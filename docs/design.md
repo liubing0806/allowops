@@ -161,7 +161,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 1. 只用 `exec.Command(argv...)`，任何地方不出现 `sh -c` / `bash -c`。
 2. 占位符只作为完整 argv 元素替换，不做字符串内插。
 3. 拒绝以 `-` 开头的字符串参数值（防参数注入）。
-4. path 类型：`filepath.EvalSymlinks` 后检查是否在 allowed_roots 内，防 `../` 和软链接逃逸。
+4. path 类型：`filepath.EvalSymlinks` 后检查是否在 allowed_roots 内，防 `../` 和软链接逃逸。执行前再逐分量检查属主和写权限（`PATH_NOT_TRUSTED`），见 `docs/action-catalog-requirements.md` 第 4 节第 8 项。
 5. 执行环境清空，只保留 `PATH=/usr/sbin:/usr/bin:/sbin:/bin`、`LANG=C.UTF-8`、`PAGER=cat`、`SYSTEMD_PAGER=`。
 6. 每个动作都有超时（context），超时后结束整个进程组。
 7. 输出超过 max_output 时截断，结果中 `truncated: true`。脱敏在截断前执行。

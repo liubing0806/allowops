@@ -222,7 +222,13 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 		}
 		return nil
 	}
+	// Immediately before execution, in the process that will exec as the
+	// target uid: nobody else may be able to swap a component of a path.
+	trustPaths := func() error { return params.CheckPathsTrusted(defs, values, os.Geteuid()) }
 	if a.Builtin != "" {
+		if err := trustPaths(); err != nil {
+			return result, err
+		}
 		if err := onStart(); err != nil {
 			return result, err
 		}
@@ -256,6 +262,9 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 			return result, err
 		}
 		defer cleanup()
+		if err := trustPaths(); err != nil {
+			return result, err
+		}
 		return runCommand(ctx, argv, redactor, filters, limit, scan, nil, onStart)
 	}
 	if a.Steps == nil {
@@ -263,7 +272,13 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 		if err != nil {
 			return result, err
 		}
+		if err := trustPaths(); err != nil {
+			return result, err
+		}
 		return runCommand(ctx, argv, redactor, filters, limit, scan, nil, onStart)
+	}
+	if err := trustPaths(); err != nil {
+		return result, err
 	}
 	budget := stepBudget(limit)
 	result.ExitCode = 0
@@ -281,6 +296,10 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 		}
 		argv, err := renderCommand(step.Exec, nil, a.AllowInterpreter, defs, values)
 		r := Result{ExitCode: -1}
+		if err == nil {
+			// A later step starts after earlier steps ran for a while.
+			err = trustPaths()
+		}
 		if err == nil {
 			r, err = runCommand(ctx, argv, redactor, filters, limit, scan, budget, onStart)
 		}
