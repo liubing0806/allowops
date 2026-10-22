@@ -53,13 +53,18 @@ func (s *Service) dependencyHealth(ctx context.Context) []*v1.DependencyHealth {
 func (s *Service) GetSystemStatus(ctx context.Context, _ *connect.Request[v1.GetSystemStatusRequest]) (*connect.Response[v1.GetSystemStatusResponse], error) {
 	out := &v1.GetSystemStatusResponse{ObservedAt: stamp(time.Now()), Status: v1.HealthStatus_HEALTH_STATUS_DEGRADED, Dependencies: s.dependencyHealth(ctx)}
 	g := s.gatewayConfig()
+	out.UpdateCheckEnabled, out.GatewayVersion = s.Config.UpdateCheckEnabled, s.buildVersion()
 	out.Limits = &v1.ApiLimits{MaxMessageBytes: uint32(s.Config.MessageBytes), MaxChunkBytes: uint32(g.ChunkBytes), DefaultPageSize: uint32(s.Config.PageSize), MaxPageSize: uint32(s.Config.MaxPageSize), DefaultOutputPageBytes: 16 << 10, MaxOutputPageBytes: 24 << 10, MaxCatalogBytes: uint64(g.EnvelopeBytes), MaxCsvBytes: uint32(s.management.config.MaxCSVBytes)}
 	if out.Dependencies[0].Status == v1.HealthStatus_HEALTH_STATUS_UNAVAILABLE {
 		out.Status = v1.HealthStatus_HEALTH_STATUS_UNAVAILABLE
 		return connect.NewResponse(out), nil
 	}
+	update, checked, err := s.gatewayUpdate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out.GatewayUpdate, out.UpdateCheckedAt, out.UpdateCheckError = update, optionalStamp(checked.CheckedAt), checked.LastError
 	if s.jobStatistics != nil {
-		var err error
 		out.RunningJobs, out.FailedJobsLast_24Hours, err = s.jobStatistics.Statistics(ctx)
 		if err != nil {
 			out.RunningJobs, out.FailedJobsLast_24Hours = 0, 0
@@ -79,6 +84,7 @@ func (s *Service) GetSystemStatus(ctx context.Context, _ *connect.Request[v1.Get
 	if err != nil {
 		return nil, err
 	}
+	out.HostsBelowGatewayVersion = hostsBelowGatewayVersion(g.Version, hosts)
 	for _, h := range hosts {
 		if h.Online {
 			out.OnlineHosts++

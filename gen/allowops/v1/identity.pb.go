@@ -2536,8 +2536,10 @@ type GetCurrentSessionResponse struct {
 	CsrfToken string `protobuf:"bytes,4,opt,name=csrf_token,json=csrfToken,proto3" json:"csrf_token,omitempty"`
 	// Build version of the serving gateway; "dev" for development builds.
 	GatewayVersion string `protobuf:"bytes,5,opt,name=gateway_version,json=gatewayVersion,proto3" json:"gateway_version,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Set only when the update check is enabled and a newer release is known.
+	GatewayUpdate *GatewayUpdate `protobuf:"bytes,6,opt,name=gateway_update,json=gatewayUpdate,proto3" json:"gateway_update,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetCurrentSessionResponse) Reset() {
@@ -2603,6 +2605,13 @@ func (x *GetCurrentSessionResponse) GetGatewayVersion() string {
 		return x.GatewayVersion
 	}
 	return ""
+}
+
+func (x *GetCurrentSessionResponse) GetGatewayUpdate() *GatewayUpdate {
+	if x != nil {
+		return x.GatewayUpdate
+	}
+	return nil
 }
 
 type LogoutRequest struct {
@@ -2876,7 +2885,7 @@ var File_allowops_v1_identity_proto protoreflect.FileDescriptor
 
 const file_allowops_v1_identity_proto_rawDesc = "" +
 	"\n" +
-	"\x1aallowops/v1/identity.proto\x12\vallowops.v1\x1a\x18allowops/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8c\x02\n" +
+	"\x1aallowops/v1/identity.proto\x12\vallowops.v1\x1a\x18allowops/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x18allowops/v1/system.proto\"\x8c\x02\n" +
 	"\x0eServiceAccount\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x12\n" +
@@ -3056,7 +3065,7 @@ const file_allowops_v1_identity_proto_rawDesc = "" +
 	"lastUsedAt\x129\n" +
 	"\n" +
 	"revoked_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\"\x1a\n" +
-	"\x18GetCurrentSessionRequest\"\xf7\x01\n" +
+	"\x18GetCurrentSessionRequest\"\xba\x02\n" +
 	"\x19GetCurrentSessionResponse\x12%\n" +
 	"\x04user\x18\x01 \x01(\v2\x11.allowops.v1.UserR\x04user\x120\n" +
 	"\x06client\x18\x02 \x01(\x0e2\x18.allowops.v1.LoginClientR\x06client\x129\n" +
@@ -3064,7 +3073,8 @@ const file_allowops_v1_identity_proto_rawDesc = "" +
 	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1d\n" +
 	"\n" +
 	"csrf_token\x18\x04 \x01(\tR\tcsrfToken\x12'\n" +
-	"\x0fgateway_version\x18\x05 \x01(\tR\x0egatewayVersion\"\x0f\n" +
+	"\x0fgateway_version\x18\x05 \x01(\tR\x0egatewayVersion\x12A\n" +
+	"\x0egateway_update\x18\x06 \x01(\v2\x1a.allowops.v1.GatewayUpdateR\rgatewayUpdate\"\x0f\n" +
 	"\rLogoutRequest\"\x10\n" +
 	"\x0eLogoutResponse\"_\n" +
 	"\x16ListCliSessionsRequest\x12,\n" +
@@ -3178,6 +3188,7 @@ var file_allowops_v1_identity_proto_goTypes = []any{
 	(*timestamppb.Timestamp)(nil),      // 52: google.protobuf.Timestamp
 	(*PageRequest)(nil),                // 53: allowops.v1.PageRequest
 	(*PageResponse)(nil),               // 54: allowops.v1.PageResponse
+	(*GatewayUpdate)(nil),              // 55: allowops.v1.GatewayUpdate
 }
 var file_allowops_v1_identity_proto_depIdxs = []int32{
 	52, // 0: allowops.v1.ServiceAccount.created_at:type_name -> google.protobuf.Timestamp
@@ -3218,58 +3229,59 @@ var file_allowops_v1_identity_proto_depIdxs = []int32{
 	17, // 35: allowops.v1.GetCurrentSessionResponse.user:type_name -> allowops.v1.User
 	0,  // 36: allowops.v1.GetCurrentSessionResponse.client:type_name -> allowops.v1.LoginClient
 	52, // 37: allowops.v1.GetCurrentSessionResponse.expires_at:type_name -> google.protobuf.Timestamp
-	53, // 38: allowops.v1.ListCliSessionsRequest.page:type_name -> allowops.v1.PageRequest
-	43, // 39: allowops.v1.ListCliSessionsResponse.sessions:type_name -> allowops.v1.CliSession
-	54, // 40: allowops.v1.ListCliSessionsResponse.page:type_name -> allowops.v1.PageResponse
-	3,  // 41: allowops.v1.ServiceAccountService.CreateServiceAccount:input_type -> allowops.v1.CreateServiceAccountRequest
-	5,  // 42: allowops.v1.ServiceAccountService.GetServiceAccount:input_type -> allowops.v1.GetServiceAccountRequest
-	7,  // 43: allowops.v1.ServiceAccountService.ListServiceAccounts:input_type -> allowops.v1.ListServiceAccountsRequest
-	9,  // 44: allowops.v1.ServiceAccountService.UpdateServiceAccount:input_type -> allowops.v1.UpdateServiceAccountRequest
-	11, // 45: allowops.v1.ServiceAccountService.CreateServiceAccountToken:input_type -> allowops.v1.CreateServiceAccountTokenRequest
-	13, // 46: allowops.v1.ServiceAccountService.ListServiceAccountTokens:input_type -> allowops.v1.ListServiceAccountTokensRequest
-	15, // 47: allowops.v1.ServiceAccountService.RevokeServiceAccountToken:input_type -> allowops.v1.RevokeServiceAccountTokenRequest
-	18, // 48: allowops.v1.UserService.ListUsers:input_type -> allowops.v1.ListUsersRequest
-	20, // 49: allowops.v1.UserService.GetUser:input_type -> allowops.v1.GetUserRequest
-	22, // 50: allowops.v1.UserService.SetUserRoles:input_type -> allowops.v1.SetUserRolesRequest
-	25, // 51: allowops.v1.UserService.ListRoles:input_type -> allowops.v1.ListRolesRequest
-	28, // 52: allowops.v1.UserService.GetRoleMappings:input_type -> allowops.v1.GetRoleMappingsRequest
-	30, // 53: allowops.v1.UserService.SaveRoleMappings:input_type -> allowops.v1.SaveRoleMappingsRequest
-	33, // 54: allowops.v1.AuthService.GetLoginMethods:input_type -> allowops.v1.GetLoginMethodsRequest
-	35, // 55: allowops.v1.AuthService.BeginOidcLogin:input_type -> allowops.v1.BeginOidcLoginRequest
-	37, // 56: allowops.v1.AuthService.CompleteOidcLogin:input_type -> allowops.v1.CompleteOidcLoginRequest
-	39, // 57: allowops.v1.AuthService.LoginLdap:input_type -> allowops.v1.LoginLdapRequest
-	41, // 58: allowops.v1.AuthService.ExchangeCliSession:input_type -> allowops.v1.ExchangeCliSessionRequest
-	44, // 59: allowops.v1.AuthService.GetCurrentSession:input_type -> allowops.v1.GetCurrentSessionRequest
-	46, // 60: allowops.v1.AuthService.Logout:input_type -> allowops.v1.LogoutRequest
-	48, // 61: allowops.v1.AuthService.ListCliSessions:input_type -> allowops.v1.ListCliSessionsRequest
-	50, // 62: allowops.v1.AuthService.RevokeCliSession:input_type -> allowops.v1.RevokeCliSessionRequest
-	4,  // 63: allowops.v1.ServiceAccountService.CreateServiceAccount:output_type -> allowops.v1.CreateServiceAccountResponse
-	6,  // 64: allowops.v1.ServiceAccountService.GetServiceAccount:output_type -> allowops.v1.GetServiceAccountResponse
-	8,  // 65: allowops.v1.ServiceAccountService.ListServiceAccounts:output_type -> allowops.v1.ListServiceAccountsResponse
-	10, // 66: allowops.v1.ServiceAccountService.UpdateServiceAccount:output_type -> allowops.v1.UpdateServiceAccountResponse
-	12, // 67: allowops.v1.ServiceAccountService.CreateServiceAccountToken:output_type -> allowops.v1.CreateServiceAccountTokenResponse
-	14, // 68: allowops.v1.ServiceAccountService.ListServiceAccountTokens:output_type -> allowops.v1.ListServiceAccountTokensResponse
-	16, // 69: allowops.v1.ServiceAccountService.RevokeServiceAccountToken:output_type -> allowops.v1.RevokeServiceAccountTokenResponse
-	19, // 70: allowops.v1.UserService.ListUsers:output_type -> allowops.v1.ListUsersResponse
-	21, // 71: allowops.v1.UserService.GetUser:output_type -> allowops.v1.GetUserResponse
-	23, // 72: allowops.v1.UserService.SetUserRoles:output_type -> allowops.v1.SetUserRolesResponse
-	26, // 73: allowops.v1.UserService.ListRoles:output_type -> allowops.v1.ListRolesResponse
-	29, // 74: allowops.v1.UserService.GetRoleMappings:output_type -> allowops.v1.GetRoleMappingsResponse
-	31, // 75: allowops.v1.UserService.SaveRoleMappings:output_type -> allowops.v1.SaveRoleMappingsResponse
-	34, // 76: allowops.v1.AuthService.GetLoginMethods:output_type -> allowops.v1.GetLoginMethodsResponse
-	36, // 77: allowops.v1.AuthService.BeginOidcLogin:output_type -> allowops.v1.BeginOidcLoginResponse
-	38, // 78: allowops.v1.AuthService.CompleteOidcLogin:output_type -> allowops.v1.CompleteOidcLoginResponse
-	40, // 79: allowops.v1.AuthService.LoginLdap:output_type -> allowops.v1.LoginLdapResponse
-	42, // 80: allowops.v1.AuthService.ExchangeCliSession:output_type -> allowops.v1.ExchangeCliSessionResponse
-	45, // 81: allowops.v1.AuthService.GetCurrentSession:output_type -> allowops.v1.GetCurrentSessionResponse
-	47, // 82: allowops.v1.AuthService.Logout:output_type -> allowops.v1.LogoutResponse
-	49, // 83: allowops.v1.AuthService.ListCliSessions:output_type -> allowops.v1.ListCliSessionsResponse
-	51, // 84: allowops.v1.AuthService.RevokeCliSession:output_type -> allowops.v1.RevokeCliSessionResponse
-	63, // [63:85] is the sub-list for method output_type
-	41, // [41:63] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	55, // 38: allowops.v1.GetCurrentSessionResponse.gateway_update:type_name -> allowops.v1.GatewayUpdate
+	53, // 39: allowops.v1.ListCliSessionsRequest.page:type_name -> allowops.v1.PageRequest
+	43, // 40: allowops.v1.ListCliSessionsResponse.sessions:type_name -> allowops.v1.CliSession
+	54, // 41: allowops.v1.ListCliSessionsResponse.page:type_name -> allowops.v1.PageResponse
+	3,  // 42: allowops.v1.ServiceAccountService.CreateServiceAccount:input_type -> allowops.v1.CreateServiceAccountRequest
+	5,  // 43: allowops.v1.ServiceAccountService.GetServiceAccount:input_type -> allowops.v1.GetServiceAccountRequest
+	7,  // 44: allowops.v1.ServiceAccountService.ListServiceAccounts:input_type -> allowops.v1.ListServiceAccountsRequest
+	9,  // 45: allowops.v1.ServiceAccountService.UpdateServiceAccount:input_type -> allowops.v1.UpdateServiceAccountRequest
+	11, // 46: allowops.v1.ServiceAccountService.CreateServiceAccountToken:input_type -> allowops.v1.CreateServiceAccountTokenRequest
+	13, // 47: allowops.v1.ServiceAccountService.ListServiceAccountTokens:input_type -> allowops.v1.ListServiceAccountTokensRequest
+	15, // 48: allowops.v1.ServiceAccountService.RevokeServiceAccountToken:input_type -> allowops.v1.RevokeServiceAccountTokenRequest
+	18, // 49: allowops.v1.UserService.ListUsers:input_type -> allowops.v1.ListUsersRequest
+	20, // 50: allowops.v1.UserService.GetUser:input_type -> allowops.v1.GetUserRequest
+	22, // 51: allowops.v1.UserService.SetUserRoles:input_type -> allowops.v1.SetUserRolesRequest
+	25, // 52: allowops.v1.UserService.ListRoles:input_type -> allowops.v1.ListRolesRequest
+	28, // 53: allowops.v1.UserService.GetRoleMappings:input_type -> allowops.v1.GetRoleMappingsRequest
+	30, // 54: allowops.v1.UserService.SaveRoleMappings:input_type -> allowops.v1.SaveRoleMappingsRequest
+	33, // 55: allowops.v1.AuthService.GetLoginMethods:input_type -> allowops.v1.GetLoginMethodsRequest
+	35, // 56: allowops.v1.AuthService.BeginOidcLogin:input_type -> allowops.v1.BeginOidcLoginRequest
+	37, // 57: allowops.v1.AuthService.CompleteOidcLogin:input_type -> allowops.v1.CompleteOidcLoginRequest
+	39, // 58: allowops.v1.AuthService.LoginLdap:input_type -> allowops.v1.LoginLdapRequest
+	41, // 59: allowops.v1.AuthService.ExchangeCliSession:input_type -> allowops.v1.ExchangeCliSessionRequest
+	44, // 60: allowops.v1.AuthService.GetCurrentSession:input_type -> allowops.v1.GetCurrentSessionRequest
+	46, // 61: allowops.v1.AuthService.Logout:input_type -> allowops.v1.LogoutRequest
+	48, // 62: allowops.v1.AuthService.ListCliSessions:input_type -> allowops.v1.ListCliSessionsRequest
+	50, // 63: allowops.v1.AuthService.RevokeCliSession:input_type -> allowops.v1.RevokeCliSessionRequest
+	4,  // 64: allowops.v1.ServiceAccountService.CreateServiceAccount:output_type -> allowops.v1.CreateServiceAccountResponse
+	6,  // 65: allowops.v1.ServiceAccountService.GetServiceAccount:output_type -> allowops.v1.GetServiceAccountResponse
+	8,  // 66: allowops.v1.ServiceAccountService.ListServiceAccounts:output_type -> allowops.v1.ListServiceAccountsResponse
+	10, // 67: allowops.v1.ServiceAccountService.UpdateServiceAccount:output_type -> allowops.v1.UpdateServiceAccountResponse
+	12, // 68: allowops.v1.ServiceAccountService.CreateServiceAccountToken:output_type -> allowops.v1.CreateServiceAccountTokenResponse
+	14, // 69: allowops.v1.ServiceAccountService.ListServiceAccountTokens:output_type -> allowops.v1.ListServiceAccountTokensResponse
+	16, // 70: allowops.v1.ServiceAccountService.RevokeServiceAccountToken:output_type -> allowops.v1.RevokeServiceAccountTokenResponse
+	19, // 71: allowops.v1.UserService.ListUsers:output_type -> allowops.v1.ListUsersResponse
+	21, // 72: allowops.v1.UserService.GetUser:output_type -> allowops.v1.GetUserResponse
+	23, // 73: allowops.v1.UserService.SetUserRoles:output_type -> allowops.v1.SetUserRolesResponse
+	26, // 74: allowops.v1.UserService.ListRoles:output_type -> allowops.v1.ListRolesResponse
+	29, // 75: allowops.v1.UserService.GetRoleMappings:output_type -> allowops.v1.GetRoleMappingsResponse
+	31, // 76: allowops.v1.UserService.SaveRoleMappings:output_type -> allowops.v1.SaveRoleMappingsResponse
+	34, // 77: allowops.v1.AuthService.GetLoginMethods:output_type -> allowops.v1.GetLoginMethodsResponse
+	36, // 78: allowops.v1.AuthService.BeginOidcLogin:output_type -> allowops.v1.BeginOidcLoginResponse
+	38, // 79: allowops.v1.AuthService.CompleteOidcLogin:output_type -> allowops.v1.CompleteOidcLoginResponse
+	40, // 80: allowops.v1.AuthService.LoginLdap:output_type -> allowops.v1.LoginLdapResponse
+	42, // 81: allowops.v1.AuthService.ExchangeCliSession:output_type -> allowops.v1.ExchangeCliSessionResponse
+	45, // 82: allowops.v1.AuthService.GetCurrentSession:output_type -> allowops.v1.GetCurrentSessionResponse
+	47, // 83: allowops.v1.AuthService.Logout:output_type -> allowops.v1.LogoutResponse
+	49, // 84: allowops.v1.AuthService.ListCliSessions:output_type -> allowops.v1.ListCliSessionsResponse
+	51, // 85: allowops.v1.AuthService.RevokeCliSession:output_type -> allowops.v1.RevokeCliSessionResponse
+	64, // [64:86] is the sub-list for method output_type
+	42, // [42:64] is the sub-list for method input_type
+	42, // [42:42] is the sub-list for extension type_name
+	42, // [42:42] is the sub-list for extension extendee
+	0,  // [0:42] is the sub-list for field type_name
 }
 
 func init() { file_allowops_v1_identity_proto_init() }
@@ -3278,6 +3290,7 @@ func file_allowops_v1_identity_proto_init() {
 		return
 	}
 	file_allowops_v1_common_proto_init()
+	file_allowops_v1_system_proto_init()
 	file_allowops_v1_identity_proto_msgTypes[10].OneofWrappers = []any{}
 	file_allowops_v1_identity_proto_msgTypes[39].OneofWrappers = []any{}
 	type x struct{}

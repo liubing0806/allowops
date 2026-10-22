@@ -375,8 +375,18 @@ type GetSystemStatusResponse struct {
 	ExpiringServiceAccountTokens uint64                 `protobuf:"varint,8,opt,name=expiring_service_account_tokens,json=expiringServiceAccountTokens,proto3" json:"expiring_service_account_tokens,omitempty"`
 	Dependencies                 []*DependencyHealth    `protobuf:"bytes,9,rep,name=dependencies,proto3" json:"dependencies,omitempty"`
 	Limits                       *ApiLimits             `protobuf:"bytes,10,opt,name=limits,proto3" json:"limits,omitempty"`
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
+	UpdateCheckEnabled           bool                   `protobuf:"varint,11,opt,name=update_check_enabled,json=updateCheckEnabled,proto3" json:"update_check_enabled,omitempty"`
+	// Build version of the serving gateway; "dev" for development builds.
+	GatewayVersion string `protobuf:"bytes,12,opt,name=gateway_version,json=gatewayVersion,proto3" json:"gateway_version,omitempty"`
+	// Set only when the check is enabled and a newer release is known.
+	GatewayUpdate   *GatewayUpdate         `protobuf:"bytes,13,opt,name=gateway_update,json=gatewayUpdate,proto3" json:"gateway_update,omitempty"`
+	UpdateCheckedAt *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=update_checked_at,json=updateCheckedAt,proto3" json:"update_checked_at,omitempty"`
+	// Fixed category of the last failed check, empty after a success.
+	UpdateCheckError string `protobuf:"bytes,15,opt,name=update_check_error,json=updateCheckError,proto3" json:"update_check_error,omitempty"`
+	// Permission-filtered hosts whose SemVer agent version is lower than the gateway's.
+	HostsBelowGatewayVersion uint64 `protobuf:"varint,16,opt,name=hosts_below_gateway_version,json=hostsBelowGatewayVersion,proto3" json:"hosts_below_gateway_version,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *GetSystemStatusResponse) Reset() {
@@ -479,6 +489,108 @@ func (x *GetSystemStatusResponse) GetLimits() *ApiLimits {
 	return nil
 }
 
+func (x *GetSystemStatusResponse) GetUpdateCheckEnabled() bool {
+	if x != nil {
+		return x.UpdateCheckEnabled
+	}
+	return false
+}
+
+func (x *GetSystemStatusResponse) GetGatewayVersion() string {
+	if x != nil {
+		return x.GatewayVersion
+	}
+	return ""
+}
+
+func (x *GetSystemStatusResponse) GetGatewayUpdate() *GatewayUpdate {
+	if x != nil {
+		return x.GatewayUpdate
+	}
+	return nil
+}
+
+func (x *GetSystemStatusResponse) GetUpdateCheckedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdateCheckedAt
+	}
+	return nil
+}
+
+func (x *GetSystemStatusResponse) GetUpdateCheckError() string {
+	if x != nil {
+		return x.UpdateCheckError
+	}
+	return ""
+}
+
+func (x *GetSystemStatusResponse) GetHostsBelowGatewayVersion() uint64 {
+	if x != nil {
+		return x.HostsBelowGatewayVersion
+	}
+	return 0
+}
+
+type GatewayUpdate struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LatestVersion string                 `protobuf:"bytes,1,opt,name=latest_version,json=latestVersion,proto3" json:"latest_version,omitempty"`
+	PublishedAt   *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
+	CheckedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=checked_at,json=checkedAt,proto3" json:"checked_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GatewayUpdate) Reset() {
+	*x = GatewayUpdate{}
+	mi := &file_allowops_v1_system_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GatewayUpdate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GatewayUpdate) ProtoMessage() {}
+
+func (x *GatewayUpdate) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_system_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GatewayUpdate.ProtoReflect.Descriptor instead.
+func (*GatewayUpdate) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_system_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GatewayUpdate) GetLatestVersion() string {
+	if x != nil {
+		return x.LatestVersion
+	}
+	return ""
+}
+
+func (x *GatewayUpdate) GetPublishedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PublishedAt
+	}
+	return nil
+}
+
+func (x *GatewayUpdate) GetCheckedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CheckedAt
+	}
+	return nil
+}
+
 type ListGatewayInstancesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Page          *PageRequest           `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
@@ -488,7 +600,7 @@ type ListGatewayInstancesRequest struct {
 
 func (x *ListGatewayInstancesRequest) Reset() {
 	*x = ListGatewayInstancesRequest{}
-	mi := &file_allowops_v1_system_proto_msgTypes[5]
+	mi := &file_allowops_v1_system_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -500,7 +612,7 @@ func (x *ListGatewayInstancesRequest) String() string {
 func (*ListGatewayInstancesRequest) ProtoMessage() {}
 
 func (x *ListGatewayInstancesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_system_proto_msgTypes[5]
+	mi := &file_allowops_v1_system_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -513,7 +625,7 @@ func (x *ListGatewayInstancesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGatewayInstancesRequest.ProtoReflect.Descriptor instead.
 func (*ListGatewayInstancesRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_system_proto_rawDescGZIP(), []int{5}
+	return file_allowops_v1_system_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListGatewayInstancesRequest) GetPage() *PageRequest {
@@ -533,7 +645,7 @@ type ListGatewayInstancesResponse struct {
 
 func (x *ListGatewayInstancesResponse) Reset() {
 	*x = ListGatewayInstancesResponse{}
-	mi := &file_allowops_v1_system_proto_msgTypes[6]
+	mi := &file_allowops_v1_system_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -545,7 +657,7 @@ func (x *ListGatewayInstancesResponse) String() string {
 func (*ListGatewayInstancesResponse) ProtoMessage() {}
 
 func (x *ListGatewayInstancesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_system_proto_msgTypes[6]
+	mi := &file_allowops_v1_system_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -558,7 +670,7 @@ func (x *ListGatewayInstancesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGatewayInstancesResponse.ProtoReflect.Descriptor instead.
 func (*ListGatewayInstancesResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_system_proto_rawDescGZIP(), []int{6}
+	return file_allowops_v1_system_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListGatewayInstancesResponse) GetInstances() []*GatewayInstance {
@@ -586,7 +698,7 @@ type AgentVersionCount struct {
 
 func (x *AgentVersionCount) Reset() {
 	*x = AgentVersionCount{}
-	mi := &file_allowops_v1_system_proto_msgTypes[7]
+	mi := &file_allowops_v1_system_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -598,7 +710,7 @@ func (x *AgentVersionCount) String() string {
 func (*AgentVersionCount) ProtoMessage() {}
 
 func (x *AgentVersionCount) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_system_proto_msgTypes[7]
+	mi := &file_allowops_v1_system_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -611,7 +723,7 @@ func (x *AgentVersionCount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AgentVersionCount.ProtoReflect.Descriptor instead.
 func (*AgentVersionCount) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_system_proto_rawDescGZIP(), []int{7}
+	return file_allowops_v1_system_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AgentVersionCount) GetAgentVersion() string {
@@ -644,7 +756,7 @@ type GetAgentVersionDistributionRequest struct {
 
 func (x *GetAgentVersionDistributionRequest) Reset() {
 	*x = GetAgentVersionDistributionRequest{}
-	mi := &file_allowops_v1_system_proto_msgTypes[8]
+	mi := &file_allowops_v1_system_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -656,7 +768,7 @@ func (x *GetAgentVersionDistributionRequest) String() string {
 func (*GetAgentVersionDistributionRequest) ProtoMessage() {}
 
 func (x *GetAgentVersionDistributionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_system_proto_msgTypes[8]
+	mi := &file_allowops_v1_system_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -669,7 +781,7 @@ func (x *GetAgentVersionDistributionRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetAgentVersionDistributionRequest.ProtoReflect.Descriptor instead.
 func (*GetAgentVersionDistributionRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_system_proto_rawDescGZIP(), []int{8}
+	return file_allowops_v1_system_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetAgentVersionDistributionRequest) GetPage() *PageRequest {
@@ -689,7 +801,7 @@ type GetAgentVersionDistributionResponse struct {
 
 func (x *GetAgentVersionDistributionResponse) Reset() {
 	*x = GetAgentVersionDistributionResponse{}
-	mi := &file_allowops_v1_system_proto_msgTypes[9]
+	mi := &file_allowops_v1_system_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -701,7 +813,7 @@ func (x *GetAgentVersionDistributionResponse) String() string {
 func (*GetAgentVersionDistributionResponse) ProtoMessage() {}
 
 func (x *GetAgentVersionDistributionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_system_proto_msgTypes[9]
+	mi := &file_allowops_v1_system_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -714,7 +826,7 @@ func (x *GetAgentVersionDistributionResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use GetAgentVersionDistributionResponse.ProtoReflect.Descriptor instead.
 func (*GetAgentVersionDistributionResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_system_proto_rawDescGZIP(), []int{9}
+	return file_allowops_v1_system_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetAgentVersionDistributionResponse) GetVersions() []*AgentVersionCount {
@@ -759,7 +871,7 @@ const file_allowops_v1_system_proto_rawDesc = "" +
 	"\x15max_output_page_bytes\x18\x06 \x01(\rR\x12maxOutputPageBytes\x12*\n" +
 	"\x11max_catalog_bytes\x18\a \x01(\x04R\x0fmaxCatalogBytes\x12\"\n" +
 	"\rmax_csv_bytes\x18\b \x01(\rR\vmaxCsvBytes\"\x18\n" +
-	"\x16GetSystemStatusRequest\"\x95\x04\n" +
+	"\x16GetSystemStatusRequest\"\xe8\x06\n" +
 	"\x17GetSystemStatusResponse\x12;\n" +
 	"\vobserved_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"observedAt\x121\n" +
@@ -772,7 +884,18 @@ const file_allowops_v1_system_proto_rawDesc = "" +
 	"\x1fexpiring_service_account_tokens\x18\b \x01(\x04R\x1cexpiringServiceAccountTokens\x12A\n" +
 	"\fdependencies\x18\t \x03(\v2\x1d.allowops.v1.DependencyHealthR\fdependencies\x12.\n" +
 	"\x06limits\x18\n" +
-	" \x01(\v2\x16.allowops.v1.ApiLimitsR\x06limits\"K\n" +
+	" \x01(\v2\x16.allowops.v1.ApiLimitsR\x06limits\x120\n" +
+	"\x14update_check_enabled\x18\v \x01(\bR\x12updateCheckEnabled\x12'\n" +
+	"\x0fgateway_version\x18\f \x01(\tR\x0egatewayVersion\x12A\n" +
+	"\x0egateway_update\x18\r \x01(\v2\x1a.allowops.v1.GatewayUpdateR\rgatewayUpdate\x12F\n" +
+	"\x11update_checked_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x0fupdateCheckedAt\x12,\n" +
+	"\x12update_check_error\x18\x0f \x01(\tR\x10updateCheckError\x12=\n" +
+	"\x1bhosts_below_gateway_version\x18\x10 \x01(\x04R\x18hostsBelowGatewayVersion\"\xb0\x01\n" +
+	"\rGatewayUpdate\x12%\n" +
+	"\x0elatest_version\x18\x01 \x01(\tR\rlatestVersion\x12=\n" +
+	"\fpublished_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x129\n" +
+	"\n" +
+	"checked_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcheckedAt\"K\n" +
 	"\x1bListGatewayInstancesRequest\x12,\n" +
 	"\x04page\x18\x01 \x01(\v2\x18.allowops.v1.PageRequestR\x04page\"\x89\x01\n" +
 	"\x1cListGatewayInstancesResponse\x12:\n" +
@@ -811,7 +934,7 @@ func file_allowops_v1_system_proto_rawDescGZIP() []byte {
 }
 
 var file_allowops_v1_system_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_allowops_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_allowops_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_allowops_v1_system_proto_goTypes = []any{
 	(HealthStatus)(0),                           // 0: allowops.v1.HealthStatus
 	(*DependencyHealth)(nil),                    // 1: allowops.v1.DependencyHealth
@@ -819,41 +942,46 @@ var file_allowops_v1_system_proto_goTypes = []any{
 	(*ApiLimits)(nil),                           // 3: allowops.v1.ApiLimits
 	(*GetSystemStatusRequest)(nil),              // 4: allowops.v1.GetSystemStatusRequest
 	(*GetSystemStatusResponse)(nil),             // 5: allowops.v1.GetSystemStatusResponse
-	(*ListGatewayInstancesRequest)(nil),         // 6: allowops.v1.ListGatewayInstancesRequest
-	(*ListGatewayInstancesResponse)(nil),        // 7: allowops.v1.ListGatewayInstancesResponse
-	(*AgentVersionCount)(nil),                   // 8: allowops.v1.AgentVersionCount
-	(*GetAgentVersionDistributionRequest)(nil),  // 9: allowops.v1.GetAgentVersionDistributionRequest
-	(*GetAgentVersionDistributionResponse)(nil), // 10: allowops.v1.GetAgentVersionDistributionResponse
-	(*timestamppb.Timestamp)(nil),               // 11: google.protobuf.Timestamp
-	(*PageRequest)(nil),                         // 12: allowops.v1.PageRequest
-	(*PageResponse)(nil),                        // 13: allowops.v1.PageResponse
+	(*GatewayUpdate)(nil),                       // 6: allowops.v1.GatewayUpdate
+	(*ListGatewayInstancesRequest)(nil),         // 7: allowops.v1.ListGatewayInstancesRequest
+	(*ListGatewayInstancesResponse)(nil),        // 8: allowops.v1.ListGatewayInstancesResponse
+	(*AgentVersionCount)(nil),                   // 9: allowops.v1.AgentVersionCount
+	(*GetAgentVersionDistributionRequest)(nil),  // 10: allowops.v1.GetAgentVersionDistributionRequest
+	(*GetAgentVersionDistributionResponse)(nil), // 11: allowops.v1.GetAgentVersionDistributionResponse
+	(*timestamppb.Timestamp)(nil),               // 12: google.protobuf.Timestamp
+	(*PageRequest)(nil),                         // 13: allowops.v1.PageRequest
+	(*PageResponse)(nil),                        // 14: allowops.v1.PageResponse
 }
 var file_allowops_v1_system_proto_depIdxs = []int32{
 	0,  // 0: allowops.v1.DependencyHealth.status:type_name -> allowops.v1.HealthStatus
-	11, // 1: allowops.v1.GatewayInstance.started_at:type_name -> google.protobuf.Timestamp
-	11, // 2: allowops.v1.GatewayInstance.last_seen:type_name -> google.protobuf.Timestamp
+	12, // 1: allowops.v1.GatewayInstance.started_at:type_name -> google.protobuf.Timestamp
+	12, // 2: allowops.v1.GatewayInstance.last_seen:type_name -> google.protobuf.Timestamp
 	1,  // 3: allowops.v1.GatewayInstance.dependencies:type_name -> allowops.v1.DependencyHealth
-	11, // 4: allowops.v1.GetSystemStatusResponse.observed_at:type_name -> google.protobuf.Timestamp
+	12, // 4: allowops.v1.GetSystemStatusResponse.observed_at:type_name -> google.protobuf.Timestamp
 	0,  // 5: allowops.v1.GetSystemStatusResponse.status:type_name -> allowops.v1.HealthStatus
 	1,  // 6: allowops.v1.GetSystemStatusResponse.dependencies:type_name -> allowops.v1.DependencyHealth
 	3,  // 7: allowops.v1.GetSystemStatusResponse.limits:type_name -> allowops.v1.ApiLimits
-	12, // 8: allowops.v1.ListGatewayInstancesRequest.page:type_name -> allowops.v1.PageRequest
-	2,  // 9: allowops.v1.ListGatewayInstancesResponse.instances:type_name -> allowops.v1.GatewayInstance
-	13, // 10: allowops.v1.ListGatewayInstancesResponse.page:type_name -> allowops.v1.PageResponse
-	12, // 11: allowops.v1.GetAgentVersionDistributionRequest.page:type_name -> allowops.v1.PageRequest
-	8,  // 12: allowops.v1.GetAgentVersionDistributionResponse.versions:type_name -> allowops.v1.AgentVersionCount
-	13, // 13: allowops.v1.GetAgentVersionDistributionResponse.page:type_name -> allowops.v1.PageResponse
-	4,  // 14: allowops.v1.SystemService.GetSystemStatus:input_type -> allowops.v1.GetSystemStatusRequest
-	6,  // 15: allowops.v1.SystemService.ListGatewayInstances:input_type -> allowops.v1.ListGatewayInstancesRequest
-	9,  // 16: allowops.v1.SystemService.GetAgentVersionDistribution:input_type -> allowops.v1.GetAgentVersionDistributionRequest
-	5,  // 17: allowops.v1.SystemService.GetSystemStatus:output_type -> allowops.v1.GetSystemStatusResponse
-	7,  // 18: allowops.v1.SystemService.ListGatewayInstances:output_type -> allowops.v1.ListGatewayInstancesResponse
-	10, // 19: allowops.v1.SystemService.GetAgentVersionDistribution:output_type -> allowops.v1.GetAgentVersionDistributionResponse
-	17, // [17:20] is the sub-list for method output_type
-	14, // [14:17] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	6,  // 8: allowops.v1.GetSystemStatusResponse.gateway_update:type_name -> allowops.v1.GatewayUpdate
+	12, // 9: allowops.v1.GetSystemStatusResponse.update_checked_at:type_name -> google.protobuf.Timestamp
+	12, // 10: allowops.v1.GatewayUpdate.published_at:type_name -> google.protobuf.Timestamp
+	12, // 11: allowops.v1.GatewayUpdate.checked_at:type_name -> google.protobuf.Timestamp
+	13, // 12: allowops.v1.ListGatewayInstancesRequest.page:type_name -> allowops.v1.PageRequest
+	2,  // 13: allowops.v1.ListGatewayInstancesResponse.instances:type_name -> allowops.v1.GatewayInstance
+	14, // 14: allowops.v1.ListGatewayInstancesResponse.page:type_name -> allowops.v1.PageResponse
+	13, // 15: allowops.v1.GetAgentVersionDistributionRequest.page:type_name -> allowops.v1.PageRequest
+	9,  // 16: allowops.v1.GetAgentVersionDistributionResponse.versions:type_name -> allowops.v1.AgentVersionCount
+	14, // 17: allowops.v1.GetAgentVersionDistributionResponse.page:type_name -> allowops.v1.PageResponse
+	4,  // 18: allowops.v1.SystemService.GetSystemStatus:input_type -> allowops.v1.GetSystemStatusRequest
+	7,  // 19: allowops.v1.SystemService.ListGatewayInstances:input_type -> allowops.v1.ListGatewayInstancesRequest
+	10, // 20: allowops.v1.SystemService.GetAgentVersionDistribution:input_type -> allowops.v1.GetAgentVersionDistributionRequest
+	5,  // 21: allowops.v1.SystemService.GetSystemStatus:output_type -> allowops.v1.GetSystemStatusResponse
+	8,  // 22: allowops.v1.SystemService.ListGatewayInstances:output_type -> allowops.v1.ListGatewayInstancesResponse
+	11, // 23: allowops.v1.SystemService.GetAgentVersionDistribution:output_type -> allowops.v1.GetAgentVersionDistributionResponse
+	21, // [21:24] is the sub-list for method output_type
+	18, // [18:21] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_allowops_v1_system_proto_init() }
@@ -868,7 +996,7 @@ func file_allowops_v1_system_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_allowops_v1_system_proto_rawDesc), len(file_allowops_v1_system_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
