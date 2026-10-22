@@ -1,0 +1,26 @@
+name: k8s_configmap_grep
+description: Read the data of one ConfigMap with secret values redacted; narrow the output with the match filter.
+risk: read
+run_as: root
+params:
+  namespace:
+    type: enum
+    description: Namespace selected from the signed allowlist.
+    values: [default, app]
+  name:
+    type: string
+    description: ConfigMap name limited to lowercase DNS characters.
+    regex: ^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$
+    max_len: 253
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, configmap, '{name}', -n, '{namespace}',
+  -o, 'go-template={{range $key, $value := .data}}### {{$key}}{{"\n"}}{{$value}}{{"\n"}}{{end}}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]
+  custom:
+    - name: sensitive_property
+      regex: (?i)[A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*\s*[=:].*

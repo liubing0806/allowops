@@ -1,0 +1,16 @@
+name: app_config_keys
+description: List only the property key names of one application config file.
+risk: read
+run_as: root
+params:
+  path:
+    type: path
+    description: Existing properties file within the signed allowed roots.
+    allowed_roots: [/etc/app, /opt/app/config]
+exec: [/usr/bin/grep, -o, -E, -e, '^[A-Za-z0-9_.-]+', --, '{path}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

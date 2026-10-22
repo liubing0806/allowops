@@ -1,0 +1,30 @@
+name: app_config_grep
+description: Search one application properties file by key pattern with secret values redacted.
+risk: read
+run_as: root
+params:
+  path:
+    type: path
+    description: Existing properties file within the signed allowed roots.
+    allowed_roots: [/etc/app, /opt/app/config]
+  pattern:
+    type: string
+    description: Case-insensitive key pattern using letters, digits, underscore, hyphen, escaped dot and alternation.
+    regex: ^([A-Za-z0-9_-]|\\\.)+(\|([A-Za-z0-9_-]|\\\.)+)*$
+    max_len: 100
+  max_matches:
+    type: int
+    description: Maximum matching lines.
+    min: 1
+    max: 500
+    default: 100
+exec: [/usr/bin/grep, -E, -i, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]
+  custom:
+    - name: sensitive_property
+      regex: (?i)[A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*\s*[=:].*

@@ -1,0 +1,35 @@
+name: docker_app_config_grep
+description: Search one application properties file inside an allowed container by key pattern with secret values redacted.
+risk: read
+run_as: root
+params:
+  container:
+    type: enum
+    description: Container selected from the signed allowlist.
+    values: [api, app]
+  path:
+    type: string
+    description: Absolute file path under the allowed container config directories; no dot-prefixed segments.
+    regex: ^/(etc/app|opt/app/config|app/config)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$
+    max_len: 200
+  pattern:
+    type: string
+    description: Case-insensitive key pattern using letters, digits, underscore, hyphen, escaped dot and alternation.
+    regex: ^([A-Za-z0-9_-]|\\\.)+(\|([A-Za-z0-9_-]|\\\.)+)*$
+    max_len: 100
+  max_matches:
+    type: int
+    description: Maximum matching lines.
+    min: 1
+    max: 500
+    default: 100
+exec: [/usr/bin/docker, exec, '{container}', grep, -E, -i, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]
+  custom:
+    - name: sensitive_property
+      regex: (?i)[A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*\s*[=:].*
