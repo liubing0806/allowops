@@ -8,7 +8,22 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	rpc "github.com/liubing0806/allowops/gen/allowops/v1/allowopsv1connect"
+	"github.com/liubing0806/allowops/internal/gateway/authn"
 )
+
+func TestCheckRequestKeepsUnavailableAuthenticationError(t *testing.T) {
+	s := &Service{}
+	for _, tc := range []struct {
+		err  error
+		want connect.Code
+	}{
+		{failure(connect.CodeUnavailable, "identity database unavailable"), connect.CodeUnavailable},
+		{authn.ErrInvalidCredentials, connect.CodeUnauthenticated},
+	} {
+		ctx := context.WithValue(context.Background(), requestKey{}, &requestState{tls: true, err: tc.err})
+		code(t, s.CheckRequest(ctx, false), tc.want)
+	}
+}
 
 // A database failure while resolving a credential is not an invalid credential:
 // the console redirects to /login on Unauthenticated but retries on Unavailable.
@@ -40,10 +55,7 @@ func TestAuthenticateDatabaseFailureIsUnavailable(t *testing.T) {
 	}
 	// Well-formed tokens that are not in the database.
 	unknownService := "aops_" + strings.Repeat("A", 43)
-	unknownCLI := f.adminToken[:len(f.adminToken)-1] + "A"
-	if unknownCLI == f.adminToken {
-		unknownCLI = f.adminToken[:len(f.adminToken)-1] + "B"
-	}
+	unknownCLI := "aops_cli_" + strings.Repeat("A", 43)
 
 	// Healthy database: unknown tokens stay Unauthenticated, known ones succeed.
 	code(t, current(unknownService), connect.CodeUnauthenticated)

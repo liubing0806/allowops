@@ -13,6 +13,9 @@ import (
 // It does not authorize an operation or append audit; the service does both.
 func (s *Service) CheckRequest(ctx context.Context, write bool) error {
 	t := transport(ctx)
+	if t != nil && t.tls && t.err != nil && connect.CodeOf(t.err) == connect.CodeUnavailable {
+		return t.err
+	}
 	if t == nil || !t.tls || t.err != nil || t.identity == nil {
 		return failure(connect.CodeUnauthenticated, "authentication required")
 	}

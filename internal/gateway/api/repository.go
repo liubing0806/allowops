@@ -154,6 +154,16 @@ func scanSession(row pgx.Row) (*v1.CliSession, error) {
 	t.CreatedAt, t.ExpiresAt, t.LastUsedAt, t.RevokedAt = stamp(created), stamp(expires), nullable(used), nullable(revoked)
 	return t, err
 }
+
+// authLookupError separates an unknown credential from a failed lookup: only a
+// missing row means the token is invalid, any other database error is an outage
+// and must not log the caller out.
+func authLookupError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return authn.ErrInvalidCredentials
+	}
+	return failure(connect.CodeUnavailable, "identity database unavailable")
+}
 func (s *Service) authenticate(ctx context.Context, token string, cookie bool) (*Identity, error) {
 	if !cookie && strings.HasPrefix(token, "aops_") && len(token) == len("aops_")+43 {
 		// Validate the canonical P5A token format before lookup.
@@ -164,11 +174,11 @@ func (s *Service) authenticate(ctx context.Context, token string, cookie bool) (
 		}
 		var accountID string
 		if err := s.Store.Pool.QueryRow(ctx, "UPDATE service_account_tokens SET last_used_at=now() WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>now() RETURNING account_id", hash(token)).Scan(&accountID); err != nil {
-			return nil, authn.ErrInvalidCredentials
+			return nil, authLookupError(err)
 		}
 		a, err := scanAccount(s.Store.Pool.QueryRow(ctx, "SELECT "+accountColumns+" FROM service_accounts WHERE account_id=$1", accountID))
 		if err != nil {
-			return nil, authn.ErrInvalidCredentials
+			return nil, authLookupError(err)
 		}
 		return &Identity{Subject: authz.Subject{ID: a.AccountId, Kind: "service_account", Roles: a.Roles, Teams: a.Teams, Owner: a.OwnerUserId}}, nil
 	}
@@ -187,15 +197,15 @@ func (s *Service) authenticate(ctx context.Context, token string, cookie bool) (
 	}
 	var sessionID, csrf string
 	if err := s.Store.Pool.QueryRow(ctx, "UPDATE identity_sessions SET last_used_at=now() WHERE token_hash=$1 AND client=$2 AND revoked_at IS NULL AND expires_at>now() RETURNING session_id,csrf_token", hash(token), client).Scan(&sessionID, &csrf); err != nil {
-		return nil, authn.ErrInvalidCredentials
+		return nil, authLookupError(err)
 	}
 	sess, err := scanSession(s.Store.Pool.QueryRow(ctx, "SELECT "+sessionColumns+" FROM identity_sessions WHERE session_id=$1", sessionID))
 	if err != nil {
-		return nil, authn.ErrInvalidCredentials
+		return nil, authLookupError(err)
 	}
 	u, err := loadUser(ctx, s.Store.Pool, sess.UserId)
 	if err != nil {
-		return nil, authn.ErrInvalidCredentials
+		return nil, authLookupError(err)
 	}
 	kind := v1.LoginClient_LOGIN_CLIENT_CLI
 	if cookie {

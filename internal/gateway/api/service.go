@@ -348,7 +348,7 @@ func (s *Service) unaryInterceptor(resolve func(string) (authz.Operation, bool, 
 				return nil, failure(connect.CodeUnauthenticated, "TLS required")
 			}
 			if t.err != nil && (!public || t.header.Get("Authorization") != "") {
-				return nil, failure(connect.CodeUnauthenticated, "invalid credential")
+				return nil, credentialError(t.err)
 			}
 			if !public && t.identity == nil {
 				return nil, failure(connect.CodeUnauthenticated, "authentication required")
@@ -402,6 +402,15 @@ func resultAuditError(mayHaveCommitted bool) error {
 	return err
 }
 
+// credentialError maps a failed request authentication to its RPC error:
+// an unavailable identity store is reported as such, everything else is an
+// invalid credential.
+func credentialError(err error) error {
+	if connect.CodeOf(err) == connect.CodeUnavailable {
+		return err
+	}
+	return failure(connect.CodeUnauthenticated, "invalid credential")
+}
 func failure(code connect.Code, message string) error {
 	return connect.NewError(code, errors.New(message))
 }
