@@ -105,6 +105,20 @@ SH
     guest 'sudo systemctl start allowops-agent; systemctl is-active allowops-agent; sudo -u allowops allowops-agent status'
     echo 'PASS join and systemd start'
     ;;
+stage)
+    # Copies upgrade packages into a root-only directory the upgrade action reads.
+    shift 2
+    scp -q -i "$work/ssh-key" -P "$(cat "$work/port")" \
+        -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$work/known-hosts" \
+        "$@" vmtester@127.0.0.1:/tmp/
+    names=()
+    for file in "$@"; do names+=("/tmp/$(basename "$file")"); done
+    guest "sudo install -d -o root -g root -m 0700 /var/tmp/allowops-upgrade && sudo install -o root -g root -m 0600 ${names[*]} /var/tmp/allowops-upgrade/ && sudo ls -l /var/tmp/allowops-upgrade"
+    ;;
+shell)
+    # Runs stdin as root in the guest.
+    guest 'sudo bash -s'
+    ;;
 uninstall)
     guest 'sudo journalctl -u allowops-agent --no-pager -n 15; if command -v dpkg >/dev/null; then sudo dpkg --purge allowops-agent; else sudo rpm -e allowops-agent; fi; test ! -e /usr/bin/allowops-agent; test ! -e /etc/sudoers.d/allowops; test ! -e /usr/lib/systemd/system/allowops-agent.service'
     echo 'PASS uninstall'
@@ -122,5 +136,5 @@ stop)
         fi
     fi
     ;;
-*) echo 'usage: run.sh start|configure|uninstall|stop WORK [arguments]' >&2; exit 2 ;;
+*) echo 'usage: run.sh start|configure|stage|shell|uninstall|stop WORK [arguments]' >&2; exit 2 ;;
 esac
