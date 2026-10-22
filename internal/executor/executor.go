@@ -23,6 +23,11 @@ import (
 
 const DefaultMaxScan int64 = 256 * 1024 * 1024
 
+// pipeDrainDelay bounds how long Wait reads output after the process exits.
+// At exit at most one pipe buffer is unread; a longer wait means a descendant
+// that left the process group still holds the pipes.
+const pipeDrainDelay = 5 * time.Second
+
 var errScanLimit = errors.New("stdout scan limit reached")
 
 type Result struct {
@@ -345,6 +350,7 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 	command := exec.Command(argv[0], argv[1:]...)
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8", "PAGER=cat", "SYSTEMD_PAGER="}
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	command.WaitDelay = pipeDrainDelay
 	stdoutReader, stdoutWriter := io.Pipe()
 	stderrReader, stderrWriter := io.Pipe()
 	defer stdoutReader.Close()
