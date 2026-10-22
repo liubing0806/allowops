@@ -56,19 +56,25 @@ go-sql-driver/mysql `v1.10.1`；testcontainers-go `v0.44.0`（MIT，仅测试）
 5. 打开凭据后在同一文件描述符上核验普通文件、root 属主和精确 0600；拒绝符号链接，严格解码 JSON。
 6. 使用 go-sql-driver/mysql 的结构化配置构造连接，禁用多语句、LOCAL INFILE 任意文件读取。不接受地址查询参数或凭据中的连接参数。
 7. 独占连接，固定会话 SQL mode，设置 max_execution_time，执行 START TRANSACTION READ ONLY；结束时回滚并关闭连接。
-8. 使用 context 覆盖连接和查询超时；遍历最多 max_rows + 1 行判断是否截断，只返回前 max_rows 行 TSV。驱动关闭结果集时可能继续排空数据，仍受超时限制。
+8. 使用 context 覆盖连接和查询超时；遍历最多 max_rows + 1 行判断是否截断，只返回前 max_rows 行 TSV；同时累计脱敏和转义后的 TSV 字节数，超过 max_response_bytes 时丢弃该行并停止读取。驱动关闭结果集时可能继续排空数据，仍受超时限制。
 
 只读事务不能替代数据库权限。部署时必须使用只读账号，不授予 FILE、EXECUTE 或管理权限。
-调用方负责脱敏和输出字节限制；本包返回 TSV、实际返回行数和 truncated。database 为默认库，
+调用方负责脱敏和最终输出（max_output）限制；本包返回 TSV、实际返回行数和 truncated。database 为默认库，
 不是库访问授权边界，跨库权限由数据库账号控制。本任务不引入 TLS 配置接口。
 SQL 文本检查不会展开数据库中的视图定义；视图中的函数和数据库插件仍由数据库权限及运维配置约束。
-只限制行数，不限制单个字段或整个结果的字节数，不能把 max_rows 当作内存上限。
+结果受 max_rows 和 max_response_bytes 两项限制。max_response_bytes 默认 64 KiB，配置范围 0..16 MiB（0 表示默认值），
+计量对象是脱敏和转义之后的完整 TSV，包含表头；表头始终返回，即使本身已超过限制。
+追加某一行会使总量超过限制时，丢弃该行（不输出半行），停止读取，并设置 `truncated`；
+目录配置经 `builtin_config` 只能收紧到不超过默认值，与 redis_command 一致（见 builtin-config.md）。
+恰好等于限制的结果不截断。该限制作用于已读入的行：驱动在 `Scan` 前已为当前行分配内存，
+单行最大为服务器的 max_allowed_packet，因此 max_response_bytes 不是读取阶段的内存上限。
 支持目标是 MySQL 8；MariaDB/TiDB 的执行兼容性未验证。
 
 ## 接口与使用
 
-`Config` 字段：`Credential`、`Address`、`MaxRows`、`Timeout`，YAML 标签分别为
-`credential`、`address`、`max_rows`、`timeout`。零行数/超时表示默认值；负数和超过默认上限报错。
+`Config` 字段：`Credential`、`Address`、`MaxRows`、`MaxResponseBytes`、`Timeout`，YAML 标签分别为
+`credential`、`address`、`max_rows`、`max_response_bytes`、`timeout`。零行数/字节数/超时表示默认值；
+负数和超过上限（行数 500、字节 16 MiB、超时 10 秒）报错。
 非零超时最小 1ms，写入 max_execution_time 时向上取整为毫秒。
 `Validate()` 只检查配置，不打开文件或联网；`Run` 在数据库名和 SQL 校验后读取凭据。
 `Params{Database, SQL}` 与 JSON Schema 2020-12 对应；额外参数由调用方按 schema 拒绝。

@@ -2,10 +2,12 @@ package catalog
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/liubing0806/allowops/internal/builtin/mysql"
 	"github.com/liubing0806/allowops/internal/params"
 )
@@ -67,6 +69,20 @@ func MySQLConfig(config map[string]any) (mysql.Config, error) {
 				return c, fmt.Errorf("max_rows requires integer")
 			}
 			c.MaxRows = n
+		case "max_response_bytes":
+			// Same size syntax and tighten-only rule as redis_command.
+			var size Size
+			data, err := json.Marshal(value)
+			if err == nil {
+				err = json.Unmarshal(data, &size)
+			}
+			if err != nil {
+				return c, fmt.Errorf("builtin_config.max_response_bytes requires a byte size: %w", err)
+			}
+			if int64(size) > builtin.DefaultMySQLMaxResponseBytes {
+				return c, fmt.Errorf("mysql_query max_response_bytes may only tighten default %d", builtin.DefaultMySQLMaxResponseBytes)
+			}
+			c.MaxResponseBytes = int64(size)
 		case "databases", "statement_types", "show_types":
 			values, err := builtinStringList(value, key)
 			if err != nil {

@@ -42,7 +42,8 @@ type Config struct {
 	StatementTypes []string      `yaml:"statement_types" json:"statement_types"`
 	ShowTypes      []string      `yaml:"show_types" json:"show_types"`
 
-	// MaxResponseBytes limits the redacted, escaped TSV; zero selects the default.
+	// MaxResponseBytes limits the redacted, escaped TSV (header included); zero
+	// selects the default. A row that would exceed it is dropped whole.
 	MaxResponseBytes int64 `yaml:"max_response_bytes" json:"max_response_bytes"`
 }
 
@@ -64,6 +65,9 @@ func (c Config) Validate() error {
 	}
 	if c.MaxRows < 0 || c.MaxRows > DefaultMaxRows {
 		return errors.New("max_rows must be between 0 and 500")
+	}
+	if c.MaxResponseBytes < 0 || c.MaxResponseBytes > 16<<20 {
+		return errors.New("max_response_bytes must be between 0 and 16777216 bytes")
 	}
 	if c.Timeout < 0 || c.Timeout > DefaultTimeout || (c.Timeout > 0 && c.Timeout < time.Millisecond) {
 		return errors.New("timeout must be zero or between 1ms and 10s")
@@ -177,6 +181,9 @@ func RunRedacted(ctx context.Context, cfg Config, p Params, mask func(string) st
 	}
 	if cfg.MaxRows == 0 {
 		cfg.MaxRows = DefaultMaxRows
+	}
+	if cfg.MaxResponseBytes == 0 {
+		cfg.MaxResponseBytes = builtin.DefaultMySQLMaxResponseBytes
 	}
 	if cfg.Timeout == 0 {
 		cfg.Timeout = DefaultTimeout
@@ -298,6 +305,7 @@ func readRowsRedacted(rows *sql.Rows, maxRows int, maxBytes int64, mask func(str
 	for i := range values {
 		dest[i] = &values[i]
 	}
+	var line strings.Builder
 	for rows.Next() {
 		if result.Rows == maxRows {
 			result.Truncated = true
@@ -306,17 +314,26 @@ func readRowsRedacted(rows *sql.Rows, maxRows int, maxBytes int64, mask func(str
 		if err := rows.Scan(dest...); err != nil {
 			return Result{}, err
 		}
+		line.Reset()
 		for i, v := range values {
 			if i > 0 {
-				out.WriteByte('\t')
+				line.WriteByte('\t')
 			}
 			if v.Valid {
-				out.WriteString(escapeTSV(mask(v.String)))
+				line.WriteString(escapeTSV(mask(v.String)))
 			} else {
-				out.WriteString(`\N`)
+				line.WriteString(`\N`)
 			}
 		}
-		out.WriteByte('\n')
+		line.WriteByte('\n')
+		// The limit applies to the final encoded row; the driver has already
+		// allocated this row, so one oversized row costs at most
+		// max_allowed_packet before it is dropped.
+		if int64(out.Len()+line.Len()) > maxBytes {
+			result.Truncated = true
+			break
+		}
+		out.WriteString(line.String())
 		result.Rows++
 	}
 	if err := rows.Err(); err != nil {
