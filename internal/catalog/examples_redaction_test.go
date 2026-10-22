@@ -287,3 +287,100 @@ func TestExampleRedisConfigFileViewRedactsQuotedDirectives(t *testing.T) {
 		{"sentinel monitor mymaster 10.0.0.1 6379 2", ""},
 	})
 }
+
+// XML written with the key in an attribute and the value in the element text
+// (Spring, Hibernate, Log4j2, web.xml) and TOML keys written in quotes.
+var textValueCredentialCases = []redactionCase{
+	{`<property name="password">SameLineValuePw</property>`, "SameLineValuePw"},
+	{`<property name="password"><value>textpw17</value></property>`, "textpw17"},
+	{`<property name="db.secret"><value><![CDATA[textpw18]]></value></property>`, "textpw18"},
+	{`<Property name="DB_PASSWORD">Log4jPw</Property>`, "Log4jPw"},
+	{`<property name="hibernate.connection.password">hunter2</property>`, "hunter2"},
+	{`<parameter name='password'>textpw19</parameter>`, "textpw19"},
+	{`<entry key="accessKey">textpw20</entry>`, "textpw20"},
+	{`<property value-type="s" name="password">textpw21</property>`, "textpw21"},
+	{`<context-param><param-name>db.password</param-name><param-value>textpw22</param-value></context-param>`, "textpw22"},
+	{`<init-param><param-name>api.token</param-name><param-value><![CDATA[textpw23]]></param-value></init-param>`, "textpw23"},
+	{`<env-entry-name>jdbc/secret</env-entry-name><env-entry-value>textpw24</env-entry-value>`, "textpw24"},
+	{`<entry><key>password</key><value>textpw25</value></entry>`, "textpw25"},
+	{`"secret-key" = "tomlSk"`, "tomlSk"},
+	{`'api-token' = 'tomlTok26'`, "tomlTok26"},
+	{`cfg = { "access_key" = "tomlAk27", port = 1 }`, "tomlAk27"},
+	{`<property name="timeout">30</property>`, ""},
+	{`<property name="password"/>`, ""},
+	{`<property name="password" ref="encoder"/>`, ""},
+	{`<param-name>timeout</param-name><param-value>30</param-value>`, ""},
+	{`<property name="port">8080</property>`, ""},
+	{`"port" = 8080`, ""},
+	{`"name" = "demo"`, ""},
+}
+
+func TestExampleConfigReadersRedactElementTextAndQuotedTomlKeys(t *testing.T) {
+	c := loadExamples(t)
+	for _, name := range configReaders {
+		checkRedactionCases(t, name, exampleRedactor(t, c, name), textValueCredentialCases)
+	}
+}
+
+// A credential element must not hide the neighbouring elements on the line,
+// and an element that is not a credential must not hide a later one.
+func TestExampleConfigReadersTextValueRulesStayInsideOneElement(t *testing.T) {
+	c := loadExamples(t)
+	for _, name := range configReaders {
+		r := exampleRedactor(t, c, name)
+		for _, tc := range []struct{ line, keep string }{
+			{`<property name="password">pw28</property><property name="port">8080</property>`, `<property name="port">8080</property>`},
+			{`<property name="url">jdbc:h2:mem</property><property name="password">pw29</property>`, `<property name="url">jdbc:h2:mem</property>`},
+			{`<param-name>password</param-name><param-value>pw30</param-value><param-name>port</param-name><param-value>8080</param-value>`, `<param-name>port</param-name><param-value>8080</param-value>`},
+			{`<bean name="passwordEncoder"><property name="strength">10</property></bean>`, `<property name="strength">10</property></bean>`},
+			{`cfg = { "secret-key" = "tomlSk", port = 8080 }`, `port = 8080 }`},
+		} {
+			if got := r.Line(tc.line); !strings.Contains(got, tc.keep) {
+				t.Errorf("%s: %q lost %q: %q", name, tc.line, tc.keep, got)
+			}
+		}
+	}
+}
+
+// nginx directives separate the name from the value with whitespace and end
+// with a semicolon. Group A adds the Basic header and htpasswd builtins; these
+// rules cover the directives and the headers with names that hold a keyword.
+var nginxDirectiveCases = []redactionCase{
+	{"fastcgi_param DB_PASSWORD hunter2;", "hunter2"},
+	{"    uwsgi_param API_TOKEN tok123;", "tok123"},
+	{`scgi_param APP_SECRET "scgi sec4";`, "sec4"},
+	{`binddn_passwd "LdapBindPw";`, "LdapBindPw"},
+	{`  # binddn_passwd 'LdapBindPw2';`, "LdapBindPw2"},
+	{"ssl_password_file /etc/nginx/pw.txt;", "pw.txt"},
+	{"set $token abcTok5;", "abcTok5"},
+	{"grpc_set_header X-Secret grpcSecret6;", "grpcSecret6"},
+	{"proxy_set_header X-Api-Key nginxkey7;", "nginxkey7"},
+	{`proxy_set_header Authorization "Basic bmdpbng6cHc=";`, "bmdpbng6cHc="},
+	{"add_header X-Auth-Token tok8;", "tok8"},
+	{"admin:$apr1$Zk3dJf2B$Q1w2E3r4T5y6U7i8O9p0a1", "Q1w2E3r4T5y6U7i8O9p0a1"},
+	{"user:{SHA}W6ph5Mm5Pz8GgiULbPgzG37mj9g=", "W6ph5Mm5Pz8GgiULbPgzG37mj9g="},
+	{"fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;", ""},
+	{"fastcgi_param QUERY_STRING $query_string;", ""},
+	{"proxy_pass http://127.0.0.1:8080;", ""},
+	{"server_tokens off;", ""},
+	{"proxy_cache_key $scheme$host$uri;", ""},
+	{"set $upstream app;", ""},
+	{"listen 80;", ""},
+	{"server_name example.com;", ""},
+	{"include /etc/nginx/conf.d/token_map.conf;", ""},
+	{"rewrite ^/token /x last;", ""},
+}
+
+func TestExampleNginxDirectiveCredentialsAreRedacted(t *testing.T) {
+	c := loadExamples(t)
+	for _, name := range append([]string{"file_view"}, configReaders...) {
+		checkRedactionCases(t, name, exampleRedactor(t, c, name), nginxDirectiveCases)
+	}
+}
+
+// file_view reaches /etc/nginx; it must hide the same file credentials as the
+// container file readers.
+func TestExampleFileViewRedactsFileCredentials(t *testing.T) {
+	r := exampleRedactor(t, loadExamples(t), "file_view")
+	checkRedactionCases(t, "file_view", r, fileCredentialCases)
+}
