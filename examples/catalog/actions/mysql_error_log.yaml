@@ -1,0 +1,28 @@
+name: mysql_error_log
+description: Search MySQL or MariaDB error logs, plain or gzip, with bounded scan and match limits.
+risk: read
+run_as: root
+params:
+  path_glob:
+    type: string
+    description: Error log path glob directly under /var/log, /var/log/mysql or /var/log/mariadb.
+    regex: ^/var/log/((mysql|mariadb)/)?(error|mysqld|mariadb)[A-Za-z0-9_.*?-]*$
+    max_len: 128
+  pattern:
+    type: string
+    description: Bounded search pattern without line breaks.
+    regex: ^[^\r\n]+$
+    max_len: 200
+timeout: 30s
+builtin: log_search
+builtin_config:
+  allowed_roots: [/var/log]
+  max_files: 20
+  max_scan: 256MB
+  max_context: 10
+  max_matches: 500
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

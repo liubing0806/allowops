@@ -1,0 +1,35 @@
+name: redis_config_file_view
+description: Read a line-bounded prefix of a Redis configuration file with credentials redacted.
+risk: read
+run_as: root
+params:
+  path:
+    type: path
+    description: Existing configuration file within the signed allowed roots.
+    allowed_roots: [/etc/redis.conf, /etc/redis]
+  lines:
+    type: int
+    description: Maximum number of output lines.
+    min: 1
+    max: 500
+    default: 200
+exec: [/usr/bin/head, -n, '{lines}', --, '{path}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]
+  custom:
+    - name: redis_requirepass
+      regex: (?i)^\s*#*\s*requirepass\s+.+$
+    - name: redis_masterauth
+      regex: (?i)^\s*#*\s*(?:masteruser|masterauth|primaryuser|primaryauth)\s+.+$
+    - name: redis_acl_user
+      regex: (?i)^\s*#*\s*user\s+.+$
+    - name: redis_sentinel_auth
+      regex: (?i)^\s*#*\s*sentinel\s+(?:auth-pass|auth-user|sentinel-pass|sentinel-user)\s+.+$
+    - name: redis_tls_key_pass
+      regex: (?i)^\s*#*\s*tls-(?:client-)?key-file-pass\s+.+$
+    - name: redis_rename_command
+      regex: (?i)^\s*#*\s*rename-command\s+.+$
