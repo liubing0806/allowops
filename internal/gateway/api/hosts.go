@@ -297,6 +297,10 @@ func (s *Service) changedLabels(before map[string]string, changes *v1.LabelChang
 	return out, nil
 }
 func (s *Service) SetHostLabels(ctx context.Context, req *connect.Request[v1.SetHostLabelsRequest]) (*connect.Response[v1.SetHostLabelsResponse], error) {
+	ctx, err := s.pinPolicy(ctx)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return nil, dbError(err)
@@ -355,6 +359,10 @@ func (s *Service) SetHostLabels(ctx context.Context, req *connect.Request[v1.Set
 func (s *Service) DeleteHost(ctx context.Context, req *connect.Request[v1.DeleteHostRequest]) (*connect.Response[v1.DeleteHostResponse], error) {
 	if req.Msg.HostId == "" || req.Msg.ExpectedRevision == "" {
 		return nil, failure(connect.CodeInvalidArgument, "host ID and revision required")
+	}
+	ctx, err := s.pinPolicy(ctx)
+	if err != nil {
+		return nil, err
 	}
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {
