@@ -269,27 +269,28 @@ type ServiceAccountToken struct {
 }
 
 type Task struct {
-	JobID         string
-	TaskID        string
-	CreatedAt     pgtype.Timestamptz
-	HostID        string
-	Hostname      string
-	Position      int32
-	ConnectionID  pgtype.Text
-	Dispatched    bool
-	Status        int16
-	Result        []byte
-	StartedAt     pgtype.Timestamptz
-	FinishedAt    pgtype.Timestamptz
-	OutputStored  bool
-	OutputState   string
-	StdoutPreview []byte
-	StderrPreview []byte
-	StdoutSha256  []byte
-	StderrSha256  []byte
-	StdoutSize    int64
-	StderrSize    int64
-	StepCount     int32
+	JobID          string
+	TaskID         string
+	CreatedAt      pgtype.Timestamptz
+	HostID         string
+	Hostname       string
+	Position       int32
+	ConnectionID   pgtype.Text
+	Dispatched     bool
+	Status         int16
+	Result         []byte
+	StartedAt      pgtype.Timestamptz
+	FinishedAt     pgtype.Timestamptz
+	OutputStored   bool
+	OutputState    string
+	StdoutPreview  []byte
+	StderrPreview  []byte
+	StdoutSha256   []byte
+	StderrSha256   []byte
+	StdoutSize     int64
+	StderrSize     int64
+	StepCount      int32
+	OutputInstance pgtype.Text
 }
 
 type TaskStep struct {
