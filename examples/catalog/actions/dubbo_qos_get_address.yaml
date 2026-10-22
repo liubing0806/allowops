@@ -1,0 +1,18 @@
+# url usage: url=http://127.0.0.1:22222/getAddress/org.example.api.DemoService.
+name: dubbo_qos_get_address
+description: Show the available provider addresses of one Dubbo service through the local QoS HTTP endpoint (GET /getAddress/{service}); credentials are redacted.
+risk: read
+params: {}
+builtin: http_get
+builtin_config:
+  allowed_prefixes: ['http://127.0.0.1:22222/getAddress']
+  headers:
+    Accept: application/json
+  timeout: 5s
+  max_response_bytes: 64KB
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]
