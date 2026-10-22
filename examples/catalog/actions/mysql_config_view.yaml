@@ -22,4 +22,4 @@ redact:
   builtin: [secrets]
   custom:
     - name: mysql_option_password
-      regex: (?i)^\s*#*\s*[A-Za-z0-9_-]*(?:(?:password|passwd|pwd|secret|token|wsrep[_-]sst[_-]auth)\s*=\s*\S|\[REDACTED:credential\]).*$
+      regex: (?i)^\s*#*\s*[A-Za-z0-9_.-]*(?:(?:password|passwd|pwd|secret|token|wsrep[_-]sst[_-]auth)[A-Za-z0-9_.-]*\s*=\s*\S|\[REDACTED:credential\]).*$
