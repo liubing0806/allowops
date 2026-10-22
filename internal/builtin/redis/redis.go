@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -34,7 +35,9 @@ import (
 // them. CONFIG GET additionally requires ConfigParams, an allowlist of literal
 // parameter names; sensitive parameters (passwords, users, ACL settings) can
 // never be listed or requested. SLOWLOG GET is refused when KeyPrefixes is set
-// because slow log entries carry the keys of arbitrary commands.
+// because slow log entries carry the keys of arbitrary commands. SLOWLOG GET
+// returns only id, time, duration, command name, argument count and client
+// address of each entry; arguments and client names are dropped.
 type Config struct {
 	Address          string        `yaml:"address"`
 	Credential       string        `yaml:"credential"`
@@ -491,6 +494,52 @@ func maskResponse(value any, mask func(string) string) any {
 	}
 }
 
+var slowlogTruncatedArgs = regexp.MustCompile(`^\.\.\. \((\d+) more arguments\)$`)
+
+// summarizeSlowlog reduces each SLOWLOG GET entry to [id, unix time,
+// duration in microseconds, command name, argument count, client address].
+// Command arguments (keys and values of any client) and the client name are
+// dropped, so the result cannot expose data outside key_prefixes.
+func summarizeSlowlog(value any) (any, bool, error) {
+	entries, ok := value.([]any)
+	if !ok {
+		return nil, false, errors.New("unexpected SLOWLOG GET reply")
+	}
+	out := make([]any, 0, len(entries))
+	for _, raw := range entries {
+		entry, ok := raw.([]any)
+		if !ok || len(entry) < 4 {
+			return nil, false, errors.New("unexpected SLOWLOG GET entry")
+		}
+		args, ok := entry[3].([]any)
+		if !ok {
+			return nil, false, errors.New("unexpected SLOWLOG GET entry")
+		}
+		var name string
+		if len(args) > 0 {
+			name, _ = args[0].(string)
+		}
+		count := int64(len(args))
+		if len(args) > 0 {
+			// The server stores a limited number of arguments and replaces the
+			// rest with a "... (N more arguments)" marker.
+			if last, _ := args[len(args)-1].(string); last != "" {
+				if m := slowlogTruncatedArgs.FindStringSubmatch(last); m != nil {
+					if more, err := strconv.ParseInt(m[1], 10, 32); err == nil {
+						count = int64(len(args)) - 1 + more
+					}
+				}
+			}
+		}
+		var addr string
+		if len(entry) > 4 {
+			addr, _ = entry[4].(string)
+		}
+		out = append(out, []any{entry[0], entry[1], entry[2], name, count, addr})
+	}
+	return out, false, nil
+}
+
 // ErrResponseLimit means values exceeded the configured response resource limit.
 var ErrResponseLimit = errors.New("redis response limit exceeded")
 
@@ -568,6 +617,9 @@ func readResponse(ctx context.Context, client *redisclient.Client, args []any, l
 	// G13: HGET/MGET preflight is not atomic. Concurrent writes between the
 	// length check and read may enlarge a value beyond this memory limit.
 	value, err := client.Do(ctx, args...).Result()
+	if err == nil && name == "SLOWLOG" && len(args) > 1 && args[1] == "GET" {
+		return summarizeSlowlog(value)
+	}
 	if err == nil {
 		switch value := value.(type) {
 		case string:
