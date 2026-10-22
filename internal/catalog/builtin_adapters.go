@@ -181,6 +181,7 @@ func redisConfig(input map[string]any) (redisbuiltin.Config, error) {
 		Commands         []string `json:"commands"`
 		KeyPrefixes      []string `json:"key_prefixes"`
 		InfoSections     []string `json:"info_sections"`
+		ConfigParams     []string `json:"config_params"`
 	}
 	if err := decodeBuiltinConfig(input, &fields); err != nil {
 		return redisbuiltin.Config{}, err
@@ -188,7 +189,7 @@ func redisConfig(input map[string]any) (redisbuiltin.Config, error) {
 	for _, list := range []struct {
 		name   string
 		values []string
-	}{{"commands", fields.Commands}, {"key_prefixes", fields.KeyPrefixes}, {"info_sections", fields.InfoSections}} {
+	}{{"commands", fields.Commands}, {"key_prefixes", fields.KeyPrefixes}, {"info_sections", fields.InfoSections}, {"config_params", fields.ConfigParams}} {
 		if _, present := input[list.name]; present && list.values == nil {
 			return redisbuiltin.Config{}, fmt.Errorf("builtin_config.%s requires a nonempty list of strings", list.name)
 		}
@@ -200,7 +201,7 @@ func redisConfig(input map[string]any) (redisbuiltin.Config, error) {
 	if fields.MaxResponseBytes < 0 || int64(fields.MaxResponseBytes) > builtin.DefaultRedisMaxResponseBytes {
 		return redisbuiltin.Config{}, fmt.Errorf("redis_command max_response_bytes may only tighten default %d", builtin.DefaultRedisMaxResponseBytes)
 	}
-	cfg := redisbuiltin.Config{Address: fields.Address, Credential: fields.Credential, DB: fields.DB, Timeout: timeout, MaxResponseBytes: int64(fields.MaxResponseBytes), MaxScanCount: fields.MaxScanCount, Commands: fields.Commands, KeyPrefixes: fields.KeyPrefixes, InfoSections: fields.InfoSections}
+	cfg := redisbuiltin.Config{Address: fields.Address, Credential: fields.Credential, DB: fields.DB, Timeout: timeout, MaxResponseBytes: int64(fields.MaxResponseBytes), MaxScanCount: fields.MaxScanCount, Commands: fields.Commands, KeyPrefixes: fields.KeyPrefixes, InfoSections: fields.InfoSections, ConfigParams: fields.ConfigParams}
 	return cfg, cfg.Validate()
 }
 func (redisHandler) ValidateConfig(input map[string]any) error {

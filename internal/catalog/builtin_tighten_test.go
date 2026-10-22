@@ -16,6 +16,7 @@ func TestBuiltinConfigRestrictionLists(t *testing.T) {
 		{"redis_command", "commands", []string{"GET", "SCAN", "INFO"}, []string{"GET", "KEYS"}, "MGET"},
 		{"redis_command", "key_prefixes", []string{"tenant:"}, []string{""}, "nonempty"},
 		{"redis_command", "info_sections", []string{"server", "memory"}, []string{"all"}, "server"},
+		{"redis_command", "config_params", []string{"maxmemory", "maxmemory-policy"}, []string{"requirepass"}, "requirepass"},
 		{"mysql_query", "databases", []string{"fixture"}, []string{"invalid-name"}, "a-zA-Z0-9_"},
 		{"mysql_query", "statement_types", []string{"SELECT", "SHOW", "DESCRIBE", "EXPLAIN"}, []string{"DELETE"}, "SELECT"},
 		{"mysql_query", "show_types", []string{"TABLES", "DATABASES", "PROCESSLIST", "VARIABLES", "STATUS", "CREATE TABLE", "COLUMNS"}, []string{"SELECT"}, "TABLES"},
@@ -54,6 +55,31 @@ func TestRedisCommandsSchemaRestriction(t *testing.T) {
 	defs, err = ParameterDefinitions(a)
 	if err != nil || len(defs["command"].Values) != 13 {
 		t.Fatalf("default command schema: %v, %v", defs, err)
+	}
+}
+
+func TestRedisConfigAndSlowlogSchema(t *testing.T) {
+	a := registeredBuiltinAction("redis_command")
+	a.BuiltinConfig["commands"] = []string{"config", "SlowLog"}
+	a.BuiltinConfig["config_params"] = []string{"maxmemory"}
+	defs, err := ParameterDefinitions(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(defs["command"].Values, []string{"CONFIG", "SLOWLOG"}) {
+		t.Fatalf("command schema values=%v; want [CONFIG SLOWLOG]", defs["command"].Values)
+	}
+	result, err := Builtins["redis_command"].Run(context.Background(), a.BuiltinConfig, map[string]any{"command": "CONFIG", "args": []string{"GET", "requirepass"}})
+	if err == nil || !strings.Contains(err.Error(), "sensitive") || result.ExitCode != 1 {
+		t.Fatalf("sensitive CONFIG GET: %+v, %v", result, err)
+	}
+	result, err = Builtins["redis_command"].Run(context.Background(), a.BuiltinConfig, map[string]any{"command": "CONFIG", "args": []string{"GET", "other"}})
+	if err == nil || !strings.Contains(err.Error(), "config_params") || result.ExitCode != 1 {
+		t.Fatalf("unlisted CONFIG GET: %+v, %v", result, err)
+	}
+	result, err = Builtins["redis_command"].Run(context.Background(), a.BuiltinConfig, map[string]any{"command": "SLOWLOG", "args": []string{"RESET"}})
+	if err == nil || result.ExitCode != 1 {
+		t.Fatalf("SLOWLOG RESET: %+v, %v", result, err)
 	}
 }
 
