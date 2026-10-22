@@ -129,6 +129,41 @@ describe('production Connect adapter', () => {
     })
   })
 
+  it('reads a single page of jobs and returns the next page token', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            jobs: [{ jobId: 'first' }],
+            page: { nextPageToken: 'cursor' },
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ jobs: [{ jobId: 'second' }], page: {} }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+      )
+    vi.stubGlobal('fetch', fetch)
+    const { api } = await vi.importActual<typeof import('./index')>('./index')
+    const result = await api.listJobs({
+      action: 'restart',
+      page: { pageSize: 10, pageToken: 'previous' },
+    })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(
+      JSON.parse(new TextDecoder().decode(fetch.mock.calls[0][1].body)),
+    ).toEqual({
+      action: 'restart',
+      page: { pageSize: 10, pageToken: 'previous' },
+    })
+    expect(result.jobs.map((job) => job.jobId)).toEqual(['first'])
+    expect(result.page.nextPageToken).toBe('cursor')
+  })
+
   it('sends LDAP credentials only to LoginLdap without a prior session request', async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ user: { userId: 'ldap-user' } }), {
