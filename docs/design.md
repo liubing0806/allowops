@@ -14,6 +14,8 @@ allowops 是给 AI agent 使用的运维网关：agent 通过 MCP 调用运维�
 
 ## 2. 架构
 
+图示见 [architecture-diagram.html](architecture-diagram.html)（浏览器打开；截图 [architecture-diagram.png](architecture-diagram.png)），包括部署总览、主机长连接、一次命令的执行时序、审计和示例目录中的 action。
+
 ```
  AI agent ──MCP Streamable HTTP──▶ ┌──────────── allowops-gateway ─────────────┐ ◀── 浏览器（控制台）
  运维人员 ──allowops CLI─────────▶ │ 认证 → 目录 → 参数校验 → 选主机 → ABAC      │
