@@ -80,3 +80,53 @@ describe('editing labels whose values contain punctuation or spaces', () => {
     expect(saved.hostLabels).toEqual({ team: 'ops,platform', env: 'stage' })
   })
 })
+
+// Labels written through the API or CLI can hold an "=" or surrounding space in
+// a key, which one key=value per line cannot carry. Saving the text would store
+// different labels, so the editors must refuse instead.
+describe('labels the line format cannot represent', () => {
+  const unrepresentable =
+    '标签含无法按每行 key=value 编辑的键或值，请使用 CLI 或 API 修改'
+  it('blocks saving host labels', async () => {
+    const { host } = await api.getHost({ hostname: 'web-01' })
+    vi.spyOn(api, 'getHost').mockResolvedValue({
+      host: { ...host, authorizationLabels: { 'a=b': 'c', env: 'prod' } },
+    })
+    window.history.replaceState({}, '', '/hosts/web-01')
+    render(<App />)
+    await screen.findByLabelText('授权标签')
+    expect(await screen.findByText(unrepresentable)).toBeVisible()
+    expect(screen.getByRole('button', { name: '保存标签' })).toBeDisabled()
+  })
+  it('blocks saving a rule with such host labels', async () => {
+    const { policy } = await api.getPolicy()
+    const seeded = {
+      rules: [
+        ...policy.rules.rules,
+        {
+          ...policy.rules.rules[0],
+          name: 'spaced-key-rule',
+          hostLabels: { ' env': 'prod' },
+        },
+      ],
+    }
+    const seedTest = await api.testPolicy({
+      baseVersion: policy.version,
+      rules: seeded,
+      cases: [],
+    })
+    await api.savePolicy({
+      baseVersion: policy.version,
+      rules: seeded,
+      testId: seedTest.test.testId,
+      reason: 'seed',
+    })
+    window.history.replaceState({}, '', '/policies')
+    render(<App />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: '编辑 spaced-key-rule' }),
+    )
+    expect(await screen.findByText(unrepresentable)).toBeVisible()
+    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled()
+  })
+})
