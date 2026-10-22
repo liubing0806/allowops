@@ -76,3 +76,14 @@ func TestMaskRowFailsClosedWhenFieldBoundariesAreAmbiguous(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// A row rule can remove exactly as many tabs as a cell contains, so the tab
+// count matches the cell count while the boundaries are shifted. A row with an
+// embedded tab that a row rule changed must collapse into one field.
+func TestMaskRowCollapsesWhenRowRuleChangesRowWithEmbeddedTab(t *testing.T) {
+	mask := func(s string) string { return strings.ReplaceAll(s, "password=\tv", "[R]") }
+	got := maskRow(cells("a\tb", "password=", "v"), mask)
+	if len(got) != 1 || strings.Contains(got[0], "\t") || strings.Contains(got[0], "\tv") {
+		t.Fatalf("got %q, want one field without a raw tab", got)
+	}
+}
