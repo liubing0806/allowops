@@ -103,11 +103,11 @@ redact:
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential、xml_name_value_credential |
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | CentOS 7 的 GNU coreutils head 支持 -n 和 --。 |
-| 安全说明 | 替代原 `app_config_grep`：grep 版本的退出码取决于模式是否命中整行，调用方可用 `pattern=值的前缀` 的退出码逐字符判断被脱敏的值，因此删除；本 action 用 head 读取整个文件开头（最多 2000 行，默认 500），退出码只反映文件能否读取，与内容无关。键名筛选由调用方在脱敏之后用 match 过滤完成：被替换的敏感键的键名也被替换，无法按键名查询；过滤只作用于已脱敏输出，不能探测原值。路径解析符号链接后检查允许根目录。输出受 64KB 限制，超出时 truncated 为 true。多行值（YAML 块标量、properties 续行、值与键分处两个 XML 元素如 `<name>` 与 `<value>`）的后续行不会被脱敏；键名不含关键字的键下的敏感值不会被识别；规则按“宁可多脱敏”设计，`monkey`、`passenger` 之类含关键字的键也会被替换。脱敏不能保证识别所有敏感内容。 |
+| 安全说明 | 替代原 `app_config_grep`：grep 版本的退出码取决于模式是否命中整行，调用方可用 `pattern=值的前缀` 的退出码逐字符判断被脱敏的值，因此删除；本 action 用 head 读取整个文件开头（最多 2000 行，默认 500），退出码只反映文件能否读取，与内容无关。键名筛选由调用方在脱敏之后用 match 过滤完成：被替换的敏感键的键名也被替换，无法按键名查询；过滤只作用于已脱敏输出，不能探测原值。路径解析符号链接后检查允许根目录。输出受 64KB 限制，超出时 truncated 为 true。多行值（YAML 块标量、properties 续行）的后续行不会被脱敏；Hadoop、Hive 风格的 `<name>` 与 `<value>` 元素在同一行时由 xml_name_value_credential 脱敏，`<name>` 与 `<value>` 分处两行时不会被脱敏。JSON 值为数组或对象（`"secrets": ["a", "b"]`、`"credentials": {"user": "u", "pw": "x"}`）时，json_credential 只替换到第一个逗号、空白或闭合符号之前，其余元素原样输出（实测 `"secrets": ["arr1", "arr2"]` 输出 `[REDACTED:json_credential], "arr2"]`）；键名不含关键字的键下的敏感值不会被识别；规则按“宁可多脱敏”设计，`monkey`、`passenger` 之类含关键字的键也会被替换。脱敏不能保证识别所有敏感内容。 |
 
 自定义脱敏规则（五个配置读取 action 使用同一组，键名关键字统一为 pass、pwd、secret、token、key、credential，不区分大小写，因此 `db_password`、`passwd`、`accessKey`、`api-key`、`client_secret` 等均命中）：
 
@@ -117,6 +117,7 @@ redact:
 | json_credential | `"password":"v"`、`"secretKey": "v"`、`'token': 'v'`、非字符串值（数字、true、null） | 仅该键值对 |
 | xml_element_credential | `<password>v</password>`、`<secretKey><![CDATA[v]]></secretKey>` | 整个元素 |
 | xml_attribute_credential | `name="password" value="v"` 及 `value` 在前的写法，属性名 name、key、id、var | 从第一个属性到 `value` 属性 |
+| xml_name_value_credential | 同一行的 `<name>db.password</name><value>v</value>`（Hadoop、Hive 风格；`name` 与 `value` 之间可有同行的 description、final、source 元素，value 可为 CDATA） | 从 `<name>` 起到 `</value>` |
 
 参数：
 
@@ -307,7 +308,7 @@ exec: [/usr/bin/getent, hosts, '{name}']
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential（同 `app_config_view`） |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential、xml_name_value_credential（同 `app_config_view`） |
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | CentOS 7 需另装 Docker CLI；容器内需有支持 -n 和 -- 的 head。docker exec 不分配 TTY。 |
@@ -427,14 +428,14 @@ exec: [/usr/bin/docker, exec, '{container}', getent, hosts, '{name}']
 | 扩展能力 | D1、D4 |
 | 执行限制 | timeout=20s；max_output=64KB |
 | CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；该示例的选项是否可用须在目标版本验证。/usr/bin/docker 缺失时标记 unsupported。容器内需有支持 -F、-n、-m、-e 的 grep（GNU grep 或 busybox grep）。无匹配时 grep 退出码为 1，action 报告失败。 |
-| 安全说明 | Docker 包装命令后的执行目标固定为 grep，禁止解释器和 TTY；模式使用 -e，路径前使用 --，两者均不会被当作选项。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，且每个路径段以非点字符开头，无法出现 .. 段。正则不能阻止容器内已有的符号链接：根目录内指向其他位置的链接会被 grep 跟随（实测 /var/log/app/pw.log -> /etc/passwd 可读，只限该容器文件系统，不涉及主机）。输出先脱敏再过滤。内置 secrets 规则只匹配 password、secret、token 后紧跟等号的形式，因此增加自定义规则：sensitive_property（键名含 pass、pwd、secret、token、key、credential，后接 `=` 或 `:`，从键名到行尾替换，覆盖 `password: v`、`client_secret: v`、`db_password: v`、`X-Api-Key: v`）、json_credential（`"password":"v"`）、auth_header（`Authorization`、`Proxy-Authorization` 的头值，含 nginx `proxy_set_header Authorization "Basic ..."` 写法）、api_key_header（`X-` 开头且名称含 key、token、secret、auth、pass、pwd、credential 的头值，含 `proxy_set_header X-Api-Key v;` 写法）、htpasswd_hash（`$apr1$`、`$1$`、`$5$`、`$6$`、`$2y$` 等 crypt 格式及 `{SHA}`、`{SSHA}` 哈希，仅替换哈希，用户名保留）。限制：不识别 crypt(3) 的 13 位 DES 哈希；nginx `set $token v;` 等无冒号或等号的写法不识别；键名含关键字的普通文本（如 `bypass: true`）也会被替换。 |
+| 安全说明 | Docker 包装命令后的执行目标固定为 grep，禁止解释器和 TTY；模式使用 -e，路径前使用 --，两者均不会被当作选项。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，且每个路径段以非点字符开头，无法出现 .. 段。正则不能阻止容器内已有的符号链接：根目录内指向其他位置的链接会被 grep 跟随（实测 /var/log/app/pw.log -> /etc/passwd 可读，只限该容器文件系统，不涉及主机）。输出先脱敏再过滤。内置 secrets 规则只匹配 password、secret、token 后紧跟等号的形式，因此增加自定义规则：sensitive_property（键名含 pass、pwd、secret、token、key、credential，后接 `=` 或 `:`，从键名到行尾替换，覆盖 `password: v`、`client_secret: v`、`db_password: v`、`X-Api-Key: v`）、json_credential（`"password":"v"`）、auth_header（`Authorization`、`Proxy-Authorization` 的头值，含 nginx `proxy_set_header Authorization "Basic ..."` 写法）、api_key_header（`X-` 开头且名称含 key、token、secret、auth、pass、pwd、credential 的头值，含 `proxy_set_header X-Api-Key v;` 写法）、htpasswd_hash（`$apr1$`、`$1$`、`$5$`、`$6$`、`$2y$` 等 crypt 格式及 `{SHA}`、`{SSHA}` 哈希，仅替换哈希，用户名保留）。限制：不识别 crypt(3) 的 13 位 DES 哈希；nginx `set $token v;` 等无冒号或等号的写法不识别；键名含关键字的普通文本（如 `bypass: true`）也会被替换。 检索根目录只含日志目录 /var/log、/data/logs，不含 /etc/nginx：grep 在原文上匹配后才脱敏，调用方可以用是否命中（退出码 0 或 1、输出是否为空）判断被脱敏的内容是否含某字符串（实测对 `proxy_set_header Authorization "Basic …";` 一行，pattern 为其中的密文时退出码 0，为不存在的字符串时退出码 1），因此配置文件不能放进检索根目录；原因和同类 action 见第 4 节第 11 项。根目录内指向配置文件的符号链接同样会被检索，须由镜像或运维保证日志目录内没有这类链接。 |
 
 参数：
 
 | 名称 | 类型 | 约束 | 用途（description） |
 |---|---|---|---|
 | `container` | enum | `values: ['api', 'app']`；必填 | 预定义应用容器 |
-| `path` | string | `regex: ^/(var/log\|data/logs\|etc/nginx)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$`；`max_len: 256`；必填 | 容器内固定根目录下的绝对文件路径，无点段 |
+| `path` | string | `regex: ^/(var/log\|data/logs)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$`；`max_len: 256`；必填 | 容器内固定日志根目录下的绝对文件路径，无点段 |
 | `pattern` | string | `regex: ^[^\r\n]+$`；`max_len: 200`；必填 | 不含换行的固定检索字符串 |
 | `max_matches` | int | `min: 1`；`max: 500`；必填（有默认值时可省略）；默认 `100` | 匹配行数上限 |
 
@@ -569,7 +570,7 @@ exec: [/usr/bin/docker, exec, '{container}', jar, tf, '{jar}']
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii；自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential（同 `app_config_view`） |
+| redact | secrets, pii；自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential、xml_name_value_credential（同 `app_config_view`） |
 | 扩展能力 | D1、D4 |
 | 执行限制 | timeout=15s；max_output=64KB |
 | CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；/usr/bin/docker 缺失时标记 unsupported。容器内须有 unzip（JDK 镜像通常没有：eclipse-temurin 和 CentOS 7 JDK 镜像无 unzip，openjdk:8 的 Debian 镜像有，alpine 的 busybox unzip 支持 -p）（容器内命令按名称查找，无法在主机检查）。 |
@@ -1374,11 +1375,11 @@ exec_fallbacks: [/usr/local/bin/kubectl]
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential（同 `app_config_view`） |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential、xml_name_value_credential（同 `app_config_view`） |
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | 依赖目标节点的 kubectl 和只读 kubeconfig；go-template 输出须在目标版本验证。 |
-| 安全说明 | 输出格式为每个键一段：`### <键>` 后接值。命名空间使用签名枚举，ConfigMap 名称用 DNS 子域名正则且不以连字符开头。由原 `k8s_configmap_grep` 改名，行为不变：始终输出整个 ConfigMap 的 data，退出码只反映 kubectl 能否读取，与内容无关。脱敏规则同 `app_config_view`，覆盖 properties、YAML、JSON、XML 形式。match 在脱敏之后执行，无法探测被脱敏的值。限制：多行值中不含敏感词的键下的敏感值、binaryData 不处理（模板只遍历 .data）。 |
+| 安全说明 | 输出格式为每个键一段：`### <键>` 后接值。命名空间使用签名枚举，ConfigMap 名称用 DNS 子域名正则且不以连字符开头。由原 `k8s_configmap_grep` 改名，行为不变：始终输出整个 ConfigMap 的 data，退出码只反映 kubectl 能否读取，与内容无关。脱敏规则同 `app_config_view`，覆盖 properties、YAML、JSON、XML 形式。match 在脱敏之后执行，无法探测被脱敏的值。限制：多行值中不含敏感词的键下的敏感值、binaryData 不处理（模板只遍历 .data）。同一行的 `<name>`/`<value>` 元素由 xml_name_value_credential 脱敏，分处两行的、JSON 数组或对象值的第一个元素之后的内容不脱敏（同 `app_config_view`）。 |
 
 参数：
 
@@ -1527,7 +1528,7 @@ exec_fallbacks: [/usr/local/bin/kubectl]
 | 扩展能力 | D1、D5 |
 | 执行限制 | timeout=20s；max_output=64KB |
 | CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。容器内需有支持 -F、-n、-m、-e 的 grep。无匹配时 grep 退出码为 1，action 报告失败。 |
-| 安全说明 | 命名空间和容器使用枚举，Pod 名称不能以连字符开头；固定使用 `exec -n <ns> <pod> [-c <container>] --`，不使用 -i、-t，无 stdin 和 TTY；包装命令后真正执行的 grep 通过解释器检查。kubectl exec 需要 pods/exec 的 create 权限，这不是纯只读 RBAC：持有该权限的凭据理论上可在 Pod 内执行任意命令，只读 kubeconfig 的 RBAC 必须仅授予允许的命名空间，并由运维评审；allowops 的签名 argv 是唯一的约束。禁用 kubeconfig 的 exec 认证插件。模式使用 -e，路径前使用 --。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，每个路径段以非点字符开头，无法出现 .. 段；容器内已有符号链接可被跟随。内置 secrets 规则只匹配 password、secret、token 后紧跟等号的形式，因此增加自定义规则：sensitive_property（键名含 pass、pwd、secret、token、key、credential，后接 `=` 或 `:`，从键名到行尾替换，覆盖 `password: v`、`client_secret: v`、`db_password: v`、`X-Api-Key: v`）、json_credential（`"password":"v"`）、auth_header（`Authorization`、`Proxy-Authorization` 的头值，含 nginx `proxy_set_header Authorization "Basic ..."` 写法）、api_key_header（`X-` 开头且名称含 key、token、secret、auth、pass、pwd、credential 的头值，含 `proxy_set_header X-Api-Key v;` 写法）、htpasswd_hash（`$apr1$`、`$1$`、`$5$`、`$6$`、`$2y$` 等 crypt 格式及 `{SHA}`、`{SSHA}` 哈希，仅替换哈希，用户名保留）。限制：不识别 crypt(3) 的 13 位 DES 哈希；nginx `set $token v;` 等无冒号或等号的写法不识别；键名含关键字的普通文本（如 `bypass: true`）也会被替换。 |
+| 安全说明 | 命名空间和容器使用枚举，Pod 名称不能以连字符开头；固定使用 `exec -n <ns> <pod> [-c <container>] --`，不使用 -i、-t，无 stdin 和 TTY；包装命令后真正执行的 grep 通过解释器检查。kubectl exec 需要 pods/exec 的 create 权限，这不是纯只读 RBAC：持有该权限的凭据理论上可在 Pod 内执行任意命令，只读 kubeconfig 的 RBAC 必须仅授予允许的命名空间，并由运维评审；allowops 的签名 argv 是唯一的约束。禁用 kubeconfig 的 exec 认证插件。模式使用 -e，路径前使用 --。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，每个路径段以非点字符开头，无法出现 .. 段；容器内已有符号链接可被跟随。内置 secrets 规则只匹配 password、secret、token 后紧跟等号的形式，因此增加自定义规则：sensitive_property（键名含 pass、pwd、secret、token、key、credential，后接 `=` 或 `:`，从键名到行尾替换，覆盖 `password: v`、`client_secret: v`、`db_password: v`、`X-Api-Key: v`）、json_credential（`"password":"v"`）、auth_header（`Authorization`、`Proxy-Authorization` 的头值，含 nginx `proxy_set_header Authorization "Basic ..."` 写法）、api_key_header（`X-` 开头且名称含 key、token、secret、auth、pass、pwd、credential 的头值，含 `proxy_set_header X-Api-Key v;` 写法）、htpasswd_hash（`$apr1$`、`$1$`、`$5$`、`$6$`、`$2y$` 等 crypt 格式及 `{SHA}`、`{SSHA}` 哈希，仅替换哈希，用户名保留）。限制：不识别 crypt(3) 的 13 位 DES 哈希；nginx `set $token v;` 等无冒号或等号的写法不识别；键名含关键字的普通文本（如 `bypass: true`）也会被替换。 检索根目录只含日志目录 /var/log、/data/logs，不含 /etc/nginx：grep 在原文上匹配后才脱敏，调用方可以用是否命中（退出码 0 或 1、输出是否为空）判断被脱敏的内容是否含某字符串（实测对 `proxy_set_header Authorization "Basic …";` 一行，pattern 为其中的密文时退出码 0，为不存在的字符串时退出码 1），因此配置文件不能放进检索根目录；原因和同类 action 见第 4 节第 11 项。根目录内指向配置文件的符号链接同样会被检索，须由镜像或运维保证日志目录内没有这类链接。 |
 
 参数：
 
@@ -1536,7 +1537,7 @@ exec_fallbacks: [/usr/local/bin/kubectl]
 | `namespace` | enum | `values: ['default', 'app']`；必填 | 预定义命名空间 |
 | `pod` | string | `regex: ^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$`；`max_len: 63`；必填 | 长度不超过 63 的 Pod 名称 |
 | `container` | enum | `values: ['api', 'app']`；可选 | 可选预定义容器名 |
-| `path` | string | `regex: ^/(var/log\|data/logs\|etc/nginx)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$`；`max_len: 256`；必填 | 容器内固定根目录下的绝对文件路径，无点段 |
+| `path` | string | `regex: ^/(var/log\|data/logs)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$`；`max_len: 256`；必填 | 容器内固定日志根目录下的绝对文件路径，无点段 |
 | `pattern` | string | `regex: ^[^\r\n]+$`；`max_len: 200`；必填 | 不含换行的固定检索字符串 |
 | `max_matches` | int | `min: 1`；`max: 500`；必填（有默认值时可省略）；默认 `100` | 匹配行数上限 |
 
@@ -1624,7 +1625,7 @@ exec_fallbacks: [/usr/local/bin/kubectl]
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii；自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential（同 `app_config_view`） |
+| redact | secrets, pii；自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential、xml_name_value_credential（同 `app_config_view`） |
 | 扩展能力 | D1、D4、D5 |
 | 执行限制 | timeout=15s；max_output=64KB |
 | CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。容器内须有 unzip（JDK 镜像通常没有，须在镜像中安装）。 |
@@ -2148,7 +2149,7 @@ exec: [/usr/bin/free, -m]
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | CentOS 7 的 GNU head 支持 -n 和 --。 |
-| 安全说明 | path 类型的 allowed_roots 可以是单个文件：`/etc/my.cnf` 作为根时只允许该文件本身，`/etc/mysql`、`/etc/my.cnf.d` 作为根时允许目录内的文件；不存在的根被跳过。内置 secrets 的 credential 规则只匹配 `password`、`secret`、`token` 后接 `=` 的写法，并且只替换到第一个空白或分号。选项文件的未加引号取值可以含空格（`password = a b c`），因此 `b c` 会原样输出。本 action 增加自定义规则：键名含 password、passwd、pwd、secret、token 且后接 `=` 的行，以及已被内置规则替换过的行，整行（含键名、行首注释符）替换为 [REDACTED:mysql_option_password]。本机用样例文件实测 `password = x`、`password=x`、`Password = "x y"`、`password   =   x y z`、`loose-password=x`、`db_password = x`、`ssl-key-passwd=x`、`PASSWORD=x` 和注释行 `# password = x` 均脱敏。`validate_password.policy`（含点号）和 `default_authentication_plugin` 不是凭据，保持原样。限制：不含这些词的键名下的敏感值、多行值不会被识别；`[client]` 的 `user` 等非密码项原样输出。 |
+| 安全说明 | path 类型的 allowed_roots 可以是单个文件：`/etc/my.cnf` 作为根时只允许该文件本身，`/etc/mysql`、`/etc/my.cnf.d` 作为根时允许目录内的文件；不存在的根被跳过。内置 secrets 的 credential 规则只匹配 `password`、`secret`、`token` 后接 `=` 的写法，并且只替换到第一个空白或分号。选项文件的未加引号取值可以含空格（`password = a b c`），因此 `b c` 会原样输出。本 action 增加自定义规则：键名含 password、passwd、pwd、secret、token 或 wsrep_sst_auth（Galera 的 `user:password`，`wsrep-sst-auth` 写法同样匹配）且后接 `=` 的行，以及已被内置规则替换过的行，整行（含键名、行首注释符）替换为 [REDACTED:mysql_option_password]。本机用样例文件实测 `password = x`、`password=x`、`Password = "x y"`、`password   =   x y z`、`loose-password=x`、`db_password = x`、`ssl-key-passwd=x`、`PASSWORD=x`、`wsrep_sst_auth = user:x`、`wsrep-sst-auth="user:x"` 和注释行 `# password = x` 均脱敏。`validate_password.policy`（含点号）和 `default_authentication_plugin` 不是凭据，保持原样。限制：不含这些词的键名（`wsrep_sst_auth` 除外）下的敏感值、多行值不会被识别；`[client]` 的 `user` 等非密码项原样输出。 |
 
 参数：
 
@@ -2165,7 +2166,7 @@ redact:
   builtin: [secrets]
   custom:
     - name: mysql_option_password
-      regex: (?i)^\s*#*\s*[A-Za-z0-9_-]*(?:(?:password|passwd|pwd|secret|token)\s*=\s*\S|\[REDACTED:credential\]).*$
+      regex: (?i)^\s*#*\s*[A-Za-z0-9_-]*(?:(?:password|passwd|pwd|secret|token|wsrep[_-]sst[_-]auth)\s*=\s*\S|\[REDACTED:credential\]).*$
 ```
 
 ### `mysql_error_log`
@@ -2214,11 +2215,11 @@ builtin_config:
 | run_as | root |
 | 执行方式 | builtin |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii |
+| redact | secrets, pii，另有自定义规则 sql_string_literal、sql_hex_literal |
 | 扩展能力 | D1、D7 |
 | 执行限制 | timeout=15s；max_output=64KB |
 | CentOS 7 | 内置驱动不要求安装 mysql CLI；服务器兼容性同 mysql_query_readonly。 |
-| 安全说明 | G34 要求配置 databases 时显式列出 show_types: [PROCESSLIST]。sql 正则只允许 `SHOW PROCESSLIST` 和 `SHOW FULL PROCESSLIST`。Info 列含其他会话的 SQL 文本，可能含密码字面值和手机号；secrets 与 pii 脱敏后输出。本机 MySQL 8.4.6 实测：账号有 PROCESS 权限时返回所有会话；只有库级 SELECT 时只返回自己的会话，不报错；SQL 中的 `password=...` 字面值和手机号字面值脱敏。Host 列的客户端地址不脱敏。不带 FULL 时服务器把 Info 截断为 100 个字符。 |
+| 安全说明 | G34 要求配置 databases 时显式列出 show_types: [PROCESSLIST]。sql 正则只允许 `SHOW PROCESSLIST` 和 `SHOW FULL PROCESSLIST`。Info 列含其他会话的 SQL 文本，可能含密码字面值和手机号；secrets 与 pii 脱敏后输出。本机 MySQL 8.4.6 实测：账号有 PROCESS 权限时返回所有会话；只有库级 SELECT 时只返回自己的会话，不报错；SQL 中的 `password=...` 字面值和手机号字面值脱敏。Host 列的客户端地址不脱敏。不带 FULL 时服务器把 Info 截断为 100 个字符。 语句文本中的字符串字面值可能含密码和令牌，自定义规则 sql_string_literal 把所有单引号和双引号字符串（含 `\'`、`\\`、`''`、`""` 转义，未闭合的字符串从引号到行尾）整体替换为 [REDACTED:sql_string_literal]，sql_hex_literal 把 `0x…` 十六进制字面值替换为 [REDACTED:sql_hex_literal]；`x'41'` 形式的引号部分由前一条规则替换。本机用 mysql:8.0 容器实测：运行 `SELECT SLEEP(9), 'access_token=''x''', "user_password=\"y\"", 0xDEADBEEF, x'4142', 'it\'s', 'back\\', 'multi\nline secret'` 期间，SHOW FULL PROCESSLIST 的 Info 列规则生效前含全部字面值，生效后全部为 [REDACTED:…]。取舍：诊断时看不到任何字面值，无法区分查询的参数；替换标记不是 `'?'`，因为自定义规则只能输出 [REDACTED:规则名]。限制：未加引号的数字字面值（`password=12345`）和二进制字面值 `0b…` 不替换；ANSI_QUOTES 模式下的双引号标识符、注释中的单个撇号也会触发替换，按过度脱敏处理。 |
 
 参数：
 
@@ -2239,6 +2240,13 @@ builtin_config:
   databases: [app]
   statement_types: [SHOW]
   show_types: [PROCESSLIST]
+redact:
+  builtin: [secrets, pii]
+  custom:
+    - name: sql_string_literal
+      regex: '(?s)''(?:[^''\\]|\\.|'''')*(?:''|\\?$)|"(?:[^"\\]|\\.|"")*(?:"|\\?$)'
+    - name: sql_hex_literal
+      regex: '(?i)\b0x[0-9a-f]+\b'
 ```
 
 ### `mysql_query_readonly`
@@ -2324,11 +2332,11 @@ builtin_config:
 | run_as | root |
 | 执行方式 | builtin |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii |
+| redact | secrets, pii，另有自定义规则 sql_string_literal、sql_hex_literal |
 | 扩展能力 | D1、D3 |
 | 执行限制 | timeout=30s；max_output=64KB |
 | CentOS 7 | 由内置处理器实现，不依赖 grep、zgrep 或解释器。 |
-| 安全说明 | 文件名限于含 slow 的名称，规则和 allowed_roots 的限制同 mysql_error_log。慢日志含完整 SQL 文本，可能含手机号、令牌和密码字面值，启用 secrets 与 pii。本机用样例慢日志实测：`phone='13812345678'` 中的号码、`token='x'`、`password='x'` 均脱敏。只有匹配行和上下文行被输出，多行 SQL 的后续行需要用 context 取得。 |
+| 安全说明 | 文件名限于含 slow 的名称，规则和 allowed_roots 的限制同 mysql_error_log。慢日志含完整 SQL 文本，可能含手机号、令牌和密码字面值，启用 secrets 与 pii。本机用样例慢日志实测：`phone='13812345678'` 中的号码、`token='x'`、`password='x'` 均脱敏。只有匹配行和上下文行被输出，多行 SQL 的后续行需要用 context 取得。 自定义规则 sql_string_literal、sql_hex_literal 与 `mysql_processlist` 相同，把单引号和双引号字符串字面值（含转义引号）及 `0x…` 十六进制字面值替换为 [REDACTED:规则名]；本机用样例慢日志实测 `access_token='slowtok1'`、`user_password="slowpw2"`、`0xCAFEBABE3`、`'it\'s slowesc4'` 规则生效前原样输出，生效后均被替换。取舍：看不到字面值。限制：脱敏逐行进行，跨行的字符串字面值，其续行中引号之前的内容不会被替换（引号之后到行尾被替换）。 |
 
 参数：
 
@@ -2348,6 +2356,13 @@ builtin_config:
   max_scan: 256MB
   max_context: 10
   max_matches: 500
+redact:
+  builtin: [secrets, pii]
+  custom:
+    - name: sql_string_literal
+      regex: '(?s)''(?:[^''\\]|\\.|'''')*(?:''|\\?$)|"(?:[^"\\]|\\.|"")*(?:"|\\?$)'
+    - name: sql_hex_literal
+      regex: '(?i)\b0x[0-9a-f]+\b'
 ```
 
 ### `mysql_variables`
@@ -2360,11 +2375,11 @@ builtin_config:
 | run_as | root |
 | 执行方式 | builtin |
 | filters | match, exclude, tail, head, count |
-| redact | secrets |
+| redact | secrets，另有自定义规则 mysql_secret_variable |
 | 扩展能力 | D1、D7 |
 | 执行限制 | timeout=15s；max_output=64KB |
 | CentOS 7 | 内置驱动不要求安装 mysql CLI；服务器兼容性同 mysql_query_readonly。 |
-| 安全说明 | 内置校验器接受 `SHOW VARIABLES LIKE '<模式>'`（本机实测），因此 sql 参数用正则固定语句形式：`SHOW [GLOBAL ]VARIABLES[ LIKE '<1 到 64 个字母、数字、下划线、百分号>']`。引号内不能出现其他字符，WHERE、SESSION 和多语句被正则拒绝（本机实测）。show_types: [VARIABLES] 满足 G34 对服务器级 SHOW 的显式授权要求。变量值可能含 init_connect 等自由文本，secrets 规则仍然生效。SHOW VARIABLES 不需要专门权限。 |
+| 安全说明 | 内置校验器接受 `SHOW VARIABLES LIKE '<模式>'`（本机实测），因此 sql 参数用正则固定语句形式：`SHOW [GLOBAL ]VARIABLES[ LIKE '<1 到 64 个字母、数字、下划线、百分号>']`。引号内不能出现其他字符，WHERE、SESSION 和多语句被正则拒绝（本机实测）。show_types: [VARIABLES] 满足 G34 对服务器级 SHOW 的显式授权要求。变量值可能含 init_connect 等自由文本，secrets 规则仍然生效。SHOW VARIABLES 不需要专门权限。内置 mysql_query 逐个单元格脱敏，因此值单元格看不到变量名；处理器因此在单元格脱敏之后，对用制表符连接的整行再脱敏一次（`maskRow`），自定义规则 mysql_secret_variable 作用于该行：第一列含 pass、pwd、secret、token、key、auth、credential（不区分大小写，覆盖 password、passwd、pwd）的行整行替换为 [REDACTED:mysql_secret_variable]，变量名和值都不输出。本机用 mysql:8.0 容器以 `--report-password=rp_s3cr3tvalue` 启动实测：规则生效前 `report_password` 行输出明文，生效后该行为 [REDACTED:mysql_secret_variable]。取舍：规则按名称过度脱敏，`key_buffer_size`、`foreign_key_checks`、`validate_password.length`、`default_authentication_plugin`、`password_history` 等名称含关键字的普通变量也被整行隐藏，调用方看不到它们的值；不含这些词的变量名下的敏感值（如 init_connect 中写入的文本）不会被识别。行替换后字段数不再可信，该行只输出一个字段。 |
 
 参数：
 
@@ -2385,6 +2400,11 @@ builtin_config:
   databases: [app]
   statement_types: [SHOW]
   show_types: [VARIABLES]
+redact:
+  builtin: [secrets]
+  custom:
+    - name: mysql_secret_variable
+      regex: '(?is)^[^\t]*(?:pass|pwd|secret|token|key|auth|credential)[^\t]*\t.*$'
 ```
 
 ### `nginx_access_stats`
@@ -2541,7 +2561,7 @@ exec: [/usr/bin/ps, -eo, 'pid,user,%cpu,%mem,etime,comm', --sort=-%cpu]
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | CentOS 7 的 GNU head 支持 -n 和 --。 |
-| 安全说明 | Redis 配置用空格分隔键和值，内置 secrets 规则只匹配 `=` 形式，不会处理 `requirepass x`。自定义规则按行首匹配（允许前导空白和 `#` 注释符，因为注释掉的旧密码同样敏感）：requirepass；masteruser、masterauth、primaryuser、primaryauth；user（ACL 行，含 `>密码` 和 `#哈希`）；sentinel auth-pass、auth-user、sentinel-pass、sentinel-user；tls-key-file-pass、tls-client-key-file-pass；rename-command。本机用样例文件实测以上各形式（含带引号值、大小写混写、行首制表符、users.acl 文件）均脱敏，`sentinel monitor`、`maxmemory` 等非凭据行保持原样。限制：ACL 行整行替换，不保留用户名和权限；包含 `user` 开头的注释说明也会被替换；PEM 私钥由内置规则处理。 |
+| 安全说明 | Redis 配置用空格分隔键和值，内置 secrets 规则只匹配 `=` 形式，不会处理 `requirepass x`。自定义规则按行首匹配（允许前导空白和 `#` 注释符，因为注释掉的旧密码同样敏感）：requirepass；masteruser、masterauth、primaryuser、primaryauth；user（ACL 行，含 `>密码` 和 `#哈希`）；sentinel auth-pass、auth-user、sentinel-pass、sentinel-user；tls-key-file-pass、tls-client-key-file-pass；rename-command。指令名可以带单引号或双引号（`"requirepass" "v"`、`'masterauth' v`、`sentinel "auth-pass" m v`），本机 Valkey 9.1.2 实测接受这些写法（`"requirepass" "quotedpw1"` 生效，无密码连接返回 NOAUTH）；规则中的指令名两侧各允许一个可选引号。本机用样例文件实测以上各形式（含带引号的指令名和值、大小写混写、行首制表符、users.acl 文件）均脱敏，`sentinel monitor`、`maxmemory` 等非凭据行保持原样。限制：ACL 行整行替换，不保留用户名和权限；包含 `user` 开头的注释说明也会被替换；PEM 私钥由内置规则处理。 |
 
 参数：
 
@@ -2558,17 +2578,17 @@ redact:
   builtin: [secrets]
   custom:
     - name: redis_requirepass
-      regex: (?i)^\s*#*\s*requirepass\s+.+$
+      regex: '(?i)^\s*#*\s*["'']?requirepass["'']?\s+.+$'
     - name: redis_masterauth
-      regex: (?i)^\s*#*\s*(?:masteruser|masterauth|primaryuser|primaryauth)\s+.+$
+      regex: '(?i)^\s*#*\s*["'']?(?:masteruser|masterauth|primaryuser|primaryauth)["'']?\s+.+$'
     - name: redis_acl_user
-      regex: (?i)^\s*#*\s*user\s+.+$
+      regex: '(?i)^\s*#*\s*["'']?user["'']?\s+.+$'
     - name: redis_sentinel_auth
-      regex: (?i)^\s*#*\s*sentinel\s+(?:auth-pass|auth-user|sentinel-pass|sentinel-user)\s+.+$
+      regex: '(?i)^\s*#*\s*["'']?sentinel["'']?\s+["'']?(?:auth-pass|auth-user|sentinel-pass|sentinel-user)["'']?\s+.+$'
     - name: redis_tls_key_pass
-      regex: (?i)^\s*#*\s*tls-(?:client-)?key-file-pass\s+.+$
+      regex: '(?i)^\s*#*\s*["'']?tls-(?:client-)?key-file-pass["'']?\s+.+$'
     - name: redis_rename_command
-      regex: (?i)^\s*#*\s*rename-command\s+.+$
+      regex: '(?i)^\s*#*\s*["'']?rename-command["'']?\s+.+$'
 ```
 
 ### `redis_config_get`
@@ -2880,6 +2900,8 @@ exec: [/usr/bin/systemctl, status, '{service}', --no-pager]
 9. **目标工具能力检测（待确认）**：当前 `internal/catalog/host.go` 的 `CheckHost`/`ResolveExecutable` 检查文件存在、权限、解释器和 shebang，不检测工具版本、命令选项、容器内程序或远端服务能力。journal_grep 的 -g、Docker --until、kubectl 与集群版本、JDK 工具权限、sysstat 文件版本仍需目标环境证据。本节点没有连接这些环境。建议维护最低版本与所需选项清单，在部署前运行固定、只读的能力探测；由独立节点确定“加载时 unsupported”或“执行时失败”的状态契约。
 
 10. **写操作（已删除）**：2026-10-22 起示例目录不含任何 risk 不是 read 的 action，process_signal 和 docker_stop 已删除。写操作如需恢复，须单独评审授权范围（PID 复用、容器强制终止、Docker root 权限、容器挂载和容器内链接），本节点没有执行任何写 action。
+
+11. **按模式检索的 action 在原文上匹配（已确定）**：以下 action 把调用方给出的 pattern 交给 grep、journalctl 或内置 log_search，在未脱敏的原文上匹配，匹配之后才脱敏输出：`log_grep_file`、`log_grep_fixed`、`log_search_dir`、`log_search`、`journal_grep`、`docker_file_grep`、`k8s_pod_file_grep`、`mysql_error_log`、`mysql_slow_log`。调用方可以用是否命中（退出码、输出是否为空、`count` 过滤的结果）判断原文是否含某字符串，逐字符试探即可还原被脱敏的值，脱敏规则不能阻止这一点。因此这些 action 的检索根目录只能放日志，不能放含凭据的配置文件：`docker_file_grep`、`k8s_pod_file_grep` 的根目录已去掉 `/etc/nginx`，其余 action 的根目录限于 `/var/log`、`/data/logs`（`journal_grep` 检索 journald）。日志本身可能含凭据，这类内容只能靠脱敏降低暴露，不能保证无法试探；运维评审 catalog 时须保证检索根目录内没有配置文件，也没有指向配置文件的符号链接。读取配置的 action（`app_config_view`、`docker_app_config_view`、`k8s_configmap_view`、`docker_jar_read_entry`、`k8s_pod_jar_read_entry`、`mysql_config_view`、`redis_config_file_view`）不接受 pattern，退出码与内容无关，match 与 exclude 只作用于脱敏之后的输出。数据库查询（`mysql_query_readonly`）的 WHERE 条件作用于原值，其范围由数据库账号的权限决定。依据：`docker_file_grep` 实测，`/etc/nginx/nginx.conf` 含 `proxy_set_header Authorization "Basic …";` 时，pattern 为其中的密文返回退出码 0，为不存在的字符串返回退出码 1，两种情况的输出都不含密文。
 
 ### G30 示例收紧结果（P12D）
 
