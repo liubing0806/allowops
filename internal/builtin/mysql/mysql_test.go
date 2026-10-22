@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/liubing0806/allowops/internal/builtin"
 )
 
 func TestConfig(t *testing.T) {
@@ -204,6 +206,72 @@ func TestReadRows(t *testing.T) {
 				t.Fatalf("got %+v, %v; want %+v, %v", got, err, tc.want, tc.rowErr)
 			}
 		})
+	}
+}
+
+func TestReadRowsByteLimit(t *testing.T) {
+	big := strings.Repeat("x", 30000)
+	bigRows := [][]driver.Value{{big}, {big}, {big}}
+	bigLine := big + "\n"
+	upper := func(s string) string { return strings.ToUpper(s) + "!!" }
+	for _, tc := range []struct {
+		name  string
+		rows  [][]driver.Value
+		limit int64
+		mask  func(string) string
+		want  Result
+	}{
+		{"default limit truncates and drops the partial row", bigRows, builtin.DefaultMySQLMaxResponseBytes, nil,
+			Result{Output: "value\n" + bigLine + bigLine, Rows: 2, Truncated: true}},
+		{"larger configured limit passes", bigRows, 128 << 10, nil,
+			Result{Output: "value\n" + bigLine + bigLine + bigLine, Rows: 3}},
+		{"exactly at limit", [][]driver.Value{{"abc"}, {"def"}}, 14, nil,
+			Result{Output: "value\nabc\ndef\n", Rows: 2}},
+		{"one byte under limit drops the last row", [][]driver.Value{{"abc"}, {"def"}}, 13, nil,
+			Result{Output: "value\nabc\n", Rows: 1, Truncated: true}},
+		{"escaped size counts", [][]driver.Value{{"\t\t\t\t"}}, 14, nil,
+			Result{Output: "value\n", Truncated: true}},
+		{"redacted size counts", [][]driver.Value{{"abc"}}, 11, upper,
+			Result{Output: "VALUE!!\n", Truncated: true}},
+		{"header alone over the limit", [][]driver.Value{{"a"}}, 3, nil,
+			Result{Output: "value\n", Truncated: true}},
+		{"no rows never truncates", nil, 3, nil,
+			Result{Output: "value\n"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := sql.OpenDB(&fixture{columns: []string{"value"}, rows: tc.rows})
+			defer db.Close()
+			rows, err := db.Query("test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rows.Close()
+			got, err := readRowsRedacted(rows, DefaultMaxRows, tc.limit, tc.mask)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Fatalf("got rows=%d truncated=%v len=%d; want rows=%d truncated=%v len=%d", got.Rows, got.Truncated, len(got.Output), tc.want.Rows, tc.want.Truncated, len(tc.want.Output))
+			}
+		})
+	}
+}
+
+func TestMaxResponseBytesConfig(t *testing.T) {
+	base := Config{Credential: "/etc/allowops/mysql.json", Address: "tcp://127.0.0.1:3306"}
+	for _, n := range []int64{0, 1, 64 << 10, 16 << 20} {
+		c := base
+		c.MaxResponseBytes = n
+		if err := c.Validate(); err != nil {
+			t.Errorf("max_response_bytes %d: %v", n, err)
+		}
+	}
+	for _, n := range []int64{-1, 16<<20 + 1} {
+		c := base
+		c.MaxResponseBytes = n
+		if c.Validate() == nil {
+			t.Errorf("accepted max_response_bytes %d", n)
+		}
 	}
 }
 

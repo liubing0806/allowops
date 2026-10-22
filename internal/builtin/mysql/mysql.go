@@ -20,6 +20,8 @@ import (
 	"time"
 
 	driver "github.com/go-sql-driver/mysql"
+
+	"github.com/liubing0806/allowops/internal/builtin"
 )
 
 const (
@@ -39,6 +41,9 @@ type Config struct {
 	Databases      []string      `yaml:"databases" json:"databases"`
 	StatementTypes []string      `yaml:"statement_types" json:"statement_types"`
 	ShowTypes      []string      `yaml:"show_types" json:"show_types"`
+
+	// MaxResponseBytes limits the redacted, escaped TSV; zero selects the default.
+	MaxResponseBytes int64 `yaml:"max_response_bytes" json:"max_response_bytes"`
 }
 
 type Params struct {
@@ -229,7 +234,7 @@ func runQueryRedacted(ctx context.Context, cfg Config, p Params, cred credential
 		return result, queryError(ctx, "query", err)
 	}
 	defer rows.Close()
-	result, err = readRowsRedacted(rows, cfg.MaxRows, mask)
+	result, err = readRowsRedacted(rows, cfg.MaxRows, cfg.MaxResponseBytes, mask)
 	if err != nil {
 		return Result{}, queryError(ctx, "read result", err)
 	}
@@ -271,10 +276,10 @@ func queryError(ctx context.Context, stage string, err error) error {
 }
 
 func readRows(rows *sql.Rows, maxRows int) (Result, error) {
-	return readRowsRedacted(rows, maxRows, nil)
+	return readRowsRedacted(rows, maxRows, builtin.DefaultMySQLMaxResponseBytes, nil)
 }
 
-func readRowsRedacted(rows *sql.Rows, maxRows int, mask func(string) string) (Result, error) {
+func readRowsRedacted(rows *sql.Rows, maxRows int, maxBytes int64, mask func(string) string) (Result, error) {
 	if mask == nil {
 		mask = func(s string) string { return s }
 	}
