@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -155,4 +156,134 @@ func TestExampleAppConfigKeysMasksLongBase64(t *testing.T) {
 			t.Errorf("%q changed to %q", line, got)
 		}
 	}
+}
+
+// Hadoop and Hive style configuration keeps the key and the value in two
+// elements. Only the same-line form can be recognised.
+var hadoopStyleCases = []redactionCase{
+	{"<property><name>fs.s3a.secret.key</name><value>hdfskey13</value></property>", "hdfskey13"},
+	{"  <name>javax.jdo.option.ConnectionPassword</name> <value>hivepw14</value>", "hivepw14"},
+	{"<property><name>hive.server2.token</name><value><![CDATA[hivetok15]]></value></property>", "hivetok15"},
+	{"<name>a.password</name><value>hadooppw16</value><name>b.port</name><value>portkeep</value>", "hadooppw16"},
+	{"<name>fs.defaultFS</name><value>hdfs://nn:8020</value>", ""},
+	{"<name>hive.metastore.uris</name><value>thrift://meta:9083</value>", ""},
+}
+
+func TestExampleConfigReadersRedactSameLineNameValueElements(t *testing.T) {
+	c := loadExamples(t)
+	for _, name := range configReaders {
+		checkRedactionCases(t, name, exampleRedactor(t, c, name), hadoopStyleCases)
+	}
+	// The unrelated property that shares the line must survive.
+	got := exampleRedactor(t, c, "app_config_view").Line(hadoopStyleCases[3].line)
+	if !strings.Contains(got, "portkeep") {
+		t.Errorf("neighbouring property lost: %q", got)
+	}
+}
+
+// The grep actions match the original text before redaction, so the exit code
+// and the output reveal whether a hidden value contains a string. Their roots
+// must therefore hold logs only.
+func TestExampleContainerFileGrepSearchesLogDirectoriesOnly(t *testing.T) {
+	c := loadExamples(t)
+	for _, name := range []string{"docker_file_grep", "k8s_pod_file_grep"} {
+		a := c.Actions[name]
+		re := regexp.MustCompile(a.Params["path"].Regex)
+		for _, p := range []string{"/var/log/app/a.log", "/data/logs/app.log"} {
+			if !re.MatchString(p) {
+				t.Errorf("%s rejects %s", name, p)
+			}
+		}
+		for _, p := range []string{"/etc/nginx/nginx.conf", "/etc/nginx/conf.d/site.conf", "/etc/passwd", "/var/log/../etc/x"} {
+			if re.MatchString(p) {
+				t.Errorf("%s accepts %s", name, p)
+			}
+		}
+		if strings.Contains(a.Description+a.Params["path"].Description, "nginx") {
+			t.Errorf("%s description still mentions nginx", name)
+		}
+	}
+}
+
+// SHOW VARIABLES rows are checked as "name<TAB>value" by the row pass of the
+// MySQL builtin; the rule needs the variable name.
+func TestExampleMySQLVariablesRedactsSecretVariables(t *testing.T) {
+	r := exampleRedactor(t, loadExamples(t), "mysql_variables")
+	checkRedactionCases(t, "mysql_variables", r, []redactionCase{
+		{"report_password\trp_s3cr3t_value", "rp_s3cr3t_value"},
+		{"wsrep_sst_auth\tsstuser:sstpw1", "sstpw1"},
+		{"ssl_key\t/etc/mysql/server-key.pem", "server-key.pem"},
+		{"some_secret_x\tsecval2", "secval2"},
+		{"api_token\ttokval3", "tokval3"},
+		{"validate_password.policy\tstrict\nmore", "more"},
+		{"max_connections\t151", ""},
+		{"version\t8.0.46", ""},
+		{"Variable_name\tValue", ""},
+	})
+	// Over-redaction is accepted: numeric variables whose names contain key.
+	if got := r.Line("key_buffer_size\t8388608"); strings.Contains(got, "8388608") {
+		t.Errorf("key_buffer_size not redacted: %q", got)
+	}
+}
+
+// Statement text can hold credentials in literals. Literals are removed,
+// including escaped quotes and hexadecimal forms.
+var sqlLiteralCases = []redactionCase{
+	{"SELECT 1 FROM t WHERE access_token='tokval1' AND id=5", "tokval1"},
+	{`UPDATE u SET user_password="pwval2" WHERE id=5`, "pwval2"},
+	{`SELECT 'esc\'aped3 tail' FROM t`, "aped3"},
+	{`SELECT 'esc\'aped3 tail' FROM t`, "tail"},
+	{`SELECT "dq""inner4" FROM t`, "inner4"},
+	{`SELECT 'sq''inner5' FROM t`, "inner5"},
+	{`SELECT 'back\\' AS a, 'second6' AS b`, "second6"},
+	{"SELECT 0xDEADBEEF7 FROM t", "DEADBEEF7"},
+	{"SELECT x'41424344' AS h", "41424344"},
+	{"SELECT 1 WHERE n='unterminated8", "unterminated8"},
+	{"SELECT 'multi\nline secret9' AS m", "secret9"},
+	{"SELECT 'a' AS a, 'b' AS b, token_col FROM t", "'b'"},
+	{"SELECT id, name FROM t WHERE n > 5 ORDER BY id", ""},
+	{"# Time: 2026-10-22T10:00:00.000000Z", ""},
+	{"SET timestamp=1700000000;", ""},
+	{"# User@Host: app[app] @ localhost []  Id:    12", ""},
+}
+
+func TestExampleMySQLStatementLogsRedactSQLLiterals(t *testing.T) {
+	c := loadExamples(t)
+	for _, name := range []string{"mysql_processlist", "mysql_slow_log"} {
+		checkRedactionCases(t, name, exampleRedactor(t, c, name), sqlLiteralCases)
+	}
+}
+
+func TestExampleMySQLConfigViewRedactsWsrepSstAuth(t *testing.T) {
+	r := exampleRedactor(t, loadExamples(t), "mysql_config_view")
+	checkRedactionCases(t, "mysql_config_view", r, []redactionCase{
+		{"wsrep_sst_auth = sstuser:sstpw1", "sstpw1"},
+		{"wsrep-sst-auth=sstuser:sstpw2", "sstpw2"},
+		{`wsrep_sst_auth="sstuser:sstpw3"`, "sstpw3"},
+		{"# wsrep_sst_auth=sstuser:sstpw4", "sstpw4"},
+		{"password=mysqlpw5", "mysqlpw5"},
+		{"[mysqld]", ""},
+		{"max_connections=100", ""},
+		{"wsrep_cluster_name=prod", ""},
+	})
+}
+
+func TestExampleRedisConfigFileViewRedactsQuotedDirectives(t *testing.T) {
+	r := exampleRedactor(t, loadExamples(t), "redis_config_file_view")
+	checkRedactionCases(t, "redis_config_file_view", r, []redactionCase{
+		{"requirepass redispw1", "redispw1"},
+		{`"requirepass" "redispw2"`, "redispw2"},
+		{`'requirepass' redispw3`, "redispw3"},
+		{`  "masterauth" "redispw4"`, "redispw4"},
+		{`'masterauth' redispw5`, "redispw5"},
+		{`"masteruser" replica_user6`, "replica_user6"},
+		{`"user" default on >redispw7 ~* +@all`, "redispw7"},
+		{`sentinel "auth-pass" mymaster redispw8`, "redispw8"},
+		{`"sentinel" 'auth-pass' mymaster redispw9`, "redispw9"},
+		{`"tls-key-file-pass" "redispw10"`, "redispw10"},
+		{`"rename-command" CONFIG hiddencmd11`, "hiddencmd11"},
+		{"port 6379", ""},
+		{`"maxmemory" "100mb"`, ""},
+		{"sentinel monitor mymaster 10.0.0.1 6379 2", ""},
+	})
 }
