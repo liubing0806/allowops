@@ -54,6 +54,7 @@ fuzz:
 script-checks:
 	python3 deploy/packaging/test-postinstall-nosudo.py
 	python3 test/ci-dist-check.py
+	python3 deploy/compose/test-local-up-bootstrap.py
 
 lint: script-checks
 	go vet ./...
