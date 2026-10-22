@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/big"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/store"
@@ -635,9 +637,11 @@ func (s *Service) catalogReport(c *connection, r *v1.CatalogLoadReport) error {
 		}
 		// Only complete validated reports become visible; fence replaced connections.
 		// Snapshot persistence must not introduce new connection failures.
-		_, _ = s.Store.Pool.Exec(c.ctx, `INSERT INTO host_catalog_reports(host_id,catalog_id,version,loaded,report)
+		if _, err := s.Store.Pool.Exec(c.ctx, `INSERT INTO host_catalog_reports(host_id,catalog_id,version,loaded,report)
  SELECT host_id,$2,$3,$4,$5 FROM hosts WHERE host_id=$1 AND connection_id=$6 AND certificate_status='active'
- ON CONFLICT(host_id,catalog_id) DO UPDATE SET version=EXCLUDED.version,loaded=EXCLUDED.loaded,report=EXCLUDED.report`, c.identity.HostID, r.Catalog.CatalogId, int64(r.Catalog.Version), r.Loaded, raw, c.id)
+ ON CONFLICT(host_id,catalog_id) DO UPDATE SET version=EXCLUDED.version,loaded=EXCLUDED.loaded,report=EXCLUDED.report`, c.identity.HostID, r.Catalog.CatalogId, int64(r.Catalog.Version), r.Loaded, raw, c.id); err != nil {
+			logWriteFailure(c.ctx, "host catalog report persistence failed", err, "host_id", c.identity.HostID, "catalog_id", r.Catalog.CatalogId)
+		}
 		c.loaded[r.Catalog.CatalogId] = c.report
 		c.report = nil
 	}
@@ -670,21 +674,55 @@ func (s *Service) maintenance() {
 		case <-s.ctx.Done():
 			return
 		case <-flush.C:
-			for _, c := range s.snapshot() {
-				_ = s.Store.Queries.TouchConnection(s.ctx, db.TouchConnectionParams{HostID: c.identity.HostID, ConnectionID: pgtype.Text{String: c.id, Valid: true}, LastSeen: store.Timestamp(*c.lastSeen.Load())})
+			conns := s.snapshot()
+			var failed int
+			var first error
+			for _, c := range conns {
+				if err := s.Store.Queries.TouchConnection(s.ctx, db.TouchConnectionParams{HostID: c.identity.HostID, ConnectionID: pgtype.Text{String: c.id, Valid: true}, LastSeen: store.Timestamp(*c.lastSeen.Load())}); err != nil {
+					if failed == 0 {
+						first = err
+					}
+					failed++
+				}
 			}
-			_, _ = s.Store.Pool.Exec(s.ctx, "UPDATE gateway_instances SET last_seen=now() WHERE instance_id=$1", s.InstanceID)
+			if failed > 0 {
+				// One record per tick: a database outage fails every connection.
+				logWriteFailure(s.ctx, "host connection last_seen flush failed", first, "failed", failed, "total", len(conns))
+			}
+			if _, err := s.Store.Pool.Exec(s.ctx, "UPDATE gateway_instances SET last_seen=now() WHERE instance_id=$1", s.InstanceID); err != nil {
+				logWriteFailure(s.ctx, "gateway instance last_seen update failed", err)
+			}
 		case <-cleanup.C:
-			_ = s.Store.Queries.DeleteExpiredMessages(s.ctx)
+			if err := s.Store.Queries.DeleteExpiredMessages(s.ctx); err != nil {
+				logWriteFailure(s.ctx, "expired gateway message cleanup failed", err)
+			}
 		}
 	}
+}
+
+// logWriteFailure reports a best-effort write that is deliberately not
+// returned to the caller. Provider errors can contain SQL and parameters, so
+// only the Go type and SQLSTATE are emitted. Failures caused by cancellation
+// of ctx (shutdown or a closed connection) are expected and not logged.
+func logWriteFailure(ctx context.Context, message string, err error, attrs ...any) {
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+		return
+	}
+	var state string
+	var pgerr *pgconn.PgError
+	if errors.As(err, &pgerr) {
+		state = pgerr.Code
+	}
+	slog.WarnContext(ctx, message, append(attrs, "sqlstate", state, "error_type", fmt.Sprintf("%T", err))...)
 }
 
 // Drain rejects new dispatch immediately. P6's optional hook waits for running
 // work. Each host gets a cryptographically random delay within the configured range.
 func (s *Service) Drain(ctx context.Context) error {
 	s.draining.Store(true)
-	_, _ = s.Store.Pool.Exec(ctx, "UPDATE gateway_instances SET draining=true WHERE instance_id=$1", s.InstanceID)
+	if _, err := s.Store.Pool.Exec(ctx, "UPDATE gateway_instances SET draining=true WHERE instance_id=$1", s.InstanceID); err != nil {
+		logWriteFailure(ctx, "gateway instance draining update failed", err)
+	}
 	if s.Hooks.Drain != nil {
 		if err := s.Hooks.Drain(ctx); err != nil {
 			return err
