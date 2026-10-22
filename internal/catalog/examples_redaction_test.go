@@ -384,3 +384,12 @@ func TestExampleFileViewRedactsFileCredentials(t *testing.T) {
 	r := exampleRedactor(t, loadExamples(t), "file_view")
 	checkRedactionCases(t, "file_view", r, fileCredentialCases)
 }
+
+// The container and Pod file readers share the file rule set with file_view,
+// including the whitespace-separated nginx directives.
+func TestExampleContainerFileActionsRedactNginxDirectives(t *testing.T) {
+	c := loadExamples(t)
+	for _, name := range []string{"docker_file_view", "docker_file_grep", "k8s_pod_file_view", "k8s_pod_file_grep"} {
+		checkRedactionCases(t, name, exampleRedactor(t, c, name), nginxDirectiveCases)
+	}
+}
