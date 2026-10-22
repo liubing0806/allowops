@@ -323,3 +323,74 @@ func TestSlowlogGet128FitsDefaultLimit(t *testing.T) {
 		t.Fatalf("128 entries use %d bytes, over 64KB", len(r.Stdout))
 	}
 }
+
+// A client can send any argument text, including the server's truncation
+// marker. The marker counts only when the entry holds the server maximum of 32
+// stored arguments (31 real ones plus the marker); a shorter entry was not
+// truncated, so its argument count is len(args).
+func TestSummarizeSlowlogIgnoresForgedMarker(t *testing.T) {
+	entry := func(args ...any) []any {
+		return []any{[]any{int64(1), int64(1700000000), int64(7), args, "127.0.0.1:1", ""}}
+	}
+	count := func(t *testing.T, args ...any) int64 {
+		t.Helper()
+		out, _, err := summarizeSlowlog(entry(args...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out.([]any)[0].([]any)[4].(int64)
+	}
+	if got := count(t, "SET", "k", "... (999999 more arguments)"); got != 3 {
+		t.Fatalf("forged marker in a 3 argument SET: count = %d, want 3", got)
+	}
+	if got := count(t, "GET", "... (5 more arguments)"); got != 2 {
+		t.Fatalf("forged marker in a 2 argument GET: count = %d, want 2", got)
+	}
+	// 31 stored arguments are fewer than the server maximum: no truncation.
+	args31 := make([]any, 31)
+	for i := range args31 {
+		args31[i] = "a"
+	}
+	args31[30] = "... (50 more arguments)"
+	if got := count(t, args31...); got != 31 {
+		t.Fatalf("forged marker in a 31 argument entry: count = %d, want 31", got)
+	}
+	// A real truncation: 31 stored arguments plus the marker for 50 more.
+	args32 := append(append([]any{}, args31[:30]...), "x", "... (50 more arguments)")
+	if got := count(t, args32...); got != 31+50 {
+		t.Fatalf("server truncation marker: count = %d, want 81", got)
+	}
+}
+
+// Same forgery against a real server: SET with a forged marker is 3 arguments.
+func TestSlowlogGetForgedMarkerAgainstServer(t *testing.T) {
+	if !inRootNamespace(t) {
+		return
+	}
+	s := startServer(t)
+	cfg := restrictedConfig(t, `{"commands":["SLOWLOG"]}`)
+	cfg.Address, cfg.Credential = s.address, credentials(t)
+	ctx := context.Background()
+	for _, args := range [][]any{{"CONFIG", "SET", "slowlog-log-slower-than", "0"}, {"SLOWLOG", "RESET"}, {"SET", "forged-k", "... (999999 more arguments)"}} {
+		if err := s.client.Do(ctx, args...).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r, err := Run(ctx, cfg, Params{Command: "SLOWLOG", Args: []string{"GET", "10"}})
+	if err != nil || r.ExitCode != 0 {
+		t.Fatalf("SLOWLOG GET: %+v, %v", r, err)
+	}
+	var entries [][]any
+	if err := json.Unmarshal([]byte(r.Stdout), &entries); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.EqualFold(e[3].(string), "set") {
+			if e[4].(float64) != 3 {
+				t.Fatalf("SET argument count = %v, want 3 (%s)", e[4], r.Stdout)
+			}
+			return
+		}
+	}
+	t.Fatalf("no SET entry in %s", r.Stdout)
+}
