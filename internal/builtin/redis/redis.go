@@ -455,32 +455,54 @@ func readResponse(ctx context.Context, client *redisclient.Client, args []any, l
 			}
 			size += length
 		}
+		return readBoundedMGet(ctx, client, args[1:], limit)
 	}
 	if size > limit {
 		return nil, true, fmt.Errorf("%w: value exceeds %d bytes", ErrResponseLimit, limit)
 	}
-	// G13: HGET/MGET preflight is not atomic. Concurrent writes between the
+	// G13: the HGET preflight is not atomic. Concurrent writes between the
 	// length check and read may enlarge a value beyond this memory limit.
 	value, err := client.Do(ctx, args...).Result()
 	if err == nil {
-		switch value := value.(type) {
-		case string:
-			if name == "HGET" && int64(len(value)) > limit {
-				return nil, true, fmt.Errorf("%w: value changed after size check", ErrResponseLimit)
-			}
-		case []any:
-			if name == "MGET" {
-				var total int64
-				for _, item := range value {
-					if text, ok := item.(string); ok {
-						total += int64(len(text))
-					}
-				}
-				if total > limit {
-					return nil, true, fmt.Errorf("%w: values changed after size check", ErrResponseLimit)
-				}
-			}
+		if text, ok := value.(string); ok && name == "HGET" && int64(len(text)) > limit {
+			return nil, true, fmt.Errorf("%w: value changed after size check", ErrResponseLimit)
 		}
 	}
 	return value, false, err
+}
+
+// readBoundedMGet answers MGET with one bounded GETRANGE per key, so a key that
+// grew after the STRLEN precheck cannot make the client allocate its full size.
+// Each read is capped at the unused budget plus one byte; the extra byte shows
+// growth past the limit. The reads are not an atomic snapshot.
+func readBoundedMGet(ctx context.Context, client *redisclient.Client, keys []any, limit int64) (any, bool, error) {
+	values := make([]any, len(keys))
+	var total int64
+	for i, key := range keys {
+		remaining := limit - total
+		text, err := client.GetRange(ctx, key.(string), 0, remaining).Result()
+		// MGET returns null for non-string keys. Preserve that behavior.
+		if err != nil && strings.HasPrefix(err.Error(), "WRONGTYPE") {
+			continue
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		if int64(len(text)) > remaining {
+			return nil, true, fmt.Errorf("%w: values changed after size check", ErrResponseLimit)
+		}
+		if text == "" {
+			// GETRANGE answers "" for a missing key as well as an empty string.
+			exists, err := client.Exists(ctx, key.(string)).Result()
+			if err != nil {
+				return nil, false, err
+			}
+			if exists == 0 {
+				continue
+			}
+		}
+		values[i] = text
+		total += int64(len(text))
+	}
+	return values, false, nil
 }
