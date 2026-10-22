@@ -3,8 +3,11 @@ package redis
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+
+	redisclient "github.com/redis/go-redis/v9"
 )
 
 func rejectedBeforeCredential(t *testing.T, c Config, p Params, want string) {
@@ -172,18 +175,18 @@ func TestConfigGetAndSlowlogLocalServer(t *testing.T) {
 	}
 	var entries []any
 	r, err = Run(context.Background(), cfg, Params{Command: "SLOWLOG", Args: []string{"GET", "128"}})
-	if err != nil || r.ExitCode != 0 || json.Unmarshal([]byte(r.Stdout), &entries) != nil || len(entries) == 0 || !strings.Contains(r.Stdout, "tenant:key") {
+	if err != nil || r.ExitCode != 0 || json.Unmarshal([]byte(r.Stdout), &entries) != nil || len(entries) == 0 {
 		t.Fatalf("SLOWLOG GET: %+v, %v", r, err)
 	}
 	r, err = Run(context.Background(), cfg, Params{Command: "SLOWLOG", Args: []string{"GET"}})
 	if err != nil || r.ExitCode != 0 {
 		t.Fatalf("SLOWLOG GET default count: %+v, %v", r, err)
 	}
-	// Masking reaches nested slow log command arguments.
+	// Masking reaches the strings that remain in each summarized entry.
 	r, err = RunRedacted(context.Background(), cfg, Params{Command: "SLOWLOG", Args: []string{"GET", "10"}}, func(v string) string {
-		return strings.ReplaceAll(v, "super-secret-value", "***")
+		return strings.ReplaceAll(v, "SET", "***")
 	})
-	if err != nil || strings.Contains(r.Stdout, "super-secret-value") || !strings.Contains(r.Stdout, "***") {
+	if err != nil || strings.Contains(r.Stdout, `"SET"`) || !strings.Contains(r.Stdout, "***") {
 		t.Fatalf("SLOWLOG masking: %+v, %v", r, err)
 	}
 	// RESET is rejected and the log is untouched.
@@ -203,5 +206,120 @@ func TestConfigGetAndSlowlogLocalServer(t *testing.T) {
 	r, err = Run(context.Background(), small, Params{Command: "SLOWLOG", Args: []string{"GET", "128"}})
 	if err != nil || r.ExitCode != 0 || !r.Truncated || r.Stdout != "" {
 		t.Fatalf("SLOWLOG GET limit: %+v, %v", r, err)
+	}
+}
+
+// SLOWLOG GET must not return command arguments (keys, values) or the client
+// name; each entry keeps only id, timestamp, duration, command name, argument
+// count and client address.
+func TestSlowlogGetSummary(t *testing.T) {
+	if !inRootNamespace(t) {
+		return
+	}
+	s := startServer(t)
+	cfg := restrictedConfig(t, `{"commands":["SLOWLOG"]}`)
+	cfg.Address, cfg.Credential = s.address, credentials(t)
+
+	opts := *s.client.Options()
+	opts.ClientName = "client-name-marker"
+	named := redisclient.NewClient(&opts)
+	defer named.Close()
+	ctx := context.Background()
+	if err := named.Do(ctx, "CONFIG", "SET", "slowlog-log-slower-than", "0").Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := named.Do(ctx, "SLOWLOG", "RESET").Err(); err != nil {
+		t.Fatal(err)
+	}
+	if err := named.Do(ctx, "SET", "other-tenant:key-marker", "value-marker").Err(); err != nil {
+		t.Fatal(err)
+	}
+	mset := []any{"MSET"}
+	for i := 0; i < 40; i++ {
+		mset = append(mset, fmt.Sprintf("bulk-key-%d", i), "bulk-value")
+	}
+	if err := named.Do(ctx, mset...).Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := Run(ctx, cfg, Params{Command: "SLOWLOG", Args: []string{"GET", "128"}})
+	if err != nil || r.ExitCode != 0 || r.Truncated {
+		t.Fatalf("SLOWLOG GET: %+v, %v", r, err)
+	}
+	for _, leaked := range []string{"key-marker", "value-marker", "client-name-marker", "bulk-key", "bulk-value", "slowlog-log-slower-than"} {
+		if strings.Contains(r.Stdout, leaked) {
+			t.Fatalf("SLOWLOG GET leaked %q:\n%s", leaked, r.Stdout)
+		}
+	}
+	var entries [][]any
+	if err := json.Unmarshal([]byte(r.Stdout), &entries); err != nil || len(entries) == 0 {
+		t.Fatalf("SLOWLOG GET output: %q, %v", r.Stdout, err)
+	}
+	counts := map[string]float64{}
+	for _, entry := range entries {
+		if len(entry) != 6 {
+			t.Fatalf("entry must hold id, timestamp, duration, command, argument count, address: %v", entry)
+		}
+		for i := 0; i < 3; i++ {
+			if _, ok := entry[i].(float64); !ok {
+				t.Fatalf("entry[%d] is not a number: %v", i, entry)
+			}
+		}
+		name, ok := entry[3].(string)
+		if !ok {
+			t.Fatalf("entry[3] is not the command name: %v", entry)
+		}
+		count, ok := entry[4].(float64)
+		if !ok {
+			t.Fatalf("entry[4] is not the argument count: %v", entry)
+		}
+		if _, ok := entry[5].(string); !ok {
+			t.Fatalf("entry[5] is not the client address: %v", entry)
+		}
+		counts[strings.ToUpper(name)] = count
+	}
+	if counts["SET"] != 3 {
+		t.Fatalf("SET argument count = %v, want 3 (entries %v)", counts["SET"], entries)
+	}
+	// The server keeps 31 arguments and replaces the rest with a marker; the
+	// summary reports the real count of 81.
+	if counts["MSET"] != 81 {
+		t.Fatalf("MSET argument count = %v, want 81 (entries %v)", counts["MSET"], entries)
+	}
+}
+
+// 128 entries of the largest shape the server can store stay within the 64KB
+// response limit of the catalog action.
+func TestSlowlogGet128FitsDefaultLimit(t *testing.T) {
+	if !inRootNamespace(t) {
+		return
+	}
+	s := startServer(t)
+	cfg := restrictedConfig(t, `{"commands":["SLOWLOG"]}`)
+	cfg.Address, cfg.Credential = s.address, credentials(t)
+	cfg.MaxResponseBytes = 64 << 10
+	ctx := context.Background()
+	s.seed(t, "CONFIG", "SET", "slowlog-log-slower-than", "0")
+	s.seed(t, "CONFIG", "SET", "slowlog-max-len", "256")
+	s.seed(t, "SLOWLOG", "RESET")
+	long := strings.Repeat("k", 4096)
+	for i := 0; i < 140; i++ {
+		args := []any{"MSET"}
+		for j := 0; j < 100; j++ {
+			args = append(args, long, long)
+		}
+		s.seed(t, args...)
+	}
+	r, err := Run(ctx, cfg, Params{Command: "SLOWLOG", Args: []string{"GET", "128"}})
+	if err != nil || r.ExitCode != 0 || r.Truncated {
+		t.Fatalf("SLOWLOG GET 128: truncated=%v, %v", r.Truncated, err)
+	}
+	var entries [][]any
+	if err := json.Unmarshal([]byte(r.Stdout), &entries); err != nil || len(entries) != 128 {
+		t.Fatalf("entries = %d, %v", len(entries), err)
+	}
+	t.Logf("128 entries use %d bytes", len(r.Stdout))
+	if len(r.Stdout) > 64<<10 {
+		t.Fatalf("128 entries use %d bytes, over 64KB", len(r.Stdout))
 	}
 }
