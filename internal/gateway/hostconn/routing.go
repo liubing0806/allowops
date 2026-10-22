@@ -182,6 +182,99 @@ func (s *Service) forgetPending(host, connectionID, task, mailbox string) {
 	}
 }
 
+// reconcilePending drops pending mailbox IDs whose gateway_messages row no longer
+// exists, which only the connection owner can detect when the sender ran on another
+// instance: that sender deletes the row on timeout or cancellation, but forgetPending
+// reaches only the sender's own connection map. The agent ignores a cancel for a task
+// it does not know, so such an entry would otherwise stay until the connection ends
+// and count against MaxInflight.
+//
+// The rule is deliberately narrower than "the row is gone". An ID is dropped only if
+//   - it is not the first in its task's list and its row is gone: write admits a second
+//     ID only for a cancel, so the first ID is the assignment and later ones are
+//     cancels, and a stale cancel must not block a retried cancel (limit of two); or
+//   - its row is gone and the task is not active on this connection per the database
+//     (finished, absent, or owned by another connection).
+//
+// The ID of a task that is still executing is kept even when its sender is gone, so
+// the task keeps occupying its slot until TaskCompleted arrives. A mailbox that is
+// added after the snapshot is never considered; its row exists when write adds it.
+func (s *Service) reconcilePending(ctx context.Context, c *connection) error {
+	c.mu.Lock()
+	var ids, tasks []string
+	for task, mailboxes := range c.pending {
+		tasks = append(tasks, task)
+		ids = append(ids, mailboxes...)
+	}
+	c.mu.Unlock()
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := s.Store.Pool.Query(ctx, "SELECT message_id FROM gateway_messages WHERE message_id=ANY($1::text[])", ids)
+	if err != nil {
+		return err
+	}
+	exists := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		exists[id] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	missing := map[string]bool{}
+	for _, id := range ids {
+		if !exists[id] {
+			missing[id] = true
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	// The status predicate matches tasks_host_connection. A task only leaves the
+	// active states, so a task read as inactive here cannot become active later.
+	rows, err = s.Store.Pool.Query(ctx, "SELECT DISTINCT task_id FROM tasks WHERE task_id=ANY($1::text[]) AND host_id=$2 AND connection_id=$3 AND status IN (1,2)", tasks, c.identity.HostID, c.id)
+	if err != nil {
+		return err
+	}
+	active := map[string]bool{}
+	for rows.Next() {
+		var task string
+		if err := rows.Scan(&task); err != nil {
+			rows.Close()
+			return err
+		}
+		active[task] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for task, mailboxes := range c.pending {
+		i := -1
+		kept := slices.DeleteFunc(slices.Clone(mailboxes), func(id string) bool {
+			i++
+			return missing[id] && (i > 0 || !active[task])
+		})
+		if len(kept) == len(mailboxes) {
+			continue
+		}
+		if len(kept) > 0 {
+			c.pending[task] = kept
+		} else {
+			delete(c.pending, task)
+		}
+	}
+	return nil
+}
+
 func (s *Service) notification(payload string) {
 	switch {
 	case strings.HasPrefix(payload, "host:"):
