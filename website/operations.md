@@ -45,6 +45,29 @@ output and audit. A reported version or commit alone does not establish that
 the new executable is serving requests. Host package installation enables but
 does not start the service; operators control the restart.
 
+## Update check
+
+The gateway can remind operators that a newer release exists. The check is off
+by default. Enable it with `update_check.enabled: true`.
+
+`update_check.url` defaults to `https://liubing0806.github.io/allowops/version.json`.
+An intranet deployment can host the same file internally and point the setting
+at it. The manifest has two fields:
+
+```json
+{"version":"0.1.0","published_at":"2026-10-22T00:00:00Z"}
+```
+
+`version` is the latest SemVer release and `published_at` is its UTC date. The
+documentation build generates the file from the first release heading of
+`CHANGELOG.md`.
+
+The gateway requests the manifest every 24 hours with a random delay. The
+request carries only the header `User-Agent: allowops-gateway/<version>`. The
+gateway only shows a reminder when the manifest version is newer than the running
+one. It never downloads or installs a release; follow [Upgrade order](#upgrade-order)
+with verified artifacts.
+
 ## Key and token rotation
 
 Catalog key rotation is described in [publishing](publishing.md): distribute the
