@@ -495,6 +495,10 @@ func maskResponse(value any, mask func(string) string) any {
 	}
 }
 
+// slowlogEntryMaxArgc is the server limit on stored arguments per slow log
+// entry (SLOWLOG_ENTRY_MAX_ARGC in Redis and Valkey).
+const slowlogEntryMaxArgc = 32
+
 var slowlogTruncatedArgs = regexp.MustCompile(`^\.\.\. \((\d+) more arguments\)$`)
 
 // summarizeSlowlog reduces each SLOWLOG GET entry to [id, unix time,
@@ -521,9 +525,12 @@ func summarizeSlowlog(value any) (any, bool, error) {
 			name, _ = args[0].(string)
 		}
 		count := int64(len(args))
-		if len(args) > 0 {
-			// The server stores a limited number of arguments and replaces the
-			// rest with a "... (N more arguments)" marker.
+		if len(args) >= slowlogEntryMaxArgc {
+			// The server stores at most slowlogEntryMaxArgc arguments and, when
+			// the command had more, replaces the last stored one with a
+			// "... (N more arguments)" marker. A shorter entry was not
+			// truncated, so an argument that looks like the marker was sent by
+			// a client and must not change the count.
 			if last, _ := args[len(args)-1].(string); last != "" {
 				if m := slowlogTruncatedArgs.FindStringSubmatch(last); m != nil {
 					if more, err := strconv.ParseInt(m[1], 10, 32); err == nil {

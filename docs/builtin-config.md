@@ -33,6 +33,9 @@ GET、MGET、HGET、HLEN、TTL、TYPE、EXISTS、STRLEN、LLEN、SCARD、ZCARD �
 COUNT 上限和游标校验沿用原有规则。
 
 CONFIG 只支持 `CONFIG GET <参数名>...`，一次最多 16 个参数名。SET、RESETSTAT、REWRITE、HELP 等子命令拒绝。
+一次传多个参数名要求服务端为 Redis 7.0 及以上；旧版本（4.0.11 实测）对多个参数名返回 `ERR Wrong number of arguments for CONFIG GET`，需一次一个参数名。
+参数在不同版本的名称可能不同：5.0 之前只有 `slave-read-only`，`replica-read-only` 在 4.0.11 上返回空数组 `[]` 且退出码为 0；
+`config_params` 需要按目标版本列出实际名称（示例 `redis_config_get` 同时列出两个名称，7.0 及以上两者等价）。
 参数名必须是字面名称：含 `*`、`?`、`[` 等字符的名称拒绝，因此无法用通配符枚举全部配置。
 每个参数名必须出现在 `config_params` 中（不区分大小写），未配置 `config_params` 时 CONFIG GET 拒绝。
 敏感参数不能出现在 `config_params` 中，也不能被请求，即使目录配置了也拒绝（校验和执行都检查）。
@@ -46,7 +49,10 @@ SLOWLOG 只支持 `SLOWLOG GET [count]` 和 `SLOWLOG LEN`。count 为 1..128 的
 RESET、HELP 和其他子命令拒绝，因此不会清空慢日志。
 SLOWLOG GET 的每条记录只保留条目编号、时间戳、耗时（微秒）、命令名（命令的第一个参数）、参数个数和客户端地址。
 命令的其余参数（任意键和值）与客户端名称在返回前丢弃，不进入输出。
-服务端只保存每条命令的前 31 个参数，其余以 `... (N more arguments)` 代替；参数个数按该标记还原为实际个数。
+服务端每条记录最多保存 32 个参数（SLOWLOG_ENTRY_MAX_ARGC），命令超过 32 个参数时保存前 31 个，第 32 项以 `... (N more arguments)` 代替；
+仅当记录含 32 个参数且最后一项为该标记时，参数个数才按标记还原为实际个数，不足 32 个参数的记录直接取参数个数。
+恰好含 32 个参数、且第 32 项是客户端自己发送的标记样式文本的记录无法与服务端截断区分，参数个数可能被伪造；
+该字段只作参考，不影响其他字段的脱敏。
 记录仍描述所有客户端执行过的命令，不受 `key_prefixes` 约束；
 因此配置 `key_prefixes` 后 SLOWLOG GET 拒绝，仅 SLOWLOG LEN 可用。使用 SLOWLOG GET 的 action 应启用 `redact.builtin: [secrets, pii]`，
 命令名和客户端地址在输出前仍经过脱敏。

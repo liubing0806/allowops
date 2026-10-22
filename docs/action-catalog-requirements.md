@@ -2616,7 +2616,7 @@ redact:
 | 扩展能力 | D7 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | 内置驱动不要求 CentOS 7 安装 redis-cli；Redis 版本和 Unix socket 配置需目标环境验证。 |
-| 安全说明 | commands 显式列出 CONFIG，且必须配置 config_params 才允许 CONFIG GET；只支持 GET 子命令，一次最多 16 个参数名，名称只含字母、数字和 `-`，拒绝 `*`、`?`、`[`。requirepass、masterauth、masteruser、primaryauth、aclfile、tls-key-file-pass 等名称（以 acl 开头，或含 pass、auth、user）即使写入 config_params 也在校验和执行时拒绝。action 的 args 正则再次限定为 GET 和 24 个参数名。输出按字符串数组返回，受 max_response_bytes 限制，超限时退出码 0 并标记 truncated。依据：builtin-config.md、internal/builtin/redis/redis.go 的 command、checkConfigParamName、validateCommand。 |
+| 安全说明 | commands 显式列出 CONFIG，且必须配置 config_params 才允许 CONFIG GET；只支持 GET 子命令，一次最多 16 个参数名，名称只含字母、数字和 `-`，拒绝 `*`、`?`、`[`。requirepass、masterauth、masteruser、primaryauth、aclfile、tls-key-file-pass 等名称（以 acl 开头，或含 pass、auth、user）即使写入 config_params 也在校验和执行时拒绝。action 的 args 正则再次限定为 GET 和 25 个参数名（含 replica-read-only 及其 5.0 之前的名称 slave-read-only）。一次传多个参数名要求 Redis 7.0 及以上，旧版本（4.0.11 实测）对多个参数名返回 `ERR Wrong number of arguments for CONFIG GET`，需一次一个。输出按字符串数组返回，受 max_response_bytes 限制，超限时退出码 0 并标记 truncated。依据：builtin-config.md、internal/builtin/redis/redis.go 的 command、checkConfigParamName、validateCommand。 |
 
 参数：
 
@@ -2635,7 +2635,7 @@ builtin_config:
   timeout: 5s
   max_response_bytes: 64KB
   commands: [CONFIG]
-  config_params: [maxmemory, maxmemory-policy, maxmemory-samples, maxclients, timeout, tcp-keepalive, databases, appendonly, appendfsync, save, slowlog-log-slower-than, slowlog-max-len, latency-monitor-threshold, hz, dir, dbfilename, loglevel, repl-backlog-size, replica-read-only, protected-mode, port, bind, cluster-enabled, notify-keyspace-events]
+  config_params: [maxmemory, maxmemory-policy, maxmemory-samples, maxclients, timeout, tcp-keepalive, databases, appendonly, appendfsync, save, slowlog-log-slower-than, slowlog-max-len, latency-monitor-threshold, hz, dir, dbfilename, loglevel, repl-backlog-size, replica-read-only, slave-read-only, protected-mode, port, bind, cluster-enabled, notify-keyspace-events]
 ```
 
 ### `redis_get`
