@@ -157,6 +157,26 @@ func TestOnlineUpgrade(t *testing.T) {
 			if final.connection != "" || final.version != after.version {
 				t.Fatalf("newer agent was accepted: %+v", final)
 			}
+			// Operators must see why the host is offline on both sides.
+			journal := exec.Command("bash", "run.sh", "shell", work)
+			journal.Stdin = strings.NewReader("journalctl --no-pager -u allowops-agent | grep 'gateway rejected agent version'\n")
+			out, err := journal.CombinedOutput()
+			t.Logf("agent journal rejection: %s", out)
+			if err != nil {
+				t.Fatalf("agent journal lacks the rejection: %v", err)
+			}
+			gatewayLog, err := os.ReadFile(filepath.Join(g.Dir, "gateway.log"))
+			harness.Check(t, err)
+			var logged []string
+			for _, line := range strings.Split(string(gatewayLog), "\n") {
+				if strings.Contains(line, "agent version unsupported") && strings.Contains(line, hostname) {
+					logged = append(logged, line)
+				}
+			}
+			t.Logf("gateway rejection log: %q", logged)
+			if len(logged) != 1 {
+				t.Fatalf("gateway logged %d rejections for %s, want one", len(logged), hostname)
+			}
 			r, _, err := g.RunJob([]string{hostname}, "root_identity")
 			if err == nil {
 				t.Logf("job after rejection: status=%s", r.Job.Status)
