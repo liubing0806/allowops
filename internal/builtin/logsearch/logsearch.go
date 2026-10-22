@@ -83,6 +83,11 @@ func within(root, path string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
+// ErrGlobLimit means path_glob examined more directory entries than allowed.
+var ErrGlobLimit = errors.New("path_glob examined too many directory entries")
+
+const maxGlobEntries = 20000
+
 type logFile struct{ name, root, relative string }
 
 // Resolve and validate every match before reading, including matches beyond the
