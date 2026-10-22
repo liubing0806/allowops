@@ -44,3 +44,5 @@ redact:
       regex: '(?i)<[A-Za-z0-9_.:-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.:-]*(?:\s[^>]*)?>(?:<!\[CDATA\[.*?\]\]>|[^<])*</[^>]+>'
     - name: xml_attribute_credential
       regex: '(?i)\b(?:name|key|id|var)\s*=\s*["''][^"'']*(?:pass|pwd|secret|token|key|credential)[^"'']*["'']\s+[^>]*?\bvalue\s*=\s*(?:"[^"]*"|''[^'']*'')|\bvalue\s*=\s*(?:"[^"]*"|''[^'']*'')\s+[^>]*?\b(?:name|key|id|var)\s*=\s*["''][^"'']*(?:pass|pwd|secret|token|key|credential)[^"'']*["'']'
+    - name: xml_name_value_credential
+      regex: '(?i)<name[^>]*>[^<]*(?:pass|pwd|secret|token|key|credential)[^<]*</name>(?:\s*<(?:description|final|source)[^>]*>[^<]*</(?:description|final|source)>)*\s*<value[^>]*>(?:<!\[CDATA\[.*?\]\]>|[^<])*</value>'

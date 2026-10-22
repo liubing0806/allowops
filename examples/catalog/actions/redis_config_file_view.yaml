@@ -22,14 +22,14 @@ redact:
   builtin: [secrets]
   custom:
     - name: redis_requirepass
-      regex: (?i)^\s*#*\s*requirepass\s+.+$
+      regex: '(?i)^\s*#*\s*["'']?requirepass["'']?\s+.+$'
     - name: redis_masterauth
-      regex: (?i)^\s*#*\s*(?:masteruser|masterauth|primaryuser|primaryauth)\s+.+$
+      regex: '(?i)^\s*#*\s*["'']?(?:masteruser|masterauth|primaryuser|primaryauth)["'']?\s+.+$'
     - name: redis_acl_user
-      regex: (?i)^\s*#*\s*user\s+.+$
+      regex: '(?i)^\s*#*\s*["'']?user["'']?\s+.+$'
     - name: redis_sentinel_auth
-      regex: (?i)^\s*#*\s*sentinel\s+(?:auth-pass|auth-user|sentinel-pass|sentinel-user)\s+.+$
+      regex: '(?i)^\s*#*\s*["'']?sentinel["'']?\s+["'']?(?:auth-pass|auth-user|sentinel-pass|sentinel-user)["'']?\s+.+$'
     - name: redis_tls_key_pass
-      regex: (?i)^\s*#*\s*tls-(?:client-)?key-file-pass\s+.+$
+      regex: '(?i)^\s*#*\s*["'']?tls-(?:client-)?key-file-pass["'']?\s+.+$'
     - name: redis_rename_command
-      regex: (?i)^\s*#*\s*rename-command\s+.+$
+      regex: '(?i)^\s*#*\s*["'']?rename-command["'']?\s+.+$'

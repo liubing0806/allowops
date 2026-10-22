@@ -28,3 +28,6 @@ filters: [match, exclude, tail, head, count]
 max_scan: 256MB
 redact:
   builtin: [secrets]
+  custom:
+    - name: mysql_secret_variable
+      regex: '(?is)^[^\t]*(?:pass|pwd|secret|token|key|auth|credential)[^\t]*\t.*$'

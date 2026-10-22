@@ -19,8 +19,8 @@ params:
     optional: true
   path:
     type: string
-    description: Absolute file path inside the container under a fixed root; no dot segments.
-    regex: ^/(var/log|data/logs|etc/nginx)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$
+    description: Absolute file path inside the container under a fixed log root; no dot segments.
+    regex: ^/(var/log|data/logs)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$
     max_len: 256
   pattern:
     type: string
