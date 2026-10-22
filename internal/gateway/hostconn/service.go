@@ -711,6 +711,20 @@ func (s *Service) maintenance() {
 			if err := s.Store.Queries.DeleteExpiredMessages(s.ctx); err != nil {
 				logWriteFailure(s.ctx, "expired gateway message cleanup failed", err)
 			}
+			conns := s.snapshot()
+			var failed int
+			var first error
+			for _, c := range conns {
+				if err := s.reconcilePending(s.ctx, c); err != nil {
+					if failed == 0 {
+						first = err
+					}
+					failed++
+				}
+			}
+			if failed > 0 {
+				logWriteFailure(s.ctx, "pending mailbox reconcile failed", first, "failed", failed, "total", len(conns))
+			}
 		}
 	}
 }
