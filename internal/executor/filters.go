@@ -107,11 +107,14 @@ type filterWriter struct {
 	// stream may lack its "\n", so line boundaries are found by scanning
 	// instead of keeping a per-line index that would dominate memory for
 	// streams of very short lines.
-	tailData    []byte
-	tailStart   int
-	tailLines   int64
-	tailDropped bool
-	lines       int64
+	tailData  []byte
+	tailStart int
+	tailLines int64
+	// tailSeen counts every line offered to tail. The retained lines are always
+	// the newest ones, so fewer than min(Tail, tailSeen) means a requested line
+	// was dropped for bytes.
+	tailSeen int64
+	lines    int64
 }
 
 func newFilterWriter(output *limitedOutput, options FilterOptions) *filterWriter {
@@ -158,7 +161,6 @@ func (w *filterWriter) dropOldest() {
 func (w *filterWriter) trimTail(limit int64) {
 	for w.tailLines > 1 && int64(len(w.tailData)-w.tailStart) > limit {
 		w.dropOldest()
-		w.tailDropped = true
 	}
 }
 
@@ -171,6 +173,7 @@ func (w *filterWriter) Write(p []byte) (int, error) {
 	if w.options.Tail > 0 {
 		w.tailData = append(w.tailData, p...)
 		w.tailLines++
+		w.tailSeen++
 		if w.tailLines > w.options.Tail {
 			w.dropOldest()
 		}
@@ -183,7 +186,7 @@ func (w *filterWriter) finish() error {
 	// A step shares its budget with other output, so the room left now can be
 	// smaller than the limit; keep the newest lines that fit it.
 	w.trimTail(w.output.room())
-	if w.tailDropped {
+	if w.tailLines < min(w.options.Tail, w.tailSeen) {
 		w.output.truncated = true
 	}
 	for rest := w.tailData[w.tailStart:]; len(rest) > 0; {
