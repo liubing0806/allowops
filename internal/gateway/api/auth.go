@@ -359,7 +359,11 @@ func (s *Service) GetCurrentSession(ctx context.Context, _ *connect.Request[v1.G
 	if !ok || id.Session == nil {
 		return nil, failure(connect.CodeFailedPrecondition, "user session required")
 	}
-	return connect.NewResponse(&v1.GetCurrentSessionResponse{User: id.User, Client: id.Client, ExpiresAt: id.Session.ExpiresAt, CsrfToken: id.CSRF, GatewayVersion: s.buildVersion()}), nil
+	update, _, err := s.gatewayUpdate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&v1.GetCurrentSessionResponse{User: id.User, Client: id.Client, ExpiresAt: id.Session.ExpiresAt, CsrfToken: id.CSRF, GatewayVersion: s.buildVersion(), GatewayUpdate: update}), nil
 }
 func (s *Service) Logout(ctx context.Context, _ *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error) {
 	id, ok := FromContext(ctx)
