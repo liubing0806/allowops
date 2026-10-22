@@ -26,3 +26,10 @@ filters: [match, exclude, tail, head, count]
 max_scan: 256MB
 redact:
   builtin: [secrets, pii]
+  custom:
+    - name: sql_comment
+      regex: '(?s)/\*.*?(?:\*/|$)|--(?:[ \t\r\f\v][^\n]*|$)'
+    - name: sql_string_literal
+      regex: '(?s)''(?:[^''\\]|\\.|'''')*(?:''|\\?$)|"(?:[^"\\]|\\.|"")*(?:"|\\?$)'
+    - name: sql_hex_literal
+      regex: '(?i)\b0x[0-9a-f]+\b'
