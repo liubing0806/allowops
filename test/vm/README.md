@@ -62,3 +62,24 @@ CentOS 7 is EOL. If its old official image/checksum URL is removed or redirected
 the test fails before boot instead of substituting an unverified mirror. Report
 the exact failure and choose an official archived image/checksum pair before
 attempting that distribution again.
+
+## Online agent upgrade
+
+`TestOnlineUpgrade` upgrades a packaged agent through a signed catalog action
+(`agent-upgrade.sh`, `run_as: root`). Build three package versions, for example
+0.1.0, 0.2.0 and 0.3.0, into `from/`, `to/` and `newer/`, and build the gateway
+as 0.2.0:
+
+```sh
+make allowops-gateway VERSION=0.2.0
+VM_UPGRADE_PACKAGES=/path/to/pkgs VM_DISTROS=centos7,ubuntu2004,rocky9 \
+  ALLOWOPS_REQUIRE_DOCKER=1 go test -tags=vm ./test/vm -run '^TestOnlineUpgrade$' -count=1 -v -timeout=50m
+```
+
+The guest installs `from/`. The action installs the staged package with
+yum/apt and schedules `systemctl restart allowops-agent.service` through a
+transient `systemd-run` timer, so the task result reaches the gateway before
+the agent stops. The test checks that `to/` reconnects with the new version and
+runs an action, and that `newer/` is refused by the gateway: the host stays
+offline, keeps the last accepted version and jobs fail. Production actions
+install from a repository instead of staged files.
