@@ -1,0 +1,32 @@
+name: docker_file_grep
+description: Search one file inside an allowed container with a bounded match count.
+risk: read
+run_as: root
+params:
+  container:
+    type: enum
+    description: Container selected from the signed allowlist.
+    values: [api, app]
+  path:
+    type: string
+    description: Absolute file path inside the container under a fixed root; no dot segments.
+    regex: ^/(var/log|data/logs|etc/nginx)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$
+    max_len: 256
+  pattern:
+    type: string
+    description: Bounded fixed search string without line breaks.
+    regex: ^[^\r\n]+$
+    max_len: 200
+  max_matches:
+    type: int
+    description: Maximum number of matching lines.
+    min: 1
+    max: 500
+    default: 100
+exec: [/usr/bin/docker, exec, '{container}', grep, -F, -n, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
+timeout: 20s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]
