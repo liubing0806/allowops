@@ -1,0 +1,44 @@
+name: k8s_pod_file_grep
+description: Search one file inside one pod container with a bounded match count.
+risk: read
+run_as: root
+params:
+  namespace:
+    type: enum
+    description: Namespace selected from the signed allowlist.
+    values: [default, app]
+  pod:
+    type: string
+    description: Pod name limited to 63 lowercase DNS characters.
+    regex: ^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$
+    max_len: 63
+  container:
+    type: enum
+    description: Optional container selected from the signed allowlist.
+    values: [api, app]
+    optional: true
+  path:
+    type: string
+    description: Absolute file path inside the container under a fixed root; no dot segments.
+    regex: ^/(var/log|data/logs|etc/nginx)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$
+    max_len: 256
+  pattern:
+    type: string
+    description: Bounded fixed search string without line breaks.
+    regex: ^[^\r\n]+$
+    max_len: 200
+  max_matches:
+    type: int
+    description: Maximum number of matching lines.
+    min: 1
+    max: 500
+    default: 100
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, exec, -n, '{namespace}', '{pod}',
+  [-c, '{container}'], --, grep, -F, -n, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+timeout: 20s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]
