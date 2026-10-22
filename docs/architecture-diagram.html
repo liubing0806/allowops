@@ -300,40 +300,43 @@ arrow([[a2.cx, a2.b], [a2.cx, 360], [a4.cx, 360], [a4.cx, a4.b]], { color: C.gw.
 label('action 执行在下发前写审计；写审计失败时调用返回错误，不返回结果。', 30, 398, { fs: 12.5, color: '#6b7280' });
 
 // ═════════ 5. 首批支持的命令 ═════════
-canvas('actions', 900);
-heading('5', '首批支持的命令（examples/catalog，首批 49 个只读 action）', '依据 examples/catalog/actions/ 与 docs/action-catalog-requirements.md。右侧标签为执行身份：“直接”= agent 以 allowops 用户执行；root、app = 经 allowops-exec 以该用户执行。');
 const groups = [
   ['主机与资源', [
-    ['system_load', '运行时间与负载（uptime）', '直接'], ['memory_usage', '内存与 swap（free）', '直接'], ['disk_usage', '文件系统容量（df）', '直接'],
-    ['disk_usage_paths', '指定路径所在文件系统容量', '直接'], ['disk_dir_size', '允许目录的总大小（du）', 'root'], ['sar_cpu', '历史 CPU 采样（sar）', 'root'],
-    ['sar_memory', '历史内存采样（sar）', 'root'], ['kernel_errors', '内核告警与错误（dmesg）', 'root'], ['host_snapshot', '主机与容器健康快照（steps）', 'root']]],
+    ['system_load', '运行时间与负载（uptime）', '直接'], ['memory_usage', '内存与 swap（free）', '直接'], ['disk_usage', '文件系统容量（df）', '直接'], ['disk_usage_paths', '指定路径所在文件系统容量', '直接'], ['disk_dir_size', '允许目录的总大小（du）', 'root'], ['sar_cpu', '历史 CPU 采样（sar）', 'root'], ['sar_memory', '历史内存采样（sar）', 'root'], ['kernel_errors', '内核告警与错误（dmesg）', 'root'], ['host_snapshot', '主机与容器健康快照（steps）', 'root']]],
   ['进程与网络', [
-    ['process_top', '按 CPU 排序的进程（ps）', '直接'], ['process_find', '按进程名查 PID（pgrep）', '直接'],
-    ['ports_listening', '监听端口与进程（ss）', 'root'], ['connections_by_port', '指定端口的 TCP 连接（ss）', 'root'], ['dns_lookup', '解析允许的名称（getent）', '直接'],
-    ['http_get_local', '探测本机健康检查地址（builtin）', '直接']]],
-  ['服务与配置', [
-    ['systemd_service_status', '服务状态（systemctl）', '直接'], ['journal_view_log', '服务日志片段（journalctl）', 'root'], ['journal_grep', '服务日志检索（journalctl）', 'root'],
-    ['crontab_list', '允许账号的 crontab', 'root'], ['nginx_test_config', '检查 nginx 配置，不重载', 'root'], ['nginx_access_stats', 'nginx 访问日志统计（签名脚本）', 'root']]],
+    ['process_top', '按 CPU 排序的进程（ps）', '直接'], ['process_find', '按进程名查 PID（pgrep）', '直接'], ['ports_listening', '监听端口与进程（ss）', 'root'], ['connections_by_port', '指定端口的 TCP 连接（ss）', 'root'], ['dns_lookup', '解析允许的名称（getent）', '直接'], ['http_get_local', '探测本机健康检查地址（builtin）', '直接'], ['hosts_entries', '/etc/hosts 条目', '直接']]],
+  ['服务与定时任务', [
+    ['systemd_service_status', '服务状态（systemctl）', '直接'], ['journal_view_log', '服务日志片段（journalctl）', 'root'], ['journal_grep', '服务日志检索（journalctl）', 'root'], ['crontab_list', '允许账号的 crontab', 'root'], ['nginx_test_config', '检查 nginx 配置，不重载', 'root'], ['nginx_access_stats', 'nginx 访问日志统计（签名脚本）', 'root']]],
   ['文件与日志', [
-    ['file_list', '列出允许的目录（ls）', 'root'], ['file_view', '读文件开头，限行数（head）', 'root'], ['log_tail_file', '读日志末尾（tail）', 'root'],
-    ['log_grep_file', '单个日志文件检索（grep）', 'root'], ['log_grep_fixed', '单个日志文件检索，限匹配数', 'root'], ['log_search_dir', '目录递归检索（grep）', 'root'],
-    ['log_search', '日志检索，支持 .gz 与通配（builtin）', 'root']]],
+    ['file_list', '列出允许的目录（ls）', 'root'], ['file_view', '读文件开头，限行数（head）', 'root'], ['log_tail_file', '读日志末尾（tail）', 'root'], ['log_grep_file', '单个日志文件检索（grep）', 'root'], ['log_grep_fixed', '单个日志文件检索，限匹配数', 'root'], ['log_search_dir', '目录递归检索（grep）', 'root'], ['log_search', '日志检索，支持 .gz 与通配（builtin）', 'root'], ['file_find', '按名称查找文件，限深度', 'root']]],
+  ['应用配置（脱敏）', [
+    ['app_config_keys', '只输出键名', 'root'], ['app_config_view', '读配置文件开头，值脱敏', 'root'], ['docker_app_config_view', '容器内配置文件，值脱敏', 'root'], ['k8s_configmap_keys', 'ConfigMap 键名', 'root'], ['k8s_configmap_view', 'ConfigMap 内容，值脱敏', 'root'], ['docker_inspect_config', '镜像、挂载、环境变量名', 'root']]],
   ['Docker', [
-    ['docker_ps', '容器列表', 'root'], ['docker_stats', '资源占用，单次采样', 'root'], ['docker_logs', '容器日志，限时间范围', 'root'],
-    ['docker_container_state', '容器状态', 'root'], ['docker_container_ls_dir', '列出容器内固定目录', 'root'], ['docker_info_logging', '默认日志驱动', 'root']]],
-  ['JVM（容器内）', [
-    ['jvm_list', 'JVM 进程与主类', 'root'], ['jvm_gc_stats', 'GC 统计，有限次数采样', 'root'], ['jvm_thread_dump', '线程转储', 'root']]],
+    ['docker_ps', '容器列表', 'root'], ['docker_stats', '资源占用，单次采样', 'root'], ['docker_logs', '容器日志，限时间范围', 'root'], ['docker_container_state', '容器状态', 'root'], ['docker_container_ls_dir', '列出容器内固定目录', 'root'], ['docker_info_logging', '默认日志驱动', 'root'], ['docker_dns_lookup', '容器内解析名称', 'root'], ['docker_file_view', '容器内读文件开头', 'root'], ['docker_file_grep', '容器内文件检索', 'root']]],
+  ['JVM 与 jar', [
+    ['jvm_list', 'JVM 进程与主类', 'root'], ['jvm_gc_stats', 'GC 统计，有限次数采样', 'root'], ['jvm_thread_dump', '线程转储', 'root'], ['docker_jar_list_entries', '容器内 jar 条目列表', 'root'], ['docker_jar_read_entry', '容器内 jar 配置条目', 'root'], ['docker_java_class_members', '容器内 class 成员（javap -p）', 'root'], ['k8s_pod_jar_list_entries', 'Pod 内 jar 条目列表', 'root'], ['k8s_pod_jar_read_entry', 'Pod 内 jar 配置条目', 'root'], ['k8s_pod_java_class_members', 'Pod 内 class 成员（javap -p）', 'root']]],
   ['Kubernetes', [
-    ['k8s_pods', '允许命名空间内的 pod 列表', 'root'], ['k8s_describe_pod', 'pod 描述', 'root'], ['k8s_pod_logs', 'pod 日志，不跟随', 'root'],
-    ['k8s_top_nodes', '节点资源用量', 'root'], ['k8s_top_pods', 'pod 资源用量', 'root'], ['k8s_warning_events', 'Warning 事件', 'root'],
-    ['k8s_rollout_status', 'deployment 发布状态', 'root'], ['k8s_rollout_history', 'deployment 发布历史', 'root']]],
-  ['数据库与缓存', [
-    ['mysql_query_readonly', '单条只读 SQL（builtin）', 'root'], ['mysql_show', '固定 SHOW 语句（builtin）', 'root'],
-    ['redis_get', '读允许前缀的 key（builtin）', 'root'], ['redis_info', 'INFO 的 server/memory/stats 段', 'root']]],
+    ['k8s_pods', '允许命名空间内的 pod 列表', 'root'], ['k8s_describe_pod', 'pod 描述', 'root'], ['k8s_pod_logs', 'pod 日志，不跟随', 'root'], ['k8s_top_nodes', '节点资源用量', 'root'], ['k8s_top_pods', 'pod 资源用量', 'root'], ['k8s_warning_events', 'Warning 事件', 'root'], ['k8s_rollout_status', 'deployment 发布状态', 'root'], ['k8s_rollout_history', 'deployment 发布历史', 'root'], ['k8s_get', '命名空间内资源列表', 'root'], ['k8s_nodes', '节点列表', 'root'], ['k8s_deploy_images', 'Deployment 镜像', 'root'], ['k8s_pod_status', 'imageID、重启次数、节点', 'root'], ['k8s_pod_file_view', 'Pod 内读文件开头', 'root'], ['k8s_pod_file_grep', 'Pod 内文件检索', 'root']]],
+  ['MySQL', [
+    ['mysql_query_readonly', '单条只读 SQL（builtin）', 'root'], ['mysql_show', '固定 SHOW 语句（builtin）', 'root'], ['mysql_variables', '服务端变量', 'root'], ['mysql_processlist', '连接与语句', 'root'], ['mysql_error_log', '错误日志检索', 'root'], ['mysql_slow_log', '慢查询日志末尾', 'root'], ['mysql_config_view', 'option 文件，凭据脱敏', 'root']]],
+  ['Redis', [
+    ['redis_get', '读允许前缀的 key（builtin）', 'root'], ['redis_info', 'INFO 的 server/memory/stats 段', 'root'], ['redis_config_get', 'CONFIG GET，参数名白名单', 'root'], ['redis_slowlog', '慢日志元数据', 'root'], ['redis_config_file_view', '配置文件，凭据脱敏', 'root'], ['redis_log_view', '日志末尾', 'root']]],
+  ['Dubbo QoS（本机 HTTP）', [
+    ['dubbo_qos_ls', '服务列表', '直接'], ['dubbo_qos_ps', '服务端口', '直接'], ['dubbo_qos_version', '框架版本', '直接'], ['dubbo_qos_live', '存活探针', '直接'], ['dubbo_qos_ready', '就绪探针', '直接'], ['dubbo_qos_startup', '启动探针', '直接'], ['dubbo_qos_logger_info', '日志适配器与级别', '直接'], ['dubbo_qos_get_address', '服务提供者地址', '直接'], ['dubbo_qos_get_config', '生效配置，凭据脱敏', '直接']]],
 ];
-const gw4 = 395, gh = 360;
+const gw4 = 395, rowH = 34;
+const gHeight = (items) => 52 + items.length * rowH + 8;
+const colY = [92, 92, 92, 92], place = [];
+groups.forEach(([title, items]) => {
+  let c = 0; for (let k = 1; k < 4; k++) if (colY[k] < colY[c]) c = k;
+  place.push([30 + c * (gw4 + 12), colY[c], gHeight(items)]);
+  colY[c] += gHeight(items) + 12;
+});
+const footY = Math.max(...colY) + 12;
+canvas('actions', footY + 50);
+heading('5', '首批支持的命令（examples/catalog，共 90 个只读 action）', '依据 examples/catalog/actions/ 与 docs/action-catalog-requirements.md。右侧标签为执行身份：“直接”= agent 以 allowops 用户执行；root、app = 经 allowops-exec 以该用户执行。');
 groups.forEach(([title, items], i) => {
-  const x = 30 + (i % 4) * (gw4 + 12), y = 92 + Math.floor(i / 4) * (gh + 16);
+  const [x, y, gh] = place[i];
   box(x, y, gw4, gh, C.host, `${title}（${items.length}）`, [], { ts: 14.5 });
   items.forEach(([n, d, who, write], k) => {
     const yy = y + 52 + k * 34;
@@ -346,8 +349,8 @@ groups.forEach(([title, items], i) => {
     label(who, x + gw4 - tw / 2 - 12, yy + 1, { fs: 11, color: tc.title, align: 'center' });
   });
 });
-label('执行方式：exec 43 个，steps 1 个（host_snapshot），script 1 个（nginx_access_stats），builtin 6 个（log_search、http_get、mysql_query ×2、redis_command ×2）。', 30, 862, { fs: 12.5 });
-label('这是公开示例目录，只用通用名称和路径。公司自己的目录放在单独的私有仓库，按同样格式编写并签名后发布。', 30, 884, { fs: 12.5, color: '#6b7280' });
+label('执行方式：exec 68 个，steps 1 个（host_snapshot），script 1 个（nginx_access_stats），builtin 20 个。', 30, footY, { fs: 12.5 });
+label('这是公开示例目录，只用通用名称和路径。公司自己的目录放在单独的私有仓库，按同样格式编写并签名后发布。', 30, footY + 22, { fs: 12.5, color: '#6b7280' });
 </script>
 </body>
 </html>
