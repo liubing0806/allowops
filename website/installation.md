@@ -7,7 +7,7 @@ software bill of materials and third-party notices supplied with the release.
 
 ## Local Compose demonstration
 
-Prerequisites are Docker Compose using a local Unix socket, Go 1.27.2, OpenSSL,
+Prerequisites are Docker Compose using a local Unix socket, Go 1.27.3, OpenSSL,
 Git and Python 3 with PyYAML on Linux amd64. From a source checkout:
 
 ```sh

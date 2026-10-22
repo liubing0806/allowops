@@ -27,7 +27,7 @@ ABAC（基于属性的访问控制）只使用网关管理的授权标签。
 
 ## 快速开始
 
-使用 Linux amd64 检出目录，准备 Docker Compose、Go 1.27.2、OpenSSL、Git
+使用 Linux amd64 检出目录，准备 Docker Compose、Go 1.27.3、OpenSSL、Git
 以及安装了 PyYAML 的 Python 3。Docker 必须使用本机 Unix socket。
 
 ```sh

@@ -48,7 +48,7 @@ allowops 是给 AI agent 使用的运维网关：agent 通过 MCP 调用运维�
 
 | 部分 | 选型 |
 |---|---|
-| 后端、主机端、CLI | Go（go.mod 1.27.2）；YAML `gopkg.in/yaml.v3`；CLI `cobra` |
+| 后端、主机端、CLI | Go（go.mod 1.27.3）；YAML `gopkg.in/yaml.v3`；CLI `cobra` |
 | 主机与网关 | gRPC 双向流 + mTLS；Protobuf + buf；connect-go |
 | MCP | 官方 `github.com/modelcontextprotocol/go-sdk`，Streamable HTTP，无状态模式 |
 | 控制台 API | Connect（protobuf），生成 TypeScript 客户端 |

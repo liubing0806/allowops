@@ -1,6 +1,6 @@
 # Local Docker Compose quick start
 
-Run this from a Linux amd64 checkout with Docker Compose, Go 1.27.2, OpenSSL,
+Run this from a Linux amd64 checkout with Docker Compose, Go 1.27.3, OpenSSL,
 Git and Python 3 with PyYAML installed. Docker must use a local Unix socket.
 Builds and image pulls may obtain public build resources. Runtime services use
 an internal Docker network and publish no host ports. Nothing is deployed to
