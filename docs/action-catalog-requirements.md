@@ -2149,7 +2149,7 @@ exec: [/usr/bin/free, -m]
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | CentOS 7 的 GNU head 支持 -n 和 --。 |
-| 安全说明 | path 类型的 allowed_roots 可以是单个文件：`/etc/my.cnf` 作为根时只允许该文件本身，`/etc/mysql`、`/etc/my.cnf.d` 作为根时允许目录内的文件；不存在的根被跳过。内置 secrets 的 credential 规则只匹配 `password`、`secret`、`token` 后接 `=` 的写法，并且只替换到第一个空白或分号。选项文件的未加引号取值可以含空格（`password = a b c`），因此 `b c` 会原样输出。本 action 增加自定义规则：键名含 password、passwd、pwd、secret、token 或 wsrep_sst_auth（Galera 的 `user:password`，`wsrep-sst-auth` 写法同样匹配）且后接 `=` 的行，以及已被内置规则替换过的行，整行（含键名、行首注释符）替换为 [REDACTED:mysql_option_password]。本机用样例文件实测 `password = x`、`password=x`、`Password = "x y"`、`password   =   x y z`、`loose-password=x`、`db_password = x`、`ssl-key-passwd=x`、`PASSWORD=x`、`wsrep_sst_auth = user:x`、`wsrep-sst-auth="user:x"` 和注释行 `# password = x` 均脱敏。`validate_password.policy`（含点号）和 `default_authentication_plugin` 不是凭据，保持原样。限制：不含这些词的键名（`wsrep_sst_auth` 除外）下的敏感值、多行值不会被识别；`[client]` 的 `user` 等非密码项原样输出。 |
+| 安全说明 | path 类型的 allowed_roots 可以是单个文件：`/etc/my.cnf` 作为根时只允许该文件本身，`/etc/mysql`、`/etc/my.cnf.d` 作为根时允许目录内的文件；不存在的根被跳过。内置 secrets 的 credential 规则只匹配 `password`、`secret`、`token` 后接 `=` 的写法，并且只替换到第一个空白或分号。选项文件的未加引号取值可以含空格（`password = a b c`），因此 `b c` 会原样输出。本 action 增加自定义规则：键名中任意位置含 password、passwd、pwd、secret、token 或 wsrep_sst_auth（Galera 的 `user:password`，`wsrep-sst-auth` 写法同样匹配）且后接 `=` 的行，以及已被内置规则替换过的行，整行（含键名、行首注释符）替换为 [REDACTED:mysql_option_password]。关键字前后的键名字符限于字母、数字、下划线、点和连字符。第四轮审阅（docs-tests/F1）发现旧规则要求关键字紧接 `=`，`secret_key = abc123`、`token_value=zzz` 原样输出；规则放宽后这两行实测均整行脱敏。本机用样例文件实测 `password = x`、`password=x`、`Password = "x y"`、`password   =   x y z`、`loose-password=x`、`db_password = x`、`ssl-key-passwd=x`、`PASSWORD=x`、`wsrep_sst_auth = user:x`、`wsrep-sst-auth="user:x"` 和注释行 `# password = x` 均脱敏。`default_authentication_plugin` 不含这些关键字，保持原样；`validate_password.length`、`validate_password.policy` 等键名含 password 的非凭据项现在也被整行脱敏（过度脱敏，调用方看不到这些值）。限制：不含这些词的键名（`wsrep_sst_auth` 除外）下的敏感值、多行值不会被识别；`[client]` 的 `user` 等非密码项原样输出。 |
 
 参数：
 
@@ -2166,7 +2166,7 @@ redact:
   builtin: [secrets]
   custom:
     - name: mysql_option_password
-      regex: (?i)^\s*#*\s*[A-Za-z0-9_-]*(?:(?:password|passwd|pwd|secret|token|wsrep[_-]sst[_-]auth)\s*=\s*\S|\[REDACTED:credential\]).*$
+      regex: (?i)^\s*#*\s*[A-Za-z0-9_.-]*(?:(?:password|passwd|pwd|secret|token|wsrep[_-]sst[_-]auth)[A-Za-z0-9_.-]*\s*=\s*\S|\[REDACTED:credential\]).*$
 ```
 
 ### `mysql_error_log`
@@ -2179,11 +2179,11 @@ redact:
 | run_as | root |
 | 执行方式 | builtin |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii |
+| redact | secrets, pii，另有自定义规则 sql_comment、sql_string_literal、sql_hex_literal |
 | 扩展能力 | D1、D3 |
 | 执行限制 | timeout=30s；max_output=64KB |
 | CentOS 7 | 由内置处理器实现，不依赖 grep、zgrep 或解释器。 |
-| 安全说明 | path_glob 的正则只允许 `/var/log`、`/var/log/mysql`、`/var/log/mariadb` 下文件名以 error、mysqld、mariadb 开头的文件，字符限于字母、数字、下划线、点、连字符、`*`、`?`，因此无法使用 `[`、`..` 或子目录。allowed_roots 为 `/var/log`：log_search 在运行时解析每个根目录，任一根目录不存在会使整个查询失败，所以不同时列出 `/var/log/mysql` 和 `/var/log/mariadb`。限制：解析后位于 `/var/log` 内但不属于上述文件名的符号链接目标仍会被读取，须保证这些目录只由 root 或受信任账号写入。错误日志可能含主机名和 IP，运行时地址不脱敏（见通用规则）。 |
+| 安全说明 | path_glob 的正则只允许 `/var/log`、`/var/log/mysql`、`/var/log/mariadb` 下文件名以 error、mysqld、mariadb 开头的文件，字符限于字母、数字、下划线、点、连字符、`*`、`?`，因此无法使用 `[`、`..` 或子目录。allowed_roots 为 `/var/log`：log_search 在运行时解析每个根目录，任一根目录不存在会使整个查询失败，所以不同时列出 `/var/log/mysql` 和 `/var/log/mariadb`。限制：解析后位于 `/var/log` 内但不属于上述文件名的符号链接目标仍会被读取，须保证这些目录只由 root 或受信任账号写入。错误日志可能含主机名和 IP，运行时地址不脱敏（见通用规则）。MySQL 8.0 默认的错误日志详细程度就会把完整 SQL 文本写入日志，例如 binlog 不安全语句警告 `Unsafe statement written to the binary log ... Statement: …` 和复制线程报错的 `Query: …`（第四轮审阅 redaction/F4）。本 action 因此与 `mysql_processlist`、`mysql_slow_log` 使用同一组自定义规则 sql_comment、sql_string_literal、sql_hex_literal。本机用 mysql:8.0 容器（`--log-error-verbosity=3`，会话 `binlog_format='STATEMENT'` 后执行 `UPDATE users SET pw='…', phone='x' WHERE id=1 LIMIT 1`）实测：规则生效前 `Statement: UPDATE users SET pw='UnsafeStmtPw77', phone='x' …` 口令明文，生效后为 `pw=[REDACTED:sql_string_literal], phone=[REDACTED:sql_string_literal]`。取舍：错误日志其他行里的引号文本（`Plugin 'FEDERATED' is disabled`、`Version: '8.0.46'`）也会被整段替换，属于过度脱敏。限制：pattern 仍然在原文上匹配，调用方可以用命中与否逐字符推断被替换的字面值，与 `mysql_slow_log` 改造前的问题相同；本 action 的前提是日志目录只放日志，且检索权限等同于可读日志原文。 |
 
 参数：
 
@@ -2203,6 +2203,15 @@ builtin_config:
   max_scan: 256MB
   max_context: 10
   max_matches: 500
+redact:
+  builtin: [secrets, pii]
+  custom:
+    - name: sql_comment
+      regex: '(?s)/\*.*?(?:\*/|$)|--(?:[ \t\r\f\v][^\n]*|$)'
+    - name: sql_string_literal
+      regex: '(?s)''(?:[^''\\]|\\.|'''')*(?:''|\\?$)|"(?:[^"\\]|\\.|"")*(?:"|\\?$)'
+    - name: sql_hex_literal
+      regex: '(?i)\b0x[0-9a-f]+\b'
 ```
 
 ### `mysql_processlist`
@@ -2215,11 +2224,11 @@ builtin_config:
 | run_as | root |
 | 执行方式 | builtin |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii，另有自定义规则 sql_string_literal、sql_hex_literal |
+| redact | secrets, pii，另有自定义规则 sql_comment、sql_string_literal、sql_hex_literal |
 | 扩展能力 | D1、D7 |
 | 执行限制 | timeout=15s；max_output=64KB |
 | CentOS 7 | 内置驱动不要求安装 mysql CLI；服务器兼容性同 mysql_query_readonly。 |
-| 安全说明 | G34 要求配置 databases 时显式列出 show_types: [PROCESSLIST]。sql 正则只允许 `SHOW PROCESSLIST` 和 `SHOW FULL PROCESSLIST`。Info 列含其他会话的 SQL 文本，可能含密码字面值和手机号；secrets 与 pii 脱敏后输出。本机 MySQL 8.4.6 实测：账号有 PROCESS 权限时返回所有会话；只有库级 SELECT 时只返回自己的会话，不报错；SQL 中的 `password=...` 字面值和手机号字面值脱敏。Host 列的客户端地址不脱敏。不带 FULL 时服务器把 Info 截断为 100 个字符。 语句文本中的字符串字面值可能含密码和令牌，自定义规则 sql_string_literal 把所有单引号和双引号字符串（含 `\'`、`\\`、`''`、`""` 转义，未闭合的字符串从引号到行尾）整体替换为 [REDACTED:sql_string_literal]，sql_hex_literal 把 `0x…` 十六进制字面值替换为 [REDACTED:sql_hex_literal]；`x'41'` 形式的引号部分由前一条规则替换。本机用 mysql:8.0 容器实测：运行 `SELECT SLEEP(9), 'access_token=''x''', "user_password=\"y\"", 0xDEADBEEF, x'4142', 'it\'s', 'back\\', 'multi\nline secret'` 期间，SHOW FULL PROCESSLIST 的 Info 列规则生效前含全部字面值，生效后全部为 [REDACTED:…]。取舍：诊断时看不到任何字面值，无法区分查询的参数；替换标记不是 `'?'`，因为自定义规则只能输出 [REDACTED:规则名]。限制：未加引号的数字字面值（`password=12345`）和二进制字面值 `0b…` 不替换；ANSI_QUOTES 模式下的双引号标识符、注释中的单个撇号也会触发替换，按过度脱敏处理。 |
+| 安全说明 | G34 要求配置 databases 时显式列出 show_types: [PROCESSLIST]。sql 正则只允许 `SHOW PROCESSLIST` 和 `SHOW FULL PROCESSLIST`。Info 列含其他会话的 SQL 文本，可能含密码字面值和手机号；secrets 与 pii 脱敏后输出。本机 MySQL 8.4.6 实测：账号有 PROCESS 权限时返回所有会话；只有库级 SELECT 时只返回自己的会话，不报错；SQL 中的 `password=...` 字面值和手机号字面值脱敏。Host 列的客户端地址不脱敏。不带 FULL 时服务器把 Info 截断为 100 个字符。 语句文本中的字符串字面值可能含密码和令牌，自定义规则 sql_string_literal 把所有单引号和双引号字符串（含 `\'`、`\\`、`''`、`""` 转义，未闭合的字符串从引号到行尾）整体替换为 [REDACTED:sql_string_literal]，sql_hex_literal 把 `0x…` 十六进制字面值替换为 [REDACTED:sql_hex_literal]；`x'41'` 形式的引号部分由前一条规则替换。本机用 mysql:8.0 容器实测：运行 `SELECT SLEEP(9), 'access_token=''x''', "user_password=\"y\"", 0xDEADBEEF, x'4142', 'it\'s', 'back\\', 'multi\nline secret'` 期间，SHOW FULL PROCESSLIST 的 Info 列规则生效前含全部字面值，生效后全部为 [REDACTED:…]。取舍：诊断时看不到任何字面值，无法区分查询的参数；替换标记不是 `'?'`，因为自定义规则只能输出 [REDACTED:规则名]。限制：未加引号的数字字面值（`password=12345`）和二进制字面值 `0b…` 不替换；ANSI_QUOTES 模式下的双引号标识符也会触发替换，按过度脱敏处理。注释先于字面值处理（第四轮审阅 redaction/F7）：规则 sql_comment 把 `/* … */`（含 `/*! … */` 和优化器提示，未闭合的从 `/*` 到文本末尾）和 `-- ` 注释（到行尾）整体替换为 [REDACTED:sql_comment]，注释里的撇号因此不会与后面字面值的引号配对。本机用 mysql:8.0 容器以 `mysql --comments` 执行 `SELECT /* it's a report */ SLEEP(300), pw FROM users WHERE id=1 AND pw = 'SuperSecretPw1'`：规则生效前 Info 列为 `SELECT /* it[REDACTED:sql_string_literal]SuperSecretPw1[REDACTED:sql_string_literal]`，口令明文；生效后为 `SELECT [REDACTED:sql_comment] SLEEP(300), pw FROM users WHERE id=1 AND pw = [REDACTED:sql_string_literal]`。限制：MySQL 的 `#` 注释不单独处理（其中的撇号只会使该行剩余部分被当作未闭合字符串替换，属于过度脱敏）；字符串字面值内部出现的 `/*` 或 `-- ` 同样被当作注释起点，结果仍是更多内容被替换。 |
 
 参数：
 
@@ -2243,6 +2252,8 @@ builtin_config:
 redact:
   builtin: [secrets, pii]
   custom:
+    - name: sql_comment
+      regex: '(?s)/\*.*?(?:\*/|$)|--(?:[ \t\r\f\v][^\n]*|$)'
     - name: sql_string_literal
       regex: '(?s)''(?:[^''\\]|\\.|'''')*(?:''|\\?$)|"(?:[^"\\]|\\.|"")*(?:"|\\?$)'
     - name: sql_hex_literal
@@ -2324,41 +2335,36 @@ builtin_config:
 
 ### `mysql_slow_log`
 
-检索 MySQL 或 MariaDB 慢查询日志（普通或 gzip 文件）。
+读取 MySQL 或 MariaDB 慢查询日志的末尾若干行，SQL 注释和字面值替换后输出。
 
 | 项 | 需求 |
 |---|---|
 | risk | read |
 | run_as | root |
-| 执行方式 | builtin |
+| 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii，另有自定义规则 sql_string_literal、sql_hex_literal |
-| 扩展能力 | D1、D3 |
-| 执行限制 | timeout=30s；max_output=64KB |
-| CentOS 7 | 由内置处理器实现，不依赖 grep、zgrep 或解释器。 |
-| 安全说明 | 文件名限于含 slow 的名称，规则和 allowed_roots 的限制同 mysql_error_log。慢日志含完整 SQL 文本，可能含手机号、令牌和密码字面值，启用 secrets 与 pii。本机用样例慢日志实测：`phone='13812345678'` 中的号码、`token='x'`、`password='x'` 均脱敏。只有匹配行和上下文行被输出，多行 SQL 的后续行需要用 context 取得。 自定义规则 sql_string_literal、sql_hex_literal 与 `mysql_processlist` 相同，把单引号和双引号字符串字面值（含转义引号）及 `0x…` 十六进制字面值替换为 [REDACTED:规则名]；本机用样例慢日志实测 `access_token='slowtok1'`、`user_password="slowpw2"`、`0xCAFEBABE3`、`'it\'s slowesc4'` 规则生效前原样输出，生效后均被替换。取舍：看不到字面值。限制：脱敏逐行进行，跨行的字符串字面值，其续行中引号之前的内容不会被替换（引号之后到行尾被替换）。 |
+| redact | secrets, pii，另有自定义规则 sql_comment、sql_string_literal、sql_hex_literal |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 的 GNU tail 支持 -n 和 --。 |
+| 安全说明 | 第四轮审阅（redaction/F2）移除了调用方提供的检索 pattern。旧版本用内置 log_search 在原文上匹配 pattern，随后才替换字面值，调用方可用命中与否逐字符还原被替换的 SQL 字面值（`UPDATE users SET pw='SuperSecretPw1' …` 上 `pw='Super` 命中、`pw='Sup3` 不命中、`pw='S[a-z]per` 命中）。现在 action 只读取末尾 `lines` 行（1 到 500），先脱敏，再由 match、exclude 等过滤参数在脱敏后的文本上缩小范围（处理顺序见通用规则：stdout → 脱敏 → match/exclude → head/tail/count → 截断），过滤无法看到被替换的原文。path 类型的 allowed_roots 限于 `/var/log/mysql`、`/var/log/mariadb`，解析符号链接后必须位于这两个目录内；目录内的非慢日志文件（如错误日志）同样可读，且同样经过本 action 的规则脱敏。慢日志含完整 SQL 文本，可能含手机号、令牌和密码字面值，启用 secrets 与 pii。自定义规则 sql_comment、sql_string_literal、sql_hex_literal 与 `mysql_processlist` 相同：注释先整体替换，再把单引号和双引号字符串字面值（含转义引号）及 `0x…` 十六进制字面值替换为 [REDACTED:规则名]。本机用 mysql:8.0 容器（`--slow-query-log=1 --long_query_time=0`）产生的慢日志实测：`UPDATE users SET pw='SuperSecretPw1', phone='13812345678' WHERE id=1;` 输出为 `pw=[REDACTED:sql_string_literal], phone=[REDACTED:sql_string_literal]`；`SELECT /* it's a report */ … pw = 'SuperSecretPw1'` 输出为 `SELECT [REDACTED:sql_comment] … pw = [REDACTED:sql_string_literal]`；`pattern` 参数被参数校验拒绝（`unknown parameter "pattern"`）。取舍：看不到字面值；不再支持 gzip 压缩的轮转日志，不再支持按模式搜索整个文件，只能看末尾 500 行内的内容，更早的内容需要调用方在宿主机上自行处理。限制：脱敏逐行进行，跨行的字符串字面值，其续行中引号之前的内容不会被替换（引号之后到行尾被替换）；`tail` 从中间截断的行首可能落在多行 SQL 的中部，这一行按未闭合字符串处理。 |
 
 参数：
 
 | 名称 | 类型 | 约束 | 用途（description） |
 |---|---|---|---|
-| `path_glob` | string | `regex: ^/var/log/((mysql\|mariadb)/)?[A-Za-z0-9_*?-]*slow[A-Za-z0-9_.*?-]*$`；`max_len: 128`；必填 | 慢日志路径通配 |
-| `pattern` | string | `regex: ^[^\r\n]+$`；`max_len: 200`；必填 | 不含换行的检索模式 |
-| `fixed`、`exclude`、`context`、`max_matches` | 处理器参数 | 同 `log_search` | 可选 |
+| `path` | path | `allowed_roots: ['/var/log/mysql', '/var/log/mariadb']`；必填 | 已存在且解析后位于允许根内的慢日志文件 |
+| `lines` | int | `min: 1`；`max: 500`；有默认值，可省略；默认 `200` | 读取的末尾行数 |
 
 argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
-builtin: log_search
-builtin_config:
-  allowed_roots: [/var/log]
-  max_files: 20
-  max_scan: 256MB
-  max_context: 10
-  max_matches: 500
+exec: [/usr/bin/tail, -n, '{lines}', --, '{path}']
 redact:
   builtin: [secrets, pii]
   custom:
+    - name: sql_comment
+      regex: '(?s)/\*.*?(?:\*/|$)|--(?:[ \t\r\f\v][^\n]*|$)'
     - name: sql_string_literal
       regex: '(?s)''(?:[^''\\]|\\.|'''')*(?:''|\\?$)|"(?:[^"\\]|\\.|"")*(?:"|\\?$)'
     - name: sql_hex_literal
