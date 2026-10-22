@@ -44,6 +44,21 @@ export const formatLabels = (labels: Labels) =>
   Object.entries(labels)
     .map(([k, v]) => `${k}=${v}`)
     .join('\n')
+// Labels written through the API or CLI may hold an "=" or surrounding space
+// in a key, or a line break, which the line format cannot carry. Editing them
+// as text would save different labels.
+export function labelsRepresentable(labels: Labels) {
+  try {
+    const parsed = parseLabels(formatLabels(labels))
+    const keys = Object.keys(labels)
+    return (
+      Object.keys(parsed).length === keys.length &&
+      keys.every((key) => Object.hasOwn(parsed, key) && parsed[key] === labels[key])
+    )
+  } catch {
+    return false
+  }
+}
 // Host selectors are a separate comma separated key=value format with a
 // conservative charset; they are not label text.
 export function parseSelector(text: string): Labels {

@@ -270,6 +270,7 @@
   "error.positiveInteger": "请输入正整数",
   "error.notFound": "未找到资源",
   "error.labels": "标签格式无效，请每行填写一个 key=value 并避免重复键",
+  "error.labelsUnrepresentable": "标签含无法按每行 key=value 编辑的键或值，请使用 CLI 或 API 修改",
   "error.selector": "选择器格式无效，请使用逗号分隔的 key=value",
   "error.csv": "CSV 格式无效，请检查列名和单元格",
   "error.csvRemove": "remove 单元格只允许 true 或空",

@@ -9,6 +9,7 @@ import { Trash2Icon } from 'lucide-react'
 import {
   api,
   formatLabels,
+  labelsRepresentable,
   parseLabels,
   toBase64,
   type Host,
@@ -551,6 +552,7 @@ function HostEditor({ host }: { host: Host }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [deleting, setDeleting] = useState(false)
+  const representable = labelsRepresentable(host.authorizationLabels)
   const form = useForm<z.infer<typeof labelSchema>>({
     resolver: zodResolver(labelSchema),
     defaultValues: {
@@ -594,7 +596,11 @@ function HostEditor({ host }: { host: Host }) {
         >
           <Field
             label={t('host.labels')}
-            error={form.formState.errors.labels?.message}
+            error={
+              representable
+                ? form.formState.errors.labels?.message
+                : 'error.labelsUnrepresentable'
+            }
           >
             <Textarea
               rows={3}
@@ -606,7 +612,9 @@ function HostEditor({ host }: { host: Host }) {
             <Input {...form.register('remove')} />
           </Field>
           <div>
-            <Button disabled={saving.isPending}>{t('host.saveLabels')}</Button>
+            <Button disabled={saving.isPending || !representable}>
+              {t('host.saveLabels')}
+            </Button>
           </div>
         </form>
       </Panel>

@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import {
   api,
   formatLabels,
+  labelsRepresentable,
   parseLabels,
   type PolicyRule,
   type PolicyVersion,
@@ -379,6 +380,7 @@ function RuleForm({
   onChange: () => void
 }) {
   const { t } = useTranslation()
+  const representable = labelsRepresentable(rule?.hostLabels ?? {})
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -472,7 +474,11 @@ function RuleForm({
         ))}
         <Field
           label={t('host.labels')}
-          error={form.formState.errors.labels?.message}
+          error={
+            representable
+              ? form.formState.errors.labels?.message
+              : 'error.labelsUnrepresentable'
+          }
         >
           <Textarea
             rows={3}
@@ -507,7 +513,9 @@ function RuleForm({
           </NativeSelect>
         </Field>
         <div className="sm:col-span-2 lg:col-span-3">
-          <Button size="sm">{t('common.save')}</Button>
+          <Button size="sm" disabled={!representable}>
+            {t('common.save')}
+          </Button>
         </div>
       </form>
     </Panel>
