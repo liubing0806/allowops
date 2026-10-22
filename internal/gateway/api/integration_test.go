@@ -243,6 +243,9 @@ func TestTokenLifecycleAndCurrentRoles(t *testing.T) {
 	if strings.Join(current.Msg.User.EffectiveRoles, ",") != "auditor,viewer" {
 		t.Fatalf("roles=%v", current.Msg.User.EffectiveRoles)
 	}
+	if current.Msg.GatewayVersion != "dev" {
+		t.Fatalf("unset build version must report dev: %q", current.Msg.GatewayVersion)
+	}
 	if _, err := f.users().SaveRoleMappings(ctx, connect.NewRequest(&v1.SaveRoleMappingsRequest{Mappings: []*v1.RoleMapping{{ProviderId: "test", Group: "ops", Roles: []string{"admin"}}, {ProviderId: "test", Group: "readers", Roles: []string{"operator"}}}, ExpectedRevision: mappings.Msg.Revision})); err != nil {
 		t.Fatal(err)
 	}
