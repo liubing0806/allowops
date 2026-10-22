@@ -84,6 +84,7 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 		{"redis_command", "max_response_bytes", Size(1024), fmt.Sprint(builtin.DefaultRedisMaxResponseBytes + 1)},
 		{"redis_command", "max_scan_count", 1, builtin.DefaultRedisMaxScanCount + 1},
 		{"mysql_query", "max_rows", 1, 501},
+		{"mysql_query", "max_response_bytes", Size(1024), fmt.Sprint(builtin.DefaultMySQLMaxResponseBytes + 1)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name+"/"+tc.key, func(t *testing.T) {
@@ -139,6 +140,26 @@ func TestBuiltinExecutionPlacement(t *testing.T) {
 			if metadata["requires_exec"] != want {
 				t.Errorf("%s run_as=%q metadata=%s; want requires_exec=%v", name, runAs, data, want)
 			}
+		}
+	}
+}
+
+// mysql_query max_response_bytes follows redis_command: byte-size syntax, tighten-only.
+func TestMySQLMaxResponseBytesRejectsInvalidValues(t *testing.T) {
+	for _, value := range []any{-1, "-1", "abc", "1TB", true, nil, []any{1}, 1.5, fmt.Sprint(builtin.DefaultMySQLMaxResponseBytes + 1), "17MB"} {
+		a := registeredBuiltinAction("mysql_query")
+		a.BuiltinConfig = maps.Clone(a.BuiltinConfig)
+		a.BuiltinConfig["max_response_bytes"] = value
+		if _, err := ValidateAction(a); err == nil {
+			t.Errorf("accepted max_response_bytes=%#v", value)
+		}
+	}
+	for _, value := range []any{0, 1, "1KB", Size(64 << 10), fmt.Sprint(builtin.DefaultMySQLMaxResponseBytes)} {
+		a := registeredBuiltinAction("mysql_query")
+		a.BuiltinConfig = maps.Clone(a.BuiltinConfig)
+		a.BuiltinConfig["max_response_bytes"] = value
+		if _, err := ValidateAction(a); err != nil {
+			t.Errorf("max_response_bytes=%#v: %v", value, err)
 		}
 	}
 }
