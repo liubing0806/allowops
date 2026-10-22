@@ -1,0 +1,40 @@
+name: k8s_pod_jar_read_entry
+description: Read one application configuration entry from a jar inside an allowed pod without writing files.
+risk: read
+run_as: root
+params:
+  namespace:
+    type: enum
+    description: Namespace selected from the signed allowlist.
+    values: [default, app]
+  pod:
+    type: string
+    description: Pod name limited to 63 lowercase DNS characters.
+    regex: ^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$
+    max_len: 63
+  container:
+    type: enum
+    description: Optional container selected from the signed allowlist.
+    values: [api, app]
+    optional: true
+  jar:
+    type: string
+    description: Jar file path under /app, /opt/app or /data/app inside the container; path segments cannot start with a dot.
+    regex: '^/(app|opt/app|data/app)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+\.jar$'
+    max_len: 200
+  entry:
+    type: string
+    description: Configuration entry name inside the jar; application*.properties, application*.yml or application*.yaml, optionally under BOOT-INF/classes/.
+    regex: '^(BOOT-INF/classes/)?application[A-Za-z0-9_.-]*\.(properties|yml|yaml)$'
+    max_len: 120
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, exec, '{pod}', -n, '{namespace}', [-c, '{container}'], --, unzip, -p, '{jar}', '{entry}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+timeout: 15s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]
+  custom:
+    - name: config_secret
+      regex: '(?i)[A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|credentials?|private[_.-]?key|access[_.-]?key|api[_.-]?key)[A-Za-z0-9_.-]*\s*[:=]\s*(?:"[^"\r\n]*"|''[^''\r\n]*''|[^\s#]*)'
