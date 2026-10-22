@@ -278,9 +278,20 @@ func TestRRA04CommitNeverReachesServer(t *testing.T) {
 			if taskStatus != int16(v1.TaskStatus_TASK_STATUS_SUCCEEDED) || state != "stored" {
 				t.Fatalf("task=%d output_state=%s after the retried terminal write; want SUCCEEDED(3), stored", taskStatus, state)
 			}
-			var stored int
-			if err := f.DB.Pool.QueryRow(ctx, "SELECT count(*) FROM audit_events WHERE operation='store_output'").Scan(&stored); err != nil {
-				t.Fatal(err)
+			// persist appends the store_output audit event after the output_state
+			// write: wait for the first event, then watch briefly for a second one.
+			count := func() (n int) {
+				if err := f.DB.Pool.QueryRow(context.Background(), "SELECT count(*) FROM audit_events WHERE operation='store_output'").Scan(&n); err != nil {
+					t.Fatal(err)
+				}
+				return n
+			}
+			stored := count()
+			for until := time.Now().Add(5 * time.Second); stored == 0 && time.Now().Before(until); stored = count() {
+				time.Sleep(10 * time.Millisecond)
+			}
+			for until := time.Now().Add(500 * time.Millisecond); stored == 1 && time.Now().Before(until); stored = count() {
+				time.Sleep(10 * time.Millisecond)
 			}
 			if stored != 1 {
 				t.Fatalf("store_output audit events=%d; want 1 from the retried terminal write", stored)
