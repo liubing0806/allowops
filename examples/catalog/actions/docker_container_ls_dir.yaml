@@ -1,0 +1,19 @@
+name: docker_container_ls_dir
+description: List one fixed directory inside an allowed container.
+risk: read
+run_as: root
+params:
+  container:
+    type: enum
+    description: Container selected from the signed allowlist.
+    values: [api, app]
+  directory:
+    type: enum
+    description: Fixed container directory; not a host path parameter.
+    values: [/var/log, /data/logs, /etc/nginx]
+exec: [/usr/bin/docker, exec, '{container}', ls, -lah, --, '{directory}']
+timeout: 10s
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets]

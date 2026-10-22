@@ -1,0 +1,15 @@
+FROM python:3.13-slim-bookworm@sha256:a1165e272e578941b84abc79e4ab38a0305cd12803a5c4247979ac7655f4d641
+RUN groupadd --gid 65532 allowops \
+    && useradd --uid 65532 --gid 65532 --home-dir /var/lib/allowops --shell /usr/sbin/nologin allowops \
+    && install -d -o allowops -g allowops -m 0700 /var/lib/allowops \
+    && install -d -m 0700 /var/lib/allowops-exec \
+    && install -d -m 0755 /etc/allowops/catalog-keys /usr/libexec/allowops
+COPY allowops-agent /usr/bin/allowops-agent
+COPY allowops-exec /usr/libexec/allowops/allowops-exec
+COPY catalog.pub.pem /etc/allowops/catalog-keys/catalog.pub.pem
+COPY agent.yaml /etc/allowops/agent.yaml
+COPY demo-host.sh /usr/local/bin/demo-host
+RUN chmod 0755 /usr/bin/allowops-agent /usr/libexec/allowops/allowops-exec /usr/local/bin/demo-host \
+    && chmod 0644 /etc/allowops/agent.yaml /etc/allowops/catalog-keys/catalog.pub.pem
+# Root joins and drops privileges with setpriv; run is the real P3 agent.
+ENTRYPOINT ["/usr/local/bin/demo-host"]

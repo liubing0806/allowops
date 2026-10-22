@@ -1,0 +1,30 @@
+name: nginx_access_stats
+description: Aggregate bounded nginx access logs without returning raw entries.
+risk: read
+run_as: root
+params:
+  path:
+    type: path
+    description: Existing path within the signed allowed roots.
+    allowed_roots: [/var/log/nginx, /data/logs/nginx]
+  hour:
+    type: string
+    description: Optional hour in the log timezone, formatted as YYYY-MM-DDTHH.
+    regex: ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3])$
+    max_len: 13
+    optional: true
+  max_lines:
+    type: int
+    description: Maximum number of input log lines to scan.
+    min: 1
+    max: 1000000
+    default: 100000
+timeout: 30s
+max_output: 16KB
+script:
+  file: scripts/nginx_access_stats.py
+  interpreter: /usr/bin/python3
+args: [--path, '{path}', [--hour, '{hour}'], --max-lines, '{max_lines}', --max-bytes, '67108864']
+filters: []
+redact:
+  builtin: [secrets]

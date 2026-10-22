@@ -1,0 +1,15 @@
+name: systemd_service_status
+description: Read the status of an allowed systemd service.
+risk: read
+params:
+  service:
+    type: enum
+    description: Service selected from the signed allowlist.
+    values: [nginx, api]
+exec: [/usr/bin/systemctl, status, '{service}', --no-pager]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

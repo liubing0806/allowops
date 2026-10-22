@@ -1,0 +1,29 @@
+name: mysql_query_readonly
+description: Run one bounded read-only SQL statement with app as the default database.
+risk: read
+run_as: root
+params:
+  database:
+    type: string
+    description: Default database fixed to app; signed configuration restricts explicit database references.
+    regex: ^app$
+    max_len: 3
+  sql:
+    type: string
+    description: Single read-only SQL statement; no line breaks or multiple statements.
+    regex: ^[^\r\n]+$
+    max_len: 4000
+timeout: 15s
+builtin: mysql_query
+builtin_config:
+  credential: /etc/allowops/credentials/mysql-main.json
+  address: unix:///var/run/mysqld/mysqld.sock
+  max_rows: 200
+  timeout: 10s
+  databases: [app]
+  statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

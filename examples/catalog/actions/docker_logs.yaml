@@ -1,0 +1,35 @@
+name: docker_logs
+description: Read bounded Docker logs with optional start and end times.
+risk: read
+run_as: root
+params:
+  container:
+    type: string
+    description: Docker container name without option prefixes.
+    regex: ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$
+    max_len: 64
+  lines:
+    type: int
+    description: Maximum number of output lines.
+    min: 1
+    max: 500
+    default: 100
+  since:
+    type: duration
+    description: Optional relative age for the start of the log range.
+    max: 24h
+    format: go
+    optional: true
+  until:
+    type: duration
+    description: Optional relative age for the end of the log range.
+    max: 24h
+    format: go
+    optional: true
+exec: [/usr/bin/docker, logs, --tail, '{lines}', --timestamps, [--since, '{since}'], [--until, '{until}'], '{container}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

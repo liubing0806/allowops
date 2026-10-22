@@ -1,0 +1,11 @@
+name: disk_usage
+description: Read filesystem capacity excluding temporary filesystems.
+risk: read
+params: {}
+exec: [/usr/bin/df, -h, -x, tmpfs, -x, devtmpfs]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

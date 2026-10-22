@@ -1,0 +1,22 @@
+name: k8s_describe_pod
+description: Read a pod description without executing a container command.
+risk: read
+run_as: root
+params:
+  namespace:
+    type: enum
+    description: Namespace selected from the signed allowlist.
+    values: [default, app]
+  pod:
+    type: string
+    description: Pod name limited to 63 lowercase DNS characters.
+    regex: ^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$
+    max_len: 63
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, describe, pod, '{pod}', -n, '{namespace}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

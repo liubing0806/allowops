@@ -1,0 +1,36 @@
+// Use a publishing-only multibranch job. Restrict credential access externally
+// to reviewed main builds; PR/fork jobs must not resolve these credentials.
+pipeline {
+    agent { label 'catalog-publisher' }
+    options {
+        disableConcurrentBuilds()
+        skipDefaultCheckout(true)
+    }
+    stages {
+        stage('Publish catalog') {
+            when {
+                allOf {
+                    branch 'main'
+                    not { changeRequest() }
+                }
+            }
+            steps {
+                checkout scm
+                withCredentials([
+                    file(credentialsId: 'allowops-catalog-signing-key', variable: 'ALLOWOPS_SIGNING_KEY_FILE'),
+                    file(credentialsId: 'allowops-gateway-ca', variable: 'ALLOWOPS_GATEWAY_CA_FILE'),
+                    string(credentialsId: 'allowops-publisher-token', variable: 'ALLOWOPS_PUBLISHER_TOKEN')
+                ]) {
+                    // ALLOWOPS_GATEWAY is a non-secret job setting.
+                    // A pinned, verified CLI is preinstalled on this runner.
+                    sh '''
+                        set +x
+                        set -eu
+                        export ALLOWOPS_PUBLISH_BRANCH="$BRANCH_NAME"
+                        sh examples/pipelines/publish.sh
+                    '''
+                }
+            }
+        }
+    }
+}

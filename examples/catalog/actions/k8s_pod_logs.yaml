@@ -1,0 +1,40 @@
+name: k8s_pod_logs
+description: Read bounded non-streaming logs from one pod.
+risk: read
+run_as: root
+params:
+  namespace:
+    type: enum
+    description: Namespace selected from the signed allowlist.
+    values: [default, app]
+  pod:
+    type: string
+    description: Pod name limited to 63 lowercase DNS characters.
+    regex: ^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$
+    max_len: 63
+  lines:
+    type: int
+    description: Maximum number of output lines.
+    min: 1
+    max: 500
+    default: 100
+  since:
+    type: duration
+    description: Optional relative log start time.
+    max: 24h
+    format: go
+    optional: true
+  container:
+    type: enum
+    description: Optional container selected from the signed allowlist.
+    values: [api, app]
+    optional: true
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, logs, '{pod}', -n, '{namespace}',
+  --tail, '{lines}', --timestamps, [--since, '{since}'], [--container, '{container}']]
+exec_fallbacks: [/usr/local/bin/kubectl]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

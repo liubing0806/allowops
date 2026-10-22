@@ -1,0 +1,16 @@
+name: docker_container_state
+description: Read only the state section of one Docker container.
+risk: read
+run_as: root
+params:
+  container:
+    type: string
+    description: Docker container name without option prefixes.
+    regex: ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$
+    max_len: 64
+exec: [/usr/bin/docker, inspect, --format, '{{json .State}}', '{container}']
+timeout: 10s
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets]

@@ -1,0 +1,18 @@
+name: k8s_pods
+description: List pods in an allowed namespace.
+risk: read
+run_as: root
+params:
+  namespace:
+    type: enum
+    description: Namespace selected from the signed allowlist.
+    values: [default, app]
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, pods, -n, '{namespace}', -o,
+  wide]
+exec_fallbacks: [/usr/local/bin/kubectl]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

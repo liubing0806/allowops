@@ -1,0 +1,12 @@
+name: docker_stats
+description: Read one non-streaming sample of Docker resource statistics.
+risk: read
+run_as: root
+params: {}
+exec: [/usr/bin/docker, stats, --no-stream, --format, '{{json .}}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

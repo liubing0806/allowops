@@ -1,0 +1,10 @@
+.git
+.agents
+.codex
+bin
+dist
+web
+deploy/compose/.local
+**/__pycache__
+*.out
+*.test

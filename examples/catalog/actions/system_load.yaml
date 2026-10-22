@@ -1,0 +1,10 @@
+name: system_load
+description: Read uptime and load averages.
+risk: read
+params: {}
+exec: [/usr/bin/uptime]
+timeout: 10s
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets]

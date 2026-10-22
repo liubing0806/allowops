@@ -1,0 +1,8 @@
+The system CA bundle is copied from the Go build image's ca-certificates
+package. Mozilla's certificate data is licensed under MPL-2.0:
+https://www.mozilla.org/en-US/MPL/2.0/
+https://hg.mozilla.org/projects/nss/file/tip/lib/ckfw/builtins/certdata.txt
+
+The gateway runtime uses scratch. The Go build image and its operating-system
+packages are build tools and are not redistributed in the gateway runtime.
+THIRD_PARTY_NOTICES contains the licenses of the shipped Go dependencies.

@@ -1,0 +1,21 @@
+name: jvm_thread_dump
+description: Read one JVM thread dump from an allowed container process.
+risk: read
+run_as: root
+params:
+  container:
+    type: enum
+    description: Container selected from the signed allowlist.
+    values: [api, app]
+  pid:
+    type: int
+    description: Required process identifier in the container PID namespace.
+    min: 1
+    max: 4194304
+timeout: 20s
+max_output: 128KB
+exec: [/usr/bin/docker, exec, '{container}', jstack, '{pid}']
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

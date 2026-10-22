@@ -1,0 +1,15 @@
+name: disk_dir_size
+description: Read the total size of one allowed directory.
+risk: read
+run_as: root
+params:
+  path:
+    type: path
+    description: Existing path within the signed allowed roots.
+    allowed_roots: [/var/log, /data]
+timeout: 20s
+exec: [/usr/bin/du, -sh, --, '{path}']
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets]

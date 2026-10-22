@@ -1,0 +1,240 @@
+name: allowops-fx2-local
+
+services:
+  postgres:
+    image: postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
+    platform: linux/amd64
+    environment:
+      POSTGRES_USER: allowops
+      POSTGRES_DB: allowops
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./.local/secrets/postgres-password:/run/secrets/postgres-password:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U allowops -d allowops']
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.46@sha256:08d516132314207d10c8e37cbffc1f32b147d870169688734cc61c6231625b62
+    platform: linux/amd64
+    command:
+      - server
+      - -dir=/data
+      - -ip=seaweedfs
+      - -ip.bind=0.0.0.0
+      - -master.telemetry=false
+      - -s3
+      - -s3.config=/run/secrets/s3.json
+      - -s3.autoCreateBucket=false
+      - -s3.port.iceberg=0
+      - -s3.port.lance=0
+    depends_on:
+      prepare-volumes:
+        condition: service_completed_successfully
+    volumes:
+      - seaweedfs:/data
+      - storage-credentials:/run/secrets:ro
+    env_file: ./.local/secrets/seaweedfs.env
+    stop_grace_period: 20s
+
+  storage-init:
+    image: python:3.13-slim-bookworm@sha256:a1165e272e578941b84abc79e4ab38a0305cd12803a5c4247979ac7655f4d641
+    platform: linux/amd64
+    user: '${ALLOWOPS_DEMO_UID:-1000}:${ALLOWOPS_DEMO_GID:-1000}'
+    command: [python, /scripts/storage-init.py]
+    depends_on: [seaweedfs]
+    volumes:
+      - ./storage-init.py:/scripts/storage-init.py:ro
+      - ./.local/secrets/s3.json:/run/secrets/s3.json:ro
+    cap_drop: [ALL]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+
+  ldap:
+    image: osixia/openldap:1.5.0@sha256:18742e9c449c9c1afe129d3f2f3ee15fb34cc43e5f940a20f3399728f41d7c28
+    platform: linux/amd64
+    hostname: ldap
+    command: [--loglevel, warning]
+    environment:
+      LDAP_ORGANISATION: Allowops Local Demo
+      LDAP_DOMAIN: demo.invalid
+      LDAP_ADMIN_PASSWORD_FILE: /seed/directory-password
+      LDAP_CONFIG_PASSWORD_FILE: /seed/config-password
+      LDAP_TLS: 'true'
+      LDAP_TLS_VERIFY_CLIENT: never
+      LDAP_TLS_CRT_FILENAME: ldap.crt
+      LDAP_TLS_KEY_FILENAME: ldap.key
+      LDAP_TLS_CA_CRT_FILENAME: ca.crt
+      LDAP_SEED_INTERNAL_LDAP_TLS_CRT_FILE: /seed/ldap.crt
+      LDAP_SEED_INTERNAL_LDAP_TLS_KEY_FILE: /seed/ldap.key
+      LDAP_SEED_INTERNAL_LDAP_TLS_CA_CRT_FILE: /seed/ca.crt
+      LDAP_SEED_INTERNAL_LDIF_PATH: /seed/ldif
+    volumes:
+      - ./.local/auth/directory-password:/seed/directory-password:ro
+      - ./.local/auth/config-password:/seed/config-password:ro
+      - ./.local/auth/ldap.crt:/seed/ldap.crt:ro
+      - ./.local/auth/ldap.key:/seed/ldap.key:ro
+      - ./.local/auth/ca.crt:/seed/ca.crt:ro
+      - ./.local/auth/ldif:/seed/ldif:ro
+      - ldap-data:/var/lib/ldap
+      - ldap-config:/etc/ldap/slapd.d
+    healthcheck:
+      test: [CMD-SHELL, 'LDAPTLS_CACERT=/container/service/slapd/assets/certs/ca.crt LDAPTLS_REQCERT=demand ldapsearch -x -H ldaps://localhost:636 -b "" -s base namingContexts >/dev/null']
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+  prepare-volumes:
+    image: python:3.13-slim-bookworm@sha256:a1165e272e578941b84abc79e4ab38a0305cd12803a5c4247979ac7655f4d641
+    platform: linux/amd64
+    command: [sh, /scripts/prepare-volumes.sh]
+    volumes:
+      - ./.local:/source:ro
+      - ./prepare-volumes.sh:/scripts/prepare-volumes.sh:ro
+      - credentials:/credentials
+      - storage-credentials:/storage-credentials
+      - audit:/audit
+
+  migrate:
+    image: ${ALLOWOPS_GATEWAY_IMAGE:-allowops-gateway:fx2}
+    platform: linux/amd64
+    command: [migrate]
+    env_file: ./.local/gateway.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    cap_drop: [ALL]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+
+  gateway:
+    image: ${ALLOWOPS_GATEWAY_IMAGE:-allowops-gateway:fx2}
+    platform: linux/amd64
+    command: [serve, --config, /etc/allowops/gateway.yaml]
+    env_file:
+      - ./.local/gateway.env
+      - ./.local/auth/gateway-ldap.env
+    environment:
+      AWS_SHARED_CREDENTIALS_FILE: /run/allowops/credentials/aws-credentials
+      AWS_EC2_METADATA_DISABLED: "true"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      prepare-volumes:
+        condition: service_completed_successfully
+      ldap:
+        condition: service_healthy
+    volumes:
+      - credentials:/run/allowops/credentials:ro
+      - ./.local/gateway-auth.yaml:/etc/allowops/gateway.yaml:ro
+      - ./.local/auth/ca.crt:/etc/allowops/idp-ca.crt:ro
+      - audit:/var/lib/allowops/audit
+    stop_grace_period: 20s
+    healthcheck:
+      test: [CMD, /usr/bin/allowops-gateway, health, --url, https://localhost:8443/health/ready, --ca-file, /run/allowops/credentials/tls-ca.crt]
+      interval: 2s
+      timeout: 6s
+      retries: 60
+    cap_drop: [ALL]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+
+  ready:
+    image: python:3.13-slim-bookworm@sha256:a1165e272e578941b84abc79e4ab38a0305cd12803a5c4247979ac7655f4d641
+    platform: linux/amd64
+    command: [python, /scripts/probe.py]
+    depends_on:
+      gateway:
+        condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./probe.py:/scripts/probe.py:ro
+      - ./.local/secrets/tls-ca.crt:/run/tls-ca.crt:ro
+    cap_drop: [ALL]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+
+  demo-1:
+    profiles: [demo]
+    build:
+      context: ./.local/host-context
+      dockerfile: ../../Dockerfile.host
+    image: ${ALLOWOPS_HOST_IMAGE:-allowops-demo-host:fx2}
+    platform: linux/amd64
+    hostname: demo-1
+    environment:
+      JOIN_TOKEN_FILE: /joins/demo-1.token
+    volumes:
+      - ./.local/joins:/joins:ro
+      - demo-1:/var/lib/allowops
+    depends_on:
+      ready:
+        condition: service_completed_successfully
+    stop_grace_period: 20s
+    healthcheck:
+      test: [CMD-SHELL, 'allowops-agent status | grep -q ''"connected":true''']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  demo-2:
+    profiles: [demo]
+    image: ${ALLOWOPS_HOST_IMAGE:-allowops-demo-host:fx2}
+    platform: linux/amd64
+    hostname: demo-2
+    environment:
+      JOIN_TOKEN_FILE: /joins/demo-2.token
+    volumes:
+      - ./.local/joins:/joins:ro
+      - demo-2:/var/lib/allowops
+    depends_on:
+      ready:
+        condition: service_completed_successfully
+    stop_grace_period: 20s
+    healthcheck:
+      test: [CMD-SHELL, 'allowops-agent status | grep -q ''"connected":true''']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  admin-tool:
+    profiles: [auth-tools]
+    image: python:3.13-slim-bookworm@sha256:a1165e272e578941b84abc79e4ab38a0305cd12803a5c4247979ac7655f4d641
+    platform: linux/amd64
+    user: '${ALLOWOPS_DEMO_UID:-1000}:${ALLOWOPS_DEMO_GID:-1000}'
+    working_dir: /work
+    entrypoint: [python, /work/bootstrap.py]
+    environment:
+      XDG_CONFIG_HOME: /work/.local/cli
+    volumes:
+      - ./bootstrap.py:/work/bootstrap.py:ro
+      - ./.local/bin:/work/.local/bin:ro
+      - ./.local/catalog.json:/work/.local/catalog.json:ro
+      - ./.local/catalog.dsse.json:/work/.local/catalog.dsse.json:ro
+      - ./.local/ca-pin:/work/.local/ca-pin:ro
+      - ./.local/secrets/tls-ca.crt:/work/.local/secrets/tls-ca.crt:ro
+      - ./.local/auth/login-password:/work/.local/auth/login-password:ro
+      - ./.local/joins:/work/.local/joins
+      - ./.local/cli:/work/.local/cli
+    cap_drop: [ALL]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+
+networks:
+  default:
+    internal: true
+
+volumes:
+  postgres:
+  seaweedfs:
+  storage-credentials:
+  credentials:
+  audit:
+  demo-1:
+  demo-2:
+  ldap-data:
+  ldap-config:

@@ -1,0 +1,22 @@
+name: log_tail_file
+description: Read the last lines of an allowed log file.
+risk: read
+run_as: root
+params:
+  path:
+    type: path
+    description: Existing path within the signed allowed roots.
+    allowed_roots: [/var/log, /data/logs]
+  lines:
+    type: int
+    description: Maximum number of output lines.
+    min: 1
+    max: 500
+    default: 100
+exec: [/usr/bin/tail, -n, '{lines}', --, '{path}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

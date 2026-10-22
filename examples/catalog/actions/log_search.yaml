@@ -1,0 +1,28 @@
+name: log_search
+description: Search allowed plain or gzip logs with bounded scan and match limits.
+risk: read
+run_as: root
+params:
+  path_glob:
+    type: string
+    description: Log path glob restricted by the builtin allowed roots.
+    regex: ^/[^\r\n]+$
+    max_len: 256
+  pattern:
+    type: string
+    description: Bounded search pattern without line breaks.
+    regex: ^[^\r\n]+$
+    max_len: 200
+timeout: 30s
+builtin: log_search
+builtin_config:
+  allowed_roots: [/var/log, /data/logs]
+  max_files: 50
+  max_scan: 256MB
+  max_context: 10
+  max_matches: 500
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

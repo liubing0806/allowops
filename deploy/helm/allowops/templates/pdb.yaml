@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "allowops.name" . }}
+  labels:
+{{ include "allowops.labels" . | indent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+{{ include "allowops.labels" . | indent 6 }}
+      app.kubernetes.io/component: gateway

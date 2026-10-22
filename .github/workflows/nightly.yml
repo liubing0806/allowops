@@ -1,0 +1,43 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 18 * * *'
+  # Run manually against the release candidate before publishing.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scale:
+    runs-on: ubuntu-latest
+    env:
+      ALLOWOPS_REQUIRE_DOCKER: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # Requires the scale target from P10A.
+      - run: make scale
+
+  opa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      # Requires the bench-opa target from P10A.
+      - run: make bench-opa
+
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: make fuzz FUZZTIME=10m

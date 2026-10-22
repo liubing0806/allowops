@@ -1,0 +1,23 @@
+name: process_signal
+description: Send TERM or HUP to one explicit process owned by app.
+risk: write
+run_as: app
+params:
+  signal:
+    type: enum
+    description: Allowed signal; process groups and forced kills are not exposed.
+    values: [TERM, HUP]
+  pid:
+    type: int
+    description: Required positive process identifier greater than one.
+    min: 2
+    max: 4194304
+timeout: 5s
+max_output: 16KB
+exec: [/usr/bin/kill, -s, '{signal}', --, '{pid}']
+filters: []
+redact:
+  builtin: [secrets]
+idempotent: false
+batch_size: 1
+max_failures: 1

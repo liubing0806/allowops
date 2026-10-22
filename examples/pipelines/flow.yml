@@ -1,0 +1,29 @@
+# Configure a publishing-only Flow pipeline and its Git source in the UI.
+# The source must be reviewed, protected main; restrict manual/API overrides.
+# Bind a private variable group from the CI credential store in the UI:
+# ALLOWOPS_SIGNING_KEY_PEM and ALLOWOPS_PUBLISHER_TOKEN.
+# Non-secret settings: ALLOWOPS_GATEWAY and ALLOWOPS_GATEWAY_CA_PEM.
+stages:
+  publish:
+    name: Publish reviewed catalog
+    jobs:
+      publish_catalog:
+        name: Publish signed actions
+        condition: |
+          "${CI_COMMIT_REF_NAME}" == "main"
+        steps:
+          publish:
+            name: Validate, build, sign and publish
+            step: Command
+            with:
+              run: |
+                set +x
+                set -eu
+                test "$CI_COMMIT_REF_NAME" = main
+                export ALLOWOPS_PUBLISH_BRANCH="$CI_COMMIT_REF_NAME"
+                umask 077
+                ca_dir=$(mktemp -d)
+                trap 'rm -rf "$ca_dir"' EXIT
+                printf '%s\n' "$ALLOWOPS_GATEWAY_CA_PEM" > "$ca_dir/ca.pem"
+                export ALLOWOPS_GATEWAY_CA_FILE="$ca_dir/ca.pem"
+                sh examples/pipelines/publish.sh

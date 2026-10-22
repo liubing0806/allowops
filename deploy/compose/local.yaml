@@ -1,0 +1,54 @@
+# Persistent local environment overlay (P13). Use together with the base file:
+#
+#   docker compose -f compose.yaml -f local.yaml ...
+#
+# The base file stays internal-only for the one-shot quickstart and the e2e
+# runner. This overlay only publishes the gateway TLS port on the host loopback
+# interface, adds a third demo host reusing the shared host image, and mounts
+# the MCP token file into the admin helper. No other service gains host ports.
+#
+# Docker does not create host port mappings for containers attached only to an
+# internal network, so the gateway joins a second project-scoped bridge
+# (host-access). All inter-service traffic keeps using the internal default
+# network; only the gateway has the extra interface.
+#
+# ALLOWOPS_LOCAL_BIND publishes the port on one LAN address instead of
+# loopback; local-up.sh rejects wildcard addresses.
+
+services:
+  gateway:
+    ports:
+      - "${ALLOWOPS_LOCAL_BIND:-127.0.0.1}:${ALLOWOPS_LOCAL_PORT:-8443}:8443"
+    networks:
+      default: {}
+      host-access: {}
+
+  demo-3:
+    profiles: [demo]
+    image: ${ALLOWOPS_HOST_IMAGE:-allowops-demo-host:fx2}
+    platform: linux/amd64
+    hostname: demo-3
+    environment:
+      JOIN_TOKEN_FILE: /joins/demo-3.token
+    volumes:
+      - ./.local/joins:/joins:ro
+      - demo-3:/var/lib/allowops
+    depends_on:
+      ready:
+        condition: service_completed_successfully
+    stop_grace_period: 20s
+    healthcheck:
+      test: [CMD-SHELL, 'allowops-agent status | grep -q ''"connected":true''']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  admin-tool:
+    volumes:
+      - ./.local/mcp-token:/work/.local/mcp-token
+
+volumes:
+  demo-3:
+
+networks:
+  host-access: {}

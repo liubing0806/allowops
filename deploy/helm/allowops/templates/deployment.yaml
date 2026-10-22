@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "allowops.name" . }}
+  labels:
+{{ include "allowops.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+{{ include "allowops.labels" . | indent 6 }}
+      app.kubernetes.io/component: gateway
+  template:
+    metadata:
+      labels:
+{{ include "allowops.labels" . | indent 8 }}
+        app.kubernetes.io/component: gateway
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+    spec:
+{{ include "allowops.pod" (merge (dict "configFile" "gateway.yaml" "exporter" false) .) | indent 6 }}

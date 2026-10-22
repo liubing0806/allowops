@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package allowops.v1;
+
+option go_package = "github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1";
+
+// Version is a placeholder for generated message code.
+message Version {
+  string version = 1;
+}

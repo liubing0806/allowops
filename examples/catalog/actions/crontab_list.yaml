@@ -1,0 +1,16 @@
+name: crontab_list
+description: Read the crontab of one allowed operating-system account.
+risk: read
+run_as: root
+params:
+  user:
+    type: enum
+    description: Account selected from the signed allowlist.
+    values: [app, nginx]
+exec: [/usr/bin/crontab, -l, -u, '{user}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

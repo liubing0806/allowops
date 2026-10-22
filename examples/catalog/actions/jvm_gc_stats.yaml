@@ -1,0 +1,26 @@
+name: jvm_gc_stats
+description: Read a bounded series of JVM garbage-collection statistics in a container.
+risk: read
+run_as: root
+params:
+  container:
+    type: enum
+    description: Container selected from the signed allowlist.
+    values: [api, app]
+  pid:
+    type: int
+    description: Required process identifier in the container PID namespace.
+    min: 1
+    max: 4194304
+  samples:
+    type: int
+    description: Number of samples at a fixed one-second interval.
+    min: 1
+    max: 10
+    default: 1
+timeout: 15s
+exec: [/usr/bin/docker, exec, '{container}', jstat, -gc, '{pid}', '1000', '{samples}']
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets]

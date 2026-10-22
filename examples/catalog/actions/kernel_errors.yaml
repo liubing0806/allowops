@@ -1,0 +1,12 @@
+name: kernel_errors
+description: Read kernel warning and error messages.
+risk: read
+run_as: root
+params: {}
+exec: [/usr/bin/dmesg, -T, '--level=err,warn']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

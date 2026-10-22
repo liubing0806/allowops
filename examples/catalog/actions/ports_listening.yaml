@@ -1,0 +1,13 @@
+name: ports_listening
+description: Read listening TCP sockets and process names.
+risk: read
+run_as: root
+params: {}
+exec: [/usr/sbin/ss, -ltnp]
+exec_fallbacks: [/usr/bin/ss]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

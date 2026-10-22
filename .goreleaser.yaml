@@ -1,0 +1,173 @@
+version: 2
+project_name: allowops
+
+builds:
+  - id: allowops
+    main: ./cmd/allowops
+    binary: allowops
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64]
+    goamd64: [v1]
+    ldflags: ['-s -w -X main.version={{ .Version }}']
+    hooks:
+      post: sh deploy/packaging/notices.sh
+  - id: allowops-gateway
+    main: ./cmd/allowops-gateway
+    binary: allowops-gateway
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64]
+    goamd64: [v1]
+    ldflags: ['-s -w -X main.version={{ .Version }}']
+  - id: allowops-agent
+    main: ./cmd/allowops-agent
+    binary: allowops-agent
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64]
+    goamd64: [v1]
+    ldflags: ['-s -w -X main.version={{ .Version }}']
+  - id: allowops-exec
+    main: ./cmd/allowops-exec
+    binary: allowops-exec
+    env: [CGO_ENABLED=0]
+    goos: [linux]
+    goarch: [amd64]
+    goamd64: [v1]
+    ldflags: ['-s -w -X main.version={{ .Version }}']
+
+archives:
+  - formats: [tar.gz]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    files:
+      - LICENSE
+      - src: dist/THIRD_PARTY_NOTICES
+        dst: THIRD_PARTY_NOTICES
+
+nfpms:
+  - id: allowops-agent
+    package_name: allowops-agent
+    ids: [allowops-agent]
+    formats: [deb, rpm]
+    file_name_template: '{{ .ConventionalFileName }}'
+    homepage: https://github.com/liubing0806/allowops
+    maintainer: liubing <liubing0806@users.noreply.github.com>
+    description: Allowops host agent and privileged execution helper.
+    license: MIT
+    bindir: /usr/bin
+    contents:
+      - src: dist/allowops-exec_linux_amd64_v1/allowops-exec
+        dst: /usr/libexec/allowops/allowops-exec
+        file_info:
+          owner: root
+          group: root
+          mode: 0755
+      - dst: /usr/libexec/allowops
+        type: dir
+        file_info:
+          owner: root
+          group: root
+          mode: 0755
+      - src: deploy/packaging/allowops-agent.service
+        dst: /usr/lib/systemd/system/allowops-agent.service
+        file_info:
+          owner: root
+          group: root
+          mode: 0644
+      - src: deploy/packaging/allowops.sudoers
+        dst: /etc/sudoers.d/allowops
+        file_info:
+          owner: root
+          group: root
+          mode: 0440
+      - src: deploy/packaging/agent.yaml
+        dst: /etc/allowops/agent.yaml
+        type: config|noreplace
+        file_info:
+          owner: root
+          group: root
+          mode: 0644
+      - dst: /etc/allowops
+        type: dir
+        file_info:
+          owner: root
+          group: root
+          mode: 0755
+      - dst: /etc/allowops/catalog-keys
+        type: dir
+        file_info:
+          owner: root
+          group: root
+          mode: 0755
+      - dst: /var/lib/allowops
+        type: dir
+        file_info:
+          owner: allowops
+          group: allowops
+          mode: 0700
+      - dst: /var/lib/allowops-exec
+        type: dir
+        file_info:
+          owner: root
+          group: root
+          mode: 0700
+      - src: LICENSE
+        dst: /usr/share/licenses/allowops-agent/LICENSE
+      - src: dist/THIRD_PARTY_NOTICES
+        dst: /usr/share/licenses/allowops-agent/THIRD_PARTY_NOTICES
+    scripts:
+      preinstall: deploy/packaging/preinstall.sh
+      postinstall: deploy/packaging/postinstall.sh
+      preremove: deploy/packaging/preremove.sh
+      postremove: deploy/packaging/postremove.sh
+    overrides:
+      deb:
+        dependencies: [passwd, systemd]
+        recommends: [sudo]
+      rpm:
+        dependencies: [sudo, shadow-utils, systemd]
+    deb:
+      compression: gzip
+      signature:
+        key_file: '{{ if not .IsSnapshot }}{{ .Env.GPG_KEY_PATH }}{{ end }}'
+    rpm:
+      compression: gzip
+      # Release CI must supply an RSA 4096 private key for rpm 4.11 compatibility.
+      signature:
+        key_file: '{{ if not .IsSnapshot }}{{ .Env.GPG_KEY_PATH }}{{ end }}'
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+# The v2 legacy Docker pipe supports load-only builds and explicit skip_push.
+# Do not replace this with a pipe that pushes manifest lists during a build.
+dockers:
+  - id: allowops-gateway
+    ids: [allowops-gateway]
+    goos: linux
+    goarch: amd64
+    goamd64: v1
+    dockerfile: deploy/docker/goreleaser.Dockerfile
+    image_templates: ['allowops-gateway:{{ .Version }}']
+    skip_push: true
+    extra_files: [LICENSE, dist/THIRD_PARTY_NOTICES, deploy/docker/CA-NOTICE]
+    build_flag_templates: ['--platform=linux/amd64']
+
+sboms:
+  - id: archives
+    artifacts: archive
+    cmd: go
+    args: [run, github.com/anchore/syft/cmd/syft@v1.54.1, scan, '$artifact', --output, 'spdx-json=$document']
+    env: [SYFT_CHECK_FOR_APP_UPDATE=false]
+  - id: packages
+    artifacts: package
+    cmd: go
+    args: [run, github.com/anchore/syft/cmd/syft@v1.54.1, scan, '$artifact', --output, 'spdx-json=$document']
+    env: [SYFT_CHECK_FOR_APP_UPDATE=false]
+
+signs:
+  - artifacts: checksum
+    cmd: gpg
+    args: [--batch, --local-user, '{{ .Env.GPG_KEY_ID }}', --output, '${signature}', --detach-sign, '${artifact}']

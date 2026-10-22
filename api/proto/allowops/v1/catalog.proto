@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package allowops.v1;
+
+import "allowops/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1";
+
+service CatalogService {
+  rpc BeginCatalogUpload(BeginCatalogUploadRequest) returns (BeginCatalogUploadResponse);
+  rpc UploadCatalogChunk(UploadCatalogChunkRequest) returns (UploadCatalogChunkResponse);
+  rpc PublishCatalog(PublishCatalogRequest) returns (PublishCatalogResponse);
+  rpc ListCatalogs(ListCatalogsRequest) returns (ListCatalogsResponse);
+  rpc GetCatalog(GetCatalogRequest) returns (GetCatalogResponse);
+  rpc ListActions(ListActionsRequest) returns (ListActionsResponse);
+  rpc GetAction(GetActionRequest) returns (GetActionResponse);
+  rpc GetCatalogDistribution(GetCatalogDistributionRequest) returns (GetCatalogDistributionResponse);
+}
+
+message CatalogVersion {
+  CatalogRef catalog = 1;
+  uint32 schema_version = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  string git_commit = 5;
+  bytes envelope_sha256 = 6;
+  uint64 envelope_size_bytes = 7;
+  uint32 action_count = 8;
+  bool current = 9;
+  google.protobuf.Timestamp published_at = 10;
+}
+
+message ActionSummary {
+  string name = 1;
+  string description = 2;
+  string risk = 3;
+  bool idempotent = 4;
+  string execution_mode = 5;
+  string builtin = 6;
+  bytes action_sha256 = 7;
+}
+
+message BeginCatalogUploadRequest {
+  uint64 envelope_size_bytes = 1;
+  bytes envelope_sha256 = 2;
+}
+
+message BeginCatalogUploadResponse {
+  string upload_id = 1;
+  uint32 max_chunk_bytes = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+message UploadCatalogChunkRequest {
+  string upload_id = 1;
+  uint64 offset = 2;
+  bytes data = 3;
+}
+
+message UploadCatalogChunkResponse {
+  uint64 next_offset = 1;
+}
+
+// G10/A11: atomically validate and publish the entire signed envelope;
+// reject action-name conflicts across catalogs.
+message PublishCatalogRequest {
+  string upload_id = 1;
+}
+
+message PublishCatalogResponse {
+  CatalogVersion catalog = 1;
+}
+
+message ListCatalogsRequest {
+  string catalog_id = 1;
+  PageRequest page = 2;
+}
+
+message ListCatalogsResponse {
+  repeated CatalogVersion catalogs = 1;
+  PageResponse page = 2;
+}
+
+message GetCatalogRequest {
+  // Version zero selects the current version for the explicit catalog_id.
+  CatalogRef catalog = 1;
+}
+
+message GetCatalogResponse {
+  CatalogVersion catalog = 1;
+}
+
+message ListActionsRequest {
+  CatalogRef catalog = 1;
+  PageRequest page = 2;
+}
+
+message ListActionsResponse {
+  repeated ActionSummary actions = 1;
+  PageResponse page = 2;
+}
+
+message GetActionRequest {
+  CatalogRef catalog = 1;
+  string action = 2;
+}
+
+message GetActionResponse {
+  ActionSummary action = 1;
+  // Read-only catalog schema JSON: params, command/steps/script/builtin, redact.
+  bytes definition_json = 2;
+  CatalogRef catalog = 3;
+}
+
+message CatalogDistribution {
+  CatalogRef catalog = 1;
+  uint64 host_count = 2;
+}
+
+message GetCatalogDistributionRequest {
+  string catalog_id = 1;
+  PageRequest page = 2;
+}
+
+message GetCatalogDistributionResponse {
+  repeated CatalogDistribution versions = 1;
+  uint64 not_loaded_host_count = 2;
+  PageResponse page = 3;
+}

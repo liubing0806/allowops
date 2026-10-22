@@ -1,0 +1,148 @@
+package mcp
+
+import (
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"slices"
+
+	"connectrpc.com/connect"
+	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
+)
+
+type summaryCursor struct {
+	Snapshot string `json:"snapshot"`
+	Offset   int    `json:"offset"`
+}
+type summaryItem struct{ group, host, offline int }
+
+// G57: slice already-authorized P6 groups for transport; never group tasks or
+// read additional job data. Detailed pages may continue the hosts of one group.
+func nativeSummaryResult(scope string, j *v1.Job, summary *v1.JobSummary, format, cursor string) (*ToolResult, error) {
+	if scope == "" || j == nil || summary == nil || summary.OutputTrust != v1.OutputTrust_OUTPUT_TRUST_UNTRUSTED {
+		return nil, accessError(connect.CodeUnavailable, "job summary unavailable")
+	}
+	if !slices.Contains([]string{"concise", "detailed"}, format) {
+		return nil, accessError(connect.CodeInvalidArgument, "response_format allowed: concise, detailed")
+	}
+	binding, err := json.Marshal(struct {
+		Scope, Format string
+		Job           *v1.Job
+		Summary       *v1.JobSummary
+	}{scope, format, j, summary})
+	if err != nil {
+		return nil, err
+	}
+	hash := sha256.Sum256(binding)
+	snapshot := hex.EncodeToString(hash[:])
+	items := []summaryItem{}
+	for i, g := range summary.Groups {
+		if g == nil {
+			return nil, accessError(connect.CodeUnavailable, "job group unavailable")
+		}
+		if format == "detailed" && len(g.Hosts) > 0 {
+			for host := range g.Hosts {
+				items = append(items, summaryItem{group: i, host: host, offline: -1})
+			}
+		} else {
+			items = append(items, summaryItem{group: i, host: -1, offline: -1})
+		}
+	}
+	for i := range summary.OfflineHosts {
+		items = append(items, summaryItem{group: -1, host: -1, offline: i})
+	}
+	start := 0
+	if cursor != "" {
+		decoded, err := base64.RawURLEncoding.Strict().DecodeString(cursor)
+		if len(cursor) > 256 || err != nil {
+			return nil, invalidArguments(errors.New("invalid summary cursor; restart without next_cursor"))
+		}
+		object, err := argumentObject(decoded)
+		var c summaryCursor
+		if err != nil || len(object) != 2 || json.Unmarshal(decoded, &c) != nil || c.Snapshot != snapshot || c.Offset <= 0 || c.Offset >= len(items) {
+			return nil, invalidArguments(errors.New("summary cursor does not match identity, job, format or P6 snapshot; restart without next_cursor"))
+		}
+		start = c.Offset
+	}
+	candidate := func(end, previewLimit int) (*ToolResult, int, error) {
+		data := jobMetadata(j)
+		data["groups"] = []map[string]any{}
+		data["offline_hosts"] = []string{}
+		data["truncated"] = summary.Truncated
+		data["hint"] = "Use jobs_get(job_id, host) for complete output; use next_cursor for remaining supplied groups. P6 may already have truncated the source summary."
+		groups := []map[string]any{}
+		lastGroup := -1
+		for _, item := range items[start:end] {
+			if item.offline >= 0 {
+				data["offline_hosts"] = append(data["offline_hosts"].([]string), summary.OfflineHosts[item.offline])
+				continue
+			}
+			source := summary.Groups[item.group]
+			if item.group != lastGroup {
+				stdout := textPrefix(source.Stdout, previewLimit)
+				stderr := textPrefix(source.Stderr, previewLimit-len(stdout))
+				shortened := len(stdout) < len(source.Stdout) || len(stderr) < len(source.Stderr)
+				g := map[string]any{"host_count": source.HostCount, "stdout": stdout, "stderr": stderr, "truncated": source.Truncated || shortened}
+				if source.ExitCode != nil {
+					g["exit_code"] = *source.ExitCode
+				}
+				if format == "detailed" {
+					g["hosts"] = []string{}
+				} else {
+					g["sample_hosts"] = slices.Clone(source.Hosts[:min(2, len(source.Hosts))])
+				}
+				if shortened {
+					data["truncated"] = true
+				}
+				groups = append(groups, g)
+				lastGroup = item.group
+			}
+			if format == "detailed" && item.host >= 0 {
+				g := groups[len(groups)-1]
+				g["hosts"] = append(g["hosts"].([]string), source.Hosts[item.host])
+			}
+		}
+		data["groups"] = groups
+		if end < len(items) {
+			raw, _ := json.Marshal(summaryCursor{Snapshot: snapshot, Offset: end})
+			data["next_cursor"] = base64.RawURLEncoding.EncodeToString(raw)
+		}
+		return toolResult(data)
+	}
+	if len(items) == 0 {
+		result, size, err := candidate(0, groupByteLimit)
+		if size > resultByteLimit {
+			return nil, accessError(connect.CodeResourceExhausted, "job metadata exceeds 32KB")
+		}
+		return result, err
+	}
+	var best *ToolResult
+	for end := start + 1; end <= len(items); end++ {
+		result, size, err := candidate(end, groupByteLimit)
+		if err != nil {
+			return nil, err
+		}
+		if size <= resultByteLimit {
+			best = result
+			continue
+		}
+		if best != nil {
+			return best, nil
+		}
+		for limit := groupByteLimit / 2; ; limit /= 2 {
+			result, size, err = candidate(end, limit)
+			if err != nil {
+				return nil, err
+			}
+			if size <= resultByteLimit {
+				return result, nil
+			}
+			if limit == 0 {
+				return nil, accessError(connect.CodeResourceExhausted, "job metadata exceeds 32KB")
+			}
+		}
+	}
+	return best, nil
+}

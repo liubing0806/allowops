@@ -1,0 +1,18 @@
+{
+  "name": "allowops-docs",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.2",
+  "engines": { "node": ">=24.19.0" },
+  "scripts": {
+    "docs:dev": "vitepress dev .",
+    "docs:build": "vitepress build .",
+    "docs:preview": "vitepress preview .",
+    "docs:check": "node --test scripts/check-docs.test.mjs && node scripts/check-docs.mjs"
+  },
+  "devDependencies": {
+    "github-slugger": "2.0.0",
+    "vitepress": "1.6.4",
+    "vue": "3.5.13"
+  }
+}

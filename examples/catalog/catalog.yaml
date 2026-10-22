@@ -1,0 +1,10 @@
+# Public example catalog using schema version 1.
+catalog_id: generic-ops
+schema_version: 1
+defaults:
+  timeout: 10s
+  max_output: 64KB
+  batch_size: 20
+  max_failures: 5
+redact:
+  builtin: [secrets]

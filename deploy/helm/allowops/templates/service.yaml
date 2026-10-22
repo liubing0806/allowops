@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "allowops.name" . }}
+  labels:
+{{ include "allowops.labels" . | indent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: tls
+      port: 443
+      targetPort: tls
+      protocol: TCP
+  selector:
+{{ include "allowops.labels" . | indent 4 }}
+    app.kubernetes.io/component: gateway

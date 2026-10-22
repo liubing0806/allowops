@@ -1,0 +1,197 @@
+syntax = "proto3";
+
+package allowops.v1;
+
+import "allowops/v1/common.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1";
+
+// Join uses server-authenticated TLS plus a join token; all other RPCs use mTLS.
+service AgentService {
+  rpc Join(JoinRequest) returns (JoinResponse);
+  rpc RenewCertificate(RenewCertificateRequest) returns (RenewCertificateResponse);
+  rpc Connect(stream ConnectRequest) returns (stream ConnectResponse);
+  rpc PullCatalog(PullCatalogRequest) returns (stream PullCatalogResponse);
+}
+
+message JoinRequest {
+  string join_token = 1;
+  string hostname = 2;
+  bytes csr_pem = 3;
+}
+
+message HostCertificate {
+  string host_id = 1;
+  bytes certificate_chain_pem = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  google.protobuf.Timestamp renew_after = 4;
+}
+
+message JoinResponse {
+  HostCertificate certificate = 1;
+}
+
+message RenewCertificateRequest {
+  bytes csr_pem = 1;
+}
+
+message RenewCertificateResponse {
+  HostCertificate certificate = 1;
+}
+
+message ConnectRequest {
+  oneof message {
+    AgentHello hello = 1;
+    AgentHeartbeat heartbeat = 2;
+    CatalogLoadReport catalog_load = 3;
+    TaskStarted task_started = 4;
+    TaskOutputChunk output = 5;
+    StepCompleted step_completed = 6;
+    TaskCompleted task_completed = 7;
+  }
+}
+
+message ConnectResponse {
+  oneof message {
+    GatewayHello hello = 1;
+    GatewayHeartbeat heartbeat = 2;
+    CatalogAvailable catalog_available = 3;
+    TaskAssignment task = 4;
+    CancelTask cancel = 5;
+    Reconnect reconnect = 6;
+  }
+}
+
+message AgentCapabilities {
+  repeated uint32 catalog_schema_versions = 1;
+  // Open capability identifiers: enum,int,string,duration,path,url.
+  repeated string parameter_types = 2;
+  // exec,steps,script,builtin.
+  repeated string execution_modes = 3;
+  // log_search,mysql_query,redis_command,http_get.
+  repeated string builtins = 4;
+  // match,exclude,tail,head,count.
+  repeated string output_filters = 5;
+  // Additional signed-catalog features, e.g. exec_fallbacks and allow_interpreter.
+  repeated string features = 6;
+}
+
+message AgentHello {
+  string agent_version = 1;
+  AgentCapabilities capabilities = 2;
+  map<string, string> reported_labels = 3;
+  repeated CatalogRef loaded_catalogs = 4;
+  // Local execution capacity; gateway must not exceed it (G10).
+  uint32 max_concurrent_tasks = 5;
+}
+
+// Gateway-selected effective limits; protocol defaults are configurable (G10).
+message ConnectionLimits {
+  google.protobuf.Duration heartbeat_interval = 1;
+  google.protobuf.Duration heartbeat_timeout = 2;
+  uint32 max_message_bytes = 3;
+  uint32 max_chunk_bytes = 4;
+  uint32 max_inflight_tasks = 5;
+}
+
+message GatewayHello {
+  string gateway_version = 1;
+  string connection_id = 2;
+  ConnectionLimits limits = 3;
+  google.protobuf.Timestamp server_time = 4;
+}
+
+message AgentHeartbeat {
+  uint64 sequence = 1;
+  google.protobuf.Timestamp sent_at = 2;
+  uint32 running_tasks = 3;
+}
+
+message GatewayHeartbeat {
+  uint64 sequence = 1;
+  google.protobuf.Timestamp server_time = 2;
+}
+
+message CatalogAvailable {
+  CatalogRef catalog = 1;
+  bytes envelope_sha256 = 2;
+  uint64 envelope_size_bytes = 3;
+}
+
+message PullCatalogRequest {
+  CatalogRef catalog = 1;
+}
+
+message PullCatalogResponse {
+  CatalogRef catalog = 1;
+  uint64 offset = 2;
+  bytes data = 3;
+  bool eof = 4;
+  bytes envelope_sha256 = 5;
+}
+
+message UnsupportedAction {
+  string action = 1;
+  string reason = 2;
+}
+
+// Repeated pages allow a large catalog to report unsupported actions safely.
+message CatalogLoadReport {
+  CatalogRef catalog = 1;
+  string report_id = 2;
+  uint32 page_index = 3;
+  bool final_page = 4;
+  bool loaded = 5;
+  string reason = 6;
+  repeated UnsupportedAction unsupported_actions = 7;
+}
+
+message TaskStarted {
+  string job_id = 1;
+  string task_id = 2;
+  google.protobuf.Timestamp started_at = 3;
+}
+
+// Per (task_id, step_index presence/value, stream) offsets start at zero.
+message TaskOutputChunk {
+  string job_id = 1;
+  string task_id = 2;
+  // Absent for exec/script/builtin; zero-based index for steps.
+  optional uint32 step_index = 3;
+  OutputStream stream = 4;
+  uint64 offset = 5;
+  bytes data = 6;
+  bool eof = 7;
+}
+
+message StepCompleted {
+  string job_id = 1;
+  string task_id = 2;
+  uint32 step_index = 3;
+  string step_name = 4;
+  ExecutionResult result = 5;
+}
+
+message TaskCompleted {
+  string job_id = 1;
+  string task_id = 2;
+  ExecutionResult result = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  uint32 completed_steps = 5;
+}
+
+message CancelTask {
+  string job_id = 1;
+  string task_id = 2;
+  string reason = 3;
+}
+
+// Drain first, then reconnect to the locally configured upstream. No new URL.
+message Reconnect {
+  string reason = 1;
+  google.protobuf.Timestamp close_at = 2;
+  google.protobuf.Duration retry_after_min = 3;
+  google.protobuf.Duration retry_after_max = 4;
+}

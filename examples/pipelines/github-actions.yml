@@ -1,0 +1,37 @@
+# Copy into .github/workflows/ in the reviewed catalog repository.
+name: Publish catalog
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: catalog-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.ref_protected == true
+    runs-on: ubuntu-latest
+    # Restrict this environment to protected main and require review.
+    environment: catalog-publishing
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      # Install a pinned, verified allowops CLI release on this runner first.
+      - name: Publish reviewed catalog
+        env:
+          ALLOWOPS_PUBLISH_BRANCH: ${{ github.ref_name }}
+          ALLOWOPS_GATEWAY: ${{ vars.ALLOWOPS_GATEWAY }}
+          ALLOWOPS_SIGNING_KEY_PEM: ${{ secrets.ALLOWOPS_SIGNING_KEY_PEM }}
+          ALLOWOPS_PUBLISHER_TOKEN: ${{ secrets.ALLOWOPS_PUBLISHER_TOKEN }}
+          ALLOWOPS_GATEWAY_CA_PEM: ${{ vars.ALLOWOPS_GATEWAY_CA_PEM }}
+        run: |
+          set +x
+          set -eu
+          umask 077
+          ca_dir=$(mktemp -d)
+          trap 'rm -rf "$ca_dir"' EXIT
+          printf '%s\n' "$ALLOWOPS_GATEWAY_CA_PEM" > "$ca_dir/ca.pem"
+          export ALLOWOPS_GATEWAY_CA_FILE="$ca_dir/ca.pem"
+          sh examples/pipelines/publish.sh

@@ -1,0 +1,32 @@
+# Full replacement example: exact maintenance actions in a UTC time window.
+rules:
+  - name: administrators
+    effect: allow
+    roles: [admin]
+    operations: [modify_policy, manage_service_accounts, manage_user_roles, manage_hosts, create_join_token, publish_catalog, view_hosts, view_catalog, view_jobs, view_output, view_audit, view_system]
+  - name: maintenance-inventory
+    effect: allow
+    roles: [ops-maintainer]
+    operations: [view_hosts, view_output]
+    host_labels: {env: test, team: ops}
+  - name: maintenance-metadata
+    effect: allow
+    roles: [ops-maintainer]
+    operations: [view_catalog, view_jobs]
+  - name: maintenance-actions
+    effect: allow
+    roles: [ops-maintainer]
+    teams: [ops]
+    operations: [execute_action]
+    actions: [systemd_service_status, nginx_test_config]
+    host_labels: {env: test, team: ops}
+    hours: {from: 8, to: 18, timezone: UTC}
+  - name: maintenance-deny-dangerous
+    effect: deny
+    roles: [ops-maintainer]
+    operations: [execute_action]
+    risks: [dangerous]
+  - name: catalog-publisher
+    effect: allow
+    roles: [publisher]
+    operations: [publish_catalog]

@@ -1,0 +1,15 @@
+[Unit]
+Description=Allowops host agent
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=allowops
+Group=allowops
+ExecStart=/usr/bin/allowops-agent run
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,27 @@
+name: k8s_rollout_status
+description: Read the rollout status of an allowed deployment with a bounded wait.
+risk: read
+run_as: root
+params:
+  namespace:
+    type: enum
+    description: Namespace selected from the signed allowlist.
+    values: [default, app]
+  deployment:
+    type: enum
+    description: Deployment selected from the signed allowlist.
+    values: [api, app]
+  wait:
+    type: duration
+    description: Maximum kubectl watch duration.
+    max: 30s
+    format: go
+    default: 15s
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, rollout, status, deployment, '{deployment}',
+  -n, '{namespace}', --timeout, '{wait}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+timeout: 40s
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets]

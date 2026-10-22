@@ -1,0 +1,15 @@
+# Binaries
+/allowops
+/dist/
+/bin/
+/web/node_modules/
+/web/dist/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store

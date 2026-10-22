@@ -1,0 +1,27 @@
+# Same address and pin as allowops-agent join. Only this upstream is contacted.
+upstream: gateway.example.invalid:443
+# SHA-256 of the gateway CA certificate DER (64 hexadecimal characters).
+# Replace this placeholder with the fingerprint supplied by your operator.
+ca_pin: sha256:0000000000000000000000000000000000000000000000000000000000000000
+# Display/filter labels only. Authorization labels are managed by the gateway.
+reported_labels:
+  site: example
+# Optional local limits. Omitted fields use the protocol defaults.
+# GatewayHello may reduce the negotiated message, chunk and task limits.
+limits:
+  message_bytes: 1048576
+  chunk_bytes: 65536
+  catalog_bytes: 67108864
+  parameter_bytes: 65536
+  parameter_depth: 32
+  concurrent_tasks: 4
+  catalog_pulls: 1
+  control_messages: 64
+  output_queue_bytes: 1048576
+  receive_rate: 100
+  receive_burst: 200
+  reported_labels: 128
+  label_key_bytes: 128
+  label_value_bytes: 1024
+  reconnect_min: 1s
+  reconnect_max: 30s

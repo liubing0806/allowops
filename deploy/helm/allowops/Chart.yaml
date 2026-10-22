@@ -1,0 +1,8 @@
+apiVersion: v2
+name: allowops
+description: Allowops gateway with external PostgreSQL and persistent audit export
+type: application
+version: 0.1.0
+appVersion: 0.1.0
+annotations:
+  org.opencontainers.image.source: https://github.com/liubing0806/allowops

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {"type": "string", "minLength": 1}
+      }
+    },
+    "replicaCount": {"type": "integer", "minimum": 2},
+    "gateway": {
+      "type": "object",
+      "properties": {"shutdownGraceSeconds": {"type": "integer", "minimum": 1}}
+    },
+    "audit": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "cursorKeySecret": {"type": "string", "minLength": 1},
+        "cursorKeyKey": {"type": "string", "minLength": 1},
+        "cursorName": {"type": "string", "minLength": 1},
+        "maxFileBytes": {"type": "integer", "minimum": 1},
+        "persistence": {
+          "type": "object",
+          "properties": {"size": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {"type": "string", "minLength": 1},
+        "create": {"type": "boolean"}
+      }
+    },
+    "database": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {"type": "string", "minLength": 1},
+        "key": {"type": "string", "minLength": 1},
+        "create": {"type": "boolean"}
+      }
+    },
+    "output": {
+      "type": "object",
+      "properties": {
+        "bucket": {"type": "string", "minLength": 1},
+        "region": {"type": "string", "minLength": 1},
+        "endpoint": {"type": "string"},
+        "existingSecret": {"type": "string", "minLength": 1},
+        "credentialsKey": {"type": "string", "minLength": 1}
+      }
+    },
+    "migration": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {"type": "string", "minLength": 1},
+        "key": {"type": "string", "minLength": 1},
+        "activeDeadlineSeconds": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

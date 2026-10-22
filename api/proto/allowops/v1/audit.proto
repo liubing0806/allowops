@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package allowops.v1;
+
+import "allowops/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1";
+
+service AuditService {
+  rpc ListAuditEvents(ListAuditEventsRequest) returns (ListAuditEventsResponse);
+  rpc ExportAudit(ExportAuditRequest) returns (ExportAuditResponse);
+  rpc VerifyAudit(VerifyAuditRequest) returns (VerifyAuditResponse);
+}
+
+message AuditQuery {
+  TimeRange time = 1;
+  string subject_id = 2;
+  string hostname = 3;
+  string action = 4;
+  string job_id = 5;
+  string operation = 6;
+}
+
+message AuditOutputReference {
+  string object_path = 1;
+  bytes sha256 = 2;
+  OutputStream stream = 3;
+  optional uint32 step_index = 4;
+}
+
+message AuditEvent {
+  uint64 seq = 1;
+  bytes prev_hash = 2;
+  bytes hash = 3;
+  google.protobuf.Timestamp at = 4;
+  string subject_id = 5;
+  string operation = 6;
+  string hostname = 7;
+  string action = 8;
+  string job_id = 9;
+  string task_id = 10;
+  string decision = 11;
+  repeated string matched_rules = 12;
+  uint64 policy_version = 13;
+  repeated AuditOutputReference outputs = 14;
+  // G10: exact persisted canonical event bytes, excluding hash/prev_hash.
+  // Verify these bytes directly; do not reconstruct them from display fields.
+  bytes hash_input = 15;
+  // Present for periodic checkpoints; refers to the preceding chain tip.
+  optional uint64 checkpoint_seq = 16;
+  bytes checkpoint_hash = 17;
+}
+
+message ListAuditEventsRequest {
+  AuditQuery query = 1;
+  PageRequest page = 2;
+}
+message ListAuditEventsResponse {
+  repeated AuditEvent events = 1;
+  PageResponse page = 2;
+}
+
+// Export a contiguous sequence interval, not a filtered chain with gaps.
+message ExportAuditRequest {
+  TimeRange time = 1;
+  string page_token = 2;
+  uint32 limit_bytes = 3;
+}
+message ExportAuditResponse {
+  bytes json_lines = 1;
+  string next_page_token = 2;
+  uint64 first_seq = 3;
+  uint64 last_seq = 4;
+  bytes preceding_hash = 5;
+  uint64 snapshot_last_seq = 6;
+}
+message VerifyAuditRequest {
+  uint64 from_seq = 1;
+  uint64 to_seq = 2;
+  // External checkpoint trust anchor. Absence verifies internal consistency only.
+  bytes expected_preceding_hash = 3;
+  bytes expected_final_hash = 4;
+}
+message VerifyAuditResponse {
+  bool valid = 1;
+  uint64 checked_count = 2;
+  optional uint64 first_invalid_seq = 3;
+  string reason = 4;
+  bytes actual_preceding_hash = 5;
+  bytes actual_final_hash = 6;
+  bool externally_anchored = 7;
+}

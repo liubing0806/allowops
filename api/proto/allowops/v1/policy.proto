@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+package allowops.v1;
+
+import "allowops/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1";
+
+service PolicyService {
+  rpc GetPolicy(GetPolicyRequest) returns (GetPolicyResponse);
+  rpc TestPolicy(TestPolicyRequest) returns (TestPolicyResponse);
+  rpc GetPolicyTestChanges(GetPolicyTestChangesRequest) returns (GetPolicyTestChangesResponse);
+  rpc SavePolicy(SavePolicyRequest) returns (SavePolicyResponse);
+  rpc ListPolicyHistory(ListPolicyHistoryRequest) returns (ListPolicyHistoryResponse);
+  rpc RollbackPolicy(RollbackPolicyRequest) returns (RollbackPolicyResponse);
+}
+
+enum PolicyEffect {
+  POLICY_EFFECT_UNSPECIFIED = 0;
+  POLICY_EFFECT_ALLOW = 1;
+  POLICY_EFFECT_DENY = 2;
+}
+
+// A11: structured policy rules; exact matching is documented in protocol.md.
+message PolicyHours {
+  uint32 from = 1;
+  uint32 to = 2;
+  string timezone = 3;
+}
+
+message PolicyRule {
+  string name = 1;
+  repeated string roles = 2;
+  repeated string teams = 3;
+  repeated string owners = 4;
+  repeated string operations = 5;
+  repeated string actions = 6;
+  repeated string risks = 7;
+  map<string, string> host_labels = 8;
+  PolicyHours hours = 9;
+  repeated string source_cidrs = 10;
+  PolicyEffect effect = 11;
+}
+
+message PolicyRules {
+  repeated PolicyRule rules = 1;
+}
+
+message PolicyVersion {
+  uint64 version = 1;
+  PolicyRules rules = 2;
+  google.protobuf.Timestamp created_at = 3;
+  string created_by = 4;
+  string reason = 5;
+  optional uint64 rolled_back_from = 6;
+}
+
+message PolicyDecision {
+  PolicyEffect effect = 1;
+  repeated string matched_rules = 2;
+  string error_reason = 3;
+}
+
+message PolicyTestCase {
+  string subject_id = 1;
+  string operation = 2;
+  string action = 3;
+  HostTargets targets = 4;
+  google.protobuf.Timestamp at = 5;
+  string source_ip = 6;
+}
+
+message PolicyChange {
+  uint32 case_index = 1;
+  string host = 2;
+  PolicyDecision before = 3;
+  PolicyDecision after = 4;
+}
+
+message PolicyTest {
+  string test_id = 1;
+  uint64 base_version = 2;
+  bytes candidate_sha256 = 3;
+  uint64 evaluated_count = 4;
+  uint64 changed_count = 5;
+  bool retains_policy_administrator = 6;
+  google.protobuf.Timestamp expires_at = 7;
+}
+
+message GetPolicyRequest {
+  optional uint64 version = 1;
+}
+
+message GetPolicyResponse {
+  PolicyVersion policy = 1;
+}
+
+message TestPolicyRequest {
+  uint64 base_version = 1;
+  oneof candidate {
+    PolicyRules rules = 2;
+    uint64 historical_version = 3;
+  }
+  repeated PolicyTestCase cases = 4;
+}
+
+message TestPolicyResponse {
+  PolicyTest test = 1;
+}
+
+message GetPolicyTestChangesRequest {
+  string test_id = 1;
+  PageRequest page = 2;
+}
+
+message GetPolicyTestChangesResponse {
+  repeated PolicyChange changes = 1;
+  PageResponse page = 2;
+}
+
+message SavePolicyRequest {
+  uint64 base_version = 1;
+  PolicyRules rules = 2;
+  string test_id = 3;
+  string reason = 4;
+}
+
+message SavePolicyResponse {
+  PolicyVersion policy = 1;
+}
+
+message ListPolicyHistoryRequest {
+  PageRequest page = 1;
+}
+
+message ListPolicyHistoryResponse {
+  repeated PolicyVersion policies = 1;
+  PageResponse page = 2;
+}
+
+message RollbackPolicyRequest {
+  uint64 base_version = 1;
+  uint64 target_version = 2;
+  string test_id = 3;
+  string reason = 4;
+}
+
+message RollbackPolicyResponse {
+  PolicyVersion policy = 1;
+}

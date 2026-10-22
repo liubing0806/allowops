@@ -1,0 +1,11 @@
+name: nginx_test_config
+description: Test the installed nginx configuration without reloading it.
+risk: read
+run_as: root
+params: {}
+exec: [/usr/sbin/nginx, -t]
+timeout: 10s
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets]

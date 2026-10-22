@@ -1,0 +1,183 @@
+syntax = "proto3";
+
+package allowops.v1;
+
+import "allowops/v1/agent.proto";
+import "allowops/v1/common.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1";
+
+service HostService {
+  rpc ListHosts(ListHostsRequest) returns (ListHostsResponse);
+  rpc GetHost(GetHostRequest) returns (GetHostResponse);
+  rpc SetHostLabels(SetHostLabelsRequest) returns (SetHostLabelsResponse);
+  rpc PreviewHostImport(PreviewHostImportRequest) returns (PreviewHostImportResponse);
+  rpc GetHostImportPreview(GetHostImportPreviewRequest) returns (GetHostImportPreviewResponse);
+  rpc ExecuteHostImport(ExecuteHostImportRequest) returns (ExecuteHostImportResponse);
+  rpc DeleteHost(DeleteHostRequest) returns (DeleteHostResponse);
+}
+
+service JoinTokenService {
+  rpc CreateJoinToken(CreateJoinTokenRequest) returns (CreateJoinTokenResponse);
+  rpc ListJoinTokens(ListJoinTokensRequest) returns (ListJoinTokensResponse);
+  rpc RevokeJoinToken(RevokeJoinTokenRequest) returns (RevokeJoinTokenResponse);
+}
+
+message Host {
+  string host_id = 1;
+  string hostname = 2;
+  map<string, string> authorization_labels = 3;
+  map<string, string> reported_labels = 4;
+  bool online = 5;
+  string agent_version = 6;
+  AgentCapabilities capabilities = 7;
+  repeated CatalogRef loaded_catalogs = 8;
+  google.protobuf.Timestamp last_seen = 9;
+  google.protobuf.Timestamp registered_at = 10;
+  string revision = 11;
+}
+
+message HostQuery {
+  string selector = 1;
+  string hostname = 2;
+  optional bool online = 3;
+  string agent_version = 4;
+  CatalogRef loaded_catalog = 5;
+}
+
+message LabelCount {
+  string key = 1;
+  string value = 2;
+  uint64 count = 3;
+}
+
+message ListHostsRequest {
+  HostQuery query = 1;
+  PageRequest page = 2;
+}
+
+message ListHostsResponse {
+  repeated Host hosts = 1;
+  PageResponse page = 2;
+  uint64 total_count = 3;
+  repeated LabelCount authorization_label_counts = 4;
+  bool label_counts_truncated = 5;
+}
+
+message GetHostRequest {
+  string hostname = 1;
+}
+
+message GetHostResponse {
+  Host host = 1;
+}
+
+// A10: atomically set only named keys and remove explicitly named keys.
+message LabelChanges {
+  map<string, string> set = 1;
+  repeated string remove = 2;
+}
+
+message HostRevision {
+  string host_id = 1;
+  string revision = 2;
+}
+
+message SetHostLabelsRequest {
+  HostTargets targets = 1;
+  uint64 expected_count = 2;
+  LabelChanges changes = 3;
+  repeated HostRevision expected_revisions = 4;
+}
+
+message SetHostLabelsResponse {
+  uint64 updated_count = 1;
+}
+
+message PreviewHostImportRequest {
+  bytes csv = 1;
+}
+
+message HostImportRow {
+  uint32 line = 1;
+  string hostname = 2;
+  map<string, string> before = 3;
+  map<string, string> after = 4;
+  repeated FieldViolation violations = 5;
+}
+
+message HostImportPreview {
+  string preview_id = 1;
+  bytes csv_sha256 = 2;
+  uint64 row_count = 3;
+  uint64 invalid_row_count = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message PreviewHostImportResponse {
+  HostImportPreview preview = 1;
+}
+
+message GetHostImportPreviewRequest {
+  string preview_id = 1;
+  PageRequest page = 2;
+}
+
+message GetHostImportPreviewResponse {
+  HostImportPreview preview = 1;
+  repeated HostImportRow rows = 2;
+  PageResponse page = 3;
+}
+
+message ExecuteHostImportRequest {
+  string preview_id = 1;
+}
+
+message ExecuteHostImportResponse {
+  uint64 updated_count = 1;
+}
+
+message DeleteHostRequest {
+  string host_id = 1;
+  string expected_revision = 2;
+}
+
+message DeleteHostResponse {}
+
+message JoinToken {
+  string token_id = 1;
+  uint32 max_uses = 2;
+  uint32 used_count = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp revoked_at = 6;
+}
+
+message CreateJoinTokenRequest {
+  uint32 max_uses = 1;
+  google.protobuf.Duration ttl = 2;
+}
+
+message CreateJoinTokenResponse {
+  JoinToken token = 1;
+  string secret = 2;
+  string upstream = 3;
+  string ca_pin = 4;
+}
+
+message ListJoinTokensRequest {
+  PageRequest page = 1;
+}
+
+message ListJoinTokensResponse {
+  repeated JoinToken tokens = 1;
+  PageResponse page = 2;
+}
+
+message RevokeJoinTokenRequest {
+  string token_id = 1;
+}
+
+message RevokeJoinTokenResponse {}

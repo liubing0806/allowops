@@ -1,0 +1,20 @@
+# INFO usage: command=INFO, args=["server"].
+name: redis_info
+description: Read only the allowed server, memory or stats sections of Redis INFO.
+risk: read
+run_as: root
+params: {}
+builtin: redis_command
+builtin_config:
+  credential: /etc/allowops/credentials/redis-main.json
+  address: unix:///var/run/redis/redis.sock
+  timeout: 5s
+  max_response_bytes: 64KB
+  commands: [INFO]
+  info_sections: [server, memory, stats]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

@@ -1,0 +1,27 @@
+# Local file paths and public endpoint are deployment-specific.
+address: ':443'
+tls_certificate: /etc/allowops/tls.pem
+tls_key: /etc/allowops/tls.key
+ca_certificate: /etc/allowops/host-ca.pem
+ca_key: /etc/allowops/host-ca.key
+catalog_keys: /etc/allowops/catalog-keys
+identity:
+  origin: https://gateway.example.org
+gateway:
+  version: '0.1.0'
+  certificate_ttl: 24h
+  single_join_ttl: 24h
+  multi_join_ttl: 24h
+management:
+  upstream: https://gateway.example.org
+  # Optional when tls.pem contains a self-signed root CA.
+  # Otherwise set sha256:<64 hex digits of the gateway TLS root CA DER>.
+  ca_pin: ''
+  preview_ttl: 10m
+  upload_ttl: 1h
+  max_csv_bytes: 524288
+  max_csv_rows: 5000
+  label_count: 128
+  label_key_bytes: 128
+  label_value_bytes: 1024
+  label_count_buckets: 200

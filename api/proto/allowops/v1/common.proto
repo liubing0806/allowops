@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+package allowops.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1";
+
+// Opaque cursors bind filters and ordering; configurable limits follow G10.
+message PageRequest {
+  uint32 page_size = 1;
+  string page_token = 2;
+}
+
+message PageResponse {
+  string next_page_token = 1;
+}
+
+message TimeRange {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+}
+
+// JSON object bytes, not rendered argv. Preserve types and integer precision.
+message Parameters {
+  bytes json = 1;
+}
+
+message HostNames {
+  repeated string names = 1;
+}
+
+message HostTargets {
+  oneof selection {
+    HostNames hosts = 1;
+    // A10: comma-separated key=value conjunctions only; must not be empty.
+    string selector = 2;
+  }
+}
+
+message CatalogRef {
+  string catalog_id = 1;
+  uint64 version = 2;
+}
+
+// A13/A17: applied independently to each step's stdout. tail/head/count are
+// mutually exclusive by presence; match/exclude may combine with one of them.
+message OutputFilters {
+  optional string match = 1;
+  optional string exclude = 2;
+  optional uint32 tail = 3;
+  optional uint32 head = 4;
+  optional bool count = 5;
+}
+
+enum JobStatus {
+  JOB_STATUS_UNSPECIFIED = 0;
+  JOB_STATUS_QUEUED = 1;
+  JOB_STATUS_RUNNING = 2;
+  JOB_STATUS_SUCCEEDED = 3;
+  JOB_STATUS_PARTIALLY_FAILED = 4;
+  JOB_STATUS_FAILED = 5;
+  JOB_STATUS_CANCELLED = 6;
+  JOB_STATUS_DENIED = 7;
+}
+
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_PENDING = 1;
+  TASK_STATUS_RUNNING = 2;
+  TASK_STATUS_SUCCEEDED = 3;
+  TASK_STATUS_FAILED = 4;
+  TASK_STATUS_TIMEOUT = 5;
+  TASK_STATUS_OFFLINE = 6;
+  TASK_STATUS_SKIPPED = 7;
+  TASK_STATUS_CANCELLED = 8;
+  TASK_STATUS_UNSUPPORTED = 9;
+}
+
+enum OutputStream {
+  OUTPUT_STREAM_UNSPECIFIED = 0;
+  OUTPUT_STREAM_STDOUT = 1;
+  OUTPUT_STREAM_STDERR = 2;
+}
+
+enum OutputTrust {
+  OUTPUT_TRUST_UNSPECIFIED = 0;
+  OUTPUT_TRUST_UNTRUSTED = 1;
+}
+
+// No shell, argv, environment, credential contents or unsigned action definition.
+message TaskAssignment {
+  string job_id = 1;
+  string task_id = 2;
+  CatalogRef catalog = 3;
+  string action = 4;
+  bytes action_sha256 = 5;
+  Parameters params = 6;
+  google.protobuf.Duration timeout = 7;
+  OutputFilters filters = 8;
+}
+
+// SHA-256 and size describe transmitted redacted, filtered, truncated bytes.
+message OutputMetadata {
+  uint64 size_bytes = 1;
+  bytes sha256 = 2;
+  bool truncated = 3;
+}
+
+message ExecutionResult {
+  TaskStatus status = 1;
+  // Absent when no process exited (unsupported, offline, skipped, etc.).
+  optional int32 exit_code = 2;
+  google.protobuf.Duration duration = 3;
+  bool truncated = 4;
+  bool scan_limit_reached = 5;
+  OutputMetadata stdout = 6;
+  OutputMetadata stderr = 7;
+  // Stable machine-readable reason, not raw execution output.
+  string reason = 8;
+}
+
+message HostDenial {
+  string host = 1;
+  repeated string rules = 2;
+}
+
+message FieldViolation {
+  string field = 1;
+  string description = 2;
+  repeated string allowed_values = 3;
+}
+
+// Typed Connect/gRPC error detail. Never echo secrets or raw parameter values.
+message ErrorDetail {
+  string reason = 1;
+  repeated FieldViolation violations = 2;
+  optional uint64 actual_count = 3;
+  repeated HostDenial denied_hosts = 4;
+  uint64 policy_version = 5;
+  google.protobuf.Duration retry_after = 6;
+  string request_id = 7;
+  bool details_truncated = 8;
+}

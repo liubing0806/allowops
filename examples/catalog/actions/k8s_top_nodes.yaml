@@ -1,0 +1,13 @@
+name: k8s_top_nodes
+description: Read node resource metrics.
+risk: read
+run_as: root
+params: {}
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, top, nodes]
+exec_fallbacks: [/usr/local/bin/kubectl]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

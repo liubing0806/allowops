@@ -1,0 +1,14 @@
+name: dns_lookup
+description: Resolve an allowed generic name through the host resolver.
+risk: read
+params:
+  name:
+    type: enum
+    description: Generic name from the signed resolver allowlist.
+    values: [localhost, nginx, api]
+exec: [/usr/bin/getent, hosts, '{name}']
+timeout: 10s
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets]

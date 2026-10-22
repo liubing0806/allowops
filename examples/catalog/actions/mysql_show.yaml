@@ -1,0 +1,30 @@
+name: mysql_show
+description: Run one fixed SHOW statement against an allowed database.
+risk: read
+run_as: root
+params:
+  database:
+    type: string
+    description: Default database fixed to app; signed configuration restricts explicit database references.
+    regex: ^app$
+    max_len: 3
+  sql:
+    type: string
+    description: Fixed SHOW TABLES or SHOW STATUS statement.
+    regex: ^SHOW (TABLES|STATUS)$
+    max_len: 11
+timeout: 15s
+builtin: mysql_query
+builtin_config:
+  credential: /etc/allowops/credentials/mysql-main.json
+  address: unix:///var/run/mysqld/mysqld.sock
+  max_rows: 200
+  timeout: 10s
+  databases: [app]
+  statement_types: [SHOW]
+  show_types: [TABLES, STATUS]
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

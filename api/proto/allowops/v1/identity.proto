@@ -1,0 +1,276 @@
+syntax = "proto3";
+
+package allowops.v1;
+
+import "allowops/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1";
+
+service ServiceAccountService {
+  rpc CreateServiceAccount(CreateServiceAccountRequest) returns (CreateServiceAccountResponse);
+  rpc GetServiceAccount(GetServiceAccountRequest) returns (GetServiceAccountResponse);
+  rpc ListServiceAccounts(ListServiceAccountsRequest) returns (ListServiceAccountsResponse);
+  rpc UpdateServiceAccount(UpdateServiceAccountRequest) returns (UpdateServiceAccountResponse);
+  rpc CreateServiceAccountToken(CreateServiceAccountTokenRequest) returns (CreateServiceAccountTokenResponse);
+  rpc ListServiceAccountTokens(ListServiceAccountTokensRequest) returns (ListServiceAccountTokensResponse);
+  rpc RevokeServiceAccountToken(RevokeServiceAccountTokenRequest) returns (RevokeServiceAccountTokenResponse);
+}
+
+service UserService {
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc SetUserRoles(SetUserRolesRequest) returns (SetUserRolesResponse);
+  rpc ListRoles(ListRolesRequest) returns (ListRolesResponse);
+  rpc GetRoleMappings(GetRoleMappingsRequest) returns (GetRoleMappingsResponse);
+  rpc SaveRoleMappings(SaveRoleMappingsRequest) returns (SaveRoleMappingsResponse);
+}
+
+service AuthService {
+  rpc GetLoginMethods(GetLoginMethodsRequest) returns (GetLoginMethodsResponse);
+  rpc BeginOidcLogin(BeginOidcLoginRequest) returns (BeginOidcLoginResponse);
+  rpc CompleteOidcLogin(CompleteOidcLoginRequest) returns (CompleteOidcLoginResponse);
+  rpc LoginLdap(LoginLdapRequest) returns (LoginLdapResponse);
+  rpc ExchangeCliSession(ExchangeCliSessionRequest) returns (ExchangeCliSessionResponse);
+  rpc GetCurrentSession(GetCurrentSessionRequest) returns (GetCurrentSessionResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  rpc ListCliSessions(ListCliSessionsRequest) returns (ListCliSessionsResponse);
+  rpc RevokeCliSession(RevokeCliSessionRequest) returns (RevokeCliSessionResponse);
+}
+
+message ServiceAccount {
+  string account_id = 1;
+  string name = 2;
+  string owner_user_id = 3;
+  string description = 4;
+  repeated string roles = 5;
+  repeated string teams = 6;
+  string revision = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message ServiceAccountToken {
+  string token_id = 1;
+  string account_id = 2;
+  string description = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  google.protobuf.Timestamp last_used_at = 6;
+  google.protobuf.Timestamp revoked_at = 7;
+}
+
+message CreateServiceAccountRequest {
+  string name = 1;
+  string owner_user_id = 2;
+  string description = 3;
+  repeated string roles = 4;
+  repeated string teams = 5;
+}
+message CreateServiceAccountResponse {
+  ServiceAccount account = 1;
+}
+message GetServiceAccountRequest {
+  string account_id = 1;
+}
+message GetServiceAccountResponse {
+  ServiceAccount account = 1;
+}
+message ListServiceAccountsRequest {
+  PageRequest page = 1;
+}
+message ListServiceAccountsResponse {
+  repeated ServiceAccount accounts = 1;
+  PageResponse page = 2;
+}
+message UpdateServiceAccountRequest {
+  string account_id = 1;
+  string expected_revision = 2;
+  string owner_user_id = 3;
+  string description = 4;
+  repeated string roles = 5;
+  repeated string teams = 6;
+}
+message UpdateServiceAccountResponse {
+  ServiceAccount account = 1;
+}
+message CreateServiceAccountTokenRequest {
+  string account_id = 1;
+  string description = 2;
+  // Omitted: 30 days. Explicit values must be 1..365.
+  optional uint32 valid_days = 3;
+}
+message CreateServiceAccountTokenResponse {
+  ServiceAccountToken token = 1;
+  // Only returned once. Never present in list/get/audit messages.
+  string secret = 2;
+}
+message ListServiceAccountTokensRequest {
+  string account_id = 1;
+  PageRequest page = 2;
+}
+message ListServiceAccountTokensResponse {
+  repeated ServiceAccountToken tokens = 1;
+  PageResponse page = 2;
+}
+message RevokeServiceAccountTokenRequest {
+  string account_id = 1;
+  string token_id = 2;
+}
+message RevokeServiceAccountTokenResponse {}
+
+message User {
+  string user_id = 1;
+  string provider_id = 2;
+  string username = 3;
+  string display_name = 4;
+  string email = 5;
+  repeated string groups = 6;
+  repeated string mapped_roles = 7;
+  repeated string manual_roles = 8;
+  repeated string effective_roles = 9;
+  repeated string teams = 10;
+  string revision = 11;
+}
+message ListUsersRequest {
+  PageRequest page = 1;
+  string query = 2;
+}
+message ListUsersResponse {
+  repeated User users = 1;
+  PageResponse page = 2;
+}
+message GetUserRequest {
+  string user_id = 1;
+}
+message GetUserResponse {
+  User user = 1;
+}
+message SetUserRolesRequest {
+  string user_id = 1;
+  repeated string manual_roles = 2;
+  string expected_revision = 3;
+}
+message SetUserRolesResponse {
+  User user = 1;
+}
+message Role {
+  string name = 1;
+  string description = 2;
+}
+message ListRolesRequest {
+  PageRequest page = 1;
+}
+message ListRolesResponse {
+  repeated Role roles = 1;
+  PageResponse page = 2;
+}
+message RoleMapping {
+  string provider_id = 1;
+  string group = 2;
+  repeated string roles = 3;
+}
+message GetRoleMappingsRequest {}
+message GetRoleMappingsResponse {
+  repeated RoleMapping mappings = 1;
+  string revision = 2;
+}
+message SaveRoleMappingsRequest {
+  repeated RoleMapping mappings = 1;
+  string expected_revision = 2;
+}
+message SaveRoleMappingsResponse {
+  string revision = 1;
+}
+
+enum LoginClient {
+  LOGIN_CLIENT_UNSPECIFIED = 0;
+  LOGIN_CLIENT_CONSOLE = 1;
+  LOGIN_CLIENT_CLI = 2;
+}
+message LoginMethod {
+  string provider_id = 1;
+  string display_name = 2;
+  // oidc or ldap; public configuration only.
+  string kind = 3;
+}
+message GetLoginMethodsRequest {}
+message GetLoginMethodsResponse {
+  repeated LoginMethod methods = 1;
+}
+
+// G10: bind client kind, callback and S256 PKCE to a one-time-code login transaction.
+message BeginOidcLoginRequest {
+  string provider_id = 1;
+  LoginClient client = 2;
+  string cli_loopback_uri = 3;
+  string cli_state = 4;
+  string cli_code_challenge = 5;
+}
+message BeginOidcLoginResponse {
+  string authorization_url = 1;
+}
+
+// Provider code/state are redeemed at the gateway callback, never an ID token
+// supplied by the caller. The HTTP callback adapter invokes this operation.
+message CompleteOidcLoginRequest {
+  string code = 1;
+  string state = 2;
+}
+message CompleteOidcLoginResponse {
+  // Console: HttpOnly session cookie; CLI: loopback URI with one-time code/state.
+  string redirect_uri = 1;
+}
+message LoginLdapRequest {
+  string provider_id = 1;
+  string username = 2;
+  string password = 3;
+  LoginClient client = 4;
+}
+message LoginLdapResponse {
+  User user = 1;
+  CliSession cli_session = 2;
+  // Only for CLI; console uses HttpOnly cookie and this field is absent.
+  optional string cli_session_token = 3;
+}
+message ExchangeCliSessionRequest {
+  string code = 1;
+  string code_verifier = 2;
+}
+message ExchangeCliSessionResponse {
+  CliSession session = 1;
+  string session_token = 2;
+}
+message CliSession {
+  string session_id = 1;
+  string user_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  google.protobuf.Timestamp last_used_at = 5;
+  google.protobuf.Timestamp revoked_at = 6;
+}
+message GetCurrentSessionRequest {}
+message GetCurrentSessionResponse {
+  User user = 1;
+  LoginClient client = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  // Console only; session-bound token for mutation request headers.
+  string csrf_token = 4;
+}
+message LogoutRequest {}
+message LogoutResponse {}
+message ListCliSessionsRequest {
+  PageRequest page = 1;
+  // A12: empty means the caller. Only admins may select another user.
+  string user_id = 2;
+}
+message ListCliSessionsResponse {
+  repeated CliSession sessions = 1;
+  PageResponse page = 2;
+}
+message RevokeCliSessionRequest {
+  string session_id = 1;
+  // A12: empty means the caller. Only admins may select another user.
+  // The session must belong to the resolved user; never infer scope from its ID.
+  string user_id = 2;
+}
+message RevokeCliSessionResponse {}

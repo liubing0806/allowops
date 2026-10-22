@@ -1,0 +1,12 @@
+name: docker_ps
+description: List Docker containers as one JSON object per line.
+risk: read
+run_as: root
+params: {}
+exec: [/usr/bin/docker, ps, --all, --format, '{{json .}}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

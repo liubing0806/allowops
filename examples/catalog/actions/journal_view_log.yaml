@@ -1,0 +1,28 @@
+name: journal_view_log
+description: Read a bounded journal excerpt for an allowed service.
+risk: read
+run_as: root
+params:
+  service:
+    type: enum
+    description: Service selected from the signed allowlist.
+    values: [nginx, api]
+  lines:
+    type: int
+    description: Maximum number of output lines.
+    min: 1
+    max: 500
+    default: 100
+  since:
+    type: string
+    description: Relative journal start time.
+    regex: ^[0-9]{1,3} (min|hour) ago$
+    max_len: 16
+    optional: true
+exec: [/usr/bin/journalctl, -u, '{service}', -n, '{lines}', --no-pager, [--since, '{since}']]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

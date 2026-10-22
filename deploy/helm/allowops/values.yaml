@@ -1,0 +1,64 @@
+replicaCount: 2
+image:
+  repository: allowops-gateway
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+service:
+  type: LoadBalancer
+  annotations: {}
+# ALPN and TLS terminate in the gateway. Only use an L4 TCP load balancer.
+gateway:
+  shutdownGraceSeconds: 10
+  management:
+    ca_pin: ""
+    # upstream defaults to identity.origin; use the public TLS endpoint.
+  identity:
+    origin: https://allowops.example.com
+  providers: []
+credentials:
+  # Keys: ca.crt, ca.key (PKCS8), tls.crt (full chain), tls.key, catalog.pub.pem.
+  existingSecret: allowops-credentials
+  create: false
+  data:
+    caCertificate: ""
+    caKey: ""
+    tlsCertificate: ""
+    tlsKey: ""
+    catalogPublicKey: ""
+database:
+  existingSecret: allowops-database
+  key: url
+  create: false
+  url: ""
+migration:
+  # Must exist before helm install: pre-install hooks precede normal Secrets.
+  existingSecret: allowops-migration-database
+  key: url
+  activeDeadlineSeconds: 300
+audit:
+  # Exactly one export instance; API replicas never export files.
+  enabled: true
+  cursorKeySecret: allowops-audit-cursor
+  cursorKeyKey: audit-cursor-key
+  cursorName: allowops-export
+  maxFileBytes: 16777216
+  persistence:
+    size: 10Gi
+    storageClass: ""
+output:
+  bucket: allowops-demo
+  region: us-east-1
+  # Empty endpoint uses the AWS regional S3 endpoint. Set for SeaweedFS.
+  endpoint: ""
+  existingSecret: allowops-output
+  credentialsKey: aws-credentials
+# Used only to copy Kubernetes Secret projections into ordinary 0600 files.
+secretCopyImage: alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+podDisruptionBudget:
+  minAvailable: 1

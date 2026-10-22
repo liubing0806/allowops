@@ -1,0 +1,22 @@
+name: k8s_rollout_history
+description: Read rollout history for an allowed deployment.
+risk: read
+run_as: root
+params:
+  namespace:
+    type: enum
+    description: Namespace selected from the signed allowlist.
+    values: [default, app]
+  deployment:
+    type: enum
+    description: Deployment selected from the signed allowlist.
+    values: [api, app]
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, rollout, history, deployment, '{deployment}',
+  -n, '{namespace}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

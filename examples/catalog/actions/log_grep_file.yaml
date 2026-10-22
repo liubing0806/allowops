@@ -1,0 +1,27 @@
+name: log_grep_file
+description: Search one allowed log file with a bounded match count.
+risk: read
+run_as: root
+params:
+  path:
+    type: path
+    description: Existing path within the signed allowed roots.
+    allowed_roots: [/var/log, /data/logs]
+  pattern:
+    type: string
+    description: Bounded search pattern without line breaks.
+    regex: ^[^\r\n]+$
+    max_len: 200
+  max_matches:
+    type: int
+    description: Maximum matches per file.
+    min: 1
+    max: 500
+    default: 100
+timeout: 20s
+exec: [/usr/bin/grep, -E, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

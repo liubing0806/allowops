@@ -1,0 +1,24 @@
+# GET usage: command=GET, args=["app:status"].
+name: redis_get
+description: Read one bounded Redis string value with an allowed app key prefix.
+risk: read
+run_as: root
+params:
+  args:
+    type: string_array
+    description: One Redis key restricted to the app prefix and signed character limits.
+    regex: ^app:[A-Za-z0-9:_-]+$
+    max_len: 128
+builtin: redis_command
+builtin_config:
+  credential: /etc/allowops/credentials/redis-main.json
+  address: unix:///var/run/redis/redis.sock
+  timeout: 5s
+  max_response_bytes: 64KB
+  commands: [GET]
+  key_prefixes: ['app:']
+timeout: 10s
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets, pii]

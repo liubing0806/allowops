@@ -1,0 +1,15 @@
+name: host_snapshot
+description: Read a sequential snapshot of host and container health.
+risk: read
+run_as: root
+params: {}
+timeout: 30s
+max_output: 128KB
+on_error: continue
+steps: [{name: hostname, exec: [/usr/bin/hostname]}, {name: time, exec: [/usr/bin/date, --iso-8601=seconds]}, {
+    name: load, exec: [/usr/bin/uptime]}, {name: memory, exec: [/usr/bin/free, -m]}, {name: disk, exec: [/usr/bin/df,
+      -h, -x, tmpfs, -x, devtmpfs]}, {name: failed_units, exec: [/usr/bin/systemctl, --failed, --no-pager]}, {name: ports,
+    exec: [/usr/sbin/ss, -ltnp]}, {name: containers, exec: [/usr/bin/docker, ps, --all, --format, '{{json .}}']}]
+filters: []
+redact:
+  builtin: [secrets]

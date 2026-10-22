@@ -1,0 +1,15 @@
+name: jvm_list
+description: List JVM identifiers and main classes inside an allowed container.
+risk: read
+run_as: root
+params:
+  container:
+    type: enum
+    description: Container selected from the signed allowlist.
+    values: [api, app]
+exec: [/usr/bin/docker, exec, '{container}', jps, -l]
+timeout: 10s
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets]

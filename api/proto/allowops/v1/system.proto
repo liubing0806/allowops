@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package allowops.v1;
+
+import "allowops/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1";
+
+service SystemService {
+  rpc GetSystemStatus(GetSystemStatusRequest) returns (GetSystemStatusResponse);
+  rpc ListGatewayInstances(ListGatewayInstancesRequest) returns (ListGatewayInstancesResponse);
+  rpc GetAgentVersionDistribution(GetAgentVersionDistributionRequest) returns (GetAgentVersionDistributionResponse);
+}
+
+enum HealthStatus {
+  HEALTH_STATUS_UNSPECIFIED = 0;
+  HEALTH_STATUS_HEALTHY = 1;
+  HEALTH_STATUS_DEGRADED = 2;
+  HEALTH_STATUS_UNAVAILABLE = 3;
+}
+message DependencyHealth {
+  string name = 1;
+  HealthStatus status = 2;
+  // Sanitized reason, never a connection string or credential.
+  string reason = 3;
+}
+message GatewayInstance {
+  string instance_id = 1;
+  string version = 2;
+  bool draining = 3;
+  uint64 connected_hosts = 4;
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp last_seen = 6;
+  repeated DependencyHealth dependencies = 7;
+}
+message ApiLimits {
+  uint32 max_message_bytes = 1;
+  uint32 max_chunk_bytes = 2;
+  uint32 default_page_size = 3;
+  uint32 max_page_size = 4;
+  uint32 default_output_page_bytes = 5;
+  uint32 max_output_page_bytes = 6;
+  uint64 max_catalog_bytes = 7;
+  uint32 max_csv_bytes = 8;
+}
+message GetSystemStatusRequest {}
+message GetSystemStatusResponse {
+  google.protobuf.Timestamp observed_at = 1;
+  HealthStatus status = 2;
+  uint64 online_hosts = 3;
+  uint64 offline_hosts = 4;
+  uint64 running_jobs = 5;
+  uint64 failed_jobs_last_24_hours = 6;
+  uint64 expiring_catalogs = 7;
+  uint64 expiring_service_account_tokens = 8;
+  repeated DependencyHealth dependencies = 9;
+  ApiLimits limits = 10;
+}
+message ListGatewayInstancesRequest {
+  PageRequest page = 1;
+}
+message ListGatewayInstancesResponse {
+  repeated GatewayInstance instances = 1;
+  PageResponse page = 2;
+}
+message AgentVersionCount {
+  string agent_version = 1;
+  uint64 host_count = 2;
+  uint64 online_count = 3;
+}
+message GetAgentVersionDistributionRequest {
+  PageRequest page = 1;
+}
+message GetAgentVersionDistributionResponse {
+  repeated AgentVersionCount versions = 1;
+  PageResponse page = 2;
+}

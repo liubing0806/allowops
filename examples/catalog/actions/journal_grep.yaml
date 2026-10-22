@@ -1,0 +1,32 @@
+name: journal_grep
+description: Search a service journal with the journalctl pattern option.
+risk: read
+run_as: root
+params:
+  service:
+    type: enum
+    description: Service selected from the signed allowlist.
+    values: [nginx, api]
+  lines:
+    type: int
+    description: Maximum number of output lines.
+    min: 1
+    max: 500
+    default: 100
+  since:
+    type: string
+    description: Required relative journal start time.
+    regex: ^[0-9]{1,3} (min|hour) ago$
+    max_len: 16
+  pattern:
+    type: string
+    description: Bounded search pattern without line breaks.
+    regex: ^[^\r\n]+$
+    max_len: 200
+exec: [/usr/bin/journalctl, -u, '{service}', --since, '{since}', -n, '{lines}', --no-pager, -g, '{pattern}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

@@ -1,0 +1,11 @@
+name: docker_info_logging
+description: Read the Docker default logging driver only.
+risk: read
+run_as: root
+params: {}
+exec: [/usr/bin/docker, info, --format, '{{.LoggingDriver}}']
+timeout: 10s
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets]

@@ -1,0 +1,52 @@
+{{- if .Values.audit.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "allowops.name" . }}-export
+  labels:
+{{ include "allowops.labels" . | indent 4 }}
+spec:
+  clusterIP: None
+  ports:
+    - name: tls
+      port: 443
+      targetPort: tls
+  selector:
+{{ include "allowops.labels" . | indent 4 }}
+    app.kubernetes.io/component: export
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "allowops.name" . }}-export
+  labels:
+{{ include "allowops.labels" . | indent 4 }}
+spec:
+  serviceName: {{ include "allowops.name" . }}-export
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "allowops.labels" . | indent 6 }}
+      app.kubernetes.io/component: export
+  template:
+    metadata:
+      labels:
+{{ include "allowops.labels" . | indent 8 }}
+        app.kubernetes.io/component: export
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+    spec:
+{{ include "allowops.pod" (merge (dict "configFile" "exporter.yaml" "exporter" true) .) | indent 6 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: audit
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.audit.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.audit.persistence.size }}
+{{- end }}

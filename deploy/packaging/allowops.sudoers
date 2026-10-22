@@ -1,0 +1,3 @@
+# /etc/sudoers.d/allowops
+Defaults:allowops !requiretty
+allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
