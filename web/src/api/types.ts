@@ -395,6 +395,7 @@ export interface ConsoleApi {
     client: 'LOGIN_CLIENT_CONSOLE'
     expiresAt: string
     csrfToken: string
+    gatewayVersion: string
   }>
   getLoginMethods(): Promise<{
     methods: { providerId: string; displayName: string; kind: string }[]
