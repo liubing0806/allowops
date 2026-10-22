@@ -4,7 +4,7 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 83 个 action，均为 risk: read；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节新增 34 个只读 action（含替换 dns_lookup 的定义）。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 83 个 action，均为 risk: read；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节新增 34 个只读 action（含替换 dns_lookup 的定义）。审阅后 `app_config_grep`、`docker_app_config_grep` 删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`，总数不变。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
@@ -60,39 +60,9 @@ Kubernetes 示例固定读取 `/etc/kubernetes/allowops-readonly.conf`。此文�
 
 ## 3. action 需求
 
-### `app_config_grep`
-
-按键名模式读取一个 properties 文件的匹配行，敏感值脱敏。
-
-| 项 | 需求 |
-|---|---|
-| risk | read |
-| run_as | root |
-| 执行方式 | exec |
-| filters | match, exclude, tail, head, count |
-| redact | secrets, pii，另有自定义规则 sensitive_property |
-| 扩展能力 | D1 |
-| 执行限制 | timeout=10s；max_output=64KB |
-| CentOS 7 | CentOS 7 的 GNU grep 支持 -E、-i、-m、-e 和 --。 |
-| 安全说明 | 模式只允许字母、数字、下划线、连字符、转义点和竖线，不能表达 `=`、锚点、通配符，最多 100 字符；以 -e 传入。内置 secrets 只覆盖 `password`、`secret`、`token` 后接 `=` 的写法，`db_password`、`app.secretKey`、`jwt.secret: x`、`access_key` 等不会被脱敏，因此增加自定义规则：键名中含 pass、pwd、secret、token、key、credential 且后接 `=` 或 `:` 时，整行（含键名）替换为 [REDACTED:sensitive_property]。限制：grep 的模式匹配整行而不是只匹配键名，传入值中的片段仍可用于判断某行是否存在；多行值、续行（反斜线）和不含敏感词的键下的敏感值不会被识别；match 过滤在脱敏之后执行。 |
-
-参数：
-
-| 名称 | 类型 | 约束 | 用途（description） |
-|---|---|---|---|
-| `path` | path | `allowed_roots: ['/etc/app', '/opt/app/config']`；必填 | 已存在且解析后位于允许根目录内的 properties 文件 |
-| `pattern` | string | `regex: ^([A-Za-z0-9_-]\|\\\.)+(\\\|([A-Za-z0-9_-]\|\\\.)+)*$`；`max_len: 100`；必填 | 不区分大小写的键名模式 |
-| `max_matches` | int | `min: 1`；`max: 500`；默认 `100` | 最大匹配行数 |
-
-argv 或 builtin_config（与示例 YAML 一致）：
-
-```yaml
-exec: [/usr/bin/grep, -E, -i, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
-```
-
 ### `app_config_keys`
 
-只输出一个 properties 文件的键名，不输出值。
+只输出一个配置文件中形如 `键名=`、`键名:` 的行的键名，不输出值。
 
 | 项 | 需求 |
 |---|---|
@@ -100,11 +70,11 @@ exec: [/usr/bin/grep, -E, -i, -m, '{max_matches}', -e, '{pattern}', --, '{path}'
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets |
+| redact | secrets，另有自定义规则 long_base64 |
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
-| CentOS 7 | CentOS 7 的 GNU grep 支持 -o、-E、-e 和 --。 |
-| 安全说明 | 使用 `grep -o` 只输出每行开头的键名字符（字母、数字、下划线、点、连字符），注释行和值不会输出；比 `cut -d= -f1` 更严格，后者会输出整行注释。路径解析后检查允许根目录。 |
+| CentOS 7 | CentOS 7 的 GNU grep 2.20 手册列有 -P（PCRE），本机 grep 3.12 已验证；未在 CentOS 7 上验证 `\K` 和先行断言。无输出时 grep 退出码为 1，action 报告失败。 |
+| 安全说明 | 旧写法 `^[A-Za-z0-9_.-]+` 输出每一行开头的词，PEM 私钥和单行密钥文件的正文行会被原样输出（实测 RSA、EC、Ed25519 私钥均泄露多行）。现在只输出后面紧跟 `=` 或 `:` 的键名，并用 `-P` 的先行断言排除值为空或仅有 base64 填充 `=` 的行，因此 PEM 末行（如 `abc12==`）和以 `=` 结尾的单行密钥不会匹配；注释行、没有分隔符的行和值不会输出。YAML 的父级键（`spring:`）会输出。值为空的键（`empty.key=`）不输出。自定义规则 long_base64 把长度不小于 32 的 base64 风格串（含 `+/_-`，不含 `.`）替换为 [REDACTED:long_base64]，作为键名模式之外的第二道防线；超过 31 字符的合法键名也会被替换。非 properties 或 YAML 文件中形如 `Subject: ...` 的行会输出其首个词，因此示例根目录只应包含配置文件。路径解析后检查允许根目录。 |
 
 参数：
 
@@ -115,7 +85,50 @@ exec: [/usr/bin/grep, -E, -i, -m, '{max_matches}', -e, '{pattern}', --, '{path}'
 argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
-exec: [/usr/bin/grep, -o, -E, -e, '^[A-Za-z0-9_.-]+', --, '{path}']
+exec: [/usr/bin/grep, -o, -P, -e, '^[[:space:]]*\K[A-Za-z][A-Za-z0-9_.-]*(?=[[:space:]]*(?::|=(?!=?[[:space:]]*$)))', --, '{path}']
+redact:
+  builtin: [secrets]
+  custom:
+    - name: long_base64
+      regex: '[A-Za-z0-9+/_-]{32,}={0,2}'
+```
+
+### `app_config_view`
+
+读取一个 properties 或 YAML 配置文件的开头若干行，敏感值脱敏，由 match 等过滤缩小范围。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 的 GNU coreutils head 支持 -n 和 --。 |
+| 安全说明 | 替代原 `app_config_grep`：grep 版本的退出码取决于模式是否命中整行，调用方可用 `pattern=值的前缀` 的退出码逐字符判断被脱敏的值，因此删除；本 action 用 head 读取整个文件开头（最多 2000 行，默认 500），退出码只反映文件能否读取，与内容无关。键名筛选由调用方在脱敏之后用 match 过滤完成：被替换的敏感键的键名也被替换，无法按键名查询；过滤只作用于已脱敏输出，不能探测原值。路径解析符号链接后检查允许根目录。输出受 64KB 限制，超出时 truncated 为 true。多行值（YAML 块标量、properties 续行、值与键分处两个 XML 元素如 `<name>` 与 `<value>`）的后续行不会被脱敏；键名不含关键字的键下的敏感值不会被识别；规则按“宁可多脱敏”设计，`monkey`、`passenger` 之类含关键字的键也会被替换。脱敏不能保证识别所有敏感内容。 |
+
+自定义脱敏规则（五个配置读取 action 使用同一组，键名关键字统一为 pass、pwd、secret、token、key、credential，不区分大小写，因此 `db_password`、`passwd`、`accessKey`、`api-key`、`client_secret` 等均命中）：
+
+| 规则名 | 覆盖形式 | 替换范围 |
+|---|---|---|
+| sensitive_property | `键名=值`、`键名: 值`（properties、YAML、环境变量文件、XML 属性写法 `password="v"`） | 从键名起到行尾 |
+| json_credential | `"password":"v"`、`"secretKey": "v"`、`'token': 'v'`、非字符串值（数字、true、null） | 仅该键值对 |
+| xml_element_credential | `<password>v</password>`、`<secretKey><![CDATA[v]]></secretKey>` | 整个元素 |
+| xml_attribute_credential | `name="password" value="v"` 及 `value` 在前的写法，属性名 name、key、id、var | 从第一个属性到 `value` 属性 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `path` | path | `allowed_roots: ['/etc/app', '/opt/app/config']`；必填 | 已存在且解析后位于允许根目录内的配置文件 |
+| `lines` | int | `min: 1`；`max: 2000`；默认 `500` | 从文件开头读取的最大行数 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/head, -n, '{lines}', --, '{path}']
 ```
 
 ### `connections_by_port`
@@ -284,9 +297,9 @@ argv 或 builtin_config（与示例 YAML 一致）：
 exec: [/usr/bin/getent, hosts, '{name}']
 ```
 
-### `docker_app_config_grep`
+### `docker_app_config_view`
 
-在允许的容器内按键名模式读取一个 properties 文件的匹配行，敏感值脱敏。
+读取允许容器内一个 properties 或 YAML 配置文件的开头若干行，敏感值脱敏，由 match 等过滤缩小范围。
 
 | 项 | 需求 |
 |---|---|
@@ -294,11 +307,11 @@ exec: [/usr/bin/getent, hosts, '{name}']
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii，另有自定义规则 sensitive_property |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential（同 `app_config_view`） |
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
-| CentOS 7 | CentOS 7 需另装 Docker CLI；容器内需有 grep。docker exec 不分配 TTY。 |
-| 安全说明 | 容器名使用签名枚举。容器内路径无法在主机检查，用正则约束：限定三个根目录，每个路径段以非点字符开头，因此无 `..` 和隐藏目录段。容器内的符号链接无法由主机检查，只读取容器内 grep 的 -- 之后的单个文件。模式规则和脱敏规则同 `app_config_grep`，限制也相同。 |
+| CentOS 7 | CentOS 7 需另装 Docker CLI；容器内需有支持 -n 和 -- 的 head。docker exec 不分配 TTY。 |
+| 安全说明 | 容器名使用签名枚举。容器内路径无法在主机检查，用正则约束：限定三个根目录，每个路径段以非点字符开头，因此无 `..` 和隐藏目录段。容器内的符号链接无法由主机检查，只读取容器内 head 的 -- 之后的单个文件。读取方式、退出码与内容无关的原因、脱敏规则和限制同 `app_config_view`。 |
 
 参数：
 
@@ -306,13 +319,12 @@ exec: [/usr/bin/getent, hosts, '{name}']
 |---|---|---|---|
 | `container` | enum | `values: [api, app]`；必填 | 签名允许列表中的容器 |
 | `path` | string | `regex: ^/(etc/app\|opt/app/config\|app/config)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$`；`max_len: 200`；必填 | 容器内允许目录下的绝对文件路径 |
-| `pattern` | string | `regex: ^([A-Za-z0-9_-]\|\\\.)+(\\\|([A-Za-z0-9_-]\|\\\.)+)*$`；`max_len: 100`；必填 | 不区分大小写的键名模式 |
-| `max_matches` | int | `min: 1`；`max: 500`；默认 `100` | 最大匹配行数 |
+| `lines` | int | `min: 1`；`max: 2000`；默认 `500` | 从文件开头读取的最大行数 |
 
 argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
-exec: [/usr/bin/docker, exec, '{container}', grep, -E, -i, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
+exec: [/usr/bin/docker, exec, '{container}', head, -n, '{lines}', --, '{path}']
 ```
 
 ### `docker_container_ls_dir`
@@ -411,11 +423,11 @@ exec: [/usr/bin/docker, exec, '{container}', getent, hosts, '{name}']
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、auth_header、api_key_header、htpasswd_hash |
 | 扩展能力 | D1、D4 |
 | 执行限制 | timeout=20s；max_output=64KB |
 | CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；该示例的选项是否可用须在目标版本验证。/usr/bin/docker 缺失时标记 unsupported。容器内需有支持 -F、-n、-m、-e 的 grep（GNU grep 或 busybox grep）。无匹配时 grep 退出码为 1，action 报告失败。 |
-| 安全说明 | Docker 包装命令后的执行目标固定为 grep，禁止解释器和 TTY；模式使用 -e，路径前使用 --，两者均不会被当作选项。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，且每个路径段以非点字符开头，无法出现 .. 段。正则不能阻止容器内已有的符号链接：根目录内指向其他位置的链接会被 grep 跟随（实测 /var/log/app/pw.log -> /etc/passwd 可读，只限该容器文件系统，不涉及主机）。输出先脱敏再过滤。脱敏只匹配 password、secret、token 后紧跟等号的形式，`secret: value`、`client_secret=value`、`api_key=value` 不被脱敏，评审时须确认允许根目录内的文件格式。 |
+| 安全说明 | Docker 包装命令后的执行目标固定为 grep，禁止解释器和 TTY；模式使用 -e，路径前使用 --，两者均不会被当作选项。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，且每个路径段以非点字符开头，无法出现 .. 段。正则不能阻止容器内已有的符号链接：根目录内指向其他位置的链接会被 grep 跟随（实测 /var/log/app/pw.log -> /etc/passwd 可读，只限该容器文件系统，不涉及主机）。输出先脱敏再过滤。内置 secrets 规则只匹配 password、secret、token 后紧跟等号的形式，因此增加自定义规则：sensitive_property（键名含 pass、pwd、secret、token、key、credential，后接 `=` 或 `:`，从键名到行尾替换，覆盖 `password: v`、`client_secret: v`、`db_password: v`、`X-Api-Key: v`）、json_credential（`"password":"v"`）、auth_header（`Authorization`、`Proxy-Authorization` 的头值，含 nginx `proxy_set_header Authorization "Basic ..."` 写法）、api_key_header（`X-` 开头且名称含 key、token、secret、auth、pass、pwd、credential 的头值，含 `proxy_set_header X-Api-Key v;` 写法）、htpasswd_hash（`$apr1$`、`$1$`、`$5$`、`$6$`、`$2y$` 等 crypt 格式及 `{SHA}`、`{SSHA}` 哈希，仅替换哈希，用户名保留）。限制：不识别 crypt(3) 的 13 位 DES 哈希；nginx `set $token v;` 等无冒号或等号的写法不识别；键名含关键字的普通文本（如 `bypass: true`）也会被替换。 |
 
 参数：
 
@@ -442,11 +454,11 @@ exec: [/usr/bin/docker, exec, '{container}', grep, -F, -n, -m, '{max_matches}', 
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、auth_header、api_key_header、htpasswd_hash |
 | 扩展能力 | D1、D4 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；该示例的选项是否可用须在目标版本验证。/usr/bin/docker 缺失时标记 unsupported。容器内需有支持 -n 和 -- 的 head。 |
-| 安全说明 | Docker 包装命令后的执行目标固定为 head，禁止解释器和 TTY；路径前使用 --。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，每个路径段以非点字符开头，无法出现 .. 段。正则不能阻止容器内已有的符号链接：根目录内指向其他位置的链接会被 head 跟随（实测 /var/log/app/pw.log -> /etc/passwd 可读，只限该容器文件系统，不涉及主机）。最多读取 500 行，输出由 max_output 限制为 64KB。脱敏只匹配 password、secret、token 后紧跟等号的形式，`secret: value`、`client_secret=value`、`api_key=value` 不被脱敏，评审时须确认允许根目录内的文件格式。 |
+| 安全说明 | Docker 包装命令后的执行目标固定为 head，禁止解释器和 TTY；路径前使用 --。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，每个路径段以非点字符开头，无法出现 .. 段。正则不能阻止容器内已有的符号链接：根目录内指向其他位置的链接会被 head 跟随（实测 /var/log/app/pw.log -> /etc/passwd 可读，只限该容器文件系统，不涉及主机）。最多读取 500 行，输出由 max_output 限制为 64KB。内置 secrets 规则只匹配 password、secret、token 后紧跟等号的形式，因此增加自定义规则：sensitive_property（键名含 pass、pwd、secret、token、key、credential，后接 `=` 或 `:`，从键名到行尾替换，覆盖 `password: v`、`client_secret: v`、`db_password: v`、`X-Api-Key: v`）、json_credential（`"password":"v"`）、auth_header（`Authorization`、`Proxy-Authorization` 的头值，含 nginx `proxy_set_header Authorization "Basic ..."` 写法）、api_key_header（`X-` 开头且名称含 key、token、secret、auth、pass、pwd、credential 的头值，含 `proxy_set_header X-Api-Key v;` 写法）、htpasswd_hash（`$apr1$`、`$1$`、`$5$`、`$6$`、`$2y$` 等 crypt 格式及 `{SHA}`、`{SSHA}` 哈希，仅替换哈希，用户名保留）。限制：不识别 crypt(3) 的 13 位 DES 哈希；nginx `set $token v;` 等无冒号或等号的写法不识别；键名含关键字的普通文本（如 `bypass: true`）也会被替换。 |
 
 参数：
 
@@ -557,11 +569,11 @@ exec: [/usr/bin/docker, exec, '{container}', jar, tf, '{jar}']
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii；自定义规则 config_secret |
+| redact | secrets, pii；自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential（同 `app_config_view`） |
 | 扩展能力 | D1、D4 |
 | 执行限制 | timeout=15s；max_output=64KB |
 | CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；/usr/bin/docker 缺失时标记 unsupported。容器内须有 unzip（JDK 镜像通常没有：eclipse-temurin 和 CentOS 7 JDK 镜像无 unzip，openjdk:8 的 Debian 镜像有，alpine 的 busybox unzip 支持 -p）（容器内命令按名称查找，无法在主机检查）。 |
-| 安全说明 | unzip -p 把条目写到标准输出，不落盘；不使用 jar xf。entry 参数限定为 application*.properties、application*.yml、application*.yaml，可带 BOOT-INF/classes/ 前缀，不含通配符、斜线和 .. 。输出先经 secrets、pii 内置规则和自定义规则 config_secret（键名含 password、passwd、pwd、secret、token、credential、private-key、access-key、api-key，分隔符为 = 或 :，整行键值替换）脱敏，再过滤。多行值（YAML 块标量、properties 续行）的后续行不会被脱敏；脱敏不能保证识别所有敏感内容。 |
+| 安全说明 | unzip -p 把条目写到标准输出，不落盘；不使用 jar xf。entry 参数限定为 application*.properties、application*.yml、application*.yaml，可带 BOOT-INF/classes/ 前缀，不含通配符、斜线和 .. 。输出先经 secrets、pii 内置规则和自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential（同 `app_config_view`）（键名含 password、passwd、pwd、secret、token、credential、private-key、access-key、api-key，分隔符为 = 或 :，整行键值替换）脱敏，再过滤。多行值（YAML 块标量、properties 续行）的后续行不会被脱敏；脱敏不能保证识别所有敏感内容。 |
 
 参数：
 
@@ -577,9 +589,7 @@ argv 或 builtin_config（与示例 YAML 一致）：
 exec: [/usr/bin/docker, exec, '{container}', unzip, -p, '{jar}', '{entry}']
 redact:
   builtin: [secrets, pii]
-  custom:
-    - name: config_secret
-      regex: '(?i)[A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|credentials?|private[_.-]?key|access[_.-]?key|api[_.-]?key)[A-Za-z0-9_.-]*\s*[:=]\s*(?:"[^"\r\n]*"|''[^''\r\n]*''|[^\s#]*)'
+  custom: 同 app_config_view 的四条规则
 ```
 
 ### `docker_java_class_members`
@@ -1326,37 +1336,6 @@ argv 或 builtin_config（与示例 YAML 一致）：
 exec: [/usr/bin/docker, exec, '{container}', jstack, '{pid}']
 ```
 
-### `k8s_configmap_grep`
-
-读取一个 ConfigMap 的 data 内容，敏感值脱敏，由 match 等过滤缩小范围。
-
-| 项 | 需求 |
-|---|---|
-| risk | read |
-| run_as | root |
-| 执行方式 | exec |
-| filters | match, exclude, tail, head, count |
-| redact | secrets, pii，另有自定义规则 sensitive_property |
-| 扩展能力 | D1 |
-| 执行限制 | timeout=10s；max_output=64KB |
-| CentOS 7 | 依赖目标节点的 kubectl 和只读 kubeconfig；go-template 输出须在目标版本验证。 |
-| 安全说明 | 输出格式为每个键一段：`### <键>` 后接值。命名空间使用签名枚举，ConfigMap 名称用 DNS 子域名正则且不以连字符开头。脱敏规则同 `app_config_grep`，同时覆盖 `key: value` 形式。match 在脱敏之后执行，无法探测被脱敏的值。限制：多行值中不含敏感词的键下的敏感值、binaryData 不处理（模板只遍历 .data）。 |
-
-参数：
-
-| 名称 | 类型 | 约束 | 用途（description） |
-|---|---|---|---|
-| `namespace` | enum | `values: [default, app]`；必填 | 签名允许列表中的命名空间 |
-| `name` | string | `regex: ^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`；`max_len: 253`；必填 | ConfigMap 名称 |
-
-argv 或 builtin_config（与示例 YAML 一致）：
-
-```yaml
-exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, configmap, '{name}', -n, '{namespace}',
-  -o, 'go-template={{range $key, $value := .data}}### {{$key}}{{"\n"}}{{$value}}{{"\n"}}{{end}}']
-exec_fallbacks: [/usr/local/bin/kubectl]
-```
-
 ### `k8s_configmap_keys`
 
 只列出一个 ConfigMap 的 data 键名。
@@ -1385,6 +1364,37 @@ argv 或 builtin_config（与示例 YAML 一致）：
 ```yaml
 exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, configmap, '{name}', -n, '{namespace}',
   -o, 'go-template={{range $key, $value := .data}}{{$key}}{{"\n"}}{{end}}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+```
+
+### `k8s_configmap_view`
+
+读取一个 ConfigMap 的 data 内容，敏感值脱敏，由 match 等过滤缩小范围。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential（同 `app_config_view`） |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 依赖目标节点的 kubectl 和只读 kubeconfig；go-template 输出须在目标版本验证。 |
+| 安全说明 | 输出格式为每个键一段：`### <键>` 后接值。命名空间使用签名枚举，ConfigMap 名称用 DNS 子域名正则且不以连字符开头。由原 `k8s_configmap_grep` 改名，行为不变：始终输出整个 ConfigMap 的 data，退出码只反映 kubectl 能否读取，与内容无关。脱敏规则同 `app_config_view`，覆盖 properties、YAML、JSON、XML 形式。match 在脱敏之后执行，无法探测被脱敏的值。限制：多行值中不含敏感词的键下的敏感值、binaryData 不处理（模板只遍历 .data）。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `namespace` | enum | `values: [default, app]`；必填 | 签名允许列表中的命名空间 |
+| `name` | string | `regex: ^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`；`max_len: 253`；必填 | ConfigMap 名称 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, configmap, '{name}', -n, '{namespace}',
+  -o, 'go-template={{range $key, $value := .data}}### {{$key}}{{"\n"}}{{$value}}{{"\n"}}{{end}}']
 exec_fallbacks: [/usr/local/bin/kubectl]
 ```
 
@@ -1516,11 +1526,11 @@ exec_fallbacks: [/usr/local/bin/kubectl]
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、auth_header、api_key_header、htpasswd_hash |
 | 扩展能力 | D1、D5 |
 | 执行限制 | timeout=20s；max_output=64KB |
 | CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。容器内需有支持 -F、-n、-m、-e 的 grep。无匹配时 grep 退出码为 1，action 报告失败。 |
-| 安全说明 | 命名空间和容器使用枚举，Pod 名称不能以连字符开头；固定使用 `exec -n <ns> <pod> [-c <container>] --`，不使用 -i、-t，无 stdin 和 TTY；包装命令后真正执行的 grep 通过解释器检查。kubectl exec 需要 pods/exec 的 create 权限，这不是纯只读 RBAC：持有该权限的凭据理论上可在 Pod 内执行任意命令，只读 kubeconfig 的 RBAC 必须仅授予允许的命名空间，并由运维评审；allowops 的签名 argv 是唯一的约束。禁用 kubeconfig 的 exec 认证插件。模式使用 -e，路径前使用 --。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，每个路径段以非点字符开头，无法出现 .. 段；容器内已有符号链接可被跟随。脱敏只匹配 password、secret、token 后紧跟等号的形式，`secret: value`、`client_secret=value`、`api_key=value` 不被脱敏。 |
+| 安全说明 | 命名空间和容器使用枚举，Pod 名称不能以连字符开头；固定使用 `exec -n <ns> <pod> [-c <container>] --`，不使用 -i、-t，无 stdin 和 TTY；包装命令后真正执行的 grep 通过解释器检查。kubectl exec 需要 pods/exec 的 create 权限，这不是纯只读 RBAC：持有该权限的凭据理论上可在 Pod 内执行任意命令，只读 kubeconfig 的 RBAC 必须仅授予允许的命名空间，并由运维评审；allowops 的签名 argv 是唯一的约束。禁用 kubeconfig 的 exec 认证插件。模式使用 -e，路径前使用 --。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，每个路径段以非点字符开头，无法出现 .. 段；容器内已有符号链接可被跟随。内置 secrets 规则只匹配 password、secret、token 后紧跟等号的形式，因此增加自定义规则：sensitive_property（键名含 pass、pwd、secret、token、key、credential，后接 `=` 或 `:`，从键名到行尾替换，覆盖 `password: v`、`client_secret: v`、`db_password: v`、`X-Api-Key: v`）、json_credential（`"password":"v"`）、auth_header（`Authorization`、`Proxy-Authorization` 的头值，含 nginx `proxy_set_header Authorization "Basic ..."` 写法）、api_key_header（`X-` 开头且名称含 key、token、secret、auth、pass、pwd、credential 的头值，含 `proxy_set_header X-Api-Key v;` 写法）、htpasswd_hash（`$apr1$`、`$1$`、`$5$`、`$6$`、`$2y$` 等 crypt 格式及 `{SHA}`、`{SSHA}` 哈希，仅替换哈希，用户名保留）。限制：不识别 crypt(3) 的 13 位 DES 哈希；nginx `set $token v;` 等无冒号或等号的写法不识别；键名含关键字的普通文本（如 `bypass: true`）也会被替换。 |
 
 参数：
 
@@ -1551,11 +1561,11 @@ exec_fallbacks: [/usr/local/bin/kubectl]
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、auth_header、api_key_header、htpasswd_hash |
 | 扩展能力 | D1、D5 |
 | 执行限制 | timeout=15s；max_output=64KB |
 | CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。容器内需有支持 -n 和 -- 的 head。 |
-| 安全说明 | 命名空间和容器使用枚举，Pod 名称不能以连字符开头；固定使用 `exec -n <ns> <pod> [-c <container>] --`，不使用 -i、-t，无 stdin 和 TTY；包装命令后真正执行的 head 通过解释器检查。kubectl exec 需要 pods/exec 的 create 权限，这不是纯只读 RBAC：持有该权限的凭据理论上可在 Pod 内执行任意命令，只读 kubeconfig 的 RBAC 必须仅授予允许的命名空间，并由运维评审；allowops 的签名 argv 是唯一的约束。禁用 kubeconfig 的 exec 认证插件。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，每个路径段以非点字符开头，无法出现 .. 段；容器内已有符号链接可被跟随。最多读取 500 行，输出由 max_output 限制为 64KB。脱敏只匹配 password、secret、token 后紧跟等号的形式，`secret: value`、`client_secret=value`、`api_key=value` 不被脱敏。 |
+| 安全说明 | 命名空间和容器使用枚举，Pod 名称不能以连字符开头；固定使用 `exec -n <ns> <pod> [-c <container>] --`，不使用 -i、-t，无 stdin 和 TTY；包装命令后真正执行的 head 通过解释器检查。kubectl exec 需要 pods/exec 的 create 权限，这不是纯只读 RBAC：持有该权限的凭据理论上可在 Pod 内执行任意命令，只读 kubeconfig 的 RBAC 必须仅授予允许的命名空间，并由运维评审；allowops 的签名 argv 是唯一的约束。禁用 kubeconfig 的 exec 认证插件。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，每个路径段以非点字符开头，无法出现 .. 段；容器内已有符号链接可被跟随。最多读取 500 行，输出由 max_output 限制为 64KB。内置 secrets 规则只匹配 password、secret、token 后紧跟等号的形式，因此增加自定义规则：sensitive_property（键名含 pass、pwd、secret、token、key、credential，后接 `=` 或 `:`，从键名到行尾替换，覆盖 `password: v`、`client_secret: v`、`db_password: v`、`X-Api-Key: v`）、json_credential（`"password":"v"`）、auth_header（`Authorization`、`Proxy-Authorization` 的头值，含 nginx `proxy_set_header Authorization "Basic ..."` 写法）、api_key_header（`X-` 开头且名称含 key、token、secret、auth、pass、pwd、credential 的头值，含 `proxy_set_header X-Api-Key v;` 写法）、htpasswd_hash（`$apr1$`、`$1$`、`$5$`、`$6$`、`$2y$` 等 crypt 格式及 `{SHA}`、`{SSHA}` 哈希，仅替换哈希，用户名保留）。限制：不识别 crypt(3) 的 13 位 DES 哈希；nginx `set $token v;` 等无冒号或等号的写法不识别；键名含关键字的普通文本（如 `bypass: true`）也会被替换。 |
 
 参数：
 
@@ -1617,7 +1627,7 @@ exec_fallbacks: [/usr/local/bin/kubectl]
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii；自定义规则 config_secret |
+| redact | secrets, pii；自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential（同 `app_config_view`） |
 | 扩展能力 | D1、D4、D5 |
 | 执行限制 | timeout=15s；max_output=64KB |
 | CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。容器内须有 unzip（JDK 镜像通常没有，须在镜像中安装）。 |
@@ -1640,9 +1650,7 @@ exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, e
 exec_fallbacks: [/usr/local/bin/kubectl]
 redact:
   builtin: [secrets, pii]
-  custom:
-    - name: config_secret
-      regex: '(?i)[A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|credentials?|private[_.-]?key|access[_.-]?key|api[_.-]?key)[A-Za-z0-9_.-]*\s*[:=]\s*(?:"[^"\r\n]*"|''[^''\r\n]*''|[^\s#]*)'
+  custom: 同 app_config_view 的四条规则
 ```
 
 ### `k8s_pod_java_class_members`
@@ -2455,7 +2463,7 @@ builtin_config:
 
 ### `redis_slowlog`
 
-读取 Redis 慢日志：传入 `command=SLOWLOG`，`args=["GET","20"]` 返回最近若干条，`args=["LEN"]` 返回条数。不能清空慢日志。
+读取 Redis 慢日志的条目元数据：传入 `command=SLOWLOG`，`args=["GET","20"]` 返回最近若干条（不含命令参数和客户端名称），`args=["LEN"]` 返回条数。不能清空慢日志。
 
 | 项 | 需求 |
 |---|---|
@@ -2467,7 +2475,7 @@ builtin_config:
 | 扩展能力 | D7 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | 内置驱动不要求 CentOS 7 安装 redis-cli；Redis 版本和 Unix socket 配置需目标环境验证。 |
-| 安全说明 | commands 显式列出 SLOWLOG。只支持 GET [count] 和 LEN，count 为 1..128；RESET、HELP 拒绝。慢日志的命令参数和客户端地址可能含业务数据和任意键，因此启用 pii；配置 key_prefixes 时 SLOWLOG GET 被拒绝，仅 LEN 可用。已知限制：secrets 规则只识别 `password=`、`secret=`、`token=` 形式和常见令牌格式，`secret: value` 形式的值不会被脱敏。输出为嵌套数组，受 max_response_bytes 限制。依据：builtin-config.md、internal/builtin/redis/redis.go 的 command、validateCommand。 |
+| 安全说明 | commands 显式列出 SLOWLOG。只支持 GET [count] 和 LEN，count 为 1..128；RESET、HELP 拒绝。SLOWLOG GET 的每条记录只保留条目编号、时间戳、耗时（微秒）、命令名、参数个数和客户端地址，命令的其余参数（任意键和值）与客户端名称在内置处理器中丢弃，不依赖脱敏规则。命令名和客户端地址仍启用 secrets、pii；配置 key_prefixes 时 SLOWLOG GET 被拒绝，仅 LEN 可用。输出为嵌套数组 `[id, 时间戳, 耗时微秒, 命令名, 参数个数, 客户端地址]`，128 条约 13KB，受 max_response_bytes 限制。依据：builtin-config.md、internal/builtin/redis/redis.go 的 command、validateCommand。 |
 
 参数：
 
@@ -2640,6 +2648,8 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 ## 5. 本地示例检查
 
 `make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 83 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+
+配置脱敏冒烟在同一临时目录中把 app_config_view、app_config_keys 的 allowed_roots 改为临时配置目录，写入 properties、JSON、XML 形式的凭据和 PEM 私钥：断言 app_config_view 输出不含凭据值、match 过滤命中与否都以退出码 0 返回，app_config_keys 只输出键名且不输出 PEM 内容。该检查依赖本机 grep 支持 -P 和 head。
 
 日志冒烟在自动删除的临时目录复制目录，仅替换 log_search 的 builtin_config.allowed_roots。它创建普通与 gzip 测试日志，并通过 catalog try 验证逐行结果、count=3、无匹配退出码 0、max_matches=1 的 truncated/resource_limit_reached。原始示例路径和文件不被修改；try 始终以当前用户执行，run_as 不在此检查中验证。检查不运行 Redis、MySQL、HTTP、Docker、Kubernetes、DNS 或任何写 action。
 

@@ -7,10 +7,13 @@ params:
     type: path
     description: Existing properties file within the signed allowed roots.
     allowed_roots: [/etc/app, /opt/app/config]
-exec: [/usr/bin/grep, -o, -E, -e, '^[A-Za-z0-9_.-]+', --, '{path}']
+exec: [/usr/bin/grep, -o, -P, -e, '^[[:space:]]*\K[A-Za-z][A-Za-z0-9_.-]*(?=[[:space:]]*(?::|=(?!=?[[:space:]]*$)))', --, '{path}']
 timeout: 10s
 max_output: 64KB
 filters: [match, exclude, tail, head, count]
 max_scan: 256MB
 redact:
   builtin: [secrets]
+  custom:
+    - name: long_base64
+      regex: '[A-Za-z0-9+/_-]{32,}={0,2}'

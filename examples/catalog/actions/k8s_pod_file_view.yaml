@@ -37,3 +37,14 @@ filters: [match, exclude, tail, head, count]
 max_scan: 256MB
 redact:
   builtin: [secrets, pii]
+  custom:
+    - name: sensitive_property
+      regex: '(?i)[A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*\s*[=:].*'
+    - name: json_credential
+      regex: '(?i)["''][A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*["'']\s*:\s*(?:"(?:[^"\\]|\\.)*"|''[^'']*''|[^\s,}\]]+)'
+    - name: auth_header
+      regex: '(?i)\b(?:proxy-)?authorization["'']?\s*:\s*(?:"[^"\r\n]*"|''[^''\r\n]*''|[^\r\n]*)|\b(?:proxy_set_header|add_header|more_set_headers|set_header)\s+["'']?(?:proxy-)?authorization["'']?\s+[^;\r\n]*'
+    - name: api_key_header
+      regex: '(?i)\bx-[A-Za-z0-9-]*(?:key|token|secret|auth|pass|pwd|credential)[A-Za-z0-9-]*["'']?\s*:\s*(?:"[^"\r\n]*"|''[^''\r\n]*''|[^\r\n]*)|\b(?:proxy_set_header|add_header|more_set_headers|set_header)\s+["'']?[A-Za-z0-9_-]*(?:key|token|secret|pass|pwd|credential)[A-Za-z0-9_-]*["'']?\s+[^;\r\n]*'
+    - name: htpasswd_hash
+      regex: '\$(?:apr1|1|5|6|2[abxy]|y|7)\$(?:[./0-9A-Za-z,=]+\$)+[./0-9A-Za-z]{20,}|\{S?SHA(?:256|512)?\}[A-Za-z0-9+/=]{20,}'

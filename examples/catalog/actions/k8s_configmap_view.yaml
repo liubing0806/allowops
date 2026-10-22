@@ -1,4 +1,4 @@
-name: k8s_configmap_grep
+name: k8s_configmap_view
 description: Read the data of one ConfigMap with secret values redacted; narrow the output with the match filter.
 risk: read
 run_as: root
@@ -23,4 +23,10 @@ redact:
   builtin: [secrets, pii]
   custom:
     - name: sensitive_property
-      regex: (?i)[A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*\s*[=:].*
+      regex: '(?i)[A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*\s*[=:].*'
+    - name: json_credential
+      regex: '(?i)["''][A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*["'']\s*:\s*(?:"(?:[^"\\]|\\.)*"|''[^'']*''|[^\s,}\]]+)'
+    - name: xml_element_credential
+      regex: '(?i)<[A-Za-z0-9_.:-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.:-]*(?:\s[^>]*)?>(?:<!\[CDATA\[.*?\]\]>|[^<])*</[^>]+>'
+    - name: xml_attribute_credential
+      regex: '(?i)\b(?:name|key|id|var)\s*=\s*["''][^"'']*(?:pass|pwd|secret|token|key|credential)[^"'']*["'']\s+[^>]*?\bvalue\s*=\s*(?:"[^"]*"|''[^'']*'')|\bvalue\s*=\s*(?:"[^"]*"|''[^'']*'')\s+[^>]*?\b(?:name|key|id|var)\s*=\s*["''][^"'']*(?:pass|pwd|secret|token|key|credential)[^"'']*["'']'
