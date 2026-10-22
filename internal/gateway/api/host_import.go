@@ -192,7 +192,11 @@ func (s *Service) preview(ctx context.Context, q querier, id string, lock bool) 
 	return p, nil
 }
 func (s *Service) previewTargets(ctx context.Context, q querier, p *storedPreview, lock, checkRevision bool) ([]*v1.Host, error) {
-	all, err := s.hosts(ctx, q, lock)
+	ids := make([]string, 0, len(p.targets))
+	for _, target := range p.targets {
+		ids = append(ids, target.HostID)
+	}
+	all, err := s.hostsWhere(ctx, q, " AND h.host_id = ANY($2)", lock, ids)
 	if err != nil {
 		return nil, err
 	}
