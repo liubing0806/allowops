@@ -424,8 +424,16 @@ func readResponse(ctx context.Context, client *redisclient.Client, args []any, l
 		}
 		// GETRANGE bounds allocation even when the key grows after STRLEN.
 		// These reads do not provide an atomic snapshot of a changing key.
-		value, err := client.GetRange(ctx, key, 0, limit-1).Result()
-		return value, int64(len(value)) == limit && length < limit, err
+		// Reading one byte past the limit is the only evidence of growth:
+		// a prefix of exactly limit bytes is complete only if nothing follows.
+		value, err := client.GetRange(ctx, key, 0, limit).Result()
+		if err != nil {
+			return value, false, err
+		}
+		if int64(len(value)) > limit {
+			return value[:limit], true, nil
+		}
+		return value, false, nil
 	case "HGET":
 		length, err := client.HStrLen(ctx, args[1].(string), args[2].(string)).Result()
 		if err != nil {
