@@ -1,0 +1,18 @@
+# url usage: url=http://127.0.0.1:22222/live.
+name: dubbo_qos_live
+description: Check Dubbo liveness through the local QoS HTTP endpoint (GET /live).
+risk: read
+params: {}
+builtin: http_get
+builtin_config:
+  allowed_prefixes: ['http://127.0.0.1:22222/live']
+  headers:
+    Accept: text/plain
+  timeout: 5s
+  max_response_bytes: 64KB
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]
