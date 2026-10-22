@@ -25,6 +25,9 @@ func CheckCommand(argv []string, allowInterpreter bool) error {
 	if IsInterpreter(command) && !allowInterpreter {
 		return fmt.Errorf("interpreter %s forbidden; allow_interpreter required", command)
 	}
+	if runsCommands(argv) && !allowInterpreter {
+		return fmt.Errorf("%s runs commands from its arguments; allow_interpreter required", command)
+	}
 	args := argv[1:]
 	nested, err := nestedCommand(name, args)
 	if err != nil {
@@ -329,6 +332,9 @@ func validateExec(template []any, defs map[string]params.Definition, allow bool)
 	}
 	for _, argv := range variants {
 		if err := CheckCommand(argv, allow); err != nil {
+			return err
+		}
+		if err := checkProgramText(argv, defs); err != nil {
 			return err
 		}
 	}

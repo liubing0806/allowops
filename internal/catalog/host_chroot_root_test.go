@@ -12,7 +12,7 @@ import (
 // filesystem, so its target gets the same shebang/interpreter checks as "/".
 func TestHostChrootLocalRootSpellings(t *testing.T) {
 	dir := t.TempDir()
-	script := filepath.Join(dir, "script")
+	script := filepath.Join(dir, "fixture")
 	if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
