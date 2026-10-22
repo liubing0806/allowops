@@ -2,16 +2,23 @@ package job
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"io"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
+	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/hostconn"
 	"github.com/liubing0806/allowops/internal/store"
 	"github.com/liubing0806/allowops/internal/testpg"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // terminateTaskRead ends the backend that runs the first task event read, as a
@@ -82,5 +89,64 @@ func TestOnMessageRetriesTransientDatabaseError(t *testing.T) {
 	unknown := hostconn.Event{HostID: "host", ConnectionID: "connection", Message: &v1.ConnectRequest{Message: &v1.ConnectRequest_TaskStarted{TaskStarted: &v1.TaskStarted{JobId: "job", TaskId: "missing"}}}}
 	if err := s.OnMessage(ctx, unknown); err == nil || err.Error() != "UNKNOWN_TASK_EVENT" {
 		t.Fatalf("unknown task event error=%v, want UNKNOWN_TASK_EVENT", err)
+	}
+}
+
+// A COMMIT whose acknowledgement is lost is retried. The replay must accept
+// the state the lost attempt committed instead of closing the host stream.
+func TestOnMessageReplayAfterLostCommitAcknowledgement(t *testing.T) {
+	s := concurrencyFixture(t)
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+	defer s.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+	a := catalog.Action{Name: "action", MaxOutput: 1024, Steps: []catalog.Step{{Name: "first", Exec: []any{"/usr/bin/true"}}, {Name: "second", Exec: []any{"/usr/bin/true"}}}}
+	definition, err := json.Marshal(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.Pool.Exec(ctx, "UPDATE jobs SET action_definition=$1", definition); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Store.Pool.Exec(ctx, "UPDATE tasks SET status=1,result=$1 WHERE task_id='fast'", pendingResult(v1.TaskStatus_TASK_STATUS_PENDING, "")); err != nil {
+		t.Fatal(err)
+	}
+	lose := false
+	commit := commitTaskEvent
+	commitTaskEvent = func(ctx context.Context, tx pgx.Tx) error {
+		err := tx.Commit(ctx)
+		if err == nil && lose {
+			lose = false
+			return io.ErrUnexpectedEOF
+		}
+		return err
+	}
+	defer func() { commitTaskEvent = commit }()
+	event := func(name string, lost bool, m *v1.ConnectRequest) {
+		t.Helper()
+		lose = lost
+		if err := s.OnMessage(ctx, hostconn.Event{HostID: "fast", ConnectionID: "connection", Message: m}); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if lose {
+			t.Fatalf("%s: no attempt committed", name)
+		}
+	}
+	event("TaskStarted after a lost COMMIT acknowledgement", true, &v1.ConnectRequest{Message: &v1.ConnectRequest_TaskStarted{TaskStarted: &v1.TaskStarted{JobId: "job", TaskId: "fast"}}})
+	empty := sha256.Sum256(nil)
+	for i := range a.Steps {
+		for _, stream := range []v1.OutputStream{v1.OutputStream_OUTPUT_STREAM_STDOUT, v1.OutputStream_OUTPUT_STREAM_STDERR} {
+			event("output", false, &v1.ConnectRequest{Message: &v1.ConnectRequest_Output{Output: &v1.TaskOutputChunk{JobId: "job", TaskId: "fast", StepIndex: proto.Uint32(uint32(i)), Stream: stream, Eof: true}}})
+		}
+		r := &v1.ExecutionResult{Status: v1.TaskStatus_TASK_STATUS_SUCCEEDED, ExitCode: proto.Int32(0), Duration: durationpb.New(time.Millisecond), Stdout: &v1.OutputMetadata{Sha256: empty[:]}, Stderr: &v1.OutputMetadata{Sha256: empty[:]}}
+		event("StepCompleted after a lost COMMIT acknowledgement", i == 0, &v1.ConnectRequest{Message: &v1.ConnectRequest_StepCompleted{StepCompleted: &v1.StepCompleted{JobId: "job", TaskId: "fast", StepIndex: uint32(i), StepName: a.Steps[i].Name, Result: r}}})
+	}
+	var status int16
+	var steps int
+	if err := s.Store.Pool.QueryRow(ctx, "SELECT t.status,(SELECT count(*) FROM task_steps WHERE task_id='fast') FROM tasks t WHERE t.task_id='fast'").Scan(&status, &steps); err != nil {
+		t.Fatal(err)
+	}
+	if status != int16(v1.TaskStatus_TASK_STATUS_RUNNING) || steps != 2 {
+		t.Fatalf("status=%d task_steps=%d; want running and 2", status, steps)
 	}
 }
