@@ -492,6 +492,77 @@ func TestHGetRejectsAdvertisedHugeBulkBeforeAllocation(t *testing.T) {
 	}
 }
 
+type chunkConn struct {
+	net.Conn
+	data  []byte
+	chunk int
+}
+
+func (c *chunkConn) Read(p []byte) (int, error) {
+	if len(c.data) == 0 {
+		return 0, io.EOF
+	}
+	n := min(len(p), c.chunk, len(c.data))
+	copy(p, c.data[:n])
+	c.data = c.data[n:]
+	return n, nil
+}
+
+// The guard must follow RESP framing under any read fragmentation: a body that
+// looks like a header is not one, an exact-limit and a null bulk pass, and the
+// first digit over the limit is withheld.
+func TestBulkLimitConnFraming(t *testing.T) {
+	const limit = 12
+	for _, tc := range []struct {
+		name, stream, want string
+		wantErr            bool
+	}{
+		{"simple replies", "+OK\r\n+OK\r\n", "+OK\r\n+OK\r\n", false},
+		{"exact limit", "$12\r\n" + strings.Repeat("a", 12) + "\r\n", "$12\r\n" + strings.Repeat("a", 12) + "\r\n", false},
+		{"null bulk", "$-1\r\n", "$-1\r\n", false},
+		{"empty bulk", "$0\r\n\r\n", "$0\r\n\r\n", false},
+		{"body that looks like a header", "$12\r\n$999999999999\r\n:1\r\n", "$12\r\n$999999999999\r\n:1\r\n", false},
+		{"error line", "-ERR $999999\r\n+OK\r\n", "-ERR $999999\r\n+OK\r\n", false},
+		{"over limit", "+OK\r\n$13\r\n" + strings.Repeat("a", 13) + "\r\n", "+OK\r\n$1", true},
+		{"huge", "$536870912\r\n", "$5", true},
+	} {
+		for _, chunk := range []int{1, 2, 3, 7, 4096} {
+			t.Run(tc.name+"/"+strconv.Itoa(chunk), func(t *testing.T) {
+				conn := &bulkLimitConn{Conn: &chunkConn{data: []byte(tc.stream), chunk: chunk}, limit: limit}
+				var got []byte
+				buf := make([]byte, 64)
+				var err error
+				for err == nil {
+					var n int
+					n, err = conn.Read(buf)
+					got = append(got, buf[:n]...)
+				}
+				if tc.wantErr != errors.Is(err, ErrResponseLimit) || !tc.wantErr && err != io.EOF {
+					t.Fatalf("error=%v wantErr=%v", err, tc.wantErr)
+				}
+				// An error case delivers everything before the first over-limit digit.
+				if string(got) != tc.want {
+					t.Fatalf("delivered %q, want %q", got, tc.want)
+				}
+			})
+		}
+	}
+}
+
+// The wire guard must not reject a real server's value that fits the limit.
+func TestHGetAtExactLimitThroughWireGuard(t *testing.T) {
+	if !inRootNamespace(t) {
+		return
+	}
+	s := startServer(t)
+	value := strings.Repeat("v", 128)
+	s.seed(t, "HSET", "hash", "field", value)
+	r, err := Run(context.Background(), Config{Address: s.address, Credential: credentials(t), MaxResponseBytes: 128}, Params{Command: "HGET", Args: []string{"hash", "field"}})
+	if err != nil || r.Truncated || strings.TrimSpace(r.Stdout) != `"`+value+`"` {
+		t.Fatalf("HGET at limit: %+v, %v", r, err)
+	}
+}
+
 func TestResponseResourceLimits(t *testing.T) {
 	if !inRootNamespace(t) {
 		return
