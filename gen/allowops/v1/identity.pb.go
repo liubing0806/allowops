@@ -2533,9 +2533,11 @@ type GetCurrentSessionResponse struct {
 	Client    LoginClient            `protobuf:"varint,2,opt,name=client,proto3,enum=allowops.v1.LoginClient" json:"client,omitempty"`
 	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	// Console only; session-bound token for mutation request headers.
-	CsrfToken     string `protobuf:"bytes,4,opt,name=csrf_token,json=csrfToken,proto3" json:"csrf_token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	CsrfToken string `protobuf:"bytes,4,opt,name=csrf_token,json=csrfToken,proto3" json:"csrf_token,omitempty"`
+	// Build version of the serving gateway; "dev" for development builds.
+	GatewayVersion string `protobuf:"bytes,5,opt,name=gateway_version,json=gatewayVersion,proto3" json:"gateway_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetCurrentSessionResponse) Reset() {
@@ -2592,6 +2594,13 @@ func (x *GetCurrentSessionResponse) GetExpiresAt() *timestamppb.Timestamp {
 func (x *GetCurrentSessionResponse) GetCsrfToken() string {
 	if x != nil {
 		return x.CsrfToken
+	}
+	return ""
+}
+
+func (x *GetCurrentSessionResponse) GetGatewayVersion() string {
+	if x != nil {
+		return x.GatewayVersion
 	}
 	return ""
 }
@@ -3047,14 +3056,15 @@ const file_allowops_v1_identity_proto_rawDesc = "" +
 	"lastUsedAt\x129\n" +
 	"\n" +
 	"revoked_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\trevokedAt\"\x1a\n" +
-	"\x18GetCurrentSessionRequest\"\xce\x01\n" +
+	"\x18GetCurrentSessionRequest\"\xf7\x01\n" +
 	"\x19GetCurrentSessionResponse\x12%\n" +
 	"\x04user\x18\x01 \x01(\v2\x11.allowops.v1.UserR\x04user\x120\n" +
 	"\x06client\x18\x02 \x01(\x0e2\x18.allowops.v1.LoginClientR\x06client\x129\n" +
 	"\n" +
 	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1d\n" +
 	"\n" +
-	"csrf_token\x18\x04 \x01(\tR\tcsrfToken\"\x0f\n" +
+	"csrf_token\x18\x04 \x01(\tR\tcsrfToken\x12'\n" +
+	"\x0fgateway_version\x18\x05 \x01(\tR\x0egatewayVersion\"\x0f\n" +
 	"\rLogoutRequest\"\x10\n" +
 	"\x0eLogoutResponse\"_\n" +
 	"\x16ListCliSessionsRequest\x12,\n" +
