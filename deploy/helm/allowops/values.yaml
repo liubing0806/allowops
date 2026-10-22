@@ -15,6 +15,13 @@ gateway:
   identity:
     origin: https://allowops.example.com
   providers: []
+  # Secret-backed environment variables for the names that providers read through
+  # bind_password_env / client_secret_env. Values never enter the ConfigMap.
+  # providerSecretEnv:
+  #   - name: ALLOWOPS_LDAP_BIND_PASSWORD
+  #     secretName: allowops-ldap
+  #     key: bind-password
+  providerSecretEnv: []
 credentials:
   # Keys: ca.crt, ca.key (PKCS8), tls.crt (full chain), tls.key, catalog.pub.pem.
   existingSecret: allowops-credentials
