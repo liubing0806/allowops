@@ -270,6 +270,7 @@
   "error.positiveInteger": "Enter a positive integer",
   "error.notFound": "Resource not found",
   "error.labels": "Invalid labels; enter one key=value per line without duplicate keys",
+  "error.labelsUnrepresentable": "Labels hold a key or value that one key=value per line cannot represent; edit them with the CLI or API",
   "error.selector": "Invalid selector; use comma separated key=value",
   "error.csv": "Invalid CSV; check column names and cells",
   "error.csvRemove": "Remove cells must contain true or be empty",

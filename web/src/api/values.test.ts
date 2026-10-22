@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { formatLabels, parseLabels, parseSelector } from './values'
+import {
+  formatLabels,
+  labelsRepresentable,
+  parseLabels,
+  parseSelector,
+} from './values'
 
 describe('label text round trip', () => {
   it.each([
@@ -42,5 +47,18 @@ describe('host selector text', () => {
     })
     expect(() => parseSelector('env=a b')).toThrow('error.labels')
     expect(() => parseSelector('env=prod\ntier=web')).toThrow('error.labels')
+  })
+})
+
+describe('label representability', () => {
+  it.each([
+    ['an "=" in a key', { 'a=b': 'c' }],
+    ['space around a key', { ' k': 'v' }],
+    ['a line break in a value', { note: 'x\ny=z' }],
+  ])('rejects %s', (_name, labels) => {
+    expect(labelsRepresentable(labels)).toBe(false)
+  })
+  it('accepts labels the line format keeps intact', () => {
+    expect(labelsRepresentable({ team: '研发 团队', 'k8s.io/x': 'a,b', e: '' })).toBe(true)
   })
 })

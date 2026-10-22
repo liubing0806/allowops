@@ -4,6 +4,7 @@ export {
   parseLabels,
   parseSelector,
   formatLabels,
+  labelsRepresentable,
   toBase64,
   fromBase64,
 } from './values'

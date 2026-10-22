@@ -94,7 +94,6 @@ describe('labels the line format cannot represent', () => {
     })
     window.history.replaceState({}, '', '/hosts/web-01')
     render(<App />)
-    await screen.findByLabelText('授权标签')
     expect(await screen.findByText(unrepresentable)).toBeVisible()
     expect(screen.getByRole('button', { name: '保存标签' })).toBeDisabled()
   })
