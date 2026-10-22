@@ -316,7 +316,7 @@ allowops-agent join|run|status
 - 四个二进制同一 SemVer 版本，从同一 Git tag 发布。网关支持当前和上一主版本的主机端；主机端比网关新时拒绝连接。
 - 主机端：仅 amd64；`.deb`、`.rpm`、`.tar.gz`；`CGO_ENABLED=0`。支持 CentOS 7 / RHEL 7、Rocky/Alma/RHEL 8+、Ubuntu 20.04+、Debian 11+。rpm 不用弱依赖、不用 zstd 压缩，用 RSA 4096 GPG 签名；unit 只用 systemd 219 支持的选项。
 - 主机端在线升级：签名目录中的升级 action（`run_as: root`、`risk: dangerous`），用 yum/apt 从内网软件源安装指定版本，再用 `systemd-run --on-active=5 --timer-property=AccuracySec=1s` 重启 `allowops-agent.service`，task 结果先回传。版本参数为 enum，只列出不高于当前网关的版本；先升级网关，再发布含新版本的目录。灰度用 job 主机选择器分批执行。软件源和包签名由运维人员维护。依据见决定记录第 8 节。
-- 网关新版本提醒：网关读取发布清单（发布流水线从 Git tag 生成的静态 JSON，发布到文档站），发现新版本后在控制台提醒，不下载、不安装。配置 `update_check.enabled`（默认 `false`）和 `update_check.url`（默认文档站地址，内网可改为内部地址）。开启后每 24 小时检查一次并加随机延迟，请求只带 `User-Agent: allowops-gateway/<版本>`。多实例用 advisory lock 只由一个实例请求，结果写入单行表供所有实例读取。版本号须为 SemVer，发布说明链接的主机名须与清单地址相同。依据见决定记录第 8 节。
+- 网关新版本提醒：网关读取发布清单（发布流水线从 Git tag 生成的静态 JSON，发布到文档站），发现新版本后在控制台提醒，不下载、不安装。配置 `update_check.enabled`（默认 `false`）和 `update_check.url`（默认文档站地址，内网可改为内部地址）。开启后每 24 小时检查一次并加随机延迟，请求只带 `User-Agent: allowops-gateway/<版本>`。多实例用 advisory lock 只由一个实例请求，结果写入单行表供所有实例读取。清单只含 `version` 和 `published_at`；版本号须为严格 SemVer，发布说明链接由控制台按版本号拼成。依据见决定记录第 8 节。
 - 主机端文件布局：
 
 ```
