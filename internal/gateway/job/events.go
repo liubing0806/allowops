@@ -73,14 +73,21 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 	// A database failure is not a protocol violation. Closing the stream would
 	// end every running task on the host, so retry the whole transaction while
 	// the connection lives. In-memory task state changes only after COMMIT.
-	return retrySQL(ctx, jobID, func(ctx context.Context) error { return s.taskEvent(ctx, e, jobID, taskID) })
+	// A failed attempt may still have committed, so later attempts are replays
+	// that accept the state an earlier attempt wrote for this same event.
+	replay := false
+	return retrySQL(ctx, jobID, func(ctx context.Context) error {
+		err := s.taskEvent(ctx, e, jobID, taskID, replay)
+		replay = true
+		return err
+	})
 }
 
 // commitTaskEvent commits a non-terminal task event. Tests replace it to report
 // a lost COMMIT acknowledgement after the server committed.
 var commitTaskEvent = func(ctx context.Context, tx pgx.Tx) error { return tx.Commit(ctx) }
 
-func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID string) error {
+func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID string, replay bool) error {
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -142,6 +149,11 @@ func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID
 		return err
 	}
 	if started := e.Message.GetTaskStarted(); started != nil {
+		if state == 2 && replay {
+			// The host stream is serial, so only this event's earlier attempt
+			// can have started the task.
+			return nil
+		}
 		if state != 1 {
 			return errors.New("DUPLICATE_TASK_START")
 		}
@@ -233,7 +245,13 @@ func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, "INSERT INTO task_steps(job_id,task_id,created_at,step_index,name,result) VALUES ($1,$2,$3,$4,$5,$6)", jobID, taskID, created, step.StepIndex, step.StepName, raw); err != nil {
+		insert := "INSERT INTO task_steps(job_id,task_id,created_at,step_index,name,result) VALUES ($1,$2,$3,$4,$5,$6)"
+		if replay {
+			// out.Steps changes only after COMMIT, so an existing row for this
+			// index was written by this event's earlier attempt.
+			insert += " ON CONFLICT DO NOTHING"
+		}
+		if _, err := tx.Exec(ctx, insert, jobID, taskID, created, step.StepIndex, step.StepName, raw); err != nil {
 			return err
 		}
 		if err := commitTaskEvent(ctx, tx); err != nil {
