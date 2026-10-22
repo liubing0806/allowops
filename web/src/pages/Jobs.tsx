@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Code } from '@connectrpc/connect'
@@ -27,6 +27,7 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { useCommand } from '@/lib/notifications'
 
 const schema = z.object({ status: z.string(), action: z.string() })
+const jobsPageSize = 10
 
 // Authentication, authorization and missing-resource errors do not recover by
 // polling again.
@@ -54,14 +55,23 @@ export default function Jobs() {
     defaultValues: { status: '', action: '' },
   })
   const values = useWatch({ control: form.control })
+  // tokens[i] opens page i + 1; the first page has no token. Changing a filter
+  // starts again from the first page, because a token is bound to its filters.
+  const filterKey = JSON.stringify(values)
+  const [paging, setPaging] = useState({ filterKey, tokens: [''] })
+  const tokens = paging.filterKey === filterKey ? paging.tokens : ['']
+  const pageToken = tokens[tokens.length - 1]
   const query = useQuery({
-    queryKey: ['jobs', values],
+    queryKey: ['jobs', values, pageToken],
     queryFn: () =>
       api.listJobs({
         statuses: values.status ? [values.status as JobStatus] : [],
         action: values.action,
+        page: { pageSize: jobsPageSize, pageToken },
       }),
+    placeholderData: keepPreviousData,
   })
+  const nextPageToken = query.data?.page.nextPageToken
 
   return (
     <div className="flex flex-col gap-3">
@@ -92,6 +102,16 @@ export default function Jobs() {
         {query.data && (
           <DataTable<Job>
             data={query.data.jobs}
+            pager={{
+              page: tokens.length,
+              hasNext: !!nextPageToken,
+              pending: query.isPlaceholderData,
+              onPrevious: () =>
+                setPaging({ filterKey, tokens: tokens.slice(0, -1) }),
+              onNext: () =>
+                nextPageToken &&
+                setPaging({ filterKey, tokens: [...tokens, nextPageToken] }),
+            }}
             columns={[
               {
                 accessorKey: 'jobId',

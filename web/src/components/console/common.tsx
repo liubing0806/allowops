@@ -194,12 +194,56 @@ export function Time({ value }: { value?: string }) {
   )
 }
 
+// Paging state of a list that the server pages by token. DataTable then shows
+// the rows it is given and only renders the controls.
+export interface ServerPager {
+  page: number
+  hasNext: boolean
+  pending?: boolean
+  onPrevious: () => void
+  onNext: () => void
+}
+
+function PagerFooter({
+  label,
+  canPrevious,
+  canNext,
+  onPrevious,
+  onNext,
+}: {
+  label: string
+  canPrevious: boolean
+  canNext: boolean
+  onPrevious: () => void
+  onNext: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <footer className="flex items-center justify-end gap-2 border-t pt-2 text-xs text-muted-foreground">
+      <span>{label}</span>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={!canPrevious}
+        onClick={onPrevious}
+      >
+        {t('common.previous')}
+      </Button>
+      <Button variant="outline" size="sm" disabled={!canNext} onClick={onNext}>
+        {t('common.next')}
+      </Button>
+    </footer>
+  )
+}
+
 export function DataTable<T>({
   data,
   columns,
+  pager,
 }: {
   data: T[]
   columns: ColumnDef<T>[]
+  pager?: ServerPager
 }) {
   const { t } = useTranslation()
   const [sorting, setSorting] = useState<SortingState>([])
@@ -212,6 +256,7 @@ export function DataTable<T>({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    manualPagination: !!pager,
     initialState: { pagination: { pageSize: 10 } },
   })
   return (
@@ -282,32 +327,30 @@ export function DataTable<T>({
           )}
         </TableBody>
       </Table>
-      {data.length > 10 && (
-        <footer className="flex items-center justify-end gap-2 border-t pt-2 text-xs text-muted-foreground">
-          <span>
-            {t('common.pagination', {
+      {pager ? (
+        (pager.page > 1 || pager.hasNext) && (
+          <PagerFooter
+            label={t('common.page', { page: pager.page })}
+            canPrevious={pager.page > 1 && !pager.pending}
+            canNext={pager.hasNext && !pager.pending}
+            onPrevious={pager.onPrevious}
+            onNext={pager.onNext}
+          />
+        )
+      ) : (
+        data.length > 10 && (
+          <PagerFooter
+            label={t('common.pagination', {
               page: table.getState().pagination.pageIndex + 1,
               total: table.getPageCount(),
               count: data.length,
             })}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!table.getCanPreviousPage()}
-            onClick={() => table.previousPage()}
-          >
-            {t('common.previous')}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!table.getCanNextPage()}
-            onClick={() => table.nextPage()}
-          >
-            {t('common.next')}
-          </Button>
-        </footer>
+            canPrevious={table.getCanPreviousPage()}
+            canNext={table.getCanNextPage()}
+            onPrevious={() => table.previousPage()}
+            onNext={() => table.nextPage()}
+          />
+        )
       )}
     </div>
   )

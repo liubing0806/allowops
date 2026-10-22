@@ -22,7 +22,7 @@ make build
 
 ## API 与会话
 
-`src/api/connect.ts` 使用生成的服务描述创建 Connect 客户端。页面保留 ProtoJSON 模型：uint64 使用十进制字符串，bytes 使用 Base64，枚举使用符号名，时间和时长使用 protobuf JSON 格式。生成的描述负责请求解析和响应编码。服务端分页由适配层按原过滤条件继续读取，页面沿用每页 10 条的表格分页。
+`src/api/connect.ts` 使用生成的服务描述创建 Connect 客户端。页面保留 ProtoJSON 模型：uint64 使用十进制字符串，bytes 使用 Base64，枚举使用符号名，时间和时长使用 protobuf JSON 格式。生成的描述负责请求解析和响应编码。服务端分页由适配层按原过滤条件继续读取，页面沿用每页 10 条的表格分页。Job 列表例外：适配层只读取一页，Jobs 页每次请求 10 条，用 `next_page_token` 翻页，更换筛选条件后回到第一页。
 
 浏览器通过 `credentials: same-origin` 携带 P5B 的 Secure、HttpOnly、SameSite=Strict 会话 Cookie。前端不读取或存储 Cookie。每次写操作先读取 GetCurrentSession，再发送返回的 `X-CSRF-Token`。Origin 由浏览器在同源 POST 请求上设置；网关 identity.origin 配置必须与页面的 HTTPS origin 一致。公开的 OIDC/LDAP 登录接口不要求已有会话。OIDC 登录地址使用浏览器文档导航，继续执行网关的 `/auth/oidc/start` 和回调流程。
 

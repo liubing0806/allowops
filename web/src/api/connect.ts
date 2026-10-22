@@ -225,7 +225,7 @@ export const api: ConsoleApi = {
     'revokeServiceAccountToken',
     ServiceAccountService.method.revokeServiceAccountToken,
   ),
-  listJobs: bind('listJobs', JobService.method.listJobs, 'jobs'),
+  listJobs: bind('listJobs', JobService.method.listJobs),
   getJob: bind('getJob', JobService.method.getJob),
   listTasks: bind('listTasks', JobService.method.listTasks, 'tasks'),
   getJobOutput: bind('getJobOutput', JobService.method.getJobOutput),

@@ -35,6 +35,7 @@
   "common.previous": "Previous",
   "common.next": "Next",
   "common.pagination": "Page {{page}} of {{total}}, {{count}} entries",
+  "common.page": "Page {{page}}",
   "common.sort": "Sort by {{column}}",
   "common.back": "Back to list",
   "common.role": "Role",
