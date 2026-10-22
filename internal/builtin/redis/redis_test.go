@@ -1,14 +1,17 @@
 package redis
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -418,6 +421,74 @@ func TestMGETNullAndEmptyValues(t *testing.T) {
 	value, truncated, err := readResponse(context.Background(), s.client, []any{"MGET", "text", "missing", "hash", "empty", "list", "text", "exact"}, 18)
 	if err != nil || truncated || !reflect.DeepEqual(value, want) {
 		t.Fatalf("MGET: value=%#v want %#v truncated=%v error=%v", value, want, truncated, err)
+	}
+}
+
+// A fake server that passes the HSTRLEN precheck, then advertises a maximal
+// bulk string for HGET and never sends the body. The client must reject the
+// advertised length without allocating it.
+func TestHGetRejectsAdvertisedHugeBulkBeforeAllocation(t *testing.T) {
+	if !inRootNamespace(t) {
+		return
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		rd := bufio.NewReader(conn)
+		for {
+			// Commands from go-redis are arrays of bulk strings.
+			line, err := rd.ReadString('\n')
+			if err != nil || line[0] != '*' {
+				return
+			}
+			count, _ := strconv.Atoi(strings.TrimSpace(line[1:]))
+			var words []string
+			for range count {
+				header, err := rd.ReadString('\n')
+				if err != nil {
+					return
+				}
+				size, _ := strconv.Atoi(strings.TrimSpace(header[1:]))
+				word := make([]byte, size+2)
+				if _, err := io.ReadFull(rd, word); err != nil {
+					return
+				}
+				words = append(words, strings.ToUpper(string(word[:size])))
+			}
+			switch words[0] {
+			case "HELLO":
+				_, _ = conn.Write([]byte("*0\r\n"))
+			case "HSTRLEN":
+				_, _ = conn.Write([]byte(":5\r\n"))
+			case "HGET":
+				_, _ = conn.Write([]byte("$536870912\r\n"))
+				<-done
+				return
+			default:
+				_, _ = conn.Write([]byte("+OK\r\n"))
+			}
+		}
+	}()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	start := time.Now()
+	r, err := Run(context.Background(), Config{Address: ln.Addr().String(), Credential: credentials(t), MaxResponseBytes: 128, Timeout: 3 * time.Second}, Params{Command: "HGET", Args: []string{"hash", "field"}})
+	runtime.ReadMemStats(&after)
+	if !errors.Is(err, ErrResponseLimit) || !r.Truncated || r.Stdout != "" || r.ExitCode != 1 {
+		t.Fatalf("huge HGET: %+v error=%v after %v", r, err, time.Since(start))
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 64<<20 {
+		t.Fatalf("huge HGET allocated %d bytes", allocated)
 	}
 }
 
