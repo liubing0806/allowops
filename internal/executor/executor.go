@@ -96,6 +96,16 @@ func (w *limitedOutput) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// room reports how many more bytes the output accepts before truncating.
+func (w *limitedOutput) room() int64 {
+	if w.budget != nil {
+		w.budget.mu.Lock()
+		defer w.budget.mu.Unlock()
+		return w.budget.remaining
+	}
+	return w.limit - int64(w.buffer.Len())
+}
+
 type scanReader struct {
 	reader    io.Reader
 	remaining int64
