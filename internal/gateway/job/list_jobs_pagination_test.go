@@ -355,6 +355,7 @@ func TestListJobsPageCostIsBounded(t *testing.T) {
 	if len(ids) != 300 {
 		t.Fatalf("walk returned %d jobs; want 300", len(ids))
 	}
+	t.Logf("most statements on one page: %d (bound %d)", slices.Max(statements), bound)
 	for page, n := range statements {
 		if n > bound {
 			t.Fatalf("page %d of %d used %d SQL statements for page_size=%d over %d jobs; want at most %d (O(page_size)); statements by prefix: %s", page, len(statements), n, size, len(ids), bound, e.counter.summary())

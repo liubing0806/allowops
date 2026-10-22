@@ -21,55 +21,152 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func paginate[T proto.Message](scope string, r *v1.PageRequest, items []T) ([]T, *v1.PageResponse, error) {
-	n := 50
-	offset := 0
+func pageBinding(scope string) string {
 	sum := sha256.Sum256([]byte(scope))
-	binding := hex.EncodeToString(sum[:])
-	if r != nil {
-		if r.PageSize > 200 {
-			return nil, nil, failure(connect.CodeInvalidArgument, "PAGE_SIZE_EXCEEDED")
-		}
-		if r.PageSize > 0 {
-			n = int(r.PageSize)
-		}
-		if r.PageToken != "" {
-			raw, err := base64.RawURLEncoding.DecodeString(r.PageToken)
-			if err != nil {
-				return nil, nil, failure(connect.CodeInvalidArgument, "INVALID_PAGE_TOKEN")
-			}
-			parts := strings.Split(string(raw), ":")
-			if len(parts) != 2 || parts[0] != binding {
-				return nil, nil, failure(connect.CodeInvalidArgument, "INVALID_PAGE_TOKEN")
-			}
-			offset, err = strconv.Atoi(parts[1])
-			if err != nil || offset < 0 || offset > len(items) {
-				return nil, nil, failure(connect.CodeInvalidArgument, "INVALID_PAGE_TOKEN")
-			}
-		}
+	return hex.EncodeToString(sum[:])
+}
+
+func pageSize(r *v1.PageRequest) (int, error) {
+	if r == nil || r.PageSize == 0 {
+		return 50, nil
 	}
-	end := min(offset+n, len(items))
+	if r.PageSize > 200 {
+		return 0, failure(connect.CodeInvalidArgument, "PAGE_SIZE_EXCEEDED")
+	}
+	return int(r.PageSize), nil
+}
+
+// fitResponse returns how many leading items fit in ResponseBytes.
+func fitResponse[T proto.Message](items []T) (int, error) {
 	bytes := 512
-	for i := offset; i < end; i++ {
-		raw, err := protojson.Marshal(items[i])
+	for i, item := range items {
+		raw, err := protojson.Marshal(item)
 		if err != nil {
-			return nil, nil, err
+			return 0, err
 		}
-		size := max(len(raw), proto.Size(items[i])) + 2
+		size := max(len(raw), proto.Size(item)) + 2
 		if bytes+size > ResponseBytes {
-			if i == offset {
-				return nil, nil, failure(connect.CodeResourceExhausted, "JOB_RESPONSE_LIMIT")
+			if i == 0 {
+				return 0, failure(connect.CodeResourceExhausted, "JOB_RESPONSE_LIMIT")
 			}
-			end = i
-			break
+			return i, nil
 		}
 		bytes += size
 	}
+	return len(items), nil
+}
+
+func paginate[T proto.Message](scope string, r *v1.PageRequest, items []T) ([]T, *v1.PageResponse, error) {
+	offset := 0
+	binding := pageBinding(scope)
+	n, err := pageSize(r)
+	if err != nil {
+		return nil, nil, err
+	}
+	if r != nil && r.PageToken != "" {
+		raw, err := base64.RawURLEncoding.DecodeString(r.PageToken)
+		if err != nil {
+			return nil, nil, failure(connect.CodeInvalidArgument, "INVALID_PAGE_TOKEN")
+		}
+		parts := strings.Split(string(raw), ":")
+		if len(parts) != 2 || parts[0] != binding {
+			return nil, nil, failure(connect.CodeInvalidArgument, "INVALID_PAGE_TOKEN")
+		}
+		offset, err = strconv.Atoi(parts[1])
+		if err != nil || offset < 0 || offset > len(items) {
+			return nil, nil, failure(connect.CodeInvalidArgument, "INVALID_PAGE_TOKEN")
+		}
+	}
+	end := min(offset+n, len(items))
+	fit, err := fitResponse(items[offset:end])
+	if err != nil {
+		return nil, nil, err
+	}
+	end = offset + fit
 	page := &v1.PageResponse{}
 	if end < len(items) {
 		page.NextPageToken = base64.RawURLEncoding.EncodeToString([]byte(binding + ":" + strconv.Itoa(end)))
 	}
 	return items[offset:end], page, nil
+}
+
+// jobCursor is the position of a job in the ListJobs order (created_at DESC,
+// job_id DESC). The token of a page holds the cursor of its last job.
+type jobCursor struct {
+	created time.Time
+	id      string
+}
+
+func (c jobCursor) token(binding string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(binding + ":" + strconv.FormatInt(c.created.UnixMicro(), 10) + ":" + c.id))
+}
+
+func parseJobCursor(token, binding string) (*jobCursor, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return nil, failure(connect.CodeInvalidArgument, "INVALID_PAGE_TOKEN")
+	}
+	parts := strings.SplitN(string(raw), ":", 3)
+	if len(parts) != 3 || parts[0] != binding || parts[2] == "" {
+		return nil, failure(connect.CodeInvalidArgument, "INVALID_PAGE_TOKEN")
+	}
+	micros, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return nil, failure(connect.CodeInvalidArgument, "INVALID_PAGE_TOKEN")
+	}
+	return &jobCursor{created: time.UnixMicro(micros), id: parts[2]}, nil
+}
+
+type jobFilter struct {
+	subject, action string
+	from, to        *time.Time
+	statuses        []int16
+}
+
+// candidates returns up to limit job positions after the cursor. Only the
+// filters that are set appear in the statement, so that it can use
+// jobs_subject_created or jobs_created for ordering and the cursor.
+func (f jobFilter) candidates(ctx context.Context, db *store.Store, after *jobCursor, limit int) ([]jobCursor, error) {
+	where := []string{"TRUE"}
+	args := []any{}
+	add := func(condition string, value any) {
+		args = append(args, value)
+		where = append(where, fmt.Sprintf(condition, len(args)))
+	}
+	if f.subject != "" {
+		add("subject_id=$%d", f.subject)
+	}
+	if f.action != "" {
+		add("action=$%d", f.action)
+	}
+	if f.from != nil {
+		add("created_at>=$%d", *f.from)
+	}
+	if f.to != nil {
+		add("created_at<$%d", *f.to)
+	}
+	if len(f.statuses) > 0 {
+		add("status=ANY($%d)", f.statuses)
+	}
+	if after != nil {
+		args = append(args, after.created, after.id)
+		where = append(where, fmt.Sprintf("(created_at,job_id)<($%d,$%d)", len(args)-1, len(args)))
+	}
+	args = append(args, limit)
+	rows, err := db.Pool.Query(ctx, "SELECT job_id,created_at FROM jobs WHERE "+strings.Join(where, " AND ")+" ORDER BY created_at DESC,job_id DESC LIMIT $"+strconv.Itoa(len(args)), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []jobCursor{}
+	for rows.Next() {
+		var c jobCursor
+		if err := rows.Scan(&c.id, &c.created); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 func (s *Service) GetJob(ctx context.Context, r *v1.GetJobRequest) (*v1.GetJobResponse, error) {
@@ -149,41 +246,64 @@ func (s *Service) ListJobs(ctx context.Context, r *v1.ListJobsRequest) (*v1.List
 			}
 			statuses = append(statuses, int16(status))
 		}
-		rows, err := s.Store.Pool.Query(ctx, "SELECT job_id FROM jobs WHERE ($1='' OR subject_id=$1) AND ($2='' OR action=$2) AND ($3::timestamptz IS NULL OR created_at>=$3) AND ($4::timestamptz IS NULL OR created_at<$4) AND (cardinality($5::smallint[])=0 OR status=ANY($5)) ORDER BY created_at DESC,job_id DESC", subject, r.Action, from, to, statuses)
+		size, err := pageSize(r.Page)
 		if err != nil {
 			return nil, err
 		}
-		ids := []string{}
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				rows.Close()
+		scope := fmt.Sprintf("jobs:%s:%s:%s:%v:%v:%v", actor, subject, r.Action, from, to, statuses)
+		binding := pageBinding(scope)
+		var after *jobCursor
+		if r.Page != nil && r.Page.PageToken != "" {
+			if after, err = parseJobCursor(r.Page.PageToken, binding); err != nil {
 				return nil, err
 			}
-			ids = append(ids, id)
 		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
-			return nil, err
-		}
+		// Candidates are read in bounded batches after the cursor and
+		// authorized one by one. One job beyond the page tells whether another
+		// page exists, so hidden jobs never produce empty or dangling pages.
+		filter := jobFilter{subject: subject, action: r.Action, from: from, to: to, statuses: statuses}
+		batch := min(max(size+1, 50), 250)
 		items := []*v1.Job{}
-		for _, id := range ids {
-			j, err := s.get(ctx, id)
+		for len(items) <= size {
+			candidates, err := filter.candidates(ctx, s.Store, after, batch)
 			if err != nil {
 				return nil, err
 			}
-			if _, _, err := s.authorize(ctx, j, authz.ViewJobs, false, ""); err != nil {
-				if connect.CodeOf(err) == connect.CodePermissionDenied {
-					continue
+			for _, c := range candidates {
+				j, err := s.get(ctx, c.id)
+				if err != nil {
+					return nil, err
 				}
-				return nil, err
+				if _, _, err := s.authorize(ctx, j, authz.ViewJobs, false, ""); err != nil {
+					if connect.CodeOf(err) == connect.CodePermissionDenied {
+						continue
+					}
+					return nil, err
+				}
+				items = append(items, j)
+				if len(items) > size {
+					break
+				}
 			}
-			items = append(items, j)
+			if len(candidates) < batch {
+				break
+			}
+			after = &candidates[len(candidates)-1]
 		}
-		scope := fmt.Sprintf("jobs:%s:%s:%s:%v:%v:%v", actor, subject, r.Action, from, to, statuses)
-		items, page, err := paginate(scope, r.Page, items)
-		return &v1.ListJobsResponse{Jobs: items, Page: page}, err
+		more := len(items) > size
+		items = items[:min(len(items), size)]
+		fit, err := fitResponse(items)
+		if err != nil {
+			return nil, err
+		}
+		more = more || fit < len(items)
+		items = items[:fit]
+		page := &v1.PageResponse{}
+		if more {
+			last := items[len(items)-1]
+			page.NextPageToken = jobCursor{created: last.CreatedAt.AsTime(), id: last.JobId}.token(binding)
+		}
+		return &v1.ListJobsResponse{Jobs: items, Page: page}, nil
 	})
 	if err != nil {
 		return nil, err

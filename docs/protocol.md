@@ -76,7 +76,7 @@ P4 的 443 TLS ALPN（应用层协议协商）入口使用 TLS 1.3，L4 负载�
 - `OutputFilters` 用 optional 保留 presence。允许项来自签名 action 的 `filters`，`match`/`exclude` 为 RE2 且最长 200 字符；stdout 顺序为脱敏、过滤、截断。stderr 也先脱敏再截断。tail、head、count 按字段存在性互斥，同时传入返回 INVALID_ARGUMENT；match/exclude 可与其中之一组合（A17）。max_scan 按每个步骤 stdout 原始字节计；扫描超限使用 `scan_limit_reached`，不能混同 `truncated`。
 - 输出、摘要、CSR（证书签名请求）和证书均为 bytes；CSR/证书内容为 PEM。SHA-256 字段固定 32 字节，缺省表示尚不可用，不表示空内容的摘要。所有 duration 必须非负；有执行上限含义时必须大于 0。时间为 UTC `Timestamp`。
 - `HostTargets` 必须设置 oneof：非空主机名列表或 selector。selector 只支持逗号分隔的非空 `key=value` 条件，所有条件均须满足（A10），不支持 OR、正则或集合操作。HostTargets 的空 selector 不构成合法目标，返回 INVALID_ARGUMENT；查询列表未指定 selector 表示不加该筛选。`reported.` 前缀仅用于上报标签筛选，未加前缀仅指授权标签。策略永远只读取授权标签。
-- `PageRequest.page_token` 为不可解释的服务端游标，绑定身份、过滤器和稳定排序；后续请求不能改过滤条件。空 `next_page_token` 表示完成。排序：资源按不可变 ID，版本倒序，job 按创建时间及 ID 倒序，审计按 seq 升序。权限仍在每次读取时检查，不把游标作为授权凭据。
+- `PageRequest.page_token` 为不可解释的服务端游标，绑定身份、过滤器和稳定排序；后续请求不能改过滤条件。空 `next_page_token` 表示完成。排序：资源按不可变 ID，版本倒序，job 按创建时间及 ID 倒序，审计按 seq 升序。`ListJobs` 游标记录上一页最后一个 job 的创建时间和 ID，按该位置之后继续查询并逐个检查权限，直到填满页面；单次请求的数据库工作量随页大小和需跳过的不可见 job 数增长，不随游标之前的历史增长。权限仍在每次读取时检查，不把游标作为授权凭据。
 - ProtoJSON 中 uint64 按字符串编码，bytes 按 Base64 编码，enum 按符号名编码。消费者不得假定 enum 总是已知值。`UNSPECIFIED` 不是业务成功；需要业务枚举的请求必须显式指定。规范中的 required 是服务校验要求，proto3 不使用 `required` 关键字。
 
 ## 3. 主机身份、连接和目录同步
