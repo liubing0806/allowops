@@ -144,3 +144,22 @@ func TestGeneratedSchemaValidatesInputs(t *testing.T) {
 		}
 	}
 }
+
+// Anthropic API tool schemas reject root-level combinators; Claude Code 2.1.296
+// skips such MCP tools. Cross-field rules belong to argument validation.
+func TestToolSchemasHaveNoRootCombinators(t *testing.T) {
+	tool, err := actionTool(testAction())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range append(fixedTools(), *tool) {
+		for _, keyword := range []string{"allOf", "anyOf", "oneOf", "not", "if", "then", "else"} {
+			if _, present := tool.InputSchema[keyword]; present {
+				t.Errorf("%s inputSchema has root-level %s", tool.Name, keyword)
+			}
+		}
+	}
+	if err := validateHostSearchSelection("web-01", "env=test"); err == nil || !strings.Contains(err.Error(), "not both") {
+		t.Fatalf("hostname with selector error=%v", err)
+	}
+}
