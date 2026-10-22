@@ -3,10 +3,12 @@ package redis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -369,6 +371,53 @@ func TestGetAtExactLimitDetectsGrowth(t *testing.T) {
 				t.Fatalf("GET at limit: value=%q truncated=%v want %v error=%v", value, truncated, tc.wantTruncated, err)
 			}
 		})
+	}
+}
+
+// MGET prechecks sizes with STRLEN, but a key can grow before the values are
+// read. The read must stay bounded instead of fetching the grown value whole.
+func TestMGETGrowthIsReadWithBoundedRange(t *testing.T) {
+	s := startServer(t)
+	s.seed(t, "SET", "a", "small")
+	s.seed(t, "SET", "b", "small")
+	reader := redisclient.NewClient(s.client.Options())
+	defer reader.Close()
+	reader.AddHook(afterCommandHook{after: func(cmd redisclient.Cmder) {
+		if cmd.Name() == "strlen" && cmd.Args()[1] == "b" {
+			s.seed(t, "SET", "b", strings.Repeat("x", 1<<20))
+		}
+	}})
+	s.seed(t, "CONFIG", "RESETSTAT")
+	value, truncated, err := readResponse(context.Background(), reader, []any{"MGET", "a", "b"}, 128)
+	if !errors.Is(err, ErrResponseLimit) || !truncated || value != nil {
+		t.Fatalf("grown MGET: value=%v truncated=%v error=%v", value, truncated, err)
+	}
+	stats, err := s.client.Info(context.Background(), "commandstats").Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(stats, "cmdstat_mget:") || !strings.Contains(stats, "cmdstat_getrange:") {
+		t.Fatalf("MGET must read with GETRANGE only:\n%s", stats)
+	}
+}
+
+// MGET answers null for missing and non-string keys and keeps an empty string
+// distinct from them; the bounded per-key reads must preserve that.
+func TestMGETNullAndEmptyValues(t *testing.T) {
+	s := startServer(t)
+	s.seed(t, "SET", "text", "hello")
+	s.seed(t, "SET", "empty", "")
+	s.seed(t, "SET", "exact", strings.Repeat("y", 8))
+	s.seed(t, "HSET", "hash", "field", "value")
+	s.seed(t, "RPUSH", "list", "a")
+	want, err := s.client.MGet(context.Background(), "text", "missing", "hash", "empty", "list", "text", "exact").Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "exact" ends exactly at the limit: 5 + 5 + 8 = 18.
+	value, truncated, err := readResponse(context.Background(), s.client, []any{"MGET", "text", "missing", "hash", "empty", "list", "text", "exact"}, 18)
+	if err != nil || truncated || !reflect.DeepEqual(value, want) {
+		t.Fatalf("MGET: value=%#v want %#v truncated=%v error=%v", value, want, truncated, err)
 	}
 }
 
