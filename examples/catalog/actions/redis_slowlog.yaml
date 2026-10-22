@@ -1,6 +1,6 @@
 # SLOWLOG usage: command=SLOWLOG, args=["GET","20"] or args=["LEN"].
 name: redis_slowlog
-description: Read recent Redis slow log entries or the slow log length; the log cannot be reset.
+description: Read recent Redis slow log entry metadata (time, duration, command name, argument count, client address; no arguments) or the slow log length; the log cannot be reset.
 risk: read
 run_as: root
 params:

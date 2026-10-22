@@ -44,14 +44,16 @@ CONFIG 只支持 `CONFIG GET <参数名>...`，一次最多 16 个参数名。SE
 
 SLOWLOG 只支持 `SLOWLOG GET [count]` 和 `SLOWLOG LEN`。count 为 1..128 的整数，省略时使用服务端默认条数。
 RESET、HELP 和其他子命令拒绝，因此不会清空慢日志。
-SLOWLOG GET 返回的命令参数、客户端地址可能含业务数据和其他键，不受 `key_prefixes` 约束；
-因此配置 `key_prefixes` 后 SLOWLOG GET 拒绝，仅 SLOWLOG LEN 可用。使用 SLOWLOG GET 的 action 应启用 `redact.builtin: [secrets, pii]`。
-builtin 的 secrets 规则只识别 `password=`、`secret=`、`token=` 形式和常见令牌格式，
-慢日志中 `secret: value` 形式的值不会被脱敏。
-结果是 JSON 嵌套数组（条目编号、时间戳、耗时微秒、命令参数数组、客户端地址、客户端名称）。
+SLOWLOG GET 的每条记录只保留条目编号、时间戳、耗时（微秒）、命令名（命令的第一个参数）、参数个数和客户端地址。
+命令的其余参数（任意键和值）与客户端名称在返回前丢弃，不进入输出。
+服务端只保存每条命令的前 31 个参数，其余以 `... (N more arguments)` 代替；参数个数按该标记还原为实际个数。
+记录仍描述所有客户端执行过的命令，不受 `key_prefixes` 约束；
+因此配置 `key_prefixes` 后 SLOWLOG GET 拒绝，仅 SLOWLOG LEN 可用。使用 SLOWLOG GET 的 action 应启用 `redact.builtin: [secrets, pii]`，
+命令名和客户端地址在输出前仍经过脱敏。
+结果是 JSON 嵌套数组，每条为 `[条目编号, 时间戳, 耗时微秒, "命令名", 参数个数, "客户端地址"]`。
 
 CONFIG GET 和 SLOWLOG 的响应沿用 `max_response_bytes` 限制：返回文本超限时退出码 0、标记 `truncated`、不输出内容。
-慢日志条目由服务端限制参数数量和单个参数长度，SLOWLOG GET 最多 128 条。
+SLOWLOG GET 最多 128 条；每条只含上述 6 个字段，128 条在本机 Valkey 实测约 13KB（客户端地址为 Unix socket 路径时），低于 64KB 的 `max_response_bytes`。
 
 配置 `info_sections` 后，INFO 显式指定分区时只返回该允许分区。
 未传分区时，按配置顺序逐个执行 INFO 分区请求，并将原始文本拼接为一个 JSON 字符串结果。

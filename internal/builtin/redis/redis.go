@@ -34,10 +34,11 @@ import (
 // CONFIG GET and SLOWLOG are opt-in: they are accepted only when Commands lists
 // them. CONFIG GET additionally requires ConfigParams, an allowlist of literal
 // parameter names; sensitive parameters (passwords, users, ACL settings) can
-// never be listed or requested. SLOWLOG GET is refused when KeyPrefixes is set
-// because slow log entries carry the keys of arbitrary commands. SLOWLOG GET
-// returns only id, time, duration, command name, argument count and client
-// address of each entry; arguments and client names are dropped.
+// never be listed or requested. SLOWLOG GET returns only id, time, duration,
+// command name, argument count and client address of each entry; arguments and
+// client names are dropped. It is still refused when KeyPrefixes is set,
+// because the entries describe commands of all clients and cannot be limited
+// to the configured key prefixes.
 type Config struct {
 	Address          string        `yaml:"address"`
 	Credential       string        `yaml:"credential"`
