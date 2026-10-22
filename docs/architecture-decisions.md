@@ -295,11 +295,11 @@ result := {"decision": decision, "rules": [rule.name | some rule in matched]}
 - 版本兼容：网关支持当前和上一主版本的主机端；主机端版本比网关新时拒绝连接。升级顺序为先网关后主机端。
 - 网关新版本提醒（2026-10-22 决定）：网关定时读取发布清单，发现新版本后在控制台提醒。网关只提醒，不下载、不安装；网关升级仍由运维人员用包管理器执行。
   - 版本号显示：`GetCurrentSession` 响应增加 `gateway_version`，所有登录用户可见；控制台侧栏在产品名下方显示 `v<版本>`，开发构建显示 `dev`。不放在 `GetSystemStatus`，因为它需要 `view_system` 权限。
-  - 发布清单：发布流水线从 Git tag 生成静态 JSON（`version`、`published_at`、`url`），发布到 VitePress 文档站（GitHub Pages）。内网环境可把同一文件放到内部地址，用配置指向它。
+  - 发布清单：发布流水线从 Git tag 生成静态 JSON（只含 `version` 和 `published_at`，不含链接），发布到 VitePress 文档站（GitHub Pages）。内网环境可把同一文件放到内部地址，用配置指向它。发布说明链接由控制台按版本号拼成 `https://github.com/liubing0806/allowops/releases/tag/v<版本>`，不由清单提供。
   - 默认关闭：配置项 `update_check.enabled`（默认 `false`）和 `update_check.url`（默认文档站清单地址）。allowops 多部署在内网，默认不向外网发请求。
   - 检查方式：开启后每 24 小时检查一次，加随机延迟。请求只带 `User-Agent: allowops-gateway/<版本>`，不带实例 ID、主机数或其他部署信息。
-  - 多实例：用 PostgreSQL advisory lock（建议锁）保证同一时刻只有一个实例请求；结果写入单行表（最新版本、发布说明链接、检查时间、最近错误），所有实例读同一行，控制台显示一致。
-  - 校验：返回的版本号必须是 SemVer，否则丢弃；发布说明链接的主机名必须与 `update_check.url` 相同，否则不显示链接。清单只用于显示，不触发任何下载或执行。
+  - 多实例：用 PostgreSQL advisory lock（建议锁）保证同一时刻只有一个实例请求；结果写入单行表（最新版本、发布时间、检查时间、最近错误），所有实例读同一行，控制台显示一致。
+  - 校验：返回的版本号必须是严格 SemVer，否则丢弃并记录“invalid manifest”。清单不含链接，因此没有链接主机名校验。清单只用于显示，不触发任何下载或执行。
   - 提醒位置：侧栏版本号旁显示“有新版本”标记，点击打开发布说明；概览“需要处理”增加一项；系统页显示网关实例版本不一致，以及主机端版本低于网关的主机数，后者对应上面的主机端升级 action。
   - 被否决：默认开启。Gitea、Grafana 默认开启，但 allowops 是访问控制产品，默认外连需要在安全说明中解释，内网部署大多也无法访问外网。
   - 被否决：直接查询 GitHub Releases API。未认证请求有频率限制（每 IP 每小时 60 次），内网环境无法改指向内部地址。
