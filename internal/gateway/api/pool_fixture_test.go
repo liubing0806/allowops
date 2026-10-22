@@ -58,7 +58,7 @@ type poolOptions struct {
 }
 
 // poolFixture is newFixture with a bounded pool, an optional statement log and
-// an optional real audit store on the same pool.
+// an optional real audit store.
 func poolFixture(t *testing.T, o poolOptions) *fixture {
 	t.Helper()
 	ctx := context.Background()
@@ -87,7 +87,16 @@ func poolFixture(t *testing.T, o poolOptions) *fixture {
 	fx := &auditFixture{}
 	var auditor Auditor = fx
 	if o.realAudit {
-		auditor = NewAuditor(audit.New(pool, audit.Config{}))
+		// The audit store has its own small pool, as in the gateway: an audit
+		// append must never wait for a connection held by a business transaction.
+		auditConfig := cfg.Copy()
+		auditConfig.MaxConns = 2
+		auditPool, err := pgxpool.NewWithConfig(ctx, auditConfig)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(auditPool.Close)
+		auditor = NewAuditor(audit.New(auditPool, audit.Config{}))
 	}
 	s, err := New(ctx, database, Config{Origin: origin, RoleMappings: []RoleMappingConfig{{ProviderID: "test", Group: "ops", Roles: []string{"admin"}}, {ProviderID: "test", Group: "readers", Roles: []string{"viewer"}}}}, auditor)
 	if err != nil {
