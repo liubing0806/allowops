@@ -38,7 +38,7 @@ func TestProcessHelper(t *testing.T) {
 				}
 				fmt.Printf("%d\n", child.Process.Pid)
 				time.Sleep(time.Hour)
-			case "escape":
+			case "escape", "detach":
 				child := exec.Command(os.Args[0], "-test.run=TestProcessHelper", "--", "child")
 				child.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 				child.Stdout = os.Stdout
@@ -48,6 +48,11 @@ func TestProcessHelper(t *testing.T) {
 				}
 				if err := os.WriteFile(os.Args[i+2], []byte(strconv.Itoa(child.Process.Pid)), 0600); err != nil {
 					os.Exit(2)
+				}
+				if os.Args[i+1] == "detach" {
+					// Like a daemon started without closing inherited output.
+					fmt.Print("started\n")
+					os.Exit(0)
 				}
 				time.Sleep(time.Hour)
 			case "child":
@@ -128,6 +133,42 @@ func TestEscapedDescendantDoesNotHoldRunOpen(t *testing.T) {
 		}
 	case <-time.After(20 * time.Second):
 		t.Fatal("run still waits for output pipes held by an escaped descendant")
+	}
+}
+
+// A command that exits 0 after starting a descendant outside its process group
+// that keeps the output pipes open succeeded; only its output may be incomplete.
+func TestDetachedDescendantKeepsSuccessfulExit(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	t.Cleanup(func() {
+		if data, err := os.ReadFile(pidFile); err == nil {
+			if pid, err := strconv.Atoi(string(data)); err == nil {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	})
+	a := helperAction("detach")
+	a.Exec = append(a.Exec, pidFile)
+	a.Timeout = "60s"
+	type outcome struct {
+		r   Result
+		err error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		r, err := Run(context.Background(), a, nil, nil)
+		done <- outcome{r, err}
+	}()
+	select {
+	case o := <-done:
+		if o.err != nil || o.r.ExitCode != 0 {
+			t.Fatalf("exit_code=%d error=%v; want 0 and no error", o.r.ExitCode, o.err)
+		}
+		if o.r.Stdout != "started\n" || !o.r.Truncated {
+			t.Fatalf("stdout=%q truncated=%v; want the output written before exit, marked truncated", o.r.Stdout, o.r.Truncated)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("run still waits for output pipes held by a detached descendant")
 	}
 }
 
