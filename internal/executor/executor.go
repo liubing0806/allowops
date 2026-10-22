@@ -459,6 +459,14 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 	if parent.Err() != nil {
 		return result, parent.Err()
 	}
+	if errors.Is(waitErr, exec.ErrWaitDelay) {
+		// Wait returns ErrWaitDelay only after a successful exit: a descendant
+		// outside the process group, such as a started daemon, still held the
+		// output pipes. The command succeeded; output after pipeDrainDelay is lost.
+		result.ExitCode = 0
+		result.Truncated = true
+		return result, nil
+	}
 	if waitErr == nil {
 		result.ExitCode = 0
 		return result, nil
