@@ -3,7 +3,6 @@ package mcp
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/liubing0806/allowops/internal/catalog"
@@ -114,12 +113,9 @@ func actionTool(a catalog.Action) (*ToolDefinition, error) {
 			return nil, fmt.Errorf("unsupported filter; allowed: match, exclude, tail, head, count")
 		}
 	}
-	constraints := []any{map[string]any{"if": map[string]any{"properties": map[string]any{"targets": map[string]any{"required": []string{"selector"}}}}, "then": map[string]any{"required": []string{"expected_count"}}}}
-	for _, pair := range [][2]string{{"tail", "head"}, {"tail", "count"}, {"head", "count"}} {
-		if slices.Contains(a.Filters, pair[0]) && slices.Contains(a.Filters, pair[1]) {
-			constraints = append(constraints, map[string]any{"not": map[string]any{"required": []string{pair[0], pair[1]}}})
-		}
-	}
+	// The Anthropic API rejects root-level combinators, so the cross-field rules
+	// (expected_count with selector; tail/head/count exclusive) stay in the
+	// property descriptions and actionRequest enforces them.
 	annotations := ToolAnnotations{ReadOnlyHint: a.Risk == "read"}
 	switch a.Risk {
 	case "read":
@@ -137,7 +133,7 @@ func actionTool(a catalog.Action) (*ToolDefinition, error) {
 		required = append(required, "params")
 	}
 	return &ToolDefinition{Name: a.Name, Description: a.Description + toolInstructions, Annotations: annotations, InputSchema: map[string]any{
-		"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": props, "required": required, "additionalProperties": false, "allOf": constraints,
+		"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": props, "required": required, "additionalProperties": false,
 	}}, nil
 }
 
