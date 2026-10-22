@@ -80,6 +80,22 @@ String and path values beginning with `-` are rejected. Path resolution and
 symlink checks happen on the host. Gateway validation cannot establish that a
 path exists on a remote filesystem. Size suffixes KB and MB use powers of 1024.
 
+Immediately before a command starts, the process that runs it (the root helper
+when `run_as` is used, otherwise the agent itself) walks every component of each
+resolved path value from `/` to the final entry without following links. Each
+component must be owned by root or by the user the command runs as, must not be
+a symbolic link, and must not be writable by group or other. A directory with
+the sticky bit (such as `/tmp`) may be group or other writable, because other
+users cannot replace entries they do not own; its child entries are still
+checked. Otherwise the action is rejected with `PATH_NOT_TRUSTED`, without the
+path in the message. This keeps a user who can write inside an allowed root
+from swapping a component for a symbolic link after the check. Consequence: a
+path under a directory that applications write with a different owner or with
+group/other write permission, such as a log directory owned by a service user
+and group-writable, is rejected. Make the directory and files writable only by
+root or the run_as user, or choose a different `allowed_roots`. ACLs and mount
+options are not examined.
+
 ## Limits and redaction
 
 Set a timeout, `max_output` and, where scanning is involved, `max_scan`. Combined
