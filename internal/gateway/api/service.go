@@ -64,6 +64,9 @@ type Config struct {
 	MaxPageSize        int                 `yaml:"max_page_size"`
 	MessageBytes       int                 `yaml:"message_bytes"`
 	RoleMappings       []RoleMappingConfig `yaml:"role_mappings"`
+	// Version is the gateway build version shown in the console; set by the
+	// binary, not by YAML. Empty means a development build.
+	Version string `yaml:"-"`
 }
 type RoleMappingConfig struct {
 	ProviderID string   `yaml:"provider_id"`

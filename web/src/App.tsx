@@ -120,6 +120,11 @@ function Layout() {
               <span className="block truncate text-[11px] text-muted-foreground">
                 {t('app.subtitle')}
               </span>
+              <span className="block truncate text-[11px] text-muted-foreground">
+                {session.data.gatewayVersion === 'dev'
+                  ? 'dev'
+                  : `v${session.data.gatewayVersion}`}
+              </span>
             </span>
           </Link>
         </div>

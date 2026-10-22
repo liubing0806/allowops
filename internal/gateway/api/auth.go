@@ -359,7 +359,7 @@ func (s *Service) GetCurrentSession(ctx context.Context, _ *connect.Request[v1.G
 	if !ok || id.Session == nil {
 		return nil, failure(connect.CodeFailedPrecondition, "user session required")
 	}
-	return connect.NewResponse(&v1.GetCurrentSessionResponse{User: id.User, Client: id.Client, ExpiresAt: id.Session.ExpiresAt, CsrfToken: id.CSRF}), nil
+	return connect.NewResponse(&v1.GetCurrentSessionResponse{User: id.User, Client: id.Client, ExpiresAt: id.Session.ExpiresAt, CsrfToken: id.CSRF, GatewayVersion: s.buildVersion()}), nil
 }
 func (s *Service) Logout(ctx context.Context, _ *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error) {
 	id, ok := FromContext(ctx)
@@ -430,4 +430,11 @@ func (s *Service) RevokeCliSession(ctx context.Context, r *connect.Request[v1.Re
 		return nil, failure(connect.CodeNotFound, "session not found for user")
 	}
 	return connect.NewResponse(&v1.RevokeCliSessionResponse{}), dbError(err)
+}
+
+func (s *Service) buildVersion() string {
+	if s.Config.Version == "" {
+		return "dev"
+	}
+	return s.Config.Version
 }

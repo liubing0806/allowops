@@ -255,6 +255,8 @@ message GetCurrentSessionResponse {
   google.protobuf.Timestamp expires_at = 3;
   // Console only; session-bound token for mutation request headers.
   string csrf_token = 4;
+  // Build version of the serving gateway; "dev" for development builds.
+  string gateway_version = 5;
 }
 message LogoutRequest {}
 message LogoutResponse {}

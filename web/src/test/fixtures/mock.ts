@@ -640,6 +640,7 @@ export const mockApi: ConsoleApi = {
       client: 'LOGIN_CLIENT_CONSOLE',
       expiresAt: date(1),
       csrfToken: 'local-mock-only',
+      gatewayVersion: 'dev',
     }
   },
   async getLoginMethods() {

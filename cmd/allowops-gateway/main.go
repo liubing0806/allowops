@@ -133,6 +133,7 @@ func runWithAudit(args []string, auditor api.Auditor) error {
 		if auditor == nil {
 			auditor = api.NewAuditor(auditStore)
 		}
+		cfg.Identity.Version = version
 		identity, err := api.New(ctx, db, cfg.Identity, auditor)
 		if err != nil {
 			return err
