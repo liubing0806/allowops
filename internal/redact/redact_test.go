@@ -45,7 +45,7 @@ func TestSecretRuleExamples(t *testing.T) {
 		{"password=hello secret='two words' token=abc", "[REDACTED:credential] [REDACTED:credential] [REDACTED:credential]"},
 		{"mysql -psecret -h localhost", "mysql [REDACTED:mysql_password] -h localhost"},
 		{"MYSQL_PWD=secret REDISCLI_AUTH=secret", "[REDACTED:mysql_pwd] [REDACTED:rediscli_auth]"},
-		{"Authorization: Basic abc", "Authorization: Basic abc"},
+		{"Authorization: Basic abc", "[REDACTED:auth_header]"},
 		{"eyJheader.payload", "eyJheader.payload"},
 		{"https://alice@example.com/a", "https://alice@example.com/a"},
 		{"MYSQL_PWD", "MYSQL_PWD"}, {"REDISCLI_AUTH", "REDISCLI_AUTH"},
