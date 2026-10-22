@@ -95,4 +95,29 @@ describe('jobs list server pagination', () => {
     expect(last?.statuses).toEqual(['JOB_STATUS_RUNNING'])
     expect(last?.page?.pageToken || '').toBe('')
   })
+
+  it('stays on the first page when a filter is changed and restored', async () => {
+    const list = await serveJobs()
+    open()
+    await ids()
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }))
+    expect(await screen.findByText('第 2 页')).toBeInTheDocument()
+    const status = screen.getByLabelText('Job 状态')
+    fireEvent.change(status, { target: { value: 'JOB_STATUS_RUNNING' } })
+    expect(await screen.findByText('第 1 页')).toBeInTheDocument()
+    fireEvent.change(status, { target: { value: '' } })
+    expect(await screen.findByText('第 1 页')).toBeInTheDocument()
+    expect(await ids()).toEqual(Array.from({ length: 10 }, (_, i) => name(i)))
+    expect(list.mock.calls.at(-1)?.[0]?.page?.pageToken || '').toBe('')
+  })
+
+  // Sorting one server page would misorder the list across pages.
+  it('does not sort a server page in the browser', async () => {
+    await serveJobs()
+    open()
+    await ids()
+    expect(
+      screen.queryAllByRole('button', { name: /^按 .* 排序$/ }),
+    ).toHaveLength(0)
+  })
 })
