@@ -103,7 +103,7 @@ redact:
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential、xml_name_value_credential |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、quoted_key_credential、xml_name_value_credential、xml_text_value_credential、xml_element_credential、xml_attribute_credential、auth_header、api_key_header、htpasswd_hash、nginx_param_credential、nginx_secret_directive |
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | CentOS 7 的 GNU coreutils head 支持 -n 和 --。 |
@@ -117,7 +117,12 @@ redact:
 | json_credential | `"password":"v"`、`"secretKey": "v"`、`'token': 'v'`、非字符串值（数字、true、null） | 仅该键值对 |
 | xml_element_credential | `<password>v</password>`、`<secretKey><![CDATA[v]]></secretKey>` | 整个元素 |
 | xml_attribute_credential | `name="password" value="v"` 及 `value` 在前的写法，属性名 name、key、id、var | 从第一个属性到 `value` 属性 |
-| xml_name_value_credential | 同一行的 `<name>db.password</name><value>v</value>`（Hadoop、Hive 风格；`name` 与 `value` 之间可有同行的 description、final、source 元素，value 可为 CDATA） | 从 `<name>` 起到 `</value>` |
+| xml_name_value_credential | 同一行的 `<name>db.password</name><value>v</value>`（Hadoop、Hive 风格；元素名可带前缀，如 `<param-name>`/`<param-value>`、`<env-entry-name>`/`<env-entry-value>`，也可是 `<key>`/`<value>`；`name` 与 `value` 之间可有同行的 description、final、source 元素，value 可为 CDATA） | 从 `<name>` 起到 `</value>` |
+| xml_text_value_credential | 属性 name、key、id、var 含关键字、值在元素文本中的同行写法：`<property name="password">v</property>`、`<property name="password"><value>v</value></property>`、`<Property name="DB_PASSWORD">v</Property>`、Hibernate 的 `hibernate.connection.password` | 从开始标签到结束标签；自闭合标签和含子元素（`value` 除外）的元素不匹配 |
+| quoted_key_credential | 键名带引号并用 `=` 赋值（TOML）：`"secret-key" = "v"`、`'api-token' = 'v'`、内联表中的 `"access_key" = "v"` | 仅该键值对 |
+| auth_header、api_key_header、htpasswd_hash | `Authorization` 头、`X-*-Key/Token/Secret` 头及 nginx 的 `proxy_set_header`、`add_header`；htpasswd 哈希（apr1、bcrypt、SHA、crypt） | 头的值、哈希 |
+| nginx_param_credential | nginx 空白分隔的指令，名称含关键字：`fastcgi_param DB_PASSWORD v;`、`uwsgi_param API_TOKEN v;`、`*_set_header`、`set $token v;` | 从指令名到分号之前 |
+| nginx_secret_directive | 行首的指令名含 passwd、password、pwd、secret、credential、passphrase 或以 `_token` 结尾：`binddn_passwd "v";`、`ssl_password_file path;`（`proxy_pass`、`server_tokens` 不匹配） | 从指令名到分号之前 |
 
 参数：
 
@@ -308,7 +313,7 @@ exec: [/usr/bin/getent, hosts, '{name}']
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential、xml_name_value_credential（同 `app_config_view`） |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、quoted_key_credential、xml_name_value_credential、xml_text_value_credential、xml_element_credential、xml_attribute_credential、auth_header、api_key_header、htpasswd_hash、nginx_param_credential、nginx_secret_directive（同 `app_config_view`） |
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | CentOS 7 需另装 Docker CLI；容器内需有支持 -n 和 -- 的 head。docker exec 不分配 TTY。 |
@@ -570,7 +575,7 @@ exec: [/usr/bin/docker, exec, '{container}', jar, tf, '{jar}']
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii；自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential、xml_name_value_credential（同 `app_config_view`） |
+| redact | secrets, pii；自定义规则 sensitive_property、json_credential、quoted_key_credential、xml_name_value_credential、xml_text_value_credential、xml_element_credential、xml_attribute_credential、auth_header、api_key_header、htpasswd_hash、nginx_param_credential、nginx_secret_directive（同 `app_config_view`） |
 | 扩展能力 | D1、D4 |
 | 执行限制 | timeout=15s；max_output=64KB |
 | CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；/usr/bin/docker 缺失时标记 unsupported。容器内须有 unzip（JDK 镜像通常没有：eclipse-temurin 和 CentOS 7 JDK 镜像无 unzip，openjdk:8 的 Debian 镜像有，alpine 的 busybox unzip 支持 -p）（容器内命令按名称查找，无法在主机检查）。 |
@@ -1077,11 +1082,11 @@ exec: [/usr/bin/ls, -lah, --, '{path}']
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii |
+| redact | secrets, pii；自定义规则 sensitive_property、json_credential、auth_header、api_key_header、htpasswd_hash、nginx_param_credential、nginx_secret_directive（文件规则与 `docker_file_view` 相同，另加 nginx 空白分隔指令的规则） |
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | CentOS 7 的 GNU head 支持 -n 和 --。 |
-| 安全说明 | 最多读取 500 行，返回输出由 max_output 限制为 64KB；max_scan 和超时限制输出处理工作量。路径解析后检查日志和 nginx 配置目录。允许普通文件的约束如何表达见待确认。 |
+| 安全说明 | 最多读取 500 行，返回输出由 max_output 限制为 64KB；max_scan 和超时限制输出处理工作量。路径解析后检查日志和 nginx 配置目录。允许普通文件的约束如何表达见待确认。根目录含 /etc/nginx：`fastcgi_param DB_PASSWORD v;`、`proxy_set_header X-Api-Key v;`、`binddn_passwd "v";` 和 .htpasswd 哈希由上述规则替换；名称不含关键字的指令、跨行的值无法识别。 |
 
 参数：
 
@@ -1375,7 +1380,7 @@ exec_fallbacks: [/usr/local/bin/kubectl]
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential、xml_name_value_credential（同 `app_config_view`） |
+| redact | secrets, pii，另有自定义规则 sensitive_property、json_credential、quoted_key_credential、xml_name_value_credential、xml_text_value_credential、xml_element_credential、xml_attribute_credential、auth_header、api_key_header、htpasswd_hash、nginx_param_credential、nginx_secret_directive（同 `app_config_view`） |
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | 依赖目标节点的 kubectl 和只读 kubeconfig；go-template 输出须在目标版本验证。 |
@@ -1625,7 +1630,7 @@ exec_fallbacks: [/usr/local/bin/kubectl]
 | run_as | root |
 | 执行方式 | exec |
 | filters | match, exclude, tail, head, count |
-| redact | secrets, pii；自定义规则 sensitive_property、json_credential、xml_element_credential、xml_attribute_credential、xml_name_value_credential（同 `app_config_view`） |
+| redact | secrets, pii；自定义规则 sensitive_property、json_credential、quoted_key_credential、xml_name_value_credential、xml_text_value_credential、xml_element_credential、xml_attribute_credential、auth_header、api_key_header、htpasswd_hash、nginx_param_credential、nginx_secret_directive（同 `app_config_view`） |
 | 扩展能力 | D1、D4、D5 |
 | 执行限制 | timeout=15s；max_output=64KB |
 | CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。容器内须有 unzip（JDK 镜像通常没有，须在镜像中安装）。 |
