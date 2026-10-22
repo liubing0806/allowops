@@ -99,7 +99,9 @@ func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID
 	var hostID, hostname, connection, actor string
 	var dispatched bool
 	var version uint64
-	err = tx.QueryRow(ctx, "SELECT j.action_definition,t.status,t.created_at,t.host_id,t.hostname,COALESCE(t.connection_id,''),t.dispatched,j.subject_id,j.policy_version FROM tasks t JOIN jobs j ON j.job_id=t.job_id WHERE t.job_id=$1 AND t.task_id=$2 FOR UPDATE OF t", jobID, taskID).Scan(&definition, &state, &created, &hostID, &hostname, &connection, &dispatched, &actor, &version)
+	var stored []byte
+	var outputState string
+	err = tx.QueryRow(ctx, "SELECT j.action_definition,t.status,t.created_at,t.host_id,t.hostname,COALESCE(t.connection_id,''),t.dispatched,j.subject_id,j.policy_version,t.result,t.output_state FROM tasks t JOIN jobs j ON j.job_id=t.job_id WHERE t.job_id=$1 AND t.task_id=$2 FOR UPDATE OF t", jobID, taskID).Scan(&definition, &state, &created, &hostID, &hostname, &connection, &dispatched, &actor, &version, &stored, &outputState)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errors.New("UNKNOWN_TASK_EVENT")
 	}
@@ -111,6 +113,37 @@ func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID
 	}
 	if state > 2 {
 		tx.Rollback(ctx)
+		if completed := e.Message.GetTaskCompleted(); replay && completed != nil && completed.Result != nil && outputState == "pending" {
+			// An earlier attempt of this event may have committed this result
+			// while both its COMMIT reply and the terminalCommitted check were
+			// lost. That attempt did not start persistence; start it now, or the
+			// output stays pending while this instance is alive.
+			raw, err := proto.Marshal(completed.Result)
+			if err == nil && state == int16(completed.Result.Status) && bytes.Equal(raw, stored) {
+				var a catalog.Action
+				if err := json.Unmarshal(definition, &a); err != nil {
+					return err
+				}
+				s.mu.Lock()
+				if err := s.ctx.Err(); err != nil {
+					s.mu.Unlock()
+					return err
+				}
+				out := s.outputs[outputID(jobID, taskID)]
+				if out == nil {
+					out = &taskOutput{Streams: map[streamKey]*streamOutput{}}
+				}
+				s.activePersists.Add(1)
+				s.wg.Add(1)
+				s.mu.Unlock()
+				go func() {
+					defer s.wg.Done()
+					defer s.activePersists.Add(-1)
+					s.persist(jobID, taskID, hostID, hostname, actor, a.Name, created, version, out)
+				}()
+				return nil
+			}
+		}
 		s.clearTasks(jobID, taskID)
 		if e.Message.GetTaskStarted() != nil && s.Router != nil {
 			reason := "CANCELLED"
