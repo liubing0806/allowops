@@ -257,6 +257,9 @@ export function DataTable<T>({
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     manualPagination: !!pager,
+    // A server page is one slice of the server order; sorting it alone would
+    // misorder the list across pages.
+    enableSorting: !pager,
     initialState: { pagination: { pageSize: 10 } },
   })
   return (
@@ -298,10 +301,12 @@ export function DataTable<T>({
                       </span>
                     </button>
                   ) : (
-                    flexRender(
-                      header.column.columnDef.header,
-                      header.getContext(),
-                    )
+                    <span className="font-medium text-muted-foreground">
+                      {flexRender(
+                        header.column.columnDef.header,
+                        header.getContext(),
+                      )}
+                    </span>
                   )}
                 </TableHead>
               ))}

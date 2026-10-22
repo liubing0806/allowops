@@ -59,6 +59,7 @@ export default function Jobs() {
   // starts again from the first page, because a token is bound to its filters.
   const filterKey = JSON.stringify(values)
   const [paging, setPaging] = useState({ filterKey, tokens: [''] })
+  if (paging.filterKey !== filterKey) setPaging({ filterKey, tokens: [''] })
   const tokens = paging.filterKey === filterKey ? paging.tokens : ['']
   const pageToken = tokens[tokens.length - 1]
   const query = useQuery({
