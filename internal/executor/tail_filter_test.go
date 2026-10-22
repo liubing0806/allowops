@@ -72,6 +72,21 @@ func TestTailWithinLimitIsNotTruncated(t *testing.T) {
 	}
 }
 
+func TestTailLinesEvictedByCountDoNotMarkTruncation(t *testing.T) {
+	// The two long lines are dropped for bytes while they are still in the
+	// window, but the two lines tail finally asks for fit the limit.
+	out := &limitedOutput{limit: 10}
+	if err := streamStdout(strings.NewReader("aaaaaaa\nbbbbbbb\ncc\ndd\n"), out, &redact.Redactor{}, FilterOptions{Tail: 2}, DefaultMaxScan); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := out.buffer.String(), "cc\ndd\n"; got != want {
+		t.Errorf("tail output = %q, want %q", got, want)
+	}
+	if out.truncated {
+		t.Error("every line tail asked for was returned; truncated must stay false")
+	}
+}
+
 func TestTailMemoryIsBoundedByOutputLimit(t *testing.T) {
 	const lines = 3 << 20
 	var before, during runtime.MemStats
