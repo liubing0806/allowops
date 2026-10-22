@@ -63,6 +63,11 @@ type configuration struct {
 	Output     output.Config        `yaml:"output"`
 }
 
+// auditPoolConns bounds the audit store's own pool: three connections for the
+// export leader, its batch and the batch's page read, and three for appends and
+// audit queries.
+const auditPoolConns = 6
+
 func run(args []string) error {
 	return runWithAudit(args, nil)
 }
@@ -129,7 +134,16 @@ func runWithAudit(args []string, auditor api.Auditor) error {
 		if err != nil {
 			return err
 		}
-		auditStore := audit.New(db.Pool, auditCfg)
+		// Host write handlers append audit events while holding a business
+		// transaction connection, so the audit store never shares db's pool. The
+		// pool stays small: appends serialize on one advisory lock, so extra
+		// connections only queue (see auditPoolConns).
+		auditPool, err := store.OpenPool(ctx, dsn, auditPoolConns)
+		if err != nil {
+			return err
+		}
+		defer auditPool.Close()
+		auditStore := audit.New(auditPool, auditCfg)
 		if auditor == nil {
 			auditor = api.NewAuditor(auditStore)
 		}

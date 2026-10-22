@@ -55,6 +55,10 @@ func (s *Service) PreviewHostImport(ctx context.Context, req *connect.Request[v1
 		}
 		keys[key] = true
 	}
+	ctx, err = s.pinPolicy(ctx)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 	if err != nil {
 		return nil, dbError(err)
@@ -234,6 +238,10 @@ func (s *Service) GetHostImportPreview(ctx context.Context, req *connect.Request
 	return connect.NewResponse(&v1.GetHostImportPreviewResponse{Preview: p.meta, Rows: rows, Page: cursor}), nil
 }
 func (s *Service) ExecuteHostImport(ctx context.Context, req *connect.Request[v1.ExecuteHostImportRequest]) (*connect.Response[v1.ExecuteHostImportResponse], error) {
+	ctx, err := s.pinPolicy(ctx)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return nil, dbError(err)
