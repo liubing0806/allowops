@@ -16,10 +16,11 @@ import (
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/executor"
+	"github.com/liubing0806/allowops/internal/gateway/job"
 	"github.com/liubing0806/allowops/internal/params"
 )
 
-func actionRequest(a catalog.Action, raw json.RawMessage) (*v1.RunJobRequest, string, error) {
+func actionRequest(a catalog.Action, raw json.RawMessage, cfg job.Config) (*v1.RunJobRequest, string, error) {
 	args, err := argumentObject(raw)
 	if err != nil {
 		return nil, "", err
@@ -84,24 +85,29 @@ func actionRequest(a catalog.Action, raw json.RawMessage) (*v1.RunJobRequest, st
 		}
 		req.ExpectedCount = &n
 	}
-	batch, failures, err := batchLimits(a)
+	batch, failures, err := batchLimits(a, cfg)
 	if err != nil {
 		return nil, "", err
 	}
-	wait := uint32(defaultWaitSeconds)
+	// Absent options stay nil so the job layer applies its own defaults; only
+	// explicit values are checked here, against the same effective limits.
+	wait, size, stops := cfg.WaitSeconds, batch, failures
 	for _, field := range []struct {
 		name     string
 		value    *uint32
 		min, max uint32
-	}{{"wait_seconds", &wait, 0, maxWaitSeconds}, {"batch_size", &batch, 1, batch}, {"max_failures", &failures, 0, failures}} {
+		target   **uint32
+	}{{"wait_seconds", &wait, 0, cfg.MaxWaitSeconds, &req.WaitSeconds}, {"batch_size", &size, 1, batch, &req.BatchSize}, {"max_failures", &stops, 0, failures, &req.MaxFailures}} {
 		if err := decodeField(args, field.name, field.value, false); err != nil {
 			return nil, "", err
 		}
 		if *field.value < field.min || *field.value > field.max {
 			return nil, "", fmt.Errorf("%s allowed: integer in [%d,%d]", field.name, field.min, field.max)
 		}
+		if _, present := args[field.name]; present {
+			*field.target = field.value
+		}
 	}
-	req.WaitSeconds, req.BatchSize, req.MaxFailures = &wait, &batch, &failures
 	format := "concise"
 	if err := decodeField(args, "response_format", &format, false); err != nil {
 		return nil, "", err

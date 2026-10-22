@@ -212,7 +212,7 @@ func runWithAudit(args []string, auditor api.Auditor) error {
 			return err
 		}
 		srv.UseIdentity(identity)
-		mcpService, err := mcp.New(identity, srv.Catalogs, job.Client(jobs), mcp.Config{})
+		mcpService, err := mcp.New(identity, srv.Catalogs, job.Client(jobs), mcp.Config{Jobs: cfg.Jobs})
 		if err != nil {
 			agent.Close()
 			listener.Close()

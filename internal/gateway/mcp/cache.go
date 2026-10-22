@@ -116,7 +116,7 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	definitions := fixedTools()
+	definitions := fixedTools(s.config.Jobs)
 	names := slices.Collect(maps.Keys(actions))
 	slices.Sort(names)
 	available := map[string]bool{}
@@ -133,7 +133,7 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 		if result.Decision != "allow" {
 			continue
 		}
-		tool, err := actionTool(a)
+		tool, err := actionTool(a, s.config.Jobs)
 		if errors.Is(err, errUnsupportedActionSchema) {
 			// Preserve projected visibility for a stable direct-call error without
 			// registering an invalid SDK schema or dispatching the action.
