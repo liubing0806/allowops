@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/audit"
@@ -69,6 +70,13 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 	default:
 		return nil
 	}
+	// A database failure is not a protocol violation. Closing the stream would
+	// end every running task on the host, so retry the whole transaction while
+	// the connection lives. In-memory task state changes only after COMMIT.
+	return retrySQL(ctx, jobID, func(ctx context.Context) error { return s.taskEvent(ctx, e, jobID, taskID) })
+}
+
+func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID string) error {
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -81,8 +89,11 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 	var dispatched bool
 	var version uint64
 	err = tx.QueryRow(ctx, "SELECT j.action_definition,t.status,t.created_at,t.host_id,t.hostname,COALESCE(t.connection_id,''),t.dispatched,j.subject_id,j.policy_version FROM tasks t JOIN jobs j ON j.job_id=t.job_id WHERE t.job_id=$1 AND t.task_id=$2 FOR UPDATE OF t", jobID, taskID).Scan(&definition, &state, &created, &hostID, &hostname, &connection, &dispatched, &actor, &version)
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return errors.New("UNKNOWN_TASK_EVENT")
+	}
+	if err != nil {
+		return err
 	}
 	if hostID != e.HostID || connection != e.ConnectionID || !dispatched {
 		return errors.New("TASK_CONNECTION_MISMATCH")

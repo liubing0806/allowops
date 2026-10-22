@@ -192,8 +192,9 @@ func TestRRA04CommitErrorAfterServerCommit(t *testing.T) {
 
 // RR-a-04 reverse case: when the COMMIT never reaches the server, the transaction
 // is rolled back. The COMMIT error must then stay an error: terminal handling must
-// not start output persistence, and job creation must return the error with no
-// job row. A check that always reports "committed" fails this test.
+// not start output persistence for the rolled-back attempt, and job creation must
+// return the error with no job row. A check that always reports "committed" fails
+// this test.
 func TestRRA04CommitNeverReachesServer(t *testing.T) {
 	for _, mode := range []string{"terminal_result_commit", "job_create_commit"} {
 		t.Run(mode, func(t *testing.T) {
@@ -254,30 +255,35 @@ func TestRRA04CommitNeverReachesServer(t *testing.T) {
 			if !proxy.fired.Load() {
 				t.Fatal("fixture did not withhold the terminal COMMIT")
 			}
-			// The rolled-back terminal write leaves no agent result. The host
-			// connection closes on the rejected event and the task becomes OFFLINE
-			// with output_state unavailable. Persistence, when wrongly started,
-			// writes output_state and a store_output audit event within moments of
-			// the terminal result, so observe the row for a window after the drop.
-			until := time.Now().Add(3 * time.Second)
-			for time.Now().Before(until) {
-				var taskStatus int16
-				var state string
-				var preview []byte
-				if err := f.DB.Pool.QueryRow(ctx, "SELECT status,output_state,stdout_preview FROM tasks WHERE job_id=$1", id).Scan(&taskStatus, &state, &preview); err != nil {
+			// The withheld COMMIT rolled the first attempt back, and the gateway
+			// must not treat it as committed: output is never stored while the
+			// task row is still running. The event transaction is then retried on
+			// a new connection, which commits the agent result and persists the
+			// output exactly once. The host connection stays open.
+			var taskStatus int16
+			var state string
+			until := time.Now().Add(10 * time.Second)
+			for {
+				if err := f.DB.Pool.QueryRow(context.Background(), "SELECT status,output_state FROM tasks WHERE job_id=$1", id).Scan(&taskStatus, &state); err != nil {
 					t.Fatal(err)
 				}
-				if state == "stored" || taskStatus == int16(v1.TaskStatus_TASK_STATUS_SUCCEEDED) || len(preview) > 0 {
-					t.Fatalf("task=%d output_state=%s stdout_preview=%q after the terminal COMMIT never reached the server; want the agent result discarded and output_state not stored", taskStatus, state, preview)
+				if state == "stored" && taskStatus <= 2 {
+					t.Fatalf("output_state=stored while task status=%d; the rolled-back terminal write was treated as committed", taskStatus)
 				}
-				var stored int
-				if err := f.DB.Pool.QueryRow(ctx, "SELECT count(*) FROM audit_events WHERE operation='store_output'").Scan(&stored); err != nil {
-					t.Fatal(err)
+				if (taskStatus > 2 && state != "pending") || time.Now().After(until) {
+					break
 				}
-				if stored != 0 {
-					t.Fatalf("store_output audit events=%d; want 0 because persistence must not start", stored)
-				}
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
+			}
+			if taskStatus != int16(v1.TaskStatus_TASK_STATUS_SUCCEEDED) || state != "stored" {
+				t.Fatalf("task=%d output_state=%s after the retried terminal write; want SUCCEEDED(3), stored", taskStatus, state)
+			}
+			var stored int
+			if err := f.DB.Pool.QueryRow(ctx, "SELECT count(*) FROM audit_events WHERE operation='store_output'").Scan(&stored); err != nil {
+				t.Fatal(err)
+			}
+			if stored != 1 {
+				t.Fatalf("store_output audit events=%d; want 1 from the retried terminal write", stored)
 			}
 		})
 	}
