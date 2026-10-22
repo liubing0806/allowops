@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net/url"
 	"os"
+	"path/filepath"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -33,40 +34,29 @@ type IssuedCertificate struct {
 var openCAStep = func(int) {}
 
 // OpenCA creates a CA only when both files are absent. Existing keys must be
-// regular files with exactly 0600 permissions. A partially provisioned CA fails.
+// regular files with exactly 0600 permissions. Creation stages both files as
+// <path>.new and then links the key and the certificate into place. A start
+// after an interruption between the two links completes the CA from the staged
+// certificate; any other partially provisioned CA fails.
 func OpenCA(certPath, keyPath string) (*CA, error) {
+	certStaged, keyStaged := certPath+".new", keyPath+".new"
 	_, certErr := os.Lstat(certPath)
 	_, keyErr := os.Lstat(keyPath)
-	if errors.Is(certErr, os.ErrNotExist) && errors.Is(keyErr, os.ErrNotExist) {
-		pub, key, err := ed25519.GenerateKey(rand.Reader)
-		if err != nil {
+	switch {
+	case errors.Is(certErr, os.ErrNotExist) && errors.Is(keyErr, os.ErrNotExist):
+		if err := createCA(certPath, keyPath); err != nil {
 			return nil, err
 		}
-		serial, err := randomSerial()
-		if err != nil {
-			return nil, err
+	case errors.Is(certErr, os.ErrNotExist) && keyErr == nil:
+		if err := publish(certStaged, certPath); err != nil {
+			return nil, fmt.Errorf("CA files must both exist or both be absent")
 		}
-		now := time.Now()
-		template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "allowops host CA"}, NotBefore: now.Add(-5 * time.Minute), NotAfter: now.AddDate(10, 0, 0), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign}
-		der, err := x509.CreateCertificate(rand.Reader, template, template, pub, key)
-		if err != nil {
-			return nil, err
-		}
-		keyDER, err := x509.MarshalPKCS8PrivateKey(key)
-		if err != nil {
-			return nil, err
-		}
-		if err := exclusiveFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0600); err != nil {
-			return nil, err
-		}
-		openCAStep(1)
-		if err := exclusiveFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0644); err != nil {
-			os.Remove(keyPath)
-			return nil, err
-		}
-	} else if certErr != nil || keyErr != nil {
+	case certErr != nil || keyErr != nil:
 		return nil, fmt.Errorf("CA files must both exist or both be absent")
 	}
+	// An interrupted creation can leave a second link to the key or certificate.
+	os.Remove(keyStaged)
+	os.Remove(certStaged)
 	// O_NOFOLLOW and fstat keep symlinks and replacement files out of key loading.
 	f, err := os.OpenFile(keyPath, os.O_RDONLY|unix.O_NOFOLLOW, 0)
 	if err != nil {
@@ -119,6 +109,71 @@ func OpenCA(certPath, keyPath string) (*CA, error) {
 		return nil, fmt.Errorf("CA certificate and private key mismatch")
 	}
 	return &CA{certificate: cert, key: key, PEM: certData}, nil
+}
+
+func createCA(certPath, keyPath string) error {
+	pub, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return err
+	}
+	serial, err := randomSerial()
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	template := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "allowops host CA"}, NotBefore: now.Add(-5 * time.Minute), NotAfter: now.AddDate(10, 0, 0), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, pub, key)
+	if err != nil {
+		return err
+	}
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return err
+	}
+	certStaged, keyStaged := certPath+".new", keyPath+".new"
+	for _, path := range []string{keyStaged, certStaged} {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	if err := exclusiveFile(keyStaged, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0600); err != nil {
+		return err
+	}
+	openCAStep(1)
+	if err := exclusiveFile(certStaged, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0644); err != nil {
+		os.Remove(keyStaged)
+		return err
+	}
+	openCAStep(2)
+	// Both staged files are durable before the key appears at its final path.
+	if err := publish(keyStaged, keyPath); err != nil {
+		return err
+	}
+	openCAStep(3)
+	if err := publish(certStaged, certPath); err != nil {
+		return err
+	}
+	openCAStep(4)
+	return nil
+}
+
+// publish links a staged file into place without replacing an existing file.
+func publish(staged, path string) error {
+	if err := os.Link(staged, path); err != nil {
+		return err
+	}
+	if err := os.Remove(staged); err != nil {
+		return err
+	}
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	err = dir.Sync()
+	if closeErr := dir.Close(); err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 func exclusiveFile(path string, data []byte, mode os.FileMode) error {
