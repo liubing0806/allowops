@@ -8,7 +8,7 @@
     "docs:dev": "vitepress dev .",
     "docs:build": "vitepress build .",
     "docs:preview": "vitepress preview .",
-    "docs:check": "node --test scripts/check-docs.test.mjs && node scripts/check-docs.mjs"
+    "docs:check": "node --test scripts/check-docs.test.mjs scripts/release-manifest.test.mjs && node scripts/check-docs.mjs"
   },
   "devDependencies": {
     "github-slugger": "2.0.0",
