@@ -9,11 +9,13 @@
 
 | 字段 | 合法配置与省略时的行为 |
 | --- | --- |
-| `commands` | GET、MGET、HGET、HLEN、TTL、TYPE、EXISTS、STRLEN、LLEN、SCARD、ZCARD、SCAN、INFO 的非空子集；省略时允许全部 13 个命令 |
+| `commands` | GET、MGET、HGET、HLEN、TTL、TYPE、EXISTS、STRLEN、LLEN、SCARD、ZCARD、SCAN、INFO、CONFIG、SLOWLOG 的非空子集；省略时允许前 13 个命令，不包含 CONFIG 和 SLOWLOG（二者必须显式列出） |
 | `key_prefixes` | 非空字面前缀列表，每项 1..4096 字节，不含 NUL、CR、LF；省略时不增加键范围限制 |
 | `info_sections` | server、clients、memory、persistence、stats、replication、cpu、commandstats、errorstats、latencystats、cluster、keyspace、modules、sentinel 的非空子集；省略时保留原生 INFO 分区选择行为 |
+| `config_params` | CONFIG GET 允许读取的参数名列表。非空，每项为 1..64 字节的字母、数字和 `-`，不含通配符，不属于敏感参数；省略时 CONFIG GET 一律拒绝 |
 
 `commands` 同时收紧目录对外参数 schema 中的 command 枚举，枚举值统一为大写。
+省略 `commands` 时枚举保持原有 13 个值，不含 CONFIG 和 SLOWLOG。
 处理器直接调用仍接受大小写不同的命令名。内部为响应大小检查而使用的 STRLEN、HSTRLEN、
 EXISTS、GETRANGE 不属于调用方命令子集；这些读操作只使用已经通过前缀校验的键。
 
@@ -29,6 +31,27 @@ GET、MGET、HGET、HLEN、TTL、TYPE、EXISTS、STRLEN、LLEN、SCARD、ZCARD �
 `*tenant:*`、`[t]enant:*`、`ten*ant:*`、`Tenant:*` 拒绝。
 前缀 `literal[*?:` 可用 `literal\[\*\?:*` 匹配。
 COUNT 上限和游标校验沿用原有规则。
+
+CONFIG 只支持 `CONFIG GET <参数名>...`，一次最多 16 个参数名。SET、RESETSTAT、REWRITE、HELP 等子命令拒绝。
+参数名必须是字面名称：含 `*`、`?`、`[` 等字符的名称拒绝，因此无法用通配符枚举全部配置。
+每个参数名必须出现在 `config_params` 中（不区分大小写），未配置 `config_params` 时 CONFIG GET 拒绝。
+敏感参数不能出现在 `config_params` 中，也不能被请求，即使目录配置了也拒绝（校验和执行都检查）。
+判定规则：名称（不区分大小写）以 `acl` 开头，或包含 `pass`、`auth`、`user`。
+该规则覆盖 requirepass、masterauth、masteruser、primaryauth、primaryuser、aclfile、tls-key-file-pass 等。
+规则偏宽，被误判的普通参数改用 INFO 读取。输出内容不按参数名二次过滤，
+能否读取某个值只由 `config_params` 和上述规则决定；action 仍应保留 `redact.builtin: [secrets]`。
+结果是 JSON 字符串数组，按服务端返回的顺序交替排列参数名和值。
+
+SLOWLOG 只支持 `SLOWLOG GET [count]` 和 `SLOWLOG LEN`。count 为 1..128 的整数，省略时使用服务端默认条数。
+RESET、HELP 和其他子命令拒绝，因此不会清空慢日志。
+SLOWLOG GET 返回的命令参数、客户端地址可能含业务数据和其他键，不受 `key_prefixes` 约束；
+因此配置 `key_prefixes` 后 SLOWLOG GET 拒绝，仅 SLOWLOG LEN 可用。使用 SLOWLOG GET 的 action 应启用 `redact.builtin: [secrets, pii]`。
+builtin 的 secrets 规则只识别 `password=`、`secret=`、`token=` 形式和常见令牌格式，
+慢日志中 `secret: value` 形式的值不会被脱敏。
+结果是 JSON 嵌套数组（条目编号、时间戳、耗时微秒、命令参数数组、客户端地址、客户端名称）。
+
+CONFIG GET 和 SLOWLOG 的响应沿用 `max_response_bytes` 限制：返回文本超限时退出码 0、标记 `truncated`、不输出内容。
+慢日志条目由服务端限制参数数量和单个参数长度，SLOWLOG GET 最多 128 条。
 
 配置 `info_sections` 后，INFO 显式指定分区时只返回该允许分区。
 未传分区时，按配置顺序逐个执行 INFO 分区请求，并将原始文本拼接为一个 JSON 字符串结果。
@@ -91,6 +114,15 @@ builtin_config:
   commands: [GET, MGET, HGET, HLEN, TTL, TYPE, EXISTS, STRLEN, LLEN, SCARD, ZCARD, SCAN, INFO]
   key_prefixes: ['tenant:']
   info_sections: [memory, server]
+```
+
+```yaml
+# builtin: redis_command（CONFIG GET 和 SLOWLOG 需要显式启用）
+builtin_config:
+  address: 127.0.0.1:6379
+  credential: /etc/allowops/credentials/redis.json
+  commands: [CONFIG, SLOWLOG]
+  config_params: [maxmemory, maxmemory-policy, slowlog-max-len]
 ```
 
 ```yaml
