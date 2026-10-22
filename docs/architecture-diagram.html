@@ -301,14 +301,14 @@ label('action 执行在下发前写审计；写审计失败时调用返回错误
 
 // ═════════ 5. 首批支持的命令 ═════════
 canvas('actions', 900);
-heading('5', '首批支持的命令（examples/catalog，51 个 action：49 个只读，2 个变更）', '依据 examples/catalog/actions/ 与 docs/action-catalog-requirements.md。右侧标签为执行身份：“直接”= agent 以 allowops 用户执行；root、app = 经 allowops-exec 以该用户执行。');
+heading('5', '首批支持的命令（examples/catalog，首批 49 个只读 action）', '依据 examples/catalog/actions/ 与 docs/action-catalog-requirements.md。右侧标签为执行身份：“直接”= agent 以 allowops 用户执行；root、app = 经 allowops-exec 以该用户执行。');
 const groups = [
   ['主机与资源', [
     ['system_load', '运行时间与负载（uptime）', '直接'], ['memory_usage', '内存与 swap（free）', '直接'], ['disk_usage', '文件系统容量（df）', '直接'],
     ['disk_usage_paths', '指定路径所在文件系统容量', '直接'], ['disk_dir_size', '允许目录的总大小（du）', 'root'], ['sar_cpu', '历史 CPU 采样（sar）', 'root'],
     ['sar_memory', '历史内存采样（sar）', 'root'], ['kernel_errors', '内核告警与错误（dmesg）', 'root'], ['host_snapshot', '主机与容器健康快照（steps）', 'root']]],
   ['进程与网络', [
-    ['process_top', '按 CPU 排序的进程（ps）', '直接'], ['process_find', '按进程名查 PID（pgrep）', '直接'], ['process_signal', '向 app 用户的进程发 TERM/HUP', 'app', 1],
+    ['process_top', '按 CPU 排序的进程（ps）', '直接'], ['process_find', '按进程名查 PID（pgrep）', '直接'],
     ['ports_listening', '监听端口与进程（ss）', 'root'], ['connections_by_port', '指定端口的 TCP 连接（ss）', 'root'], ['dns_lookup', '解析允许的名称（getent）', '直接'],
     ['http_get_local', '探测本机健康检查地址（builtin）', '直接']]],
   ['服务与配置', [
@@ -320,8 +320,7 @@ const groups = [
     ['log_search', '日志检索，支持 .gz 与通配（builtin）', 'root']]],
   ['Docker', [
     ['docker_ps', '容器列表', 'root'], ['docker_stats', '资源占用，单次采样', 'root'], ['docker_logs', '容器日志，限时间范围', 'root'],
-    ['docker_container_state', '容器状态', 'root'], ['docker_container_ls_dir', '列出容器内固定目录', 'root'], ['docker_info_logging', '默认日志驱动', 'root'],
-    ['docker_stop', '停止允许的应用容器', 'root', 1]]],
+    ['docker_container_state', '容器状态', 'root'], ['docker_container_ls_dir', '列出容器内固定目录', 'root'], ['docker_info_logging', '默认日志驱动', 'root']]],
   ['JVM（容器内）', [
     ['jvm_list', 'JVM 进程与主类', 'root'], ['jvm_gc_stats', 'GC 统计，有限次数采样', 'root'], ['jvm_thread_dump', '线程转储', 'root']]],
   ['Kubernetes', [

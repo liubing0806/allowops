@@ -4,7 +4,7 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 51 个 action。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 83 个 action，均为 risk: read；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节新增 34 个只读 action（含替换 dns_lookup 的定义）。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
@@ -59,6 +59,64 @@ filters 是允许 agent 传入的过滤参数集合，`[]` 表示不允许过滤
 Kubernetes 示例固定读取 `/etc/kubernetes/allowops-readonly.conf`。此文件由运维人员配置，只授予所需的读取权限；禁止可执行认证插件。JVM 示例选择 Docker 容器作为一种明确执行环境，不在同一个 action 中引入未定义的 Docker/Pod 条件分支。
 
 ## 3. action 需求
+
+### `app_config_grep`
+
+按键名模式读取一个 properties 文件的匹配行，敏感值脱敏。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii，另有自定义规则 sensitive_property |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 的 GNU grep 支持 -E、-i、-m、-e 和 --。 |
+| 安全说明 | 模式只允许字母、数字、下划线、连字符、转义点和竖线，不能表达 `=`、锚点、通配符，最多 100 字符；以 -e 传入。内置 secrets 只覆盖 `password`、`secret`、`token` 后接 `=` 的写法，`db_password`、`app.secretKey`、`jwt.secret: x`、`access_key` 等不会被脱敏，因此增加自定义规则：键名中含 pass、pwd、secret、token、key、credential 且后接 `=` 或 `:` 时，整行（含键名）替换为 [REDACTED:sensitive_property]。限制：grep 的模式匹配整行而不是只匹配键名，传入值中的片段仍可用于判断某行是否存在；多行值、续行（反斜线）和不含敏感词的键下的敏感值不会被识别；match 过滤在脱敏之后执行。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `path` | path | `allowed_roots: ['/etc/app', '/opt/app/config']`；必填 | 已存在且解析后位于允许根目录内的 properties 文件 |
+| `pattern` | string | `regex: ^([A-Za-z0-9_-]\|\\\.)+(\\\|([A-Za-z0-9_-]\|\\\.)+)*$`；`max_len: 100`；必填 | 不区分大小写的键名模式 |
+| `max_matches` | int | `min: 1`；`max: 500`；默认 `100` | 最大匹配行数 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/grep, -E, -i, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
+```
+
+### `app_config_keys`
+
+只输出一个 properties 文件的键名，不输出值。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 的 GNU grep 支持 -o、-E、-e 和 --。 |
+| 安全说明 | 使用 `grep -o` 只输出每行开头的键名字符（字母、数字、下划线、点、连字符），注释行和值不会输出；比 `cut -d= -f1` 更严格，后者会输出整行注释。路径解析后检查允许根目录。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `path` | path | `allowed_roots: ['/etc/app', '/opt/app/config']`；必填 | 已存在且解析后位于允许根目录内的 properties 文件 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/grep, -o, -E, -e, '^[A-Za-z0-9_.-]+', --, '{path}']
+```
 
 ### `connections_by_port`
 
@@ -200,7 +258,7 @@ exec: [/usr/bin/df, -h, --, '{path}']
 
 ### `dns_lookup`
 
-使用主机名称解析配置查询预定义通用服务名。
+使用主机名称解析配置查询一个主机名。
 
 | 项 | 需求 |
 |---|---|
@@ -212,18 +270,49 @@ exec: [/usr/bin/df, -h, --, '{path}']
 | 扩展能力 | 无（基础 exec） |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | CentOS 7 的 glibc getent 支持 hosts 数据库；使用系统 NSS 配置，不要求额外 DNS 工具。 |
-| 安全说明 | 仅允许 localhost、nginx、api，避免开放任意域名查询。解析可能读取 hosts 或 DNS，取决于主机 NSS 配置。 |
+| 安全说明 | 主机名由正则限定为 RFC 1123 风格（标签以字母或数字开头和结尾，每个标签不超过 63 字符，总长不超过 253），不允许以连字符开头，因此不会被 getent 当成选项。该规则也允许点分数字形式。解析可能读取 hosts 或 DNS，取决于主机 NSS 配置。 |
 
 参数：
 
 | 名称 | 类型 | 约束 | 用途（description） |
 |---|---|---|---|
-| `name` | enum | `values: ['localhost', 'nginx', 'api']`；必填 | 预定义通用名称 |
+| `name` | string | `regex: ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$`；`max_len: 253`；必填 | RFC 1123 风格主机名，不以连字符开头 |
 
 argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
 exec: [/usr/bin/getent, hosts, '{name}']
+```
+
+### `docker_app_config_grep`
+
+在允许的容器内按键名模式读取一个 properties 文件的匹配行，敏感值脱敏。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii，另有自定义规则 sensitive_property |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 需另装 Docker CLI；容器内需有 grep。docker exec 不分配 TTY。 |
+| 安全说明 | 容器名使用签名枚举。容器内路径无法在主机检查，用正则约束：限定三个根目录，每个路径段以非点字符开头，因此无 `..` 和隐藏目录段。容器内的符号链接无法由主机检查，只读取容器内 grep 的 -- 之后的单个文件。模式规则和脱敏规则同 `app_config_grep`，限制也相同。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `container` | enum | `values: [api, app]`；必填 | 签名允许列表中的容器 |
+| `path` | string | `regex: ^/(etc/app\|opt/app/config\|app/config)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$`；`max_len: 200`；必填 | 容器内允许目录下的绝对文件路径 |
+| `pattern` | string | `regex: ^([A-Za-z0-9_-]\|\\\.)+(\\\|([A-Za-z0-9_-]\|\\\.)+)*$`；`max_len: 100`；必填 | 不区分大小写的键名模式 |
+| `max_matches` | int | `min: 1`；`max: 500`；默认 `100` | 最大匹配行数 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/docker, exec, '{container}', grep, -E, -i, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
 ```
 
 ### `docker_container_ls_dir`
@@ -283,6 +372,96 @@ argv 或 builtin_config（与示例 YAML 一致）：
 exec: [/usr/bin/docker, inspect, --format, '{{json .State}}', '{container}']
 ```
 
+### `docker_dns_lookup`
+
+在预定义应用容器内使用 getent 解析一个主机名。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | [] |
+| redact | secrets |
+| 扩展能力 | D4 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；/usr/bin/docker 缺失时标记 unsupported。容器镜像中需有 getent（glibc 镜像自带；部分精简镜像没有，此时命令返回非零退出码）。 |
+| 安全说明 | Docker 包装命令后的执行目标固定为 getent hosts，禁止 TTY 与解释器；容器使用枚举，主机名由正则限定且不以连字符开头。解析结果反映容器自己的 /etc/hosts、DNS 配置和 NSS 设置，可能与主机不同。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `container` | enum | `values: ['api', 'app']`；必填 | 预定义应用容器 |
+| `name` | string | `regex: ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$`；`max_len: 253`；必填 | RFC 1123 风格主机名，不以连字符开头 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/docker, exec, '{container}', getent, hosts, '{name}']
+```
+
+### `docker_file_grep`
+
+在应用容器内按固定字符串检索一个文件，限制匹配数。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 扩展能力 | D1、D4 |
+| 执行限制 | timeout=20s；max_output=64KB |
+| CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；该示例的选项是否可用须在目标版本验证。/usr/bin/docker 缺失时标记 unsupported。容器内需有支持 -F、-n、-m、-e 的 grep（GNU grep 或 busybox grep）。无匹配时 grep 退出码为 1，action 报告失败。 |
+| 安全说明 | Docker 包装命令后的执行目标固定为 grep，禁止解释器和 TTY；模式使用 -e，路径前使用 --，两者均不会被当作选项。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，且每个路径段以非点字符开头，无法出现 .. 段。正则不能阻止容器内已有的符号链接：根目录内指向其他位置的链接会被 grep 跟随（实测 /var/log/app/pw.log -> /etc/passwd 可读，只限该容器文件系统，不涉及主机）。输出先脱敏再过滤。脱敏只匹配 password、secret、token 后紧跟等号的形式，`secret: value`、`client_secret=value`、`api_key=value` 不被脱敏，评审时须确认允许根目录内的文件格式。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `container` | enum | `values: ['api', 'app']`；必填 | 预定义应用容器 |
+| `path` | string | `regex: ^/(var/log\|data/logs\|etc/nginx)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$`；`max_len: 256`；必填 | 容器内固定根目录下的绝对文件路径，无点段 |
+| `pattern` | string | `regex: ^[^\r\n]+$`；`max_len: 200`；必填 | 不含换行的固定检索字符串 |
+| `max_matches` | int | `min: 1`；`max: 500`；必填（有默认值时可省略）；默认 `100` | 匹配行数上限 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/docker, exec, '{container}', grep, -F, -n, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
+```
+
+### `docker_file_view`
+
+读取应用容器内固定根目录下一个文件的开头，限制行数。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 扩展能力 | D1、D4 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；该示例的选项是否可用须在目标版本验证。/usr/bin/docker 缺失时标记 unsupported。容器内需有支持 -n 和 -- 的 head。 |
+| 安全说明 | Docker 包装命令后的执行目标固定为 head，禁止解释器和 TTY；路径前使用 --。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，每个路径段以非点字符开头，无法出现 .. 段。正则不能阻止容器内已有的符号链接：根目录内指向其他位置的链接会被 head 跟随（实测 /var/log/app/pw.log -> /etc/passwd 可读，只限该容器文件系统，不涉及主机）。最多读取 500 行，输出由 max_output 限制为 64KB。脱敏只匹配 password、secret、token 后紧跟等号的形式，`secret: value`、`client_secret=value`、`api_key=value` 不被脱敏，评审时须确认允许根目录内的文件格式。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `container` | enum | `values: ['api', 'app']`；必填 | 预定义应用容器 |
+| `path` | string | `regex: ^/(var/log\|data/logs\|etc/nginx)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$`；`max_len: 256`；必填 | 容器内固定根目录下的绝对文件路径，无点段 |
+| `lines` | int | `min: 1`；`max: 500`；必填（有默认值时可省略）；默认 `100` | 输出行数上限 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/docker, exec, '{container}', head, -n, '{lines}', --, '{path}']
+```
+
 ### `docker_info_logging`
 
 查看 Docker 默认日志驱动。
@@ -307,6 +486,130 @@ argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
 exec: [/usr/bin/docker, info, --format, '{{.LoggingDriver}}']
+```
+
+### `docker_inspect_config`
+
+查看一个容器的镜像、创建时间、重启次数、网络模式、挂载、ExtraHosts 和环境变量名。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；Go 模板函数 split 和 json 须在目标版本验证。/usr/bin/docker 缺失时标记 unsupported。 |
+| 安全说明 | 使用 `--type container` 避免匹配同名镜像。Go 模板只取 Config.Image、Image、Created、RestartCount、HostConfig.NetworkMode、Mounts、HostConfig.ExtraHosts，Config.Env 经 `split . "="` 只保留 `=` 之前的键名，不输出值。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `container` | string | `regex: ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$`；`max_len: 64`；必填 | 受限 Docker 容器名 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/docker, inspect, --type, container, --format,
+  'Image: {{.Config.Image}} {{.Image}}{{"\n"}}Created: {{.Created}}{{"\n"}}RestartCount: {{.RestartCount}}{{"\n"}}NetworkMode: {{.HostConfig.NetworkMode}}{{"\n"}}Mounts: {{json .Mounts}}{{"\n"}}ExtraHosts: {{json .HostConfig.ExtraHosts}}{{"\n"}}EnvNames:{{range .Config.Env}} {{index (split . "=") 0}}{{end}}',
+  '{container}']
+```
+
+### `docker_jar_list_entries`
+
+列出容器内应用目录下一个 jar 的条目名。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D4 |
+| 执行限制 | timeout=20s；max_output=128KB |
+| CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；/usr/bin/docker 缺失时标记 unsupported。容器内须有 jar（JDK 自带；仅有 JRE 的镜像不可用）（容器内命令按名称查找，无法在主机检查）。 |
+| 安全说明 | 固定 jar tf，只读取 jar 目录，不解包、不写文件。jar 参数用带锚点的正则限定在 /app、/opt/app、/data/app 下且以 .jar 结尾，每个路径段首字符不是点和连字符，不会出现 .. 段，也不会被当成选项。符号链接在容器内无法检查，应用目录内的链接仍可指向容器内其他 jar 文件，只读且后缀限定为 .jar。输出为条目名，仍启用 secrets 脱敏。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `container` | enum | `values: ['api', 'app']`；必填 | 预定义应用容器 |
+| `jar` | string | `regex: ^/(app\|opt/app\|data/app)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+\.jar$`；`max_len: 200`；必填 | 应用目录下的 jar 文件路径（容器内路径，正则限定） |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/docker, exec, '{container}', jar, tf, '{jar}']
+```
+
+### `docker_jar_read_entry`
+
+读取容器内一个 jar 中的 application 配置条目，输出脱敏，不写文件。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii；自定义规则 config_secret |
+| 扩展能力 | D1、D4 |
+| 执行限制 | timeout=15s；max_output=64KB |
+| CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；/usr/bin/docker 缺失时标记 unsupported。容器内须有 unzip（JDK 镜像通常没有：eclipse-temurin 和 CentOS 7 JDK 镜像无 unzip，openjdk:8 的 Debian 镜像有，alpine 的 busybox unzip 支持 -p）（容器内命令按名称查找，无法在主机检查）。 |
+| 安全说明 | unzip -p 把条目写到标准输出，不落盘；不使用 jar xf。entry 参数限定为 application*.properties、application*.yml、application*.yaml，可带 BOOT-INF/classes/ 前缀，不含通配符、斜线和 .. 。输出先经 secrets、pii 内置规则和自定义规则 config_secret（键名含 password、passwd、pwd、secret、token、credential、private-key、access-key、api-key，分隔符为 = 或 :，整行键值替换）脱敏，再过滤。多行值（YAML 块标量、properties 续行）的后续行不会被脱敏；脱敏不能保证识别所有敏感内容。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `container` | enum | `values: ['api', 'app']`；必填 | 预定义应用容器 |
+| `jar` | string | `regex: ^/(app\|opt/app\|data/app)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+\.jar$`；`max_len: 200`；必填 | 应用目录下的 jar 文件路径（容器内路径，正则限定） |
+| `entry` | string | `regex: ^(BOOT-INF/classes/)?application[A-Za-z0-9_.-]*\.(properties\|yml\|yaml)$`；`max_len: 120`；必填 | jar 内的 application*.properties、application*.yml、application*.yaml 条目名，可带 BOOT-INF/classes/ 前缀 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/docker, exec, '{container}', unzip, -p, '{jar}', '{entry}']
+redact:
+  builtin: [secrets, pii]
+  custom:
+    - name: config_secret
+      regex: '(?i)[A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|credentials?|private[_.-]?key|access[_.-]?key|api[_.-]?key)[A-Za-z0-9_.-]*\s*[:=]\s*(?:"[^"\r\n]*"|''[^''\r\n]*''|[^\s#]*)'
+```
+
+### `docker_java_class_members`
+
+用 javap -p 列出容器内应用目录下 jar 中一个类的成员声明。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D4 |
+| 执行限制 | timeout=20s；max_output=64KB |
+| CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；/usr/bin/docker 缺失时标记 unsupported。容器内须有 javap（JDK 自带；仅有 JRE 的镜像不可用）（容器内命令按名称查找，无法在主机检查）。 |
+| 安全说明 | 固定 javap -p，不开放 -c、-v、-constants 等选项：-c 的字节码输出含字符串常量（实测 `ldc ... // String <常量值>` 不会被 secrets 规则脱敏），因此不提供。classpath 只能是一个 jar 或一个目录通配（/app/lib/*），不接受冒号分隔的列表；类名用 Java 全限定名正则，末段不能是 class（javap 会把 xxx.class 当作文件路径读取容器内当前目录的文件）。javap 会按 jar 清单的 Class-Path 加载其他 jar，仅读取。成员声明含字段名和类型，不含常量值。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `container` | enum | `values: ['api', 'app']`；必填 | 预定义应用容器 |
+| `classpath` | string | `regex: ^/(app\|opt/app\|data/app)(/[A-Za-z0-9_][A-Za-z0-9._-]*)*/(\*\|[A-Za-z0-9_][A-Za-z0-9._-]*\.jar)$`；`max_len: 200`；必填 | 一个 jar 或一个应用库目录通配（容器内路径，正则限定） |
+| `class_name` | string | `regex: ^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)*(?:[A-Za-bd-z_$][A-Za-z0-9_$]*\|c(?:[A-Za-km-z0-9_$][A-Za-z0-9_$]*)?\|cl(?:[A-Zb-z0-9_$][A-Za-z0-9_$]*)?\|cla(?:[A-Za-rt-z0-9_$][A-Za-z0-9_$]*)?\|clas(?:[A-Za-rt-z0-9_$][A-Za-z0-9_$]*)?\|class[A-Za-z0-9_$]+)$`；`max_len: 200`；必填 | Java 全限定名；嵌套类用美元符；末段不能是 class |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/docker, exec, '{container}', javap, -p, -classpath, '{classpath}', '{class_name}']
 ```
 
 ### `docker_logs`
@@ -392,33 +695,340 @@ argv 或 builtin_config（与示例 YAML 一致）：
 exec: [/usr/bin/docker, stats, --no-stream, --format, '{{json .}}']
 ```
 
-### `docker_stop`
+### `dubbo_qos_get_address`
 
-停止一个预定义应用容器。
+查询一个 Dubbo 服务当前可用的提供者地址。
 
 | 项 | 需求 |
 |---|---|
-| risk | write |
-| run_as | root |
-| 执行方式 | exec |
-| filters | [] |
-| redact | secrets |
-| 扩展能力 | 无（基础 exec） |
-| 执行限制 | timeout=45s；max_output=16KB |
-| CentOS 7 | CentOS 7 需另装 Docker CLI 并运行兼容的 Docker 服务；该示例的选项是否可用须在目标版本验证。/usr/bin/docker 缺失时标记 unsupported。 |
-| 安全说明 | risk 为 write；容器名仅允许 api、app，停止宽限期为 0~30 秒；不开放 stop 全部容器、删除或任意子命令。宽限期到期 Docker 可强制结束容器，需显式写权限。每批最多一个目标。 |
+| risk | read |
+| run_as | 省略，直接使用 allowops 用户 |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 扩展能力 | D1、D8 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 内置 HTTP 客户端不依赖 curl；目标主机的 Dubbo QoS 默认监听 22222 端口（QoS 开启且未改端口时），目标版本未验证。 |
+| 安全说明 | 只读 GET `/getAddress/{service}`；Dubbo 要求 PRIVATE 权限，默认只有来自回环地址的请求可执行；allowops 在主机上访问 127.0.0.1 满足该条件。allowed_prefixes 只含 `http://127.0.0.1:22222/getAddress`，按路径分量匹配，`/online` 等其他命令、`..` 路径和其他端口均被拒绝。Dubbo QoS 的写操作命令（online、offline、shutdown 等）同样可用 GET 触发，因此前缀限定到单个命令。提供者 URL 可能带 token 参数，secrets 规则会脱敏 `token=` 起至空白前的内容（范围偏大，不会遗漏）。 |
 
 参数：
 
 | 名称 | 类型 | 约束 | 用途（description） |
 |---|---|---|---|
-| `container` | enum | `values: ['api', 'app']`；必填 | 预定义应用容器 |
-| `grace_seconds` | int | `min: 0`；`max: 30`；必填（有默认值时可省略）；默认 `10` | Docker 强制结束前的宽限秒数 |
+| `url` | url | 由 builtin_config.allowed_prefixes 提供 `['http://127.0.0.1:22222/getAddress']`；必填，无默认值 | GET URL，例如 `http://127.0.0.1:22222/getAddress/org.example.api.DemoService` |
 
 argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
-exec: [/usr/bin/docker, stop, --time, '{grace_seconds}', '{container}']
+builtin: http_get
+builtin_config:
+  allowed_prefixes: ['http://127.0.0.1:22222/getAddress']
+  headers:
+    Accept: application/json
+  timeout: 5s
+  max_response_bytes: 64KB
+```
+
+### `dubbo_qos_get_config`
+
+导出 Dubbo 应用当前生效的配置。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 省略，直接使用 allowops 用户 |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii, 自定义规则 json_credential |
+| 扩展能力 | D1、D8 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 内置 HTTP 客户端不依赖 curl；目标主机的 Dubbo QoS 默认监听 22222 端口（QoS 开启且未改端口时），目标版本未验证。 |
+| 安全说明 | 只读 GET `/getConfig`；Dubbo 要求 PRIVATE 权限，默认只有来自回环地址的请求可执行；allowops 在主机上访问 127.0.0.1 满足该条件。allowed_prefixes 只含 `http://127.0.0.1:22222/getConfig`，按路径分量匹配，`/online` 等其他命令、`..` 路径和其他端口均被拒绝。Dubbo QoS 的写操作命令（online、offline、shutdown 等）同样可用 GET 触发，因此前缀限定到单个命令。响应是 JSON，内置 secrets 规则只匹配 `key=value` 形式，不匹配 `"password": "值"`，因此增加自定义规则 json_credential；本地样例中 password、token、secret 键值和 URL 内嵌密码均已脱敏。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `url` | url | 由 builtin_config.allowed_prefixes 提供 `['http://127.0.0.1:22222/getConfig']`；必填，无默认值 | GET URL，例如 `http://127.0.0.1:22222/getConfig` |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: http_get
+builtin_config:
+  allowed_prefixes: ['http://127.0.0.1:22222/getConfig']
+  headers:
+    Accept: application/json
+  timeout: 5s
+  max_response_bytes: 64KB
+```
+
+### `dubbo_qos_live`
+
+检查 Dubbo 进程存活状态。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 省略，直接使用 allowops 用户 |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D8 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 内置 HTTP 客户端不依赖 curl；目标主机的 Dubbo QoS 默认监听 22222 端口（QoS 开启且未改端口时），目标版本未验证。 |
+| 安全说明 | 只读 GET `/live`；Dubbo 为该命令开放匿名访问（PUBLIC）。allowed_prefixes 只含 `http://127.0.0.1:22222/live`，按路径分量匹配，`/online` 等其他命令、`..` 路径和其他端口均被拒绝。Dubbo QoS 的写操作命令（online、offline、shutdown 等）同样可用 GET 触发，因此前缀限定到单个命令。输出不含凭据。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `url` | url | 由 builtin_config.allowed_prefixes 提供 `['http://127.0.0.1:22222/live']`；必填，无默认值 | GET URL，例如 `http://127.0.0.1:22222/live` |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: http_get
+builtin_config:
+  allowed_prefixes: ['http://127.0.0.1:22222/live']
+  headers:
+    Accept: text/plain
+  timeout: 5s
+  max_response_bytes: 64KB
+```
+
+### `dubbo_qos_logger_info`
+
+查看 Dubbo 当前日志适配器和日志级别。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 省略，直接使用 allowops 用户 |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D8 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 内置 HTTP 客户端不依赖 curl；目标主机的 Dubbo QoS 默认监听 22222 端口（QoS 开启且未改端口时），目标版本未验证。 |
+| 安全说明 | 只读 GET `/loggerInfo`；Dubbo 要求 PROTECTED 权限，回环地址请求可执行。allowed_prefixes 只含 `http://127.0.0.1:22222/loggerInfo`，按路径分量匹配，`/online` 等其他命令、`..` 路径和其他端口均被拒绝。Dubbo QoS 的写操作命令（online、offline、shutdown 等）同样可用 GET 触发，因此前缀限定到单个命令。输出不含凭据。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `url` | url | 由 builtin_config.allowed_prefixes 提供 `['http://127.0.0.1:22222/loggerInfo']`；必填，无默认值 | GET URL，例如 `http://127.0.0.1:22222/loggerInfo` |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: http_get
+builtin_config:
+  allowed_prefixes: ['http://127.0.0.1:22222/loggerInfo']
+  headers:
+    Accept: text/plain
+  timeout: 5s
+  max_response_bytes: 64KB
+```
+
+### `dubbo_qos_ls`
+
+列出 Dubbo 提供者和消费者服务。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 省略，直接使用 allowops 用户 |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D8 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 内置 HTTP 客户端不依赖 curl；目标主机的 Dubbo QoS 默认监听 22222 端口（QoS 开启且未改端口时），目标版本未验证。 |
+| 安全说明 | 只读 GET `/ls`；Dubbo 要求 PROTECTED 权限，回环地址请求可执行。allowed_prefixes 只含 `http://127.0.0.1:22222/ls`，按路径分量匹配，`/online` 等其他命令、`..` 路径和其他端口均被拒绝。Dubbo QoS 的写操作命令（online、offline、shutdown 等）同样可用 GET 触发，因此前缀限定到单个命令。输出不含凭据。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `url` | url | 由 builtin_config.allowed_prefixes 提供 `['http://127.0.0.1:22222/ls']`；必填，无默认值 | GET URL，例如 `http://127.0.0.1:22222/ls` |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: http_get
+builtin_config:
+  allowed_prefixes: ['http://127.0.0.1:22222/ls']
+  headers:
+    Accept: text/plain
+  timeout: 5s
+  max_response_bytes: 64KB
+```
+
+### `dubbo_qos_ps`
+
+查看 Dubbo 服务监听端口。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 省略，直接使用 allowops 用户 |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D8 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 内置 HTTP 客户端不依赖 curl；目标主机的 Dubbo QoS 默认监听 22222 端口（QoS 开启且未改端口时），目标版本未验证。 |
+| 安全说明 | 只读 GET `/ps`；Dubbo 要求 PROTECTED 权限，回环地址请求可执行。allowed_prefixes 只含 `http://127.0.0.1:22222/ps`，按路径分量匹配，`/online` 等其他命令、`..` 路径和其他端口均被拒绝。Dubbo QoS 的写操作命令（online、offline、shutdown 等）同样可用 GET 触发，因此前缀限定到单个命令。输出不含凭据。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `url` | url | 由 builtin_config.allowed_prefixes 提供 `['http://127.0.0.1:22222/ps']`；必填，无默认值 | GET URL，例如 `http://127.0.0.1:22222/ps` |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: http_get
+builtin_config:
+  allowed_prefixes: ['http://127.0.0.1:22222/ps']
+  headers:
+    Accept: text/plain
+  timeout: 5s
+  max_response_bytes: 64KB
+```
+
+### `dubbo_qos_ready`
+
+检查 Dubbo 服务就绪状态。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 省略，直接使用 allowops 用户 |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D8 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 内置 HTTP 客户端不依赖 curl；目标主机的 Dubbo QoS 默认监听 22222 端口（QoS 开启且未改端口时），目标版本未验证。 |
+| 安全说明 | 只读 GET `/ready`；Dubbo 为该命令开放匿名访问（PUBLIC）。allowed_prefixes 只含 `http://127.0.0.1:22222/ready`，按路径分量匹配，`/online` 等其他命令、`..` 路径和其他端口均被拒绝。Dubbo QoS 的写操作命令（online、offline、shutdown 等）同样可用 GET 触发，因此前缀限定到单个命令。输出不含凭据。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `url` | url | 由 builtin_config.allowed_prefixes 提供 `['http://127.0.0.1:22222/ready']`；必填，无默认值 | GET URL，例如 `http://127.0.0.1:22222/ready` |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: http_get
+builtin_config:
+  allowed_prefixes: ['http://127.0.0.1:22222/ready']
+  headers:
+    Accept: text/plain
+  timeout: 5s
+  max_response_bytes: 64KB
+```
+
+### `dubbo_qos_startup`
+
+检查 Dubbo 启动完成状态。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 省略，直接使用 allowops 用户 |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D8 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 内置 HTTP 客户端不依赖 curl；目标主机的 Dubbo QoS 默认监听 22222 端口（QoS 开启且未改端口时），目标版本未验证。 |
+| 安全说明 | 只读 GET `/startup`；Dubbo 为该命令开放匿名访问（PUBLIC）。allowed_prefixes 只含 `http://127.0.0.1:22222/startup`，按路径分量匹配，`/online` 等其他命令、`..` 路径和其他端口均被拒绝。Dubbo QoS 的写操作命令（online、offline、shutdown 等）同样可用 GET 触发，因此前缀限定到单个命令。输出不含凭据。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `url` | url | 由 builtin_config.allowed_prefixes 提供 `['http://127.0.0.1:22222/startup']`；必填，无默认值 | GET URL，例如 `http://127.0.0.1:22222/startup` |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: http_get
+builtin_config:
+  allowed_prefixes: ['http://127.0.0.1:22222/startup']
+  headers:
+    Accept: text/plain
+  timeout: 5s
+  max_response_bytes: 64KB
+```
+
+### `dubbo_qos_version`
+
+查看运行中的 Dubbo 框架版本。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 省略，直接使用 allowops 用户 |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D8 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 内置 HTTP 客户端不依赖 curl；目标主机的 Dubbo QoS 默认监听 22222 端口（QoS 开启且未改端口时），目标版本未验证。 |
+| 安全说明 | 只读 GET `/version`；Dubbo 要求 PROTECTED 权限，回环地址请求可执行。allowed_prefixes 只含 `http://127.0.0.1:22222/version`，按路径分量匹配，`/online` 等其他命令、`..` 路径和其他端口均被拒绝。Dubbo QoS 的写操作命令（online、offline、shutdown 等）同样可用 GET 触发，因此前缀限定到单个命令。输出不含凭据。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `url` | url | 由 builtin_config.allowed_prefixes 提供 `['http://127.0.0.1:22222/version']`；必填，无默认值 | GET URL，例如 `http://127.0.0.1:22222/version` |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: http_get
+builtin_config:
+  allowed_prefixes: ['http://127.0.0.1:22222/version']
+  headers:
+    Accept: text/plain
+  timeout: 5s
+  max_response_bytes: 64KB
+```
+
+### `file_find`
+
+在允许的根目录下按名称查找普通文件，限制目录深度。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=20s；max_output=64KB |
+| CentOS 7 | CentOS 7 的 GNU find 支持 -maxdepth、-type、-name。 |
+| 安全说明 | 根目录使用枚举；maxdepth 为 1 到 4 的整数；-type f 固定，不输出目录和符号链接；-name 的 glob 由正则限制为字母、数字、点、下划线、连字符、星号和问号，长度最多 64，且不能以连字符开头，因此不会注入 -delete、-exec 等动作，也不含方括号和路径分隔符。只输出文件路径，不读取文件内容。输出行数由 max_output、max_scan 和过滤器限制。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `root` | enum | `values: ['/var/log', '/data/logs', '/etc/nginx']`；必填 | 预定义查找根目录 |
+| `depth` | int | `min: 1`；`max: 4`；必填（有默认值时可省略）；默认 `2` | 根目录以下的最大目录深度 |
+| `glob` | string | `regex: ^[A-Za-z0-9_*?.-]{1,64}$`；`max_len: 64`；必填 | 文件名 glob |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/find, '{root}', -maxdepth, '{depth}', -type, f, -name, '{glob}']
 ```
 
 ### `file_list`
@@ -506,6 +1116,32 @@ steps: [{name: hostname, exec: [/usr/bin/hostname]}, {name: time, exec: [/usr/bi
     name: load, exec: [/usr/bin/uptime]}, {name: memory, exec: [/usr/bin/free, -m]}, {name: disk, exec: [/usr/bin/df,
       -h, -x, tmpfs, -x, devtmpfs]}, {name: failed_units, exec: [/usr/bin/systemctl, --failed, --no-pager]}, {name: ports,
     exec: [/usr/sbin/ss, -ltnp]}, {name: containers, exec: [/usr/bin/docker, ps, --all, --format, '{{json .}}']}]
+```
+
+### `hosts_entries`
+
+读取主机 /etc/hosts 条目，可用 match 过滤。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 省略，直接使用 allowops 用户 |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 的 coreutils cat 支持 --。 |
+| 安全说明 | 路径固定为 /etc/hosts，无参数；使用 match、exclude 等过滤选择条目。运行时 IP 地址和主机名不脱敏，因此未启用 pii。 |
+
+参数：
+
+无参数。
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/cat, --, /etc/hosts]
 ```
 
 ### `http_get_local`
@@ -690,6 +1326,98 @@ argv 或 builtin_config（与示例 YAML 一致）：
 exec: [/usr/bin/docker, exec, '{container}', jstack, '{pid}']
 ```
 
+### `k8s_configmap_grep`
+
+读取一个 ConfigMap 的 data 内容，敏感值脱敏，由 match 等过滤缩小范围。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii，另有自定义规则 sensitive_property |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 依赖目标节点的 kubectl 和只读 kubeconfig；go-template 输出须在目标版本验证。 |
+| 安全说明 | 输出格式为每个键一段：`### <键>` 后接值。命名空间使用签名枚举，ConfigMap 名称用 DNS 子域名正则且不以连字符开头。脱敏规则同 `app_config_grep`，同时覆盖 `key: value` 形式。match 在脱敏之后执行，无法探测被脱敏的值。限制：多行值中不含敏感词的键下的敏感值、binaryData 不处理（模板只遍历 .data）。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `namespace` | enum | `values: [default, app]`；必填 | 签名允许列表中的命名空间 |
+| `name` | string | `regex: ^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`；`max_len: 253`；必填 | ConfigMap 名称 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, configmap, '{name}', -n, '{namespace}',
+  -o, 'go-template={{range $key, $value := .data}}### {{$key}}{{"\n"}}{{$value}}{{"\n"}}{{end}}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+```
+
+### `k8s_configmap_keys`
+
+只列出一个 ConfigMap 的 data 键名。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 依赖目标节点的 kubectl 和只读 kubeconfig；go-template 输出须在目标版本验证。 |
+| 安全说明 | go-template 只输出 `$key`，不输出值。命名空间使用签名枚举，ConfigMap 名称用 DNS 子域名正则且不以连字符开头。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `namespace` | enum | `values: [default, app]`；必填 | 签名允许列表中的命名空间 |
+| `name` | string | `regex: ^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$`；`max_len: 253`；必填 | ConfigMap 名称 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, configmap, '{name}', -n, '{namespace}',
+  -o, 'go-template={{range $key, $value := .data}}{{$key}}{{"\n"}}{{end}}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+```
+
+### `k8s_deploy_images`
+
+列出预定义命名空间内各 Deployment 的名称、容器镜像和就绪副本数。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D5 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。 |
+| 安全说明 | 命名空间使用枚举，custom-columns 表达式全部固定；只读 kubeconfig 由 root 管理，集群 RBAC 只授予所需读权限，禁用 kubeconfig 的 exec 认证插件。输出仅含名称、镜像和副本数。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `namespace` | enum | `values: ['default', 'app']`；必填 | 预定义命名空间 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, deployments, -n, '{namespace}',
+  -o, 'custom-columns=NAME:.metadata.name,IMAGES:.spec.template.spec.containers[*].image,READY:.status.readyReplicas']
+exec_fallbacks: [/usr/local/bin/kubectl]
+```
+
 ### `k8s_describe_pod`
 
 查看单个 Pod 的描述。
@@ -717,6 +1445,236 @@ argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
 exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, describe, pod, '{pod}', -n, '{namespace}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+```
+
+### `k8s_get`
+
+列出预定义命名空间内的一类命名空间级资源（wide 输出）。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D5 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。 |
+| 安全说明 | 资源类型和命名空间都使用枚举，不包含 secrets。configmaps 的 wide 输出只含名称、条目数和存续时间，不含键值。Node 是集群级资源，没有命名空间，由 k8s_nodes 提供，避免可选命名空间参数在该资源上被忽略。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `namespace` | enum | `values: ['default', 'app']`；必填 | 预定义命名空间 |
+| `resource` | enum | `values: ['deployments', 'services', 'endpoints', 'ingresses', 'hpa', 'jobs', 'cronjobs', 'statefulsets', 'replicasets', 'configmaps']`；必填 | 要列出的资源类型 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, '{resource}', -n, '{namespace}',
+  -o, wide]
+exec_fallbacks: [/usr/local/bin/kubectl]
+```
+
+### `k8s_nodes`
+
+列出集群节点（wide 输出）。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D5 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。 |
+| 安全说明 | Node 是集群级资源，无命名空间，因此不能放入 k8s_get 的命名空间必填参数；本 action 无参数，argv 全部固定。 |
+
+参数：
+
+无参数。
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, nodes, -o, wide]
+exec_fallbacks: [/usr/local/bin/kubectl]
+```
+
+### `k8s_pod_file_grep`
+
+在单个 Pod 的容器内按固定字符串检索一个文件，限制匹配数。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 扩展能力 | D1、D5 |
+| 执行限制 | timeout=20s；max_output=64KB |
+| CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。容器内需有支持 -F、-n、-m、-e 的 grep。无匹配时 grep 退出码为 1，action 报告失败。 |
+| 安全说明 | 命名空间和容器使用枚举，Pod 名称不能以连字符开头；固定使用 `exec -n <ns> <pod> [-c <container>] --`，不使用 -i、-t，无 stdin 和 TTY；包装命令后真正执行的 grep 通过解释器检查。kubectl exec 需要 pods/exec 的 create 权限，这不是纯只读 RBAC：持有该权限的凭据理论上可在 Pod 内执行任意命令，只读 kubeconfig 的 RBAC 必须仅授予允许的命名空间，并由运维评审；allowops 的签名 argv 是唯一的约束。禁用 kubeconfig 的 exec 认证插件。模式使用 -e，路径前使用 --。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，每个路径段以非点字符开头，无法出现 .. 段；容器内已有符号链接可被跟随。脱敏只匹配 password、secret、token 后紧跟等号的形式，`secret: value`、`client_secret=value`、`api_key=value` 不被脱敏。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `namespace` | enum | `values: ['default', 'app']`；必填 | 预定义命名空间 |
+| `pod` | string | `regex: ^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$`；`max_len: 63`；必填 | 长度不超过 63 的 Pod 名称 |
+| `container` | enum | `values: ['api', 'app']`；可选 | 可选预定义容器名 |
+| `path` | string | `regex: ^/(var/log\|data/logs\|etc/nginx)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$`；`max_len: 256`；必填 | 容器内固定根目录下的绝对文件路径，无点段 |
+| `pattern` | string | `regex: ^[^\r\n]+$`；`max_len: 200`；必填 | 不含换行的固定检索字符串 |
+| `max_matches` | int | `min: 1`；`max: 500`；必填（有默认值时可省略）；默认 `100` | 匹配行数上限 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, exec, -n, '{namespace}', '{pod}',
+  [-c, '{container}'], --, grep, -F, -n, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+```
+
+### `k8s_pod_file_view`
+
+读取单个 Pod 容器内固定根目录下一个文件的开头，限制行数。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 扩展能力 | D1、D5 |
+| 执行限制 | timeout=15s；max_output=64KB |
+| CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。容器内需有支持 -n 和 -- 的 head。 |
+| 安全说明 | 命名空间和容器使用枚举，Pod 名称不能以连字符开头；固定使用 `exec -n <ns> <pod> [-c <container>] --`，不使用 -i、-t，无 stdin 和 TTY；包装命令后真正执行的 head 通过解释器检查。kubectl exec 需要 pods/exec 的 create 权限，这不是纯只读 RBAC：持有该权限的凭据理论上可在 Pod 内执行任意命令，只读 kubeconfig 的 RBAC 必须仅授予允许的命名空间，并由运维评审；allowops 的签名 argv 是唯一的约束。禁用 kubeconfig 的 exec 认证插件。容器内路径无法在主机检查，使用锚定正则限制在固定根目录内，每个路径段以非点字符开头，无法出现 .. 段；容器内已有符号链接可被跟随。最多读取 500 行，输出由 max_output 限制为 64KB。脱敏只匹配 password、secret、token 后紧跟等号的形式，`secret: value`、`client_secret=value`、`api_key=value` 不被脱敏。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `namespace` | enum | `values: ['default', 'app']`；必填 | 预定义命名空间 |
+| `pod` | string | `regex: ^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$`；`max_len: 63`；必填 | 长度不超过 63 的 Pod 名称 |
+| `container` | enum | `values: ['api', 'app']`；可选 | 可选预定义容器名 |
+| `path` | string | `regex: ^/(var/log\|data/logs\|etc/nginx)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+$`；`max_len: 256`；必填 | 容器内固定根目录下的绝对文件路径，无点段 |
+| `lines` | int | `min: 1`；`max: 500`；必填（有默认值时可省略）；默认 `100` | 输出行数上限 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, exec, -n, '{namespace}', '{pod}',
+  [-c, '{container}'], --, head, -n, '{lines}', --, '{path}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+```
+
+### `k8s_pod_jar_list_entries`
+
+列出 Pod 内应用目录下一个 jar 的条目名。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D4、D5 |
+| 执行限制 | timeout=20s；max_output=128KB |
+| CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。容器内须有 jar（JDK 自带；仅有 JRE 的镜像不可用）。 |
+| 安全说明 | 固定 kubectl exec ... -- jar tf，不分配 TTY，不开放 stdin。jar 参数的约束同 docker_jar_list_entries。kubectl exec 需要 pods/exec 权限，该权限能在 Pod 内执行任意命令，只读 kubeconfig 的 RBAC 须仅限相应命名空间；命令内容由本 action 固定，不由 RBAC 约束。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `namespace` | enum | `values: ['default', 'app']`；必填 | 预定义命名空间 |
+| `pod` | string | `regex: ^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$`；`max_len: 63`；必填 | 长度不超过 63 的 Pod 名称 |
+| `container` | enum | `values: ['api', 'app']`；可选 | 可选预定义容器名 |
+| `jar` | string | `regex: ^/(app\|opt/app\|data/app)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+\.jar$`；`max_len: 200`；必填 | 应用目录下的 jar 文件路径（容器内路径，正则限定） |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, exec, '{pod}', -n, '{namespace}', [-c, '{container}'], --, jar, tf, '{jar}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+```
+
+### `k8s_pod_jar_read_entry`
+
+读取 Pod 内一个 jar 中的 application 配置条目，输出脱敏，不写文件。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii；自定义规则 config_secret |
+| 扩展能力 | D1、D4、D5 |
+| 执行限制 | timeout=15s；max_output=64KB |
+| CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。容器内须有 unzip（JDK 镜像通常没有，须在镜像中安装）。 |
+| 安全说明 | 固定 kubectl exec ... -- unzip -p，不分配 TTY，不开放 stdin。参数与脱敏规则同 docker_jar_read_entry。kubectl exec 需要 pods/exec 权限，该权限能在 Pod 内执行任意命令，只读 kubeconfig 的 RBAC 须仅限相应命名空间；命令内容由本 action 固定，不由 RBAC 约束。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `namespace` | enum | `values: ['default', 'app']`；必填 | 预定义命名空间 |
+| `pod` | string | `regex: ^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$`；`max_len: 63`；必填 | 长度不超过 63 的 Pod 名称 |
+| `container` | enum | `values: ['api', 'app']`；可选 | 可选预定义容器名 |
+| `jar` | string | `regex: ^/(app\|opt/app\|data/app)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+\.jar$`；`max_len: 200`；必填 | 应用目录下的 jar 文件路径（容器内路径，正则限定） |
+| `entry` | string | `regex: ^(BOOT-INF/classes/)?application[A-Za-z0-9_.-]*\.(properties\|yml\|yaml)$`；`max_len: 120`；必填 | jar 内的 application*.properties、application*.yml、application*.yaml 条目名，可带 BOOT-INF/classes/ 前缀 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, exec, '{pod}', -n, '{namespace}', [-c, '{container}'], --, unzip, -p, '{jar}', '{entry}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+redact:
+  builtin: [secrets, pii]
+  custom:
+    - name: config_secret
+      regex: '(?i)[A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|credentials?|private[_.-]?key|access[_.-]?key|api[_.-]?key)[A-Za-z0-9_.-]*\s*[:=]\s*(?:"[^"\r\n]*"|''[^''\r\n]*''|[^\s#]*)'
+```
+
+### `k8s_pod_java_class_members`
+
+用 javap -p 列出 Pod 内应用目录下 jar 中一个类的成员声明。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D4、D5 |
+| 执行限制 | timeout=20s；max_output=64KB |
+| CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。容器内须有 javap（JDK 自带；仅有 JRE 的镜像不可用）。 |
+| 安全说明 | 固定 kubectl exec ... -- javap -p，不分配 TTY，不开放 stdin，也不开放 -c 等选项（理由同 docker_java_class_members）。classpath 与类名的约束同 docker_java_class_members。kubectl exec 需要 pods/exec 权限，该权限能在 Pod 内执行任意命令，只读 kubeconfig 的 RBAC 须仅限相应命名空间；命令内容由本 action 固定，不由 RBAC 约束。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `namespace` | enum | `values: ['default', 'app']`；必填 | 预定义命名空间 |
+| `pod` | string | `regex: ^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$`；`max_len: 63`；必填 | 长度不超过 63 的 Pod 名称 |
+| `container` | enum | `values: ['api', 'app']`；可选 | 可选预定义容器名 |
+| `classpath` | string | `regex: ^/(app\|opt/app\|data/app)(/[A-Za-z0-9_][A-Za-z0-9._-]*)*/(\*\|[A-Za-z0-9_][A-Za-z0-9._-]*\.jar)$`；`max_len: 200`；必填 | 一个 jar 或一个应用库目录通配（容器内路径，正则限定） |
+| `class_name` | string | `regex: ^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)*(?:[A-Za-bd-z_$][A-Za-z0-9_$]*\|c(?:[A-Za-km-z0-9_$][A-Za-z0-9_$]*)?\|cl(?:[A-Zb-z0-9_$][A-Za-z0-9_$]*)?\|cla(?:[A-Za-rt-z0-9_$][A-Za-z0-9_$]*)?\|clas(?:[A-Za-rt-z0-9_$][A-Za-z0-9_$]*)?\|class[A-Za-z0-9_$]+)$`；`max_len: 200`；必填 | Java 全限定名；嵌套类用美元符；末段不能是 class |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, exec, '{pod}', -n, '{namespace}', [-c, '{container}'], --, javap, -p, -classpath, '{classpath}', '{class_name}']
 exec_fallbacks: [/usr/local/bin/kubectl]
 ```
 
@@ -751,6 +1709,37 @@ argv 或 builtin_config（与示例 YAML 一致）：
 ```yaml
 exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, logs, '{pod}', -n, '{namespace}',
   --tail, '{lines}', --timestamps, [--since, '{since}'], [--container, '{container}']]
+exec_fallbacks: [/usr/local/bin/kubectl]
+```
+
+### `k8s_pod_status`
+
+查看一个 Pod 的 phase、所在节点，以及各容器的 imageID 和重启次数。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D5 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 不自带 kubectl；须安装与集群版本兼容的二进制，并提供固定的只读 kubeconfig。首选 /usr/bin/kubectl，缺失时尝试 /usr/local/bin/kubectl；缺失或功能不支持时标记 unsupported。 |
+| 安全说明 | 命名空间使用枚举，Pod 名称由正则限定为 63 位小写 DNS 字符且不以连字符开头；jsonpath 表达式固定，只输出 phase、nodeName、容器名、imageID、restartCount，不读取环境变量或命令行。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `namespace` | enum | `values: ['default', 'app']`；必填 | 预定义命名空间 |
+| `pod` | string | `regex: ^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$`；`max_len: 63`；必填 | Pod 名称 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, pod, '{pod}', -n, '{namespace}',
+  -o, 'jsonpath=phase={.status.phase}{"\n"}node={.spec.nodeName}{"\n"}{range .status.containerStatuses[*]}container={.name} imageID={.imageID} restartCount={.restartCount}{"\n"}{end}']
 exec_fallbacks: [/usr/local/bin/kubectl]
 ```
 
@@ -1330,35 +2319,6 @@ argv 或 builtin_config（与示例 YAML 一致）：
 exec: [/usr/bin/pgrep, -l, -x, --, '{process}']
 ```
 
-### `process_signal`
-
-向 app 用户拥有的一个进程发送 TERM 或 HUP。
-
-| 项 | 需求 |
-|---|---|
-| risk | write |
-| run_as | app |
-| 执行方式 | exec |
-| filters | [] |
-| redact | secrets |
-| 扩展能力 | 无（基础 exec） |
-| 执行限制 | timeout=5s；max_output=16KB |
-| CentOS 7 | CentOS 7 的 /usr/bin/kill 支持 -s 和 --；必须预建 app 用户。 |
-| 安全说明 | risk 为 write；signal 仅允许 TERM/HUP，pid 必填且大于 1，禁止进程组和广播目标。run_as: app 由操作系统限制可发送信号的进程；仍有 PID 复用风险，需写权限审核。每批最多一个目标。 |
-
-参数：
-
-| 名称 | 类型 | 约束 | 用途（description） |
-|---|---|---|---|
-| `signal` | enum | `values: ['TERM', 'HUP']`；必填 | 允许的 TERM 或 HUP 信号 |
-| `pid` | int | `min: 2`；`max: 4194304`；必填 | 大于 1 的必填进程标识 |
-
-argv 或 builtin_config（与示例 YAML 一致）：
-
-```yaml
-exec: [/usr/bin/kill, -s, '{signal}', --, '{pid}']
-```
-
 ### `process_top`
 
 按 CPU 占用查看进程摘要。
@@ -1383,6 +2343,42 @@ argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
 exec: [/usr/bin/ps, -eo, 'pid,user,%cpu,%mem,etime,comm', --sort=-%cpu]
+```
+
+### `redis_config_get`
+
+读取 Redis 配置中允许的非敏感参数：传入 `command=CONFIG` 和 `args=["GET","maxmemory","dir"]`。参数名按名称精确匹配，不接受通配符。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D7 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 内置驱动不要求 CentOS 7 安装 redis-cli；Redis 版本和 Unix socket 配置需目标环境验证。 |
+| 安全说明 | commands 显式列出 CONFIG，且必须配置 config_params 才允许 CONFIG GET；只支持 GET 子命令，一次最多 16 个参数名，名称只含字母、数字和 `-`，拒绝 `*`、`?`、`[`。requirepass、masterauth、masteruser、primaryauth、aclfile、tls-key-file-pass 等名称（以 acl 开头，或含 pass、auth、user）即使写入 config_params 也在校验和执行时拒绝。action 的 args 正则再次限定为 GET 和 24 个参数名。输出按字符串数组返回，受 max_response_bytes 限制，超限时退出码 0 并标记 truncated。依据：builtin-config.md、internal/builtin/redis/redis.go 的 command、checkConfigParamName、validateCommand。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `command` | enum | builtin_config.commands 收紧为 CONFIG；必填，无默认值 | 固定 Redis CONFIG 命令 |
+| `args` | string_array | 必填；每项匹配 GET 或允许的参数名之一（见 YAML）且最长 64；第一项必须是 GET，后接 1 到 16 个参数名 | GET 加参数名，例如 `["GET","maxmemory","maxmemory-policy"]` |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: redis_command
+builtin_config:
+  credential: /etc/allowops/credentials/redis-main.json
+  address: unix:///var/run/redis/redis.sock
+  timeout: 5s
+  max_response_bytes: 64KB
+  commands: [CONFIG]
+  config_params: [maxmemory, maxmemory-policy, maxmemory-samples, maxclients, timeout, tcp-keepalive, databases, appendonly, appendfsync, save, slowlog-log-slower-than, slowlog-max-len, latency-monitor-threshold, hz, dir, dbfilename, loglevel, repl-backlog-size, replica-read-only, protected-mode, port, bind, cluster-enabled, notify-keyspace-events]
 ```
 
 ### `redis_get`
@@ -1455,6 +2451,41 @@ builtin_config:
   max_response_bytes: 64KB
   commands: [INFO]
   info_sections: [server, memory, stats]
+```
+
+### `redis_slowlog`
+
+读取 Redis 慢日志：传入 `command=SLOWLOG`，`args=["GET","20"]` 返回最近若干条，`args=["LEN"]` 返回条数。不能清空慢日志。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 扩展能力 | D7 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | 内置驱动不要求 CentOS 7 安装 redis-cli；Redis 版本和 Unix socket 配置需目标环境验证。 |
+| 安全说明 | commands 显式列出 SLOWLOG。只支持 GET [count] 和 LEN，count 为 1..128；RESET、HELP 拒绝。慢日志的命令参数和客户端地址可能含业务数据和任意键，因此启用 pii；配置 key_prefixes 时 SLOWLOG GET 被拒绝，仅 LEN 可用。已知限制：secrets 规则只识别 `password=`、`secret=`、`token=` 形式和常见令牌格式，`secret: value` 形式的值不会被脱敏。输出为嵌套数组，受 max_response_bytes 限制。依据：builtin-config.md、internal/builtin/redis/redis.go 的 command、validateCommand。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `command` | enum | builtin_config.commands 收紧为 SLOWLOG；必填，无默认值 | 固定 Redis SLOWLOG 命令 |
+| `args` | string_array | 必填；每项匹配 `^(GET\|LEN\|[1-9]\|[1-9][0-9]\|1[01][0-9]\|12[0-8])$` 且最长 8；GET 后可跟一个数量 | GET 加可选条数，或 LEN，例如 `["GET","20"]` |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: redis_command
+builtin_config:
+  credential: /etc/allowops/credentials/redis-main.json
+  address: unix:///var/run/redis/redis.sock
+  timeout: 5s
+  max_response_bytes: 64KB
+  commands: [SLOWLOG]
 ```
 
 ### `sar_cpu`
@@ -1593,7 +2624,7 @@ exec: [/usr/bin/systemctl, status, '{service}', --no-pager]
 
 9. **目标工具能力检测（待确认）**：当前 `internal/catalog/host.go` 的 `CheckHost`/`ResolveExecutable` 检查文件存在、权限、解释器和 shebang，不检测工具版本、命令选项、容器内程序或远端服务能力。journal_grep 的 -g、Docker --until、kubectl 与集群版本、JDK 工具权限、sysstat 文件版本仍需目标环境证据。本节点没有连接这些环境。建议维护最低版本与所需选项清单，在部署前运行固定、只读的能力探测；由独立节点确定“加载时 unsupported”或“执行时失败”的状态契约。
 
-10. **写操作和容器授权（待确认）**：process_signal 保留 run_as: app、PID >= 2、TERM/HUP、单目标批次；同账号权限不能证明 PID 仍对应批准的进程。生产目录是否接受该授权范围、PID 复用如何处理，代码无法决定。建议以指定服务或进程身份授予权限，发送信号前核对 PID、属主和启动时间，并评估使用 pidfd 避免身份检查后的 PID 复用；方案需单独评审。docker_stop 仍可在宽限期后强制终止；Docker root 权限、容器挂载和容器内链接需运维审核。本节点没有执行任何写 action。
+10. **写操作（已删除）**：2026-10-22 起示例目录不含任何 risk 不是 read 的 action，process_signal 和 docker_stop 已删除。写操作如需恢复，须单独评审授权范围（PID 复用、容器强制终止、Docker root 权限、容器挂载和容器内链接），本节点没有执行任何写 action。
 
 ### G30 示例收紧结果（P12D）
 
@@ -1608,7 +2639,7 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 
 ## 5. 本地示例检查
 
-`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 51 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 83 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
 
 日志冒烟在自动删除的临时目录复制目录，仅替换 log_search 的 builtin_config.allowed_roots。它创建普通与 gzip 测试日志，并通过 catalog try 验证逐行结果、count=3、无匹配退出码 0、max_matches=1 的 truncated/resource_limit_reached。原始示例路径和文件不被修改；try 始终以当前用户执行，run_as 不在此检查中验证。检查不运行 Redis、MySQL、HTTP、Docker、Kubernetes、DNS 或任何写 action。
 
