@@ -76,6 +76,10 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 	return retrySQL(ctx, jobID, func(ctx context.Context) error { return s.taskEvent(ctx, e, jobID, taskID) })
 }
 
+// commitTaskEvent commits a non-terminal task event. Tests replace it to report
+// a lost COMMIT acknowledgement after the server committed.
+var commitTaskEvent = func(ctx context.Context, tx pgx.Tx) error { return tx.Commit(ctx) }
+
 func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID string) error {
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {
@@ -147,7 +151,7 @@ func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID
 		// Output events publish their buffer while holding the task row lock.
 		// Do not create an empty entry after COMMIT releases that lock: a
 		// terminal writer may already have committed and cleared the task.
-		return tx.Commit(ctx)
+		return commitTaskEvent(ctx, tx)
 	}
 	if chunk := e.Message.GetOutput(); chunk != nil {
 		if state != 2 || (chunk.Stream != v1.OutputStream_OUTPUT_STREAM_STDOUT && chunk.Stream != v1.OutputStream_OUTPUT_STREAM_STDERR) || (len(chunk.Data) == 0 && !chunk.Eof) {
@@ -196,7 +200,7 @@ func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID
 		if eof || chunk.Offset != size || out.Bytes+int64(len(chunk.Data)) > int64(a.MaxOutput) {
 			return errors.New("OUTPUT_OFFSET_OR_BUDGET")
 		}
-		if err := tx.Commit(ctx); err != nil {
+		if err := commitTaskEvent(ctx, tx); err != nil {
 			return err
 		}
 		if stream == nil {
@@ -232,7 +236,7 @@ func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID
 		if _, err := tx.Exec(ctx, "INSERT INTO task_steps(job_id,task_id,created_at,step_index,name,result) VALUES ($1,$2,$3,$4,$5,$6)", jobID, taskID, created, step.StepIndex, step.StepName, raw); err != nil {
 			return err
 		}
-		if err := tx.Commit(ctx); err != nil {
+		if err := commitTaskEvent(ctx, tx); err != nil {
 			return err
 		}
 		out.Steps = append(out.Steps, &v1.TaskStep{Index: step.StepIndex, Name: step.StepName, Result: proto.Clone(step.Result).(*v1.ExecutionResult)})
