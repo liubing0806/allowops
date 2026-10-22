@@ -320,9 +320,11 @@ func readRowsRedacted(rows *sql.Rows, maxRows int, mask func(string) string) (Re
 // maskRow returns the TSV fields of one row. Every cell is masked on its own
 // first. The tab-joined row is then masked again so that a rule can relate a
 // name cell to its value cell, as SHOW VARIABLES needs. When that pass changes
-// the row, the fields are taken from the result if the tab count still matches;
-// otherwise the row collapses into one field, because the field boundaries can
-// no longer be trusted.
+// the row, the fields are taken from the result only when no cell contains a
+// tab and the tab count still matches; otherwise the row collapses into one
+// field. An embedded tab makes the boundaries ambiguous, because a rule that
+// removes as many tabs as a cell holds leaves the count unchanged but shifts
+// every field.
 func maskRow(values []sql.NullString, mask func(string) string) []string {
 	cells := make([]string, len(values))
 	for i, v := range values {
@@ -334,7 +336,7 @@ func maskRow(values []sql.NullString, mask func(string) string) []string {
 		joined := strings.Join(cells, "\t")
 		if masked := mask(joined); masked != joined {
 			parts := strings.Split(masked, "\t")
-			if len(parts) != len(cells) {
+			if len(parts) != len(cells) || slices.ContainsFunc(cells, func(c string) bool { return strings.Contains(c, "\t") }) {
 				return []string{escapeTSV(masked)}
 			}
 			for i, v := range values {
