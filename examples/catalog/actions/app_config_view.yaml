@@ -1,0 +1,31 @@
+name: app_config_view
+description: Read the first lines of one application properties file with secret values redacted; narrow the output with the match filter.
+risk: read
+run_as: root
+params:
+  path:
+    type: path
+    description: Existing properties file within the signed allowed roots.
+    allowed_roots: [/etc/app, /opt/app/config]
+  lines:
+    type: int
+    description: Maximum number of lines to read from the start of the file.
+    min: 1
+    max: 2000
+    default: 500
+exec: [/usr/bin/head, -n, '{lines}', --, '{path}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]
+  custom:
+    - name: sensitive_property
+      regex: '(?i)[A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*\s*[=:].*'
+    - name: json_credential
+      regex: '(?i)["''][A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*["'']\s*:\s*(?:"(?:[^"\\]|\\.)*"|''[^'']*''|[^\s,}\]]+)'
+    - name: xml_element_credential
+      regex: '(?i)<[A-Za-z0-9_.:-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.:-]*(?:\s[^>]*)?>(?:<!\[CDATA\[.*?\]\]>|[^<])*</[^>]+>'
+    - name: xml_attribute_credential
+      regex: '(?i)\b(?:name|key|id|var)\s*=\s*["''][^"'']*(?:pass|pwd|secret|token|key|credential)[^"'']*["'']\s+[^>]*?\bvalue\s*=\s*(?:"[^"]*"|''[^'']*'')|\bvalue\s*=\s*(?:"[^"]*"|''[^'']*'')\s+[^>]*?\b(?:name|key|id|var)\s*=\s*["''][^"'']*(?:pass|pwd|secret|token|key|credential)[^"'']*["'']'

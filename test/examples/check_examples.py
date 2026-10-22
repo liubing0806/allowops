@@ -79,6 +79,50 @@ def main():
         if not limited['truncated'] or not limited['resource_limit_reached']:
             raise RuntimeError(f'log_search: expected a resource limit marker, got {limited}')
 
+        # app_config_view: structured credentials are redacted and the exit
+        # code does not depend on the match filter.
+        configs = root / 'configs'
+        configs.mkdir()
+        (configs / 'app.properties').write_text(
+            'server.port=8080\ndb.password=hunter2\n"secretKey": "jsonvalue"\n'
+            '<password>xmlvalue</password>\n<entry name="password" value="attrvalue"/>\n',
+            encoding='utf-8',
+        )
+        (configs / 'private.pem').write_text(
+            '-----BEGIN PRIVATE KEY-----\nTWFuIGlzIGRpc3Rpbmd1aXNoZWQsIG5vdCBvbmx5IGJ5IGhpcw\nabcDEF123xyz98==\n'
+            '-----END PRIVATE KEY-----\n',
+            encoding='utf-8',
+        )
+        for name in ('app_config_view', 'app_config_keys'):
+            action_file = local_catalog / 'actions' / f'{name}.yaml'
+            action = action_file.read_text(encoding='utf-8')
+            original = '    allowed_roots: [/etc/app, /opt/app/config]'
+            if action.count(original) != 1:
+                raise RuntimeError(f'Expected one {name} allowed_roots declaration')
+            action_file.write_text(
+                action.replace(original, '    allowed_roots: ' + json.dumps([str(configs)])),
+                encoding='utf-8',
+            )
+        viewed = smoke(local_catalog, 'app_config_view', f'path={configs}/app.properties')
+        for secret in ('hunter2', 'jsonvalue', 'xmlvalue', 'attrvalue'):
+            if secret in viewed['stdout']:
+                raise RuntimeError(f'app_config_view leaked {secret!r}: {viewed}')
+        if 'server.port=8080' not in viewed['stdout']:
+            raise RuntimeError(f'app_config_view: expected server.port line, got {viewed}')
+        for pattern in ('hunter2', 'absent'):
+            probe = smoke(local_catalog, 'app_config_view', f'path={configs}/app.properties', f'match={pattern}')
+            if probe['stdout']:
+                raise RuntimeError(f'app_config_view: match={pattern} must not reveal redacted values: {probe}')
+        keys = smoke(local_catalog, 'app_config_keys', f'path={configs}/app.properties')
+        if keys['stdout'] != 'server.port\ndb.password\n':
+            raise RuntimeError(f'app_config_keys: unexpected keys {keys}')
+        pem = subprocess.run(
+            [cli, 'catalog', 'try', 'app_config_keys', '--dir', str(local_catalog), '--param', f'path={configs}/private.pem'],
+            capture_output=True, text=True,
+        )
+        if 'TWFu' in pem.stdout or 'abcDEF' in pem.stdout:
+            raise RuntimeError('app_config_keys printed private key content: ' + pem.stdout)
+
 
 if __name__ == '__main__':
     try:
