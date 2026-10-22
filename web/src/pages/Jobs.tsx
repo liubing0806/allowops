@@ -202,7 +202,15 @@ export function JobDetail() {
     queryKey: ['session'],
     queryFn: () => api.getCurrentSession(),
   })
-  const [host, setHost] = useState<string | null>(null)
+  // The route element is reused when :jobId changes, so the selection is
+  // bound to the job it was made for instead of being reset in an effect.
+  const [selected, setSelected] = useState<{
+    jobId: string
+    host: string
+  } | null>(null)
+  const host = selected?.jobId === jobId ? selected.host : null
+  const setHost = (hostname: string | null) =>
+    setSelected(hostname === null ? null : { jobId, host: hostname })
   const [cancel, setCancel] = useState(false)
   const cancellation = useCommand(async () => {
     await api.cancelJob({ jobId })
@@ -330,11 +338,13 @@ export function JobDetail() {
             {t('job.untrusted')}
           </p>
           <OutputStream
+            key={`${jobId}/${host}/OUTPUT_STREAM_STDOUT`}
             jobId={jobId}
             hostname={host}
             stream="OUTPUT_STREAM_STDOUT"
           />
           <OutputStream
+            key={`${jobId}/${host}/OUTPUT_STREAM_STDERR`}
             jobId={jobId}
             hostname={host}
             stream="OUTPUT_STREAM_STDERR"
