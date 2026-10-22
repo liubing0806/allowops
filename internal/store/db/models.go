@@ -110,6 +110,14 @@ type GatewayMessage struct {
 	ExpiresAt      pgtype.Timestamptz
 }
 
+type GatewayUpdateCheck struct {
+	ID            bool
+	LatestVersion string
+	PublishedAt   pgtype.Timestamptz
+	CheckedAt     pgtype.Timestamptz
+	LastError     string
+}
+
 type Host struct {
 	HostID               string
 	Hostname             string

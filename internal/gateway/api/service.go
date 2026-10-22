@@ -67,6 +67,8 @@ type Config struct {
 	// Version is the gateway build version shown in the console; set by the
 	// binary, not by YAML. Empty means a development build.
 	Version string `yaml:"-"`
+	// UpdateCheckEnabled mirrors update_check.enabled; set by the binary.
+	UpdateCheckEnabled bool `yaml:"-"`
 }
 type RoleMappingConfig struct {
 	ProviderID string   `yaml:"provider_id"`

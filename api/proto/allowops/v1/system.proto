@@ -56,6 +56,21 @@ message GetSystemStatusResponse {
   uint64 expiring_service_account_tokens = 8;
   repeated DependencyHealth dependencies = 9;
   ApiLimits limits = 10;
+  bool update_check_enabled = 11;
+  // Build version of the serving gateway; "dev" for development builds.
+  string gateway_version = 12;
+  // Set only when the check is enabled and a newer release is known.
+  GatewayUpdate gateway_update = 13;
+  google.protobuf.Timestamp update_checked_at = 14;
+  // Fixed category of the last failed check, empty after a success.
+  string update_check_error = 15;
+  // Permission-filtered hosts whose SemVer agent version is lower than the gateway's.
+  uint64 hosts_below_gateway_version = 16;
+}
+message GatewayUpdate {
+  string latest_version = 1;
+  google.protobuf.Timestamp published_at = 2;
+  google.protobuf.Timestamp checked_at = 3;
 }
 message ListGatewayInstancesRequest {
   PageRequest page = 1;

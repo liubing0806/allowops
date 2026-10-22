@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -22,6 +23,7 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/mcp"
 	"github.com/liubing0806/allowops/internal/gateway/output"
 	"github.com/liubing0806/allowops/internal/gateway/server"
+	"github.com/liubing0806/allowops/internal/gateway/updatecheck"
 	"github.com/liubing0806/allowops/internal/store"
 	"gopkg.in/yaml.v3"
 )
@@ -61,6 +63,28 @@ type configuration struct {
 	Providers  []api.ProviderConfig `yaml:"providers"`
 	Jobs       job.Config           `yaml:"jobs"`
 	Output     output.Config        `yaml:"output"`
+	// Opt-in: the gateway makes no outbound request unless enabled.
+	UpdateCheck updatecheck.Config `yaml:"update_check"`
+}
+
+// decodeConfig applies the defaults, rejects unknown keys and validates
+// update_check when it is enabled.
+func decodeConfig(r io.Reader) (configuration, error) {
+	cfg := configuration{Address: ":443", Gateway: hostconn.DefaultConfig(), Identity: api.Config{Origin: "https://localhost"}, Jobs: job.DefaultConfig(), UpdateCheck: updatecheck.DefaultConfig()}
+	if version != "dev" {
+		cfg.Gateway.Version = version
+	}
+	decoder := yaml.NewDecoder(r)
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&cfg); err != nil {
+		return cfg, fmt.Errorf("invalid gateway config: %w", err)
+	}
+	if cfg.UpdateCheck.Enabled {
+		if err := cfg.UpdateCheck.Validate(); err != nil {
+			return cfg, fmt.Errorf("invalid gateway config: %w", err)
+		}
+	}
+	return cfg, nil
 }
 
 func run(args []string) error {
@@ -105,14 +129,9 @@ func runWithAudit(args []string, auditor api.Auditor) error {
 			return fmt.Errorf("open gateway config")
 		}
 		defer f.Close()
-		cfg := configuration{Address: ":443", Gateway: hostconn.DefaultConfig(), Identity: api.Config{Origin: "https://localhost"}, Jobs: job.DefaultConfig()}
-		if version != "dev" {
-			cfg.Gateway.Version = version
-		}
-		decoder := yaml.NewDecoder(f)
-		decoder.KnownFields(true)
-		if err := decoder.Decode(&cfg); err != nil {
-			return fmt.Errorf("invalid gateway config: %w", err)
+		cfg, err := decodeConfig(f)
+		if err != nil {
+			return err
 		}
 		if cfg.Audit.Export.Enabled && (cfg.Audit.ExportDirectory == "" || cfg.Audit.CursorName == "") {
 			return fmt.Errorf("audit export_directory and cursor_name required when audit.export.enabled=true")
@@ -134,6 +153,7 @@ func runWithAudit(args []string, auditor api.Auditor) error {
 			auditor = api.NewAuditor(auditStore)
 		}
 		cfg.Identity.Version = version
+		cfg.Identity.UpdateCheckEnabled = cfg.UpdateCheck.Enabled
 		identity, err := api.New(ctx, db, cfg.Identity, auditor)
 		if err != nil {
 			return err
@@ -216,6 +236,12 @@ func runWithAudit(args []string, auditor api.Auditor) error {
 			}
 			exporter := &audit.Exporter{Store: auditStore, Cursor: cfg.Audit.CursorName, Storage: audit.FileStorage{Directory: cfg.Audit.ExportDirectory, MaxBytes: cfg.Audit.MaxFileBytes}}
 			go func() { auditErrors <- exporter.Run(auditCtx, time.Second) }()
+		}
+		if cfg.UpdateCheck.Enabled {
+			checker := updatecheck.New(db.Pool, cfg.UpdateCheck, version)
+			checked := make(chan struct{})
+			go func() { checker.Run(auditCtx); close(checked) }()
+			defer func() { stopAudit(); <-checked }()
 		}
 		finished := make(chan error, 1)
 		go func() { finished <- srv.Serve(listener) }()

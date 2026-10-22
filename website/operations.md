@@ -127,3 +127,27 @@ If publication or management returns an audit-result error after a possible
 commit, read the resource before retrying. If an execution response is lost,
 inspect jobs before submitting again. There is no general exactly-once side-effect
 guarantee. A gateway-instance loss can require task reconciliation without replay.
+
+## New release notice
+
+The gateway can tell console users when a newer release exists. It is off by
+default, so the gateway makes no outbound request unless you enable it:
+
+```yaml
+update_check:
+  enabled: true
+  url: https://liubing0806.github.io/allowops/version.json
+  interval: 24h
+```
+
+`url` must be HTTPS without credentials and `interval` must be at least `1h`.
+Point `url` at an internal copy of the manifest when the gateway has no internet
+access. The manifest is a JSON object with `version` (strict SemVer) and an
+optional `published_at` (RFC 3339).
+
+Each check sends one GET request with `User-Agent: allowops-gateway/<version>`
+and nothing else. It uses the proxy from the environment, follows at most three
+HTTPS redirects and reads at most 64 KiB. Gateway instances share one result in
+PostgreSQL, so a cluster fetches about once per interval. The gateway only
+informs; it never downloads or installs anything. Development builds report
+`dev` and never show a notice.
