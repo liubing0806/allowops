@@ -129,9 +129,10 @@ func TestGeneratedSchemaValidatesInputs(t *testing.T) {
 				valid bool
 			}{
 				{`{"targets":{"hosts":["web-01"]},"params":{"mode":"recent"},"reason":"inspect"}`, true},
-				{`{"targets":{"selector":"env=test"},"params":{"mode":"recent"},"reason":"inspect"}`, false},
 				{`{"targets":{"hosts":["web-01"]},"reason":"inspect"}`, false},
-				{`{"targets":{"hosts":["web-01"]},"params":{"mode":"recent"},"reason":"inspect","count":false,"tail":1}`, false},
+				// Cross-field rules are left to actionRequest (TestActionValidation).
+				{`{"targets":{"selector":"env=test"},"params":{"mode":"recent"},"reason":"inspect"}`, true},
+				{`{"targets":{"hosts":["web-01"]},"params":{"mode":"recent"},"reason":"inspect","count":false,"tail":1}`, true},
 			} {
 				var input any
 				if err := json.Unmarshal([]byte(tc.input), &input); err != nil {
