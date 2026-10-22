@@ -341,6 +341,37 @@ func TestGetRangeBoundsConcurrentGrowth(t *testing.T) {
 	}
 }
 
+// STRLEN equal to the limit does not prove the GETRANGE prefix is complete:
+// the key may have grown in between, and an unchanged key of exactly limit
+// bytes must still be returned whole.
+func TestGetAtExactLimitDetectsGrowth(t *testing.T) {
+	const limit = 128
+	exact := strings.Repeat("x", limit)
+	for _, tc := range []struct {
+		name          string
+		grow          bool
+		wantTruncated bool
+	}{{"unchanged", false, false}, {"grown after STRLEN", true, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := startServer(t)
+			s.seed(t, "SET", "key", exact)
+			reader := redisclient.NewClient(s.client.Options())
+			defer reader.Close()
+			if tc.grow {
+				reader.AddHook(afterCommandHook{after: func(cmd redisclient.Cmder) {
+					if cmd.Name() == "strlen" {
+						s.seed(t, "SET", "key", exact+"tail")
+					}
+				}})
+			}
+			value, truncated, err := readResponse(context.Background(), reader, []any{"GET", "key"}, limit)
+			if err != nil || truncated != tc.wantTruncated || value != exact {
+				t.Fatalf("GET at limit: value=%q truncated=%v want %v error=%v", value, truncated, tc.wantTruncated, err)
+			}
+		})
+	}
+}
+
 func TestResponseResourceLimits(t *testing.T) {
 	if !inRootNamespace(t) {
 		return
