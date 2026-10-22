@@ -25,6 +25,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { Textarea } from '@/components/ui/textarea'
 import { commaList, labelsText, requiredText } from '@/lib/forms'
 import { useCommand } from '@/lib/notifications'
 
@@ -473,7 +474,11 @@ function RuleForm({
           label={t('host.labels')}
           error={form.formState.errors.labels?.message}
         >
-          <Input {...form.register('labels')} />
+          <Textarea
+            rows={3}
+            placeholder={t('host.labelsPlaceholder')}
+            {...form.register('labels')}
+          />
         </Field>
         <Field label={t('policy.hoursFrom')}>
           <Input

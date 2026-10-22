@@ -76,7 +76,7 @@ describe('console pages', () => {
       await screen.findByRole('heading', { name: 'web-01', level: 1 }),
     ).toBeInTheDocument()
     fireEvent.change(await screen.findByLabelText('授权标签'), {
-      target: { value: 'env=prod,tier=edge' },
+      target: { value: 'env=prod\ntier=edge' },
     })
     fireEvent.click(screen.getByRole('button', { name: '保存标签' }))
     expect(await screen.findByRole('status')).toHaveTextContent('标签已保存')

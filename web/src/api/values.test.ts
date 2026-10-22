@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatLabels, parseLabels } from './values'
+import { formatLabels, parseLabels, parseSelector } from './values'
 
 describe('label text round trip', () => {
   it.each([
@@ -31,5 +31,16 @@ describe('label text round trip', () => {
   it('rejects a line without a separator and duplicate keys', () => {
     expect(() => parseLabels('a')).toThrow('error.labels')
     expect(() => parseLabels('a=1\na=2')).toThrow('error.labels')
+  })
+})
+
+describe('host selector text', () => {
+  it('stays comma separated with a restricted charset', () => {
+    expect(parseSelector('env=prod, reported.os=linux')).toEqual({
+      env: 'prod',
+      'reported.os': 'linux',
+    })
+    expect(() => parseSelector('env=a b')).toThrow('error.labels')
+    expect(() => parseSelector('env=prod\ntier=web')).toThrow('error.labels')
   })
 })
