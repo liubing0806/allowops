@@ -285,7 +285,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 
 ### 控制台页面
 
-登录、概览、主机（筛选、详情、selector 批量设标签、CSV 导入并预览、删除）、join token、目录（版本、过期倒计时、action 详情、历史、版本分布）、策略（表单、试算、历史、回滚）、服务账号、job（详情、输出、取消）、审计（查询、哈希链校验）、用户与角色、系统（实例和依赖健康、主机端版本分布）。界面中英文。
+登录、概览（含网关新版本提醒）、主机（筛选、详情、selector 批量设标签、CSV 导入并预览、删除）、join token、目录（版本、过期倒计时、action 详情、历史、版本分布）、策略（表单、试算、历史、回滚）、服务账号、job（详情、输出、取消）、审计（查询、哈希链校验）、用户与角色、系统（实例和依赖健康、主机端版本分布、实例版本不一致提示、低于网关版本的主机数）。侧栏产品名下方显示网关版本号（来自 `GetCurrentSession` 的 `gateway_version`），有新版本时旁边显示标记。界面中英文。
 
 ### CLI
 
@@ -316,6 +316,7 @@ allowops-agent join|run|status
 - 四个二进制同一 SemVer 版本，从同一 Git tag 发布。网关支持当前和上一主版本的主机端；主机端比网关新时拒绝连接。
 - 主机端：仅 amd64；`.deb`、`.rpm`、`.tar.gz`；`CGO_ENABLED=0`。支持 CentOS 7 / RHEL 7、Rocky/Alma/RHEL 8+、Ubuntu 20.04+、Debian 11+。rpm 不用弱依赖、不用 zstd 压缩，用 RSA 4096 GPG 签名；unit 只用 systemd 219 支持的选项。
 - 主机端在线升级：签名目录中的升级 action（`run_as: root`、`risk: dangerous`），用 yum/apt 从内网软件源安装指定版本，再用 `systemd-run --on-active=5 --timer-property=AccuracySec=1s` 重启 `allowops-agent.service`，task 结果先回传。版本参数为 enum，只列出不高于当前网关的版本；先升级网关，再发布含新版本的目录。灰度用 job 主机选择器分批执行。软件源和包签名由运维人员维护。依据见决定记录第 8 节。
+- 网关新版本提醒：网关读取发布清单（发布流水线从 Git tag 生成的静态 JSON，发布到文档站），发现新版本后在控制台提醒，不下载、不安装。配置 `update_check.enabled`（默认 `false`）和 `update_check.url`（默认文档站地址，内网可改为内部地址）。开启后每 24 小时检查一次并加随机延迟，请求只带 `User-Agent: allowops-gateway/<版本>`。多实例用 advisory lock 只由一个实例请求，结果写入单行表供所有实例读取。版本号须为 SemVer，发布说明链接的主机名须与清单地址相同。依据见决定记录第 8 节。
 - 主机端文件布局：
 
 ```
