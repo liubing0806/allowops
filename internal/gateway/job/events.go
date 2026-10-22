@@ -319,9 +319,12 @@ func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, "UPDATE tasks SET status=$3,result=$4,finished_at=now(),stdout_preview=$5,stderr_preview=$6,stdout_sha256=$7,stderr_sha256=$8,step_count=$9,stdout_size=$10,stderr_size=$11 WHERE job_id=$1 AND task_id=$2 AND status IN (1,2)", jobID, taskID, int16(completed.Result.Status), raw, stdout[:min(len(stdout), GroupBytes)], stderr[:min(len(stderr), GroupBytes)], stdoutHash[:], stderrHash[:], len(out.Steps), len(stdout), len(stderr)); err != nil {
+		if _, err := tx.Exec(ctx, "UPDATE tasks SET status=$3,result=$4,finished_at=now(),stdout_preview=$5,stderr_preview=$6,stdout_sha256=$7,stderr_sha256=$8,step_count=$9,stdout_size=$10,stderr_size=$11,output_instance=$12 WHERE job_id=$1 AND task_id=$2 AND status IN (1,2)", jobID, taskID, int16(completed.Result.Status), raw, stdout[:min(len(stdout), GroupBytes)], stderr[:min(len(stderr), GroupBytes)], stdoutHash[:], stderrHash[:], len(out.Steps), len(stdout), len(stderr), s.instanceID); err != nil {
 			return err
 		}
+		// output_instance names the process whose persist goroutine moves
+		// output_state on; it can differ from jobs.origin_instance. If that
+		// process dies first, RecoverLostInstances marks the output unavailable.
 		// Register accepted persistence before terminal COMMIT is visible to
 		// Drain, and serialize worker admission against Close's cancellation.
 		s.mu.Lock()
