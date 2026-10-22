@@ -12,7 +12,26 @@
     "replicaCount": {"type": "integer", "minimum": 2},
     "gateway": {
       "type": "object",
-      "properties": {"shutdownGraceSeconds": {"type": "integer", "minimum": 1}}
+      "properties": {
+        "shutdownGraceSeconds": {"type": "integer", "minimum": 1},
+        "providerSecretEnv": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "secretName", "key"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "not": {"enum": ["ALLOWOPS_DATABASE_URL", "AWS_SHARED_CREDENTIALS_FILE", "AWS_EC2_METADATA_DISABLED"]}
+              },
+              "secretName": {"type": "string", "minLength": 1},
+              "key": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
     },
     "audit": {
       "type": "object",

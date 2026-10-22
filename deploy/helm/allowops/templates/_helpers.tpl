@@ -86,6 +86,13 @@ containers:
           secretKeyRef:
             name: {{ .Values.database.existingSecret }}
             key: {{ .Values.database.key }}
+      {{- range .Values.gateway.providerSecretEnv }}
+      - name: {{ .name | quote }}
+        valueFrom:
+          secretKeyRef:
+            name: {{ .secretName | quote }}
+            key: {{ .key | quote }}
+      {{- end }}
     ports:
       - name: tls
         containerPort: 8443
