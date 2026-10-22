@@ -868,6 +868,23 @@ params:
 
 - `secrets` 规则增加：命令行 `-p<密码>` 形式（mysql 客户端）、`MYSQL_PWD=`、`REDISCLI_AUTH=`。
 
+### D10 执行命令的程序与程序文本（安全修正）
+
+2026-10-22 确认。威胁：agent 只能传参数值，但模板若把参数送到会把参数当命令或代码执行的位置，参数值就成了任意命令。
+
+- 会执行命令的程序按解释器处理，未声明 `allow_interpreter` 时拒绝；`catalog validate` 按命令名检查，主机端再按解析软链接后的路径检查。
+  - 整个程序：`watch`、`script`、`busybox`、`expect`、`tclsh`、`wish`、`fish`、`parallel`、`time`、`ssh`、`scp`、`rsh`、`sshpass`、`su`、`runuser`、`pkexec`、`doas`、`sg`、`setsid`、`setpriv`、`flock`、`nohup`、`chrt`、`taskset`、`numactl`、`unshare`、`prlimit`、`runcon`、`capsh`、`cgexec`、`chpst`、`systemd-run`、`machinectl`、`start-stop-daemon`、`strace`、`ltrace`、`gdb`、`git`、`psql`、`mysql`、`mariadb`、`sqlite3`。
+  - 出现特定选项时：`find` 的 `-exec`/`-execdir`/`-ok`/`-okdir`；`tar` 的 `--to-command`、`--use-compress-program`/`-I`、`--info-script`/`-F`、`--new-volume-script`、`--checkpoint-action`、`--rsh-command`、`--rmt-command`（长选项含可被接受的前缀）；`rsync` 的 `-e`/`--rsh`、`--rsync-path`、`-M`/`--remote-option`；`ip` 的 `netns exec`、`-batch`。
+  - 解释器列表补充 `ksh`、`mksh`、`rbash`、`csh`、`tcsh`。
+  - `busybox` 只按命令名检查：主机上普通命令可能是指向 busybox 的软链接。
+- 声明 `allow_interpreter` 时，程序文本仍由签名固定。对包装命令展开后的解释器命令：
+  - 占位符不能出现在解释器选项、选项值或程序文本位置（如 `bash -c {x}`、`bash {x}`、`python3 -c {x}`、`python3 -m {x}`、`perl -e {x}`、`awk {x}`、`sed -e {x}`）。
+  - 程序文本之后的占位符不能紧跟以 `-` 开头的选项，参数类型也不能渲染出以 `-` 开头的值（enum 含 `-` 开头的值、int 未设 `min >= 0` 时拒绝）。
+  - 有占位符时，程序文本之前出现未知选项一律拒绝，因为未知选项可能取下一个词作值。
+  - 允许的写法：`["/bin/bash", "-c", "固定脚本", "_", "{x}"]`、`["/usr/bin/python3", "-c", "固定代码", "{x}"]`、`["/usr/bin/perl", "-e", "固定代码", "--", "{x}"]`。
+  - 上述会执行命令的程序在 `allow_interpreter` 下也不能带占位符。
+- 不覆盖：签名脚本内部的 `eval "$1"` 等写法、名单以外的程序、`docker run`/`kubectl run`。这些依赖目录评审。
+
 ### 内置处理器的执行位置
 
 - 声明 `run_as` 或需要读取主机凭据的内置处理器在 allowops-exec 中执行；其余在 allowops-agent 中执行。

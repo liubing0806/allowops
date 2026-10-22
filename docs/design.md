@@ -165,7 +165,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 5. 执行环境清空，只保留 `PATH=/usr/sbin:/usr/bin:/sbin:/bin`、`LANG=C.UTF-8`、`PAGER=cat`、`SYSTEMD_PAGER=`。
 6. 每个动作都有超时（context），超时后结束整个进程组。
 7. 输出超过 max_output 时截断，结果中 `truncated: true`。脱敏在截断前执行。
-8. exec[0] 必须是绝对路径；拒绝 sh/bash/zsh/python/perl/awk/sed 等解释器和 `#!` 脚本（`allow_interpreter: true` 可覆盖并打印警告）。包装命令（`docker exec`、`kubectl exec --`、`nsenter`、`chroot`、`env`、`timeout`、`nice`、`ionice`、`stdbuf`、`xargs`）后真正执行的命令同样检查；禁止 `docker exec -t`、`kubectl exec -t`。
+8. exec[0] 必须是绝对路径；拒绝 sh/bash/zsh/python/perl/awk/sed 等解释器和 `#!` 脚本（`allow_interpreter: true` 可覆盖并打印警告）。包装命令（`docker exec`、`kubectl exec --`、`nsenter`、`chroot`、`env`、`timeout`、`nice`、`ionice`、`stdbuf`、`xargs`）后真正执行的命令同样检查；禁止 `docker exec -t`、`kubectl exec -t`。会执行命令的程序（`watch`、`ssh`、`su`、`setsid`、`git`、`psql`、`find -exec`、`tar --to-command` 等）按解释器处理；声明 `allow_interpreter` 时，占位符仍不能提供解释器选项、程序文本或这类程序的参数。名单和规则见决定记录 D10。
 9. 未知参数、缺失必填参数、类型错误一律拒绝，错误信息给出合法值。
 
 攻击测试集：`; rm -rf /`、`$(id)`、`` `id` ``、`--output=/etc/passwd`、`../../etc/shadow`、软链接逃逸、超长字符串、换行符注入等，全部被拒绝或被当作普通字面量；另加第 11 节威胁模型列出的测试。
