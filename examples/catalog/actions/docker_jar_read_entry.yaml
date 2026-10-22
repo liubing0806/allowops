@@ -1,0 +1,29 @@
+name: docker_jar_read_entry
+description: Read one application configuration entry from a jar inside an allowed container without writing files.
+risk: read
+run_as: root
+params:
+  container:
+    type: enum
+    description: Container selected from the signed allowlist.
+    values: [api, app]
+  jar:
+    type: string
+    description: Jar file path under /app, /opt/app or /data/app inside the container; path segments cannot start with a dot.
+    regex: '^/(app|opt/app|data/app)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+\.jar$'
+    max_len: 200
+  entry:
+    type: string
+    description: Configuration entry name inside the jar; application*.properties, application*.yml or application*.yaml, optionally under BOOT-INF/classes/.
+    regex: '^(BOOT-INF/classes/)?application[A-Za-z0-9_.-]*\.(properties|yml|yaml)$'
+    max_len: 120
+exec: [/usr/bin/docker, exec, '{container}', unzip, -p, '{jar}', '{entry}']
+timeout: 15s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]
+  custom:
+    - name: config_secret
+      regex: '(?i)[A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|credentials?|private[_.-]?key|access[_.-]?key|api[_.-]?key)[A-Za-z0-9_.-]*\s*[:=]\s*(?:"[^"\r\n]*"|''[^''\r\n]*''|[^\s#]*)'
