@@ -282,11 +282,14 @@ result := {"decision": decision, "rules": [rule.name | some rule in matched]}
 ## 8. 发布与部署
 
 - 主机端在线升级（2026-10-22 决定）：升级做成签名目录中的一个 action，网关按普通 job 下发，替代原来“allowops 不做托管升级”的决定。控制台显示主机端版本分布，用于确认升级进度。
-  - action 声明 `run_as: root`、`risk: dangerous`，用 yum/apt 从内网软件源安装指定版本的 allowops-agent 包，再用 `systemd-run` 创建延迟执行的临时单元重启 `allowops-agent.service`，使 task 结果先回传。
+  - action 声明 `run_as: root`、`risk: dangerous`，用 yum/apt 从内网软件源安装指定版本的 allowops-agent 包，再用 `systemd-run --on-active=5 --timer-property=AccuracySec=1s` 创建临时定时器重启 `allowops-agent.service`，使 task 结果先回传。重启任务运行在临时单元自己的 cgroup 中，agent 停止时不会被结束。不设 `AccuracySec` 时 systemd 默认精度为 1 分钟，实测重启延迟 20～48 秒。
   - 版本参数用 enum，只列出不高于当前网关的版本。每次网关升级后再发布含新版本的目录。
   - 校验分工：action 由目录签名密钥签名；安装包由 rpm/deb GPG 签名校验；OPA 策略控制谁能执行；审计记录执行。软件源和包签名密钥仍由运维人员维护。
   - 灰度：用 job 的主机选择器按授权标签分批执行。
-  - 限制：比网关新的主机端会被拒绝连接，之后无法再通过网关下发降级，只能由运维人员在主机上处理。
+  - 限制：比网关新的主机端会被拒绝连接，之后无法再通过网关下发降级。恢复方式是运维人员在主机上降级，或把网关升级到不低于该主机端的版本（后者按版本检查规则推断，未实测）。
+  - 限制：网关和 agent 当前都不记录版本拒绝，主机只显示为离线，需要补充日志或状态字段。
+  - 限制：systemd 219 上临时定时器触发后保持 `elapsed` 状态，每次升级留下一个 `run-*.timer`，重启主机后消失。
+  - 验证（2026-10-22，`test/vm` 的 `TestOnlineUpgrade`）：CentOS 7（systemd 219）、Ubuntu 20.04（systemd 245）、Rocky 9（systemd 252）上，0.1.0 经 action 升级到 0.2.0 后 task 返回 SUCCEEDED，约 5 秒后 agent 重启并以新版本重连，可继续执行 action；升级到比网关（0.2.0）新的 0.3.0 后主机保持离线，数据库版本仍为 0.2.0，后续 job 为 FAILED。测试用本地包文件代替软件源。
   - 被否决：网关直接推送二进制。网关被攻破时等于获得所有主机 root，破坏“网关被攻破也只能执行已签名 action”的保证。
   - 被否决：agent 内置自更新（网关分发二进制，主机用单独的发布公钥验证，allowops-exec 替换文件）。需要新的信任锚和分发、回滚代码；直接替换文件使 rpm/dpkg 包数据库与实际文件不一致。
 - 版本兼容：网关支持当前和上一主版本的主机端；主机端版本比网关新时拒绝连接。升级顺序为先网关后主机端。

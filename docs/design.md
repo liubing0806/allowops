@@ -315,7 +315,7 @@ allowops-agent join|run|status
 
 - 四个二进制同一 SemVer 版本，从同一 Git tag 发布。网关支持当前和上一主版本的主机端；主机端比网关新时拒绝连接。
 - 主机端：仅 amd64；`.deb`、`.rpm`、`.tar.gz`；`CGO_ENABLED=0`。支持 CentOS 7 / RHEL 7、Rocky/Alma/RHEL 8+、Ubuntu 20.04+、Debian 11+。rpm 不用弱依赖、不用 zstd 压缩，用 RSA 4096 GPG 签名；unit 只用 systemd 219 支持的选项。
-- 主机端在线升级：签名目录中的升级 action（`run_as: root`、`risk: dangerous`），用 yum/apt 从内网软件源安装指定版本，再用 `systemd-run` 延迟重启 `allowops-agent.service`，task 结果先回传。版本参数为 enum，只列出不高于当前网关的版本；先升级网关，再发布含新版本的目录。灰度用 job 主机选择器分批执行。软件源和包签名由运维人员维护。依据见决定记录第 8 节。
+- 主机端在线升级：签名目录中的升级 action（`run_as: root`、`risk: dangerous`），用 yum/apt 从内网软件源安装指定版本，再用 `systemd-run --on-active=5 --timer-property=AccuracySec=1s` 重启 `allowops-agent.service`，task 结果先回传。版本参数为 enum，只列出不高于当前网关的版本；先升级网关，再发布含新版本的目录。灰度用 job 主机选择器分批执行。软件源和包签名由运维人员维护。依据见决定记录第 8 节。
 - 主机端文件布局：
 
 ```
