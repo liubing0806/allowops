@@ -30,6 +30,12 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install PyYAML==6.0.3
       - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+      # ubuntu-24.04 runners restrict unprivileged user namespaces through AppArmor;
+      # executor and redis tests re-run themselves under `unshare -Ur`.
+      - name: Allow unprivileged user namespaces
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          unshare -Ur true
       - run: make lint test vuln build licenses
       - run: make opa-test
       - run: make fuzz FUZZTIME=30s
