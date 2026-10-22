@@ -109,9 +109,11 @@ type Service struct {
 	mu             sync.Mutex
 	connections    map[string]*connection
 	pulls          map[string]bool
-	ctx            context.Context
-	cancel         context.CancelFunc
-	done           chan struct{}
+	// rejectedVersions maps host ID to the last logged unsupported agent version.
+	rejectedVersions sync.Map
+	ctx              context.Context
+	cancel           context.CancelFunc
+	done             chan struct{}
 }
 
 func New(s *store.Store, ca *CA, config Config, hooks Hooks) (*Service, error) {
@@ -334,6 +336,17 @@ func (s *Service) validateLabels(labels map[string]string) error {
 	return nil
 }
 
+// logVersionRejection logs once per host and version; agents retry every few seconds.
+func (s *Service) logVersionRejection(ctx context.Context, hostID, version string) {
+	if previous, ok := s.rejectedVersions.Swap(hostID, version); ok && previous == version {
+		return
+	}
+	// The hostname only helps operators read the log; a failed lookup leaves it empty.
+	var hostname string
+	_ = s.Store.Pool.QueryRow(ctx, "SELECT hostname FROM hosts WHERE host_id=$1", hostID).Scan(&hostname)
+	slog.WarnContext(ctx, "agent version unsupported", "host_id", hostID, "hostname", hostname, "agent_version", version, "gateway_version", s.Config.Version)
+}
+
 func (s *Service) Connect(ctx context.Context, stream *connect.BidiStream[v1.ConnectRequest, v1.ConnectResponse]) error {
 	id, err := s.authenticate(ctx)
 	if err != nil {
@@ -380,8 +393,10 @@ func (s *Service) Connect(ctx context.Context, stream *connect.BidiStream[v1.Con
 		return rpcFailure(connect.CodeInvalidArgument, errors.New("first message must be AgentHello with positive capacity"))
 	}
 	if err := CheckVersion(s.Config.Version, h.AgentVersion); err != nil {
-		return rpcFailure(connect.CodeUnimplemented, errors.New("agent version unsupported"))
+		s.logVersionRejection(ctx, id.HostID, h.AgentVersion)
+		return rpcFailure(connect.CodeUnimplemented, fmt.Errorf("agent version %s unsupported by gateway %s", h.AgentVersion, s.Config.Version))
 	}
+	s.rejectedVersions.Delete(id.HostID)
 	if err := s.validateLabels(h.ReportedLabels); err != nil {
 		return rpcFailure(connect.CodeInvalidArgument, err)
 	}
