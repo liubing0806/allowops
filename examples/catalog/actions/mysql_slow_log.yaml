@@ -1,32 +1,28 @@
 name: mysql_slow_log
-description: Search MySQL or MariaDB slow query logs, plain or gzip, with bounded scan and match limits.
+description: Read the last lines of a MySQL or MariaDB slow query log with SQL literals redacted.
 risk: read
 run_as: root
 params:
-  path_glob:
-    type: string
-    description: Slow log path glob directly under /var/log, /var/log/mysql or /var/log/mariadb.
-    regex: ^/var/log/((mysql|mariadb)/)?[A-Za-z0-9_*?-]*slow[A-Za-z0-9_.*?-]*$
-    max_len: 128
-  pattern:
-    type: string
-    description: Bounded search pattern without line breaks.
-    regex: ^[^\r\n]+$
-    max_len: 200
-timeout: 30s
-builtin: log_search
-builtin_config:
-  allowed_roots: [/var/log]
-  max_files: 20
-  max_scan: 256MB
-  max_context: 10
-  max_matches: 500
+  path:
+    type: path
+    description: Existing slow log file within the signed database log directories.
+    allowed_roots: [/var/log/mysql, /var/log/mariadb]
+  lines:
+    type: int
+    description: Number of trailing log lines to read.
+    min: 1
+    max: 500
+    default: 200
+exec: [/usr/bin/tail, -n, '{lines}', --, '{path}']
+timeout: 10s
 max_output: 64KB
 filters: [match, exclude, tail, head, count]
 max_scan: 256MB
 redact:
   builtin: [secrets, pii]
   custom:
+    - name: sql_comment
+      regex: '(?s)/\*.*?(?:\*/|$)|--(?:[ \t\r\f\v][^\n]*|$)'
     - name: sql_string_literal
       regex: '(?s)''(?:[^''\\]|\\.|'''')*(?:''|\\?$)|"(?:[^"\\]|\\.|"")*(?:"|\\?$)'
     - name: sql_hex_literal
