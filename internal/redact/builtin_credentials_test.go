@@ -219,6 +219,8 @@ func TestBuiltinCommandLinePasswords(t *testing.T) {
 		{"tool --db-password ToolPw14", "ToolPw14"},
 		{"kubectl get pods --token TokPw15", "TokPw15"},
 		{"mysqldump -uroot -pDumpPw3 db", "DumpPw3"},
+		{`"Cmd":["redis-server","--requirepass","JsonArrayPw16"]`, "JsonArrayPw16"},
+		{`"Cmd":["tool","--db-password", "Json Array Pw17","--verbose"]`, "Pw17"},
 	})
 	if got := r.Line("0 9 * * * redis-server --requirepass SrvPw7"); got != "0 9 * * * redis-server --requirepass [REDACTED:cli_password]" {
 		t.Errorf("requirepass => %q", got)
@@ -240,5 +242,7 @@ func TestBuiltinCommandLinePasswords(t *testing.T) {
 		{"tool --token-file /opt/app/token", ""},
 		{"ssh -p 2222 app@host", ""},
 		{"sshpass -e ssh app@host", ""},
+		{`"Cmd":["psql","--no-password","mydb"]`, ""},
+		{`"Cmd":["tool","--token-file","/opt/app/token"]`, ""},
 	})
 }
