@@ -198,7 +198,7 @@ LDAP 密码仅经 TLS 发往网关，网关仅使用 LDAPS/StartTLS、转义过�
 
 ### job 与输出 API
 
-RunJob 与 MCP 共用参数校验、目标解析、expected_count 检查、逐台 ABAC、批次调度和审计。selector 必须传 expected_count，不匹配返回实际数量；任一 deny 则整单拒绝，并返回被拒主机和规则，不派发部分任务。reason 必填。batch_size/max_failures 只能收紧 action/网关限制，未传遵循设计默认 20/5；max_failures=0 表示首次失败即停止。wait_seconds 未传 30，最大 120，显式 0 为立即返回；它只限制 RPC 等待，不改变 action 超时。RunJob 网络结果不明时不得盲目重试，协议没有新增幂等键；可按主体、action 和时间查询 job 后人工确认。
+RunJob 与 MCP 共用参数校验、目标解析、expected_count 检查、逐台 ABAC、批次调度和审计。selector 必须传 expected_count，不匹配返回实际数量；任一 deny 则整单拒绝，并返回被拒主机和规则，不派发部分任务。reason 必填。batch_size/max_failures 只能收紧 action/网关限制，未传时取 action 限制与网关 jobs 配置中的较小值（网关默认 20/5）；max_failures=0 表示首次失败即停止。wait_seconds 未传时取网关 jobs 配置（默认 30，最大 120），显式 0 为立即返回；MCP 工具 schema 中的 default 与 maximum 按同一配置生成；它只限制 RPC 等待，不改变 action 超时。RunJob 网络结果不明时不得盲目重试，协议没有新增幂等键；可按主体、action 和时间查询 job 后人工确认。
 
 G39：RunJobRequest 新增字段 10、GetJobRequest 新增字段 3 为 `response_format`；RunJobResponse/GetJobResponse 新增字段 2 为 `JobSummary`，原字段保持编号和含义。缺省为 concise，每组至多返回前两个主机名；detailed 在响应预算内列出全部主机名。分组只比较退出码的存在性和值、stdout SHA-256、stderr SHA-256。每组 stdout+stderr 预览总计至多 4KiB，单次响应的 protobuf 和 JSON 编码均至多 32KiB。省略组、主机名或预览时 summary.truncated 为 true；group.truncated 表示预览或主机输出发生截断。输出信任标记固定 UNTRUSTED。Job 本身保持仅元数据；所有汇总预览仍需 view_output，缺少该权限时只返回元数据。
 
