@@ -1,0 +1,30 @@
+name: mysql_variables
+description: Read MySQL server variables, optionally narrowed by a LIKE pattern.
+risk: read
+run_as: root
+params:
+  database:
+    type: string
+    description: Default database fixed to app; signed configuration restricts explicit database references.
+    regex: ^app$
+    max_len: 3
+  sql:
+    type: string
+    description: SHOW VARIABLES with an optional LIKE pattern of letters, digits, underscore and percent.
+    regex: ^SHOW (GLOBAL )?VARIABLES( LIKE '[A-Za-z0-9_%]{1,64}')?$
+    max_len: 100
+timeout: 15s
+builtin: mysql_query
+builtin_config:
+  credential: /etc/allowops/credentials/mysql-main.json
+  address: unix:///var/run/mysqld/mysqld.sock
+  max_rows: 500
+  timeout: 10s
+  databases: [app]
+  statement_types: [SHOW]
+  show_types: [VARIABLES]
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

@@ -20,7 +20,7 @@ def main():
         return result.stdout
 
     validated = run('validate', '--dir', str(catalog))
-    if validated.strip() != 'catalog generic-ops: 83 actions valid':
+    if validated.strip() != 'catalog generic-ops: 90 actions valid':
         raise RuntimeError('Unexpected catalog validation result: ' + validated)
     print(validated, end='')
 

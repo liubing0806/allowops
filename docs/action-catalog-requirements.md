@@ -4,7 +4,7 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 83 个 action，均为 risk: read；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节新增 34 个只读 action（含替换 dns_lookup 的定义）。审阅后 `app_config_grep`、`docker_app_config_grep` 删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`，总数不变。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 90 个 action，均为 risk: read；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节新增 34 个只读 action（含替换 dns_lookup 的定义）；审阅后 `app_config_grep`、`docker_app_config_grep` 删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；之后新增 7 个 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
@@ -587,9 +587,6 @@ argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
 exec: [/usr/bin/docker, exec, '{container}', unzip, -p, '{jar}', '{entry}']
-redact:
-  builtin: [secrets, pii]
-  custom: 同 app_config_view 的四条规则
 ```
 
 ### `docker_java_class_members`
@@ -1648,9 +1645,6 @@ argv 或 builtin_config（与示例 YAML 一致）：
 ```yaml
 exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, exec, '{pod}', -n, '{namespace}', [-c, '{container}'], --, unzip, -p, '{jar}', '{entry}']
 exec_fallbacks: [/usr/local/bin/kubectl]
-redact:
-  builtin: [secrets, pii]
-  custom: 同 app_config_view 的四条规则
 ```
 
 ### `k8s_pod_java_class_members`
@@ -2140,6 +2134,113 @@ argv 或 builtin_config（与示例 YAML 一致）：
 exec: [/usr/bin/free, -m]
 ```
 
+### `mysql_config_view`
+
+读取 MySQL 或 MariaDB 选项文件（my.cnf、my.cnf.d、/etc/mysql）的开头行，密码类取值整行脱敏。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets，另有自定义规则 mysql_option_password |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 的 GNU head 支持 -n 和 --。 |
+| 安全说明 | path 类型的 allowed_roots 可以是单个文件：`/etc/my.cnf` 作为根时只允许该文件本身，`/etc/mysql`、`/etc/my.cnf.d` 作为根时允许目录内的文件；不存在的根被跳过。内置 secrets 的 credential 规则只匹配 `password`、`secret`、`token` 后接 `=` 的写法，并且只替换到第一个空白或分号。选项文件的未加引号取值可以含空格（`password = a b c`），因此 `b c` 会原样输出。本 action 增加自定义规则：键名含 password、passwd、pwd、secret、token 且后接 `=` 的行，以及已被内置规则替换过的行，整行（含键名、行首注释符）替换为 [REDACTED:mysql_option_password]。本机用样例文件实测 `password = x`、`password=x`、`Password = "x y"`、`password   =   x y z`、`loose-password=x`、`db_password = x`、`ssl-key-passwd=x`、`PASSWORD=x` 和注释行 `# password = x` 均脱敏。`validate_password.policy`（含点号）和 `default_authentication_plugin` 不是凭据，保持原样。限制：不含这些词的键名下的敏感值、多行值不会被识别；`[client]` 的 `user` 等非密码项原样输出。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `path` | path | `allowed_roots: ['/etc/my.cnf', '/etc/mysql', '/etc/my.cnf.d']`；必填 | 已存在且解析后位于允许根内的选项文件 |
+| `lines` | int | `min: 1`；`max: 500`；有默认值，可省略；默认 `200` | 输出行数上限 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/head, -n, '{lines}', --, '{path}']
+redact:
+  builtin: [secrets]
+  custom:
+    - name: mysql_option_password
+      regex: (?i)^\s*#*\s*[A-Za-z0-9_-]*(?:(?:password|passwd|pwd|secret|token)\s*=\s*\S|\[REDACTED:credential\]).*$
+```
+
+### `mysql_error_log`
+
+检索 MySQL 或 MariaDB 错误日志（普通或 gzip 文件）。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 扩展能力 | D1、D3 |
+| 执行限制 | timeout=30s；max_output=64KB |
+| CentOS 7 | 由内置处理器实现，不依赖 grep、zgrep 或解释器。 |
+| 安全说明 | path_glob 的正则只允许 `/var/log`、`/var/log/mysql`、`/var/log/mariadb` 下文件名以 error、mysqld、mariadb 开头的文件，字符限于字母、数字、下划线、点、连字符、`*`、`?`，因此无法使用 `[`、`..` 或子目录。allowed_roots 为 `/var/log`：log_search 在运行时解析每个根目录，任一根目录不存在会使整个查询失败，所以不同时列出 `/var/log/mysql` 和 `/var/log/mariadb`。限制：解析后位于 `/var/log` 内但不属于上述文件名的符号链接目标仍会被读取，须保证这些目录只由 root 或受信任账号写入。错误日志可能含主机名和 IP，运行时地址不脱敏（见通用规则）。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `path_glob` | string | `regex: ^/var/log/((mysql\|mariadb)/)?(error\|mysqld\|mariadb)[A-Za-z0-9_.*?-]*$`；`max_len: 128`；必填 | 错误日志路径通配 |
+| `pattern` | string | `regex: ^[^\r\n]+$`；`max_len: 200`；必填 | 不含换行的检索模式 |
+| `fixed`、`exclude`、`context`、`max_matches` | 处理器参数 | 同 `log_search`；`context` 最大 10，`max_matches` 最大 500 | 可选 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: log_search
+builtin_config:
+  allowed_roots: [/var/log]
+  max_files: 20
+  max_scan: 256MB
+  max_context: 10
+  max_matches: 500
+```
+
+### `mysql_processlist`
+
+通过内置 mysql_query 执行 SHOW PROCESSLIST 或 SHOW FULL PROCESSLIST，列出连接和正在执行的语句。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 扩展能力 | D1、D7 |
+| 执行限制 | timeout=15s；max_output=64KB |
+| CentOS 7 | 内置驱动不要求安装 mysql CLI；服务器兼容性同 mysql_query_readonly。 |
+| 安全说明 | G34 要求配置 databases 时显式列出 show_types: [PROCESSLIST]。sql 正则只允许 `SHOW PROCESSLIST` 和 `SHOW FULL PROCESSLIST`。Info 列含其他会话的 SQL 文本，可能含密码字面值和手机号；secrets 与 pii 脱敏后输出。本机 MySQL 8.4.6 实测：账号有 PROCESS 权限时返回所有会话；只有库级 SELECT 时只返回自己的会话，不报错；SQL 中的 `password=...` 字面值和手机号字面值脱敏。Host 列的客户端地址不脱敏。不带 FULL 时服务器把 Info 截断为 100 个字符。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `database` | string | `regex: ^app$`；`max_len: 3`；必填 | 默认库 app |
+| `sql` | string | `regex: ^SHOW (FULL )?PROCESSLIST$`；`max_len: 21`；必填 | 固定 SHOW PROCESSLIST 语句 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: mysql_query
+builtin_config:
+  credential: /etc/allowops/credentials/mysql-main.json
+  address: unix:///var/run/mysqld/mysqld.sock
+  max_rows: 500
+  timeout: 10s
+  databases: [app]
+  statement_types: [SHOW]
+  show_types: [PROCESSLIST]
+```
+
 ### `mysql_query_readonly`
 
 执行一条以 app 为默认数据库的只读 SQL。databases=[app] 同时限制默认库和 SQL 中的显式库名；数据库账号权限仍需限制视图等服务器内部对象。
@@ -2211,6 +2312,79 @@ builtin_config:
   databases: [app]
   statement_types: [SHOW]
   show_types: [TABLES, STATUS]
+```
+
+### `mysql_slow_log`
+
+检索 MySQL 或 MariaDB 慢查询日志（普通或 gzip 文件）。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 扩展能力 | D1、D3 |
+| 执行限制 | timeout=30s；max_output=64KB |
+| CentOS 7 | 由内置处理器实现，不依赖 grep、zgrep 或解释器。 |
+| 安全说明 | 文件名限于含 slow 的名称，规则和 allowed_roots 的限制同 mysql_error_log。慢日志含完整 SQL 文本，可能含手机号、令牌和密码字面值，启用 secrets 与 pii。本机用样例慢日志实测：`phone='13812345678'` 中的号码、`token='x'`、`password='x'` 均脱敏。只有匹配行和上下文行被输出，多行 SQL 的后续行需要用 context 取得。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `path_glob` | string | `regex: ^/var/log/((mysql\|mariadb)/)?[A-Za-z0-9_*?-]*slow[A-Za-z0-9_.*?-]*$`；`max_len: 128`；必填 | 慢日志路径通配 |
+| `pattern` | string | `regex: ^[^\r\n]+$`；`max_len: 200`；必填 | 不含换行的检索模式 |
+| `fixed`、`exclude`、`context`、`max_matches` | 处理器参数 | 同 `log_search` | 可选 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: log_search
+builtin_config:
+  allowed_roots: [/var/log]
+  max_files: 20
+  max_scan: 256MB
+  max_context: 10
+  max_matches: 500
+```
+
+### `mysql_variables`
+
+通过内置 mysql_query 执行 SHOW VARIABLES，可带一个 LIKE 模式。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D1、D7 |
+| 执行限制 | timeout=15s；max_output=64KB |
+| CentOS 7 | 内置驱动不要求安装 mysql CLI；服务器兼容性同 mysql_query_readonly。 |
+| 安全说明 | 内置校验器接受 `SHOW VARIABLES LIKE '<模式>'`（本机实测），因此 sql 参数用正则固定语句形式：`SHOW [GLOBAL ]VARIABLES[ LIKE '<1 到 64 个字母、数字、下划线、百分号>']`。引号内不能出现其他字符，WHERE、SESSION 和多语句被正则拒绝（本机实测）。show_types: [VARIABLES] 满足 G34 对服务器级 SHOW 的显式授权要求。变量值可能含 init_connect 等自由文本，secrets 规则仍然生效。SHOW VARIABLES 不需要专门权限。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `database` | string | `regex: ^app$`；`max_len: 3`；必填 | 默认库 app |
+| `sql` | string | `regex: ^SHOW (GLOBAL )?VARIABLES( LIKE '[A-Za-z0-9_%]{1,64}')?$`；`max_len: 100`；必填 | SHOW VARIABLES，可选 LIKE 模式 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: mysql_query
+builtin_config:
+  credential: /etc/allowops/credentials/mysql-main.json
+  address: unix:///var/run/mysqld/mysqld.sock
+  max_rows: 500
+  timeout: 10s
+  databases: [app]
+  statement_types: [SHOW]
+  show_types: [VARIABLES]
 ```
 
 ### `nginx_access_stats`
@@ -2353,6 +2527,50 @@ argv 或 builtin_config（与示例 YAML 一致）：
 exec: [/usr/bin/ps, -eo, 'pid,user,%cpu,%mem,etime,comm', --sort=-%cpu]
 ```
 
+### `redis_config_file_view`
+
+读取 Redis 配置文件的开头行，requirepass、masterauth、ACL 用户等凭据行整行脱敏。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets，另有 6 条自定义规则 |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 的 GNU head 支持 -n 和 --。 |
+| 安全说明 | Redis 配置用空格分隔键和值，内置 secrets 规则只匹配 `=` 形式，不会处理 `requirepass x`。自定义规则按行首匹配（允许前导空白和 `#` 注释符，因为注释掉的旧密码同样敏感）：requirepass；masteruser、masterauth、primaryuser、primaryauth；user（ACL 行，含 `>密码` 和 `#哈希`）；sentinel auth-pass、auth-user、sentinel-pass、sentinel-user；tls-key-file-pass、tls-client-key-file-pass；rename-command。本机用样例文件实测以上各形式（含带引号值、大小写混写、行首制表符、users.acl 文件）均脱敏，`sentinel monitor`、`maxmemory` 等非凭据行保持原样。限制：ACL 行整行替换，不保留用户名和权限；包含 `user` 开头的注释说明也会被替换；PEM 私钥由内置规则处理。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `path` | path | `allowed_roots: ['/etc/redis.conf', '/etc/redis']`；必填 | 已存在且解析后位于允许根内的配置文件 |
+| `lines` | int | `min: 1`；`max: 500`；有默认值，可省略；默认 `200` | 输出行数上限 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/head, -n, '{lines}', --, '{path}']
+redact:
+  builtin: [secrets]
+  custom:
+    - name: redis_requirepass
+      regex: (?i)^\s*#*\s*requirepass\s+.+$
+    - name: redis_masterauth
+      regex: (?i)^\s*#*\s*(?:masteruser|masterauth|primaryuser|primaryauth)\s+.+$
+    - name: redis_acl_user
+      regex: (?i)^\s*#*\s*user\s+.+$
+    - name: redis_sentinel_auth
+      regex: (?i)^\s*#*\s*sentinel\s+(?:auth-pass|auth-user|sentinel-pass|sentinel-user)\s+.+$
+    - name: redis_tls_key_pass
+      regex: (?i)^\s*#*\s*tls-(?:client-)?key-file-pass\s+.+$
+    - name: redis_rename_command
+      regex: (?i)^\s*#*\s*rename-command\s+.+$
+```
+
 ### `redis_config_get`
 
 读取 Redis 配置中允许的非敏感参数：传入 `command=CONFIG` 和 `args=["GET","maxmemory","dir"]`。参数名按名称精确匹配，不接受通配符。
@@ -2459,6 +2677,35 @@ builtin_config:
   max_response_bytes: 64KB
   commands: [INFO]
   info_sections: [server, memory, stats]
+```
+
+### `redis_log_view`
+
+查看 Redis 日志文件的末尾行。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | exec |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 扩展能力 | D1 |
+| 执行限制 | timeout=10s；max_output=64KB |
+| CentOS 7 | CentOS 7 的 GNU tail 支持 -n 和 --。 |
+| 安全说明 | 路径解析后只能位于 `/var/log/redis`；不接受 -f；行数不超过 500。本机用样例日志实测 tail 行数和 match 过滤，手机号字面值被 pii 规则脱敏。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `path` | path | `allowed_roots: ['/var/log/redis']`；必填 | 已存在且解析后位于允许根内的路径 |
+| `lines` | int | `min: 1`；`max: 500`；有默认值，可省略；默认 `100` | 输出行数上限 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+exec: [/usr/bin/tail, -n, '{lines}', --, '{path}']
 ```
 
 ### `redis_slowlog`
@@ -2647,7 +2894,7 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 
 ## 5. 本地示例检查
 
-`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 83 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 90 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
 
 配置脱敏冒烟在同一临时目录中把 app_config_view、app_config_keys 的 allowed_roots 改为临时配置目录，写入 properties、JSON、XML 形式的凭据和 PEM 私钥：断言 app_config_view 输出不含凭据值、match 过滤命中与否都以退出码 0 返回，app_config_keys 只输出键名且不输出 PEM 内容。该检查依赖本机 grep 支持 -P 和 head。
 
