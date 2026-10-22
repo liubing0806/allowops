@@ -29,6 +29,9 @@ type IssuedCertificate struct {
 	ExpiresAt, RenewAfter time.Time
 }
 
+// openCAStep lets tests stop CA creation after each durable file step.
+var openCAStep = func(int) {}
+
 // OpenCA creates a CA only when both files are absent. Existing keys must be
 // regular files with exactly 0600 permissions. A partially provisioned CA fails.
 func OpenCA(certPath, keyPath string) (*CA, error) {
@@ -56,6 +59,7 @@ func OpenCA(certPath, keyPath string) (*CA, error) {
 		if err := exclusiveFile(keyPath, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0600); err != nil {
 			return nil, err
 		}
+		openCAStep(1)
 		if err := exclusiveFile(certPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0644); err != nil {
 			os.Remove(keyPath)
 			return nil, err
