@@ -29,5 +29,5 @@ for (const lang of langs) {
 
 if (process.argv.includes('--docs')) {
   const docs = join(root, '../website');
-  execFileSync('pnpm', ['exec', 'vitepress', 'build', '.', '--base', '/docs/', '--outDir', join(dist, 'docs')], { cwd: docs, stdio: 'inherit' });
+  execFileSync('pnpm', ['exec', 'vitepress', 'build', '.', '--outDir', join(dist, 'docs')], { cwd: docs, stdio: 'inherit', env: { ...process.env, ALLOWOPS_DOCS_BASE: '/docs/' } });
 }

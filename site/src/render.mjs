@@ -129,12 +129,12 @@ export function render(t, { version }) {
 <header class="nav"><div class="wrap">
   <a class="brand" href="${base}"><img src="/favicon.svg" alt="">allowops</a>
   <nav class="nav-links">
-    <a href="#how">${t.nav.how}</a><a href="#catalog">${t.nav.catalog}</a><a href="#policy">${t.nav.policy}</a><a href="#console">${t.nav.console}</a><a href="/docs/">${t.nav.docs}</a><a href="${GITHUB}/releases">${t.nav.releases}</a>
+    <a href="#how">${t.nav.how}</a><a href="#catalog">${t.nav.catalog}</a><a href="#policy">${t.nav.policy}</a><a href="#console">${t.nav.console}</a><a href="${t.docs}">${t.nav.docs}</a><a href="${GITHUB}/releases">${t.nav.releases}</a>
   </nav>
   <div class="nav-icons">
     <a class="icon-btn" href="${t.altPath}" hreflang="${zh ? 'en' : 'zh'}" title="${zh ? 'English' : '简体中文'}">${t.altLabel}</a>
     <a class="icon-btn" href="${GITHUB}" title="GitHub">${icon.github}</a>
-    <a class="btn small" href="/docs/installation">${t.nav.start}</a>
+    <a class="btn small" href="${t.docs}installation">${t.nav.start}</a>
   </div>
 </div></header>
 
@@ -149,7 +149,7 @@ export function render(t, { version }) {
       <span class="pill"><b>CLI</b><span class="arrow">${icon.arrow}</span><code>k8s_pods</code></span>
     </div>
     <div class="cta">
-      <a class="btn" href="/docs/installation">${icon.term}${t.hero.start}</a>
+      <a class="btn" href="${t.docs}installation">${icon.term}${t.hero.start}</a>
       <a class="btn ghost" href="${GITHUB}">${icon.github}${t.hero.github}</a>
     </div>
     <div class="meta">${fill(t.hero.meta, version)}</div>
@@ -292,7 +292,7 @@ export function render(t, { version }) {
   <h2>${t.final.title}</h2>
   <p class="sub">${t.final.sub}</p>
   <div class="cta">
-    <a class="btn" href="/docs/installation">${icon.term}${t.hero.start}</a>
+    <a class="btn" href="${t.docs}installation">${icon.term}${t.hero.start}</a>
     <a class="btn ghost" href="${GITHUB}">${icon.github}${t.hero.github}</a>
   </div>
   <div class="dl">${t.final.cards.map((c) => `<a class="card" href="${GITHUB}/releases"><div class="top">${c.h}<span>${c.r}</span></div><div class="bot"><span>${c.a}</span><span>${c.b}</span></div></a>`).join('')}</div>
@@ -302,7 +302,7 @@ export function render(t, { version }) {
 
 <footer><div class="wrap">
   <span>© 2026 allowops · MIT</span>
-  <nav><a href="/docs/">${t.footer.docs}</a><a href="${GITHUB}">GitHub</a><a href="${GITHUB}/releases">${t.footer.releases}</a><a href="${GITHUB}/blob/main/SECURITY.md">${t.footer.security}</a><a href="${GITHUB}/blob/main/LICENSE">${t.footer.license}</a></nav>
+  <nav><a href="${t.docs}">${t.footer.docs}</a><a href="${GITHUB}">GitHub</a><a href="${GITHUB}/releases">${t.footer.releases}</a><a href="${GITHUB}/blob/main/SECURITY.md">${t.footer.security}</a><a href="${GITHUB}/blob/main/LICENSE">${t.footer.license}</a></nav>
 </div></footer>
 <script src="/main.js" defer></script>
 </body>

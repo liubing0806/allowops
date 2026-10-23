@@ -5,6 +5,7 @@ export default {
   altPath: '/',
   altLabel: 'EN',
   consoleDir: 'zh',
+  docs: '/docs/zh/',
   title: 'allowops — 不给 shell，只给你定义的动作',
   description: 'allowops 是面向 AI agent 的开源运维网关。运维人员定义并签名动作目录，AI agent 通过 MCP 只能调用这些动作；网关逐台主机做策略判定、分批执行并记录审计。',
   nav: { how: '工作原理', catalog: '动作目录', policy: '策略', console: '控制台', docs: '文档', releases: '版本发布', start: '快速开始' },
@@ -13,7 +14,7 @@ export default {
     lede: 'allowops 是面向 AI agent 的开源运维网关。你在目录里定义带类型的动作，评审后签名；agent 通过 MCP 只能调用这些动作。网关逐台主机做策略判定、分批执行，并记录审计。',
     start: '快速开始',
     github: '在 GitHub 查看',
-    meta: '版本 {version} · <a href="https://github.com/liubing0806/allowops">开源</a> · MIT 许可 · 网关和主机端支持 Linux amd64 · <a href="/docs/">文档</a>',
+    meta: '版本 {version} · <a href="https://github.com/liubing0806/allowops">开源</a> · MIT 许可 · 网关和主机端支持 Linux amd64 · <a href="/docs/zh/">文档</a>',
   },
   demo: {
     bar: 'Claude Code · allowops MCP',
@@ -105,7 +106,7 @@ export default {
     lede: 'Compose 演示包含网关、PostgreSQL、SeaweedFS、LDAPS 目录和两台主机。脚本在本地生成凭据，发布示例目录，并在两台主机上运行只读的 <code>disk_usage</code>。',
     copy: '复制',
     copied: '已复制',
-    note: '需要 Linux amd64、Docker Compose、Go 1.27.3、OpenSSL、Git 和带 PyYAML 的 Python 3。Kubernetes 用 Helm chart，主机安装 .deb 或 .rpm，见<a href="/docs/installation">安装文档</a>。',
+    note: '需要 Linux amd64、Docker Compose、Go 1.27.3、OpenSSL、Git 和带 PyYAML 的 Python 3。Kubernetes 用 Helm chart，主机安装 .deb 或 .rpm，见<a href="/docs/zh/installation">安装文档</a>。',
     term: [
       '<span class="c"># 定义并发布目录</span>',
       'allowops catalog validate ./catalog',
