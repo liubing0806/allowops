@@ -4,7 +4,7 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 91 个 action：90 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 92 个 action：91 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90；2026-10-23 起增加 `alertmanager_alerts`（见 6.3），共 91 个 risk: read）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
@@ -12,7 +12,7 @@ allowops 只执行运维人员预先定义、评审并签名的 action。本节�
 
 内置处理器的正式参数和配置 schema（字段结构及校验规则）由 `internal/catalog/builtin.go` 和 `builtin_adapters.go` 定义。P12D 已实现 G30 的 Redis/MySQL 收紧配置，语义见 `builtin-config.md`（含 G31、G34）；四个示例已恢复命令、键前缀、分区和库范围限制。内置参数默认值的剩余缺口见第 4 节。目录校验不检查目标主机的工具、凭据文件或外部服务，不据此宣称这些环境可执行全部 action。
 
-第 6 节记录尚未实现的 `prometheus_query`、`alertmanager_alerts` 内置处理器需求。这些需求不计入上述 90 个 action，`examples/catalog/actions/` 中没有对应 YAML，`make examples-check` 不覆盖。
+第 6 节记录 `prometheus_query`、`alertmanager_alerts` 内置处理器需求。`alertmanager_alerts` 已实现，`examples/catalog/actions/alertmanager_alerts.yaml` 计入上述 92 个 action；`prometheus_query` 尚未实现，不计入，`examples/catalog/actions/` 中没有对应 YAML。
 
 ## 2. 目录与通用规则
 
@@ -127,6 +127,31 @@ script:
   file: scripts/agent_upgrade.sh
   interpreter: /bin/sh
 args: ['{version}']
+```
+
+### `alertmanager_alerts`
+
+只读查询 Alertmanager 的当前告警（`GET /api/v2/alerts`）。参数、配置、输出格式和实现细节见 6.3。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 配置 credential 时为 root，否则省略；示例未配置 credential |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 执行限制 | timeout=15s；max_output=64KB |
+| CentOS 7 | 使用 Go 内置 HTTP 客户端，不依赖 curl；未验证 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: alertmanager_alerts
+builtin_config:
+  address: http://127.0.0.1:9093
+  timeout: 10s
+  max_alerts: 100
+  max_response_bytes: 4MB
 ```
 
 ### `app_config_keys`
@@ -2990,7 +3015,7 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 
 ## 5. 本地示例检查
 
-`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 91 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 92 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
 
 配置脱敏冒烟在同一临时目录中把 app_config_view、app_config_keys 的 allowed_roots 改为临时配置目录，写入 properties、JSON、XML 形式的凭据和 PEM 私钥：断言 app_config_view 输出不含凭据值、match 过滤命中与否都以退出码 0 返回，app_config_keys 只输出键名且不输出 PEM 内容。该检查依赖本机 grep 支持 -P 和 head。
 
@@ -3011,7 +3036,7 @@ make test lint
 
 ## 6. 待实现的内置处理器：Prometheus 与 Alertmanager
 
-状态：2026-10-23 需求已确认，尚未实现。本节不对应 `examples/catalog/actions/` 中的 YAML，不计入第 1 节的 90 个 action。
+状态：2026-10-23 需求已确认。6.3 `alertmanager_alerts` 已实现并计入第 1 节的 92 个 action；6.2 `prometheus_query` 尚未实现，不对应 `examples/catalog/actions/` 中的 YAML，不计入 action 数量。
 
 ### 6.1 范围与决定
 
@@ -3154,7 +3179,7 @@ redact:
 
 - 与 `prometheus_alerts` 的区别：Alertmanager 汇总多个 Prometheus 的告警，去重后带有静默和抑制状态；`prometheus_alerts` 只包含单个 Prometheus 的告警。
 - 不发送 POST、DELETE，不访问 `/api/v2/silences`、`/api/v2/status`，不创建或修改静默。
-- 不支持 `/api/v1/*`。Alertmanager 0.27.0 起移除了 v1 API；该版本号未在本节点核实。
+- 不支持 `/api/v1/*`。Alertmanager 0.27.0 起移除了 v1 API。依据：官方 CHANGELOG 的 0.27.0 / 2024-02-28 条目“[CHANGE] API: Removal of all `api/v1/` endpoints.”；2026-10-23 在本机用 `prom/alertmanager:v0.26.0` 和 `v0.27.0` 镜像各启动一次，`GET /api/v1/alerts` 分别返回 200 和 410，`GET /api/v2/alerts` 均返回 200。0.26.0 及更早版本仍提供 v2 API，可用；v1 API 的启用情况不影响本处理器。
 
 参数：
 
@@ -3182,7 +3207,20 @@ redact:
 | expr | 从 `generatorURL` 的 `g0.expr` 参数解码出的 PromQL，没有时为空 |
 
 - `expr` 让 AI 可以直接把触发告警的表达式交给 `prometheus_query_range` 继续查询。
-- action 需求表与 6.2 相同；计划提供的 action 名为 `alertmanager_alerts`。
+- action 需求表与 6.2 相同；action 名为 `alertmanager_alerts`。
+
+实现状态与细节（2026-10-23，处理器 `internal/builtin/alertmanager` 在提交 `302188f`，目录接入 `internal/catalog/builtin_alertmanager.go` 在提交 `cd9ab40`，均位于分支 `claude/prom-s2-alertmanager-3dd321`）：
+
+- 已实现。处理器经共享客户端 `internal/builtin/apiclient` 请求，凭据、CA、跳转和响应体上限按该包的规则处理。
+- 参数映射：`active`、`silenced`、`inhibited` 总是以 `true`/`false` 发送；`filter` 每项一个 `filter` 查询参数。不发送 `unprocessed`，沿用 Alertmanager 默认值（包含 unprocessed 状态的告警）。
+- 输出每行 10 个字段，顺序同上表，无表头；列顺序写在示例 YAML 的注释中。没有告警时输出为空，退出码 0。字段内容先经脱敏再转义，转义规则同 `mysql_query`（`\`、制表符、换行、回车、NUL）。
+- `starts_at` 转为 UTC 的 RFC 3339 秒级时间，无法解析时保留原文；排序键为 `startsAt`，相同时按 `fingerprint`。
+- `labels` 为去掉 `alertname`、`severity` 的标签集，按名称的字节序排列，值中的 `\`、换行、`"` 按 Prometheus 写法转义；不符合 `[a-zA-Z_][a-zA-Z0-9_]*` 的标签名加引号；没有其余标签时为 `{}`。
+- `expr` 取 `generatorURL` 查询串中第一个 `g0.expr` 并做 URL 解码（`+` 解码为空格）；`generatorURL` 缺失、无法解析、没有 `g0.expr` 或其值编码错误时为空。其他参数的编码错误不影响 `g0.expr`。
+- 超过 `max_alerts` 时保留 `starts_at` 最早的告警，标记 truncated 和 resource_limit_reached，stderr 写出 `truncated: returned N of M alerts (max_alerts=K)`。
+- 非 2xx 状态码：退出码 1，stdout 为空，stderr 为 `alertmanager returned HTTP <状态码> <状态文本>: <响应体前 512 字节，控制字符替换为空格>`。跳转、响应体超过 `max_response_bytes`、连接失败、超时、响应不是 JSON 数组按执行错误返回。
+- `credential` 与 `run_as`：目录校验时，配置了 `credential` 而 `run_as` 不是 `root` 的 action 被拒绝。未配置 `credential` 的 action 不要求 `run_as`，由 agent 直接执行。
+- 验证：`internal/builtin/alertmanager` 的单元测试用 httptest 覆盖参数映射、排序、转义、`expr`、截断和错误响应；集成测试用 testcontainers 启动 `prom/alertmanager:v0.34.1`，通过其 API 写入 3 条告警和 1 条静默（仅夹具写入，处理器只发 GET），验证 active/silenced 过滤、matcher、截断和 400/404 错误。Docker 不可用时集成测试 `t.Skip`。
 
 ### 6.4 待确认项
 
