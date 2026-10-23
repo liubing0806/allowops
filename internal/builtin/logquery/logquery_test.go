@@ -390,7 +390,6 @@ func TestCursorValidation(t *testing.T) {
 		"changed pattern":   func(p *Params) { p.Pattern = "record" },
 		"changed order":     func(p *Params) { p.Order = "desc" },
 		"offset past size":  func(p *Params) { p.Cursor = tamper(t, p.Cursor, func(c *cursor) { c.Offset = 1 << 40 }) },
-		"offset mid line":   func(p *Params) { p.Cursor = tamper(t, p.Cursor, func(c *cursor) { c.Offset += 3 }) },
 		"other source":      func(p *Params) { p.Cursor = tamper(t, p.Cursor, func(c *cursor) { c.Source = "other" }) },
 		"window too large":  func(p *Params) { p.Cursor = tamper(t, p.Cursor, func(c *cursor) { c.Since = "2026-10-01T00:00:00Z" }) },
 		"time outside page": func(p *Params) { p.Cursor = tamper(t, p.Cursor, func(c *cursor) { c.Time = "2026-10-24T00:00:00Z" }) },
@@ -453,19 +452,45 @@ func TestCursorExpired(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Compressing app.log.1 replaces its inode.
+	// Compressing app.log.1 replaces its inode. The new file is written before
+	// the old one is removed, so the inode is not reused.
 	data, err := os.ReadFile(filepath.Join(root, "app.log.1"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	writeLog(t, filepath.Join(root, "app.log.1.gz"), string(data), base.Add(19*time.Minute))
 	if err := os.Remove(filepath.Join(root, "app.log.1")); err != nil {
 		t.Fatal(err)
 	}
-	writeLog(t, filepath.Join(root, "app.log.1.gz"), string(data), base.Add(19*time.Minute))
 	p.Cursor = first.NextCursor
 	_, err = search(t, cfg, p)
 	if reasonOf(err) != CodeCursorExpired || !strings.Contains(err.Error(), "2026-10-23T10:12:00") {
 		t.Fatalf("err=%v, want %s with the cursor time", err, CodeCursorExpired)
+	}
+}
+
+func TestCursorExpiredAfterCopyTruncate(t *testing.T) {
+	root := rotated(t)
+	cfg := testConfig(root)
+	p := Params{Source: "app", Limit: 25, Order: "asc"}
+	first, err := search(t, cfg, p)
+	if err != nil || !first.HasMore {
+		t.Fatalf("first=%+v err=%v", first, err)
+	}
+	// Same inode, new content: copytruncate followed by new writes.
+	var content strings.Builder
+	for i := 0; i < 10; i++ {
+		content.WriteString(line(base.Add(time.Duration(30+i)*time.Minute+time.Second), fmt.Sprintf("new %d", i)))
+	}
+	writeLog(t, filepath.Join(root, "app.log"), content.String(), base.Add(39*time.Minute))
+	p.Cursor = first.NextCursor
+	if _, err := search(t, cfg, p); reasonOf(err) != CodeCursorExpired {
+		t.Fatalf("err=%v, want %s", err, CodeCursorExpired)
+	}
+	// An offset inside a line is reported the same way.
+	p.Cursor = tamper(t, first.NextCursor, func(c *cursor) { c.Offset += 3 })
+	if _, err := search(t, cfg, p); reasonOf(err) != CodeCursorExpired {
+		t.Fatalf("mid-line err=%v, want %s", err, CodeCursorExpired)
 	}
 }
 
