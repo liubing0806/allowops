@@ -3,9 +3,11 @@ package alertmanager
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -476,5 +478,31 @@ func TestUnparsableStartsAtSortsLast(t *testing.T) {
 	cut := run(t, Config{Address: srv.URL, MaxAlerts: 2}, Params{Active: true}, nil)
 	if !cut.Truncated || strings.Contains(cut.Stdout, "Bad1") || strings.Contains(cut.Stdout, "Missing") || !strings.Contains(cut.Stderr, "2 of 4") {
 		t.Fatalf("a cut must drop unparsable alerts first: %+v", cut)
+	}
+}
+
+// The response is decoded one alert at a time and only max_alerts alerts are
+// kept, so decoding memory does not scale with the number of alerts returned.
+func TestDecodeMemoryIsBounded(t *testing.T) {
+	const count = 1_300_000 // about 3.9MB, under the default max_response_bytes
+	body := "[" + strings.Repeat("{},", count-1) + "{}]"
+	if int64(len(body)) > DefaultMaxResponseBytes {
+		t.Fatalf("fixture is %d bytes", len(body))
+	}
+	srv, _ := serve(t, 200, body)
+	cfg := Config{Address: srv.URL}
+	run(t, cfg, Params{Active: true}, nil) // warm up connection and allocator state
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	r := run(t, cfg, Params{Active: true}, nil)
+	runtime.ReadMemStats(&after)
+	if !r.Truncated || len(lines(r.Stdout)) != DefaultMaxAlerts || !strings.Contains(r.Stderr, fmt.Sprintf("returned %d of %d alerts", DefaultMaxAlerts, count)) {
+		t.Fatalf("truncation: stdout lines=%d stderr=%q", len(lines(r.Stdout)), r.Stderr)
+	}
+	// Request, response body and handler copies are about 4MB each. Retaining
+	// every decoded alert costs several hundred MB.
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 48<<20 {
+		t.Fatalf("allocated %d MB while decoding a %d byte response", allocated>>20, len(body))
 	}
 }
