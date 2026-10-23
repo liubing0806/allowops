@@ -55,6 +55,36 @@ describe('sidebar update notice', () => {
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
   })
+  it('shows nothing for a version omitted by an older gateway', async () => {
+    const current = await api.getCurrentSession()
+    vi.spyOn(api, 'getCurrentSession').mockResolvedValue({
+      ...current,
+      gatewayVersion: '',
+    })
+    await open('/')
+    const nav = screen.getByRole('complementary')
+    expect(within(nav).queryByText('v')).not.toBeInTheDocument()
+  })
+  it('appears without a reload once a later session reports a release', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const current = await api.getCurrentSession()
+      vi.spyOn(api, 'getCurrentSession')
+        .mockResolvedValueOnce({ ...current, gatewayVersion: '0.1.0' })
+        .mockResolvedValue({
+          ...current,
+          gatewayVersion: '0.1.0',
+          gatewayUpdate: update,
+        })
+      await open('/')
+      const nav = screen.getByRole('complementary')
+      expect(within(nav).queryByText('有新版本')).not.toBeInTheDocument()
+      await vi.advanceTimersByTimeAsync(15 * 60 * 1000)
+      expect(await within(nav).findByText('有新版本')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
   it('shows no notice without a newer release', async () => {
     await withSession()
     await open('/')
@@ -112,7 +142,18 @@ describe('system gateway version', () => {
     expect(within(panel).getByText('未开启')).toBeInTheDocument()
     expect(within(panel).queryByText(/发布说明/)).not.toBeInTheDocument()
   })
-  it('reports the last check error and an up-to-date gateway', async () => {
+  it('reports an up-to-date gateway after a successful check', async () => {
+    await withStatus({
+      updateCheckEnabled: true,
+      updateCheckedAt: update.checkedAt,
+    })
+    await open('/system')
+    const panel = (
+      await screen.findByRole('heading', { name: '网关版本' })
+    ).closest('section') as HTMLElement
+    expect(within(panel).getByText('已是最新版本')).toBeInTheDocument()
+  })
+  it('does not claim up to date when the last check failed', async () => {
     await withStatus({
       updateCheckEnabled: true,
       updateCheckedAt: update.checkedAt,
@@ -122,10 +163,19 @@ describe('system gateway version', () => {
     const panel = (
       await screen.findByRole('heading', { name: '网关版本' })
     ).closest('section') as HTMLElement
-    expect(within(panel).getByText('已是最新版本')).toBeInTheDocument()
+    expect(within(panel).queryByText('已是最新版本')).not.toBeInTheDocument()
     expect(
       within(panel).getByText('最近一次检查失败：request failed'),
     ).toBeInTheDocument()
+  })
+  it('shows an omitted gateway version as unknown', async () => {
+    await withStatus({ gatewayVersion: '' })
+    await open('/system')
+    const panel = (
+      await screen.findByRole('heading', { name: '网关版本' })
+    ).closest('section') as HTMLElement
+    expect(within(panel).queryByText('v')).not.toBeInTheDocument()
+    expect(within(panel).getAllByText('—').length).toBeGreaterThan(0)
   })
   it('warns when gateway instances run different versions', async () => {
     const listed = await api.listGatewayInstances()
