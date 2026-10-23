@@ -82,7 +82,7 @@ Kubernetes 示例固定读取 `/etc/kubernetes/allowops-readonly.conf`。此文�
 
 | 名称 | 类型 | 约束 | 用途（description） |
 |---|---|---|---|
-| `version` | enum | `values: ['0.1.0']`；必填 | 软件包版本，只列出不高于网关的版本 |
+| `version` | enum | `values: ['0.1.0', '0.2.0']`；必填 | 软件包版本，只列出不高于网关的版本 |
 
 argv 或 builtin_config（与示例 YAML 一致）：
 
