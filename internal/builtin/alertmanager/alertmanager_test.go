@@ -464,12 +464,13 @@ func TestUnparsableStartsAtSortsLast(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("stdout = %q", r.Stdout)
 	}
-	for i, want := range []string{"Early", "Late", "Bad1", "Missing"} {
+	for i, want := range []string{"Early", "Late", "Missing", "Bad1"} {
 		if f := strings.Split(got[i], "\t"); f[2] != want {
 			t.Errorf("row %d = %s, want %s", i, f[2], want)
 		}
 	}
-	if !strings.HasPrefix(got[2], "not a time\t") || !strings.HasPrefix(got[3], "\t") {
+	// Unparsable times keep their text and order among themselves by it.
+	if !strings.HasPrefix(got[2], "\t") || !strings.HasPrefix(got[3], "not a time\t") {
 		t.Errorf("unparsable text must be kept: %q %q", got[2], got[3])
 	}
 	cut := run(t, Config{Address: srv.URL, MaxAlerts: 2}, Params{Active: true}, nil)

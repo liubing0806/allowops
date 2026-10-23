@@ -98,6 +98,30 @@ type alert struct {
 		InhibitedBy []string `json:"inhibitedBy"`
 	} `json:"status"`
 	started time.Time
+	parsed  bool // startsAt was a valid RFC 3339 time
+	seq     int  // position in the response
+}
+
+func parseTime(text string) (time.Time, bool) {
+	t, err := time.Parse(time.RFC3339Nano, text)
+	return t, err == nil
+}
+
+// before orders alerts by start time. Alerts whose startsAt cannot be parsed
+// come after every valid one, so a max_alerts cut drops them first. Ties break
+// on fingerprint and then on response order, which makes the order total.
+func (a *alert) before(b *alert) bool {
+	switch {
+	case a.parsed != b.parsed:
+		return a.parsed
+	case a.parsed && !a.started.Equal(b.started):
+		return a.started.Before(b.started)
+	case !a.parsed && a.StartsAt != b.StartsAt:
+		return a.StartsAt < b.StartsAt
+	case a.Fingerprint != b.Fingerprint:
+		return a.Fingerprint < b.Fingerprint
+	}
+	return a.seq < b.seq
 }
 
 // Run queries Alertmanager and renders the alerts as TSV. mask redacts original
@@ -141,15 +165,11 @@ func Run(ctx context.Context, cfg Config, p Params, mask func(string) string) (R
 		return failed, errors.New("invalid alertmanager response: expected a JSON array of alerts")
 	}
 	alerts = slicesNonNil(alerts)
-	for _, a := range alerts {
-		a.started, _ = time.Parse(time.RFC3339Nano, a.StartsAt)
+	for i, a := range alerts {
+		a.seq = i
+		a.started, a.parsed = parseTime(a.StartsAt)
 	}
-	sort.SliceStable(alerts, func(i, j int) bool {
-		if !alerts[i].started.Equal(alerts[j].started) {
-			return alerts[i].started.Before(alerts[j].started)
-		}
-		return alerts[i].Fingerprint < alerts[j].Fingerprint
-	})
+	sort.Slice(alerts, func(i, j int) bool { return alerts[i].before(alerts[j]) })
 	result := Result{}
 	if total := len(alerts); total > cfg.MaxAlerts {
 		alerts = alerts[:cfg.MaxAlerts]
@@ -183,7 +203,7 @@ const labelsField = 4
 
 func writeAlert(out *strings.Builder, a *alert, mask func(string) string) {
 	startsAt := a.StartsAt
-	if !a.started.IsZero() {
+	if a.parsed {
 		startsAt = a.started.UTC().Format(time.RFC3339)
 	}
 	rest := make(map[string]string, len(a.Labels))
