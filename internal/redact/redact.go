@@ -184,6 +184,11 @@ var secretRules = []secretRule{
 	{name: "cli_password", needs: []string{"curl"}, anchor: `(?i)\bcurl\b`, regex: `(?i)\s-(?:(?:-user|-proxy-user)(?:\s+|=)|[A-Za-z]*?[uU](?:\s*|=))(` + shellWord + `)`, keep: withoutColon, group: 1},
 	{name: "cli_password", needs: []string{"redis-cli", "valkey-cli"}, regex: `(?i)\b(?:redis|valkey)-cli\b[^\r\n]*?\s-a\s*("[^"\r\n]*"|'[^'\r\n]*'|\S+)`, group: 1},
 	{name: "cli_password", needs: []string{"sshpass"}, regex: `(?i)\bsshpass\b[^\r\n]*?\s-p\s+("[^"\r\n]*"|'[^'\r\n]*'|\S+)`, group: 1},
+	// The same short options as elements of a JSON argument array (docker
+	// inspect Cmd, Args, Healthcheck.Test): ["redis-cli","-a","pw"] or "-apw".
+	{name: "cli_password", needs: []string{`"curl"`, `/curl"`}, anchor: `(?i)"(?:[^"]*/)?curl"`, regex: `(?i)"-(?:-user|-proxy-user|[A-Za-z]*?[uU])(?:"\s*,\s*")?((?:[^"\\]|\\.)+)"`, keep: withoutColon, group: 1},
+	{name: "cli_password", needs: []string{`redis-cli"`, `valkey-cli"`}, anchor: `(?i)"(?:[^"]*/)?(?:redis|valkey)-cli"`, regex: `"-a(?:"\s*,\s*")?((?:[^"\\]|\\.)+)"`, group: 1},
+	{name: "cli_password", needs: []string{`sshpass"`}, anchor: `(?i)"(?:[^"]*/)?sshpass"`, regex: `"-p(?:"\s*,\s*")?((?:[^"\\]|\\.)+)"`, group: 1},
 	// Keep the boundary out of the replacement; -p without a value stays unchanged.
 	{name: "mysql_password", needs: []string{"-p"}, regex: `(?:^|[\s])(-p(?:"[^"\r\n]+"|'[^'\r\n]+'|[^\s]+))`, group: 1},
 }
