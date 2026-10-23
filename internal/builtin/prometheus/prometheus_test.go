@@ -878,3 +878,38 @@ func TestFormattingStopsWhenTheContextEnds(t *testing.T) {
 		t.Errorf("mask called %d times after the context ended", calls)
 	}
 }
+
+// Prometheus 3 allows any UTF-8 in metric and label names; names outside the
+// legacy syntax are quoted, and a metric name that needs quoting moves into
+// the braces as the first element.
+func TestLabelSetsQuoteNamesOutsideTheLegacySyntax(t *testing.T) {
+	useFixedClock(t)
+	cases := []struct {
+		metric string
+		want   string
+	}{
+		{`{"__name__":"up","job":"a"}`, `up{job="a"}`},
+		{`{"__name__":"job:rate5m","job":"a"}`, `job:rate5m{job="a"}`},
+		{`{"__name__":"http.server.duration","service.name":"x"}`, `{"http.server.duration","service.name"="x"}`},
+		{`{"__name__":"http.server.duration"}`, `{"http.server.duration"}`},
+		{`{"__name__":"up","service.name":"x","a":"1","é":"2"}`, `up{a="1","service.name"="x","é"="2"}`},
+		{`{"__name__":"9lives","a":"1"}`, `{"9lives",a="1"}`},
+		{`{"__name__":"q\"x\\y","a":"1"}`, `{"q\"x\\y",a="1"}`},
+		{`{"job":"a"}`, `{job="a"}`},
+		{`{}`, `{}`},
+	}
+	for _, tc := range cases {
+		f := serve(t, 200, vector(fmt.Sprintf(`{"metric":%s,"value":[%d,"1"]}`, tc.metric, fixedUnix)))
+		r := mustRun(t, config("query", f), Params{Query: "x"})
+		// TSV escaping doubles the backslashes of the Prometheus quoting.
+		want := strings.ReplaceAll(tc.want, `\`, `\\`) + "\t2026-10-23T03:12:00Z\t1"
+		if got := lines(r.Stdout)[1]; got != want {
+			t.Errorf("metric %s: row = %q; want %q", tc.metric, got, want)
+		}
+	}
+	f := serve(t, 200, success(`[{"__name__":"a.b","c.d":"1"}]`))
+	r := mustRun(t, config("series", f), Params{Match: []string{"x"}})
+	if got := lines(r.Stdout)[1]; got != `{"a.b","c.d"="1"}` {
+		t.Errorf("series row = %q", got)
+	}
+}
