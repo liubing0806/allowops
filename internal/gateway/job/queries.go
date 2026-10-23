@@ -123,52 +123,6 @@ type jobFilter struct {
 	statuses        []int16
 }
 
-// candidates returns up to limit job positions after the cursor. Only the
-// filters that are set appear in the statement, so that it can use
-// jobs_subject_created or jobs_created for ordering and the cursor.
-func (f jobFilter) candidates(ctx context.Context, db *store.Store, after *jobCursor, limit int) ([]jobCursor, error) {
-	where := []string{"TRUE"}
-	args := []any{}
-	add := func(condition string, value any) {
-		args = append(args, value)
-		where = append(where, fmt.Sprintf(condition, len(args)))
-	}
-	if f.subject != "" {
-		add("subject_id=$%d", f.subject)
-	}
-	if f.action != "" {
-		add("action=$%d", f.action)
-	}
-	if f.from != nil {
-		add("created_at>=$%d", *f.from)
-	}
-	if f.to != nil {
-		add("created_at<$%d", *f.to)
-	}
-	if len(f.statuses) > 0 {
-		add("status=ANY($%d)", f.statuses)
-	}
-	if after != nil {
-		args = append(args, after.created, after.id)
-		where = append(where, fmt.Sprintf("(created_at,job_id)<($%d,$%d)", len(args)-1, len(args)))
-	}
-	args = append(args, limit)
-	rows, err := db.Pool.Query(ctx, "SELECT job_id,created_at FROM jobs WHERE "+strings.Join(where, " AND ")+" ORDER BY created_at DESC,job_id DESC LIMIT $"+strconv.Itoa(len(args)), args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []jobCursor{}
-	for rows.Next() {
-		var c jobCursor
-		if err := rows.Scan(&c.id, &c.created); err != nil {
-			return nil, err
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
-}
-
 func (s *Service) GetJob(ctx context.Context, r *v1.GetJobRequest) (*v1.GetJobResponse, error) {
 	m, err := s.operation(ctx, "get_job", false, func(ctx context.Context) (proto.Message, error) {
 		if r == nil {
@@ -367,31 +321,15 @@ func (s *Service) ListTaskSteps(ctx context.Context, r *v1.ListTaskStepsRequest)
 		if _, _, err := s.authorize(ctx, j, authz.ViewJobs, false, ""); err != nil {
 			return nil, err
 		}
-		var exists bool
-		if err := s.Store.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM tasks WHERE job_id=$1 AND task_id=$2)", r.JobId, r.TaskId).Scan(&exists); err != nil {
+		exists, err := taskExists(ctx, s.Store.Pool, r.JobId, r.TaskId)
+		if err != nil {
 			return nil, err
 		}
 		if !exists {
 			return nil, failure(connect.CodeNotFound, "TASK_UNKNOWN")
 		}
-		rows, err := s.Store.Pool.Query(ctx, "SELECT step_index,name,result FROM task_steps WHERE job_id=$1 AND task_id=$2 ORDER BY step_index", r.JobId, r.TaskId)
+		items, err := listTaskSteps(ctx, s.Store.Pool, r.JobId, r.TaskId)
 		if err != nil {
-			return nil, err
-		}
-		defer rows.Close()
-		items := []*v1.TaskStep{}
-		for rows.Next() {
-			v := &v1.TaskStep{Result: &v1.ExecutionResult{}}
-			var raw []byte
-			if err := rows.Scan(&v.Index, &v.Name, &raw); err != nil {
-				return nil, err
-			}
-			if err := proto.Unmarshal(raw, v.Result); err != nil {
-				return nil, err
-			}
-			items = append(items, v)
-		}
-		if err := rows.Err(); err != nil {
 			return nil, err
 		}
 		actor, _ := reqctx.RequestInfo(ctx)
@@ -425,30 +363,16 @@ func (s *Service) CancelJob(ctx context.Context, r *v1.CancelJobRequest) (*v1.Ca
 			return nil, err
 		}
 		defer tx.Rollback(ctx)
-		var status int16
-		var requested bool
-		if err := tx.QueryRow(ctx, "SELECT status,cancel_requested FROM jobs WHERE job_id=$1 FOR UPDATE", j.JobId).Scan(&status, &requested); err != nil {
+		status, requested, err := lockJobForCancel(ctx, tx, j.JobId)
+		if err != nil {
 			return nil, err
 		}
 		var cancelledTasks []string
 		if status <= 2 && !requested {
-			if _, err := tx.Exec(ctx, "UPDATE jobs SET cancel_requested=true WHERE job_id=$1", j.JobId); err != nil {
+			if err := requestJobCancel(ctx, tx, j.JobId); err != nil {
 				return nil, err
 			}
-			rows, err := tx.Query(ctx, "UPDATE tasks SET status=8,result=$2,finished_at=now(),output_state='unavailable' WHERE job_id=$1 AND status=1 RETURNING task_id", j.JobId, pendingResult(v1.TaskStatus_TASK_STATUS_CANCELLED, "CANCELLED"))
-			if err != nil {
-				return nil, err
-			}
-			for rows.Next() {
-				var taskID string
-				if err := rows.Scan(&taskID); err != nil {
-					rows.Close()
-					return nil, err
-				}
-				cancelledTasks = append(cancelledTasks, taskID)
-			}
-			err = rows.Err()
-			rows.Close()
+			cancelledTasks, err = cancelPendingTasks(ctx, tx, j.JobId, pendingResult(v1.TaskStatus_TASK_STATUS_CANCELLED, "CANCELLED"))
 			if err != nil {
 				return nil, err
 			}
@@ -508,26 +432,11 @@ func (s *Service) startCancelWorker(id string, first bool) {
 // on a SQL error or service shutdown.
 func (s *Service) cancelTasks(ctx context.Context, id string) bool {
 	for {
-		type target struct {
-			id, host, connection string
-			status               int16
-		}
-		var targets []target
+		var targets []cancelTarget
 		err := retrySQL(ctx, id, func(ctx context.Context) error {
-			targets = nil
-			rows, err := s.Store.Pool.Query(ctx, "SELECT task_id,host_id,COALESCE(connection_id,''),status FROM tasks WHERE job_id=$1 AND status IN (1,2) AND dispatched", id)
-			if err != nil {
-				return err
-			}
-			defer rows.Close()
-			for rows.Next() {
-				var t target
-				if err := rows.Scan(&t.id, &t.host, &t.connection, &t.status); err != nil {
-					return err
-				}
-				targets = append(targets, t)
-			}
-			return rows.Err()
+			var err error
+			targets, err = listCancelTargets(ctx, s.Store.Pool, id)
+			return err
 		})
 		if err != nil {
 			logSQLFailure(ctx, slog.LevelError, "job cancellation worker stopped", id, err)

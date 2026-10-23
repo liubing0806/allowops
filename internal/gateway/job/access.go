@@ -28,35 +28,18 @@ func (s *Service) authorize(ctx context.Context, j *v1.Job, op authz.Operation, 
 	if id.Subject.Kind == "service_account" && (cancel || op == authz.ViewJobs) {
 		return j.PolicyVersion, nil, nil
 	}
-	var raw []byte
-	if err := s.Store.Pool.QueryRow(ctx, "SELECT action_definition FROM jobs WHERE job_id=$1", j.JobId).Scan(&raw); err != nil {
+	raw, err := getJobActionDefinition(ctx, s.Store.Pool, j.JobId)
+	if err != nil {
 		return 0, nil, err
 	}
 	var action catalog.Action
 	if err := json.Unmarshal(raw, &action); err != nil {
 		return 0, nil, err
 	}
-	rows, err := s.Store.Pool.Query(ctx, "SELECT DISTINCT t.host_id,h.authorization_labels FROM tasks t JOIN hosts h ON h.host_id=t.host_id WHERE t.job_id=$1 AND ($2='' OR t.hostname=$2) ORDER BY t.host_id", j.JobId, selectedHost)
+	hosts, err := listJobAuthorizationHosts(ctx, s.Store.Pool, j.JobId, selectedHost)
 	if err != nil {
 		return 0, nil, err
 	}
-	defer rows.Close()
-	hosts := []authz.Host{}
-	for rows.Next() {
-		var h authz.Host
-		var raw []byte
-		if err := rows.Scan(&h.ID, &raw); err != nil {
-			return 0, nil, err
-		}
-		if err := json.Unmarshal(raw, &h.Labels); err != nil {
-			return 0, nil, err
-		}
-		hosts = append(hosts, h)
-	}
-	if err := rows.Err(); err != nil {
-		return 0, nil, err
-	}
-	rows.Close()
 	// Denied jobs have no tasks, but still require metadata authorization.
 	if len(hosts) == 0 {
 		hosts = []authz.Host{{}}

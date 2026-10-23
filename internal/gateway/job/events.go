@@ -74,17 +74,12 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	var definition []byte
-	var state int16
-	var created time.Time
-	var hostID, hostname, connection, actor string
-	var dispatched bool
-	var version uint64
-	err = tx.QueryRow(ctx, "SELECT j.action_definition,t.status,t.created_at,t.host_id,t.hostname,COALESCE(t.connection_id,''),t.dispatched,j.subject_id,j.policy_version FROM tasks t JOIN jobs j ON j.job_id=t.job_id WHERE t.job_id=$1 AND t.task_id=$2 FOR UPDATE OF t", jobID, taskID).Scan(&definition, &state, &created, &hostID, &hostname, &connection, &dispatched, &actor, &version)
+	row, err := lockTaskForEvent(ctx, tx, jobID, taskID)
 	if err != nil {
 		return errors.New("UNKNOWN_TASK_EVENT")
 	}
-	if hostID != e.HostID || connection != e.ConnectionID || !dispatched {
+	definition, state, created, hostID, hostname, actor, version := row.definition, row.state, row.created, row.hostID, row.hostname, row.actor, row.policyVersion
+	if hostID != e.HostID || row.connection != e.ConnectionID || !row.dispatched {
 		return errors.New("TASK_CONNECTION_MISMATCH")
 	}
 	if state > 2 {
@@ -130,7 +125,7 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 		if state != 1 {
 			return errors.New("DUPLICATE_TASK_START")
 		}
-		if _, err := tx.Exec(ctx, "UPDATE tasks SET status=2,result=$3,started_at=now() WHERE job_id=$1 AND task_id=$2", jobID, taskID, pendingResult(v1.TaskStatus_TASK_STATUS_RUNNING, "")); err != nil {
+		if err := markTaskStarted(ctx, tx, jobID, taskID, pendingResult(v1.TaskStatus_TASK_STATUS_RUNNING, "")); err != nil {
 			return err
 		}
 		// Output events publish their buffer while holding the task row lock.
@@ -218,7 +213,7 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, "INSERT INTO task_steps(job_id,task_id,created_at,step_index,name,result) VALUES ($1,$2,$3,$4,$5,$6)", jobID, taskID, created, step.StepIndex, step.StepName, raw); err != nil {
+		if err := insertTaskStep(ctx, tx, jobID, taskID, created, step.StepIndex, step.StepName, raw); err != nil {
 			return err
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -308,7 +303,7 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, "UPDATE tasks SET status=$3,result=$4,finished_at=now(),stdout_preview=$5,stderr_preview=$6,stdout_sha256=$7,stderr_sha256=$8,step_count=$9,stdout_size=$10,stderr_size=$11 WHERE job_id=$1 AND task_id=$2 AND status IN (1,2)", jobID, taskID, int16(completed.Result.Status), raw, stdout[:min(len(stdout), GroupBytes)], stderr[:min(len(stderr), GroupBytes)], stdoutHash[:], stderrHash[:], len(out.Steps), len(stdout), len(stderr)); err != nil {
+		if err := completeTask(ctx, tx, jobID, taskID, int16(completed.Result.Status), raw, stdout[:min(len(stdout), GroupBytes)], stderr[:min(len(stderr), GroupBytes)], stdoutHash[:], stderrHash[:], len(out.Steps), len(stdout), len(stderr)); err != nil {
 			return err
 		}
 		// Register accepted persistence before terminal COMMIT is visible to
@@ -348,9 +343,7 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 func (s *Service) terminalCommitted(ctx context.Context, jobID, taskID string, status v1.TaskStatus, result []byte) bool {
 	readCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer stop()
-	var stored int16
-	var raw []byte
-	err := s.Store.Pool.QueryRow(readCtx, "SELECT status,result FROM tasks WHERE job_id=$1 AND task_id=$2", jobID, taskID).Scan(&stored, &raw)
+	stored, raw, err := getTaskStatusResult(readCtx, s.Store.Pool, jobID, taskID)
 	return err == nil && stored == int16(status) && bytes.Equal(raw, result)
 }
 
@@ -476,8 +469,7 @@ func (s *Service) persist(jobID, taskID, hostID, hostname, actor, action string,
 	// Keep this worker responsible for retryable writes until service shutdown,
 	// then use the existing independent five-second terminal cleanup boundary.
 	if err := terminalSQL(s.ctx, jobID, func(ctx context.Context) error {
-		_, err := s.Store.Pool.Exec(ctx, "UPDATE tasks SET output_stored=$3,output_state=$4 WHERE job_id=$1 AND task_id=$2", jobID, taskID, stored, state)
-		return err
+		return updateOutputState(ctx, s.Store.Pool, jobID, taskID, stored, state)
 	}); err != nil {
 		logSQLFailure(s.ctx, slog.LevelError, "output storage state update failed", jobID, err, "task_id", taskID)
 		return
@@ -496,23 +488,10 @@ func (s *Service) OnDisconnect(e hostconn.Event) {
 	defer cancel()
 	// Remote recovery can have made these tasks terminal without clearing the
 	// connection owner's buffers. Include all tasks of this generation.
-	rows, err := s.Store.Pool.Query(ctx, "WITH disconnected AS (UPDATE tasks SET status=6,result=$3,finished_at=now(),output_state='unavailable' WHERE host_id=$1 AND connection_id=$2 AND status IN (1,2) RETURNING job_id,task_id) SELECT job_id,task_id FROM tasks WHERE host_id=$1 AND connection_id=$2", e.HostID, e.ConnectionID, pendingResult(v1.TaskStatus_TASK_STATUS_OFFLINE, "OFFLINE"))
-	if err != nil {
-		slog.Error("task disconnect update failed", "host_id", e.HostID)
+	pairs, err := disconnectTasks(ctx, s.Store.Pool, e.HostID, e.ConnectionID, pendingResult(v1.TaskStatus_TASK_STATUS_OFFLINE, "OFFLINE"))
+	if errors.Is(err, errDisconnectScan) {
 		return
 	}
-	type pair struct{ jobID, taskID string }
-	pairs := []pair{}
-	for rows.Next() {
-		var p pair
-		if err := rows.Scan(&p.jobID, &p.taskID); err != nil {
-			rows.Close()
-			return
-		}
-		pairs = append(pairs, p)
-	}
-	err = rows.Err()
-	rows.Close()
 	if err != nil {
 		slog.Error("task disconnect update failed", "host_id", e.HostID)
 		return

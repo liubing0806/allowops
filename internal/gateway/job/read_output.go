@@ -38,17 +38,14 @@ func (s *Service) GetJobOutput(ctx context.Context, r *v1.GetJobOutputRequest) (
 		if _, _, err := s.authorize(ctx, j, authz.ViewOutput, false, r.Hostname); err != nil {
 			return nil, err
 		}
-		var taskID, hostID, state string
-		var raw, definition []byte
-		var at time.Time
-		var stored bool
-		err = s.Store.Pool.QueryRow(ctx, "SELECT t.task_id,t.host_id,t.result,t.created_at,t.output_stored,t.output_state,j.action_definition FROM tasks t JOIN jobs j ON j.job_id=t.job_id WHERE t.job_id=$1 AND t.hostname=$2", r.JobId, r.Hostname).Scan(&taskID, &hostID, &raw, &at, &stored, &state, &definition)
+		row, err := getTaskOutput(ctx, s.Store.Pool, r.JobId, r.Hostname)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, failure(connect.CodeNotFound, "TASK_UNKNOWN")
 		}
 		if err != nil {
 			return nil, err
 		}
+		taskID, hostID, state, raw, definition, at, stored := row.taskID, row.hostID, row.state, row.result, row.definition, row.created, row.stored
 		var a catalog.Action
 		if err := json.Unmarshal(definition, &a); err != nil {
 			return nil, err
@@ -61,8 +58,7 @@ func (s *Service) GetJobOutput(ctx context.Context, r *v1.GetJobOutputRequest) (
 			return nil, err
 		}
 		if r.StepIndex != nil {
-			var stepRaw []byte
-			err := s.Store.Pool.QueryRow(ctx, "SELECT result FROM task_steps WHERE job_id=$1 AND task_id=$2 AND step_index=$3", r.JobId, taskID, *r.StepIndex).Scan(&stepRaw)
+			stepRaw, err := getTaskStepResult(ctx, s.Store.Pool, r.JobId, taskID, *r.StepIndex)
 			if err == nil {
 				if err := proto.Unmarshal(stepRaw, result); err != nil {
 					return nil, err
