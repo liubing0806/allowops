@@ -4,11 +4,11 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 93 个 action：92 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-23 起原 `log_search` 改名 `log_grep`，新的 `log_search` 和新增的 `log_sources` 使用内置 log_query 处理器；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 95 个 action：94 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-23 起原 `log_search` 改名 `log_grep`，新的 `log_search` 和新增的 `log_sources`、`log_search_containers`、`log_export` 使用内置 log_query 处理器；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
-`disk_usage_paths` 查询路径所在文件系统容量，`disk_dir_size` 统计目录文件大小，两者保留。`log_search_dir` 使用固定 grep 检索未压缩目录，`log_grep` 使用内置 log_search 处理器按路径通配检索普通和 gzip 文件，`log_sources`、`log_search` 使用内置 log_query 处理器按目录中声明的日志源和时间范围检索（设计见 `log-search-design.md` 第 6 节），均保留。第 20 节 D3 已取代第 18 节“压缩日志不在 MVP”的旧限制；本目录包含 gzip 日志检索需求，不使用 zgrep。
+`disk_usage_paths` 查询路径所在文件系统容量，`disk_dir_size` 统计目录文件大小，两者保留。`log_search_dir` 使用固定 grep 检索未压缩目录，`log_grep` 使用内置 log_search 处理器按路径通配检索普通和 gzip 文件，`log_sources`、`log_search` 使用内置 log_query 处理器按目录中声明的日志源和时间范围检索（设计见 `log-search-design.md` 第 6 节），`log_search_containers` 检索容器标准输出、容器内日志文件和 Pod 日志，`log_export` 按时间顺序导出日志文本（第 8 节），均保留。第 20 节 D3 已取代第 18 节“压缩日志不在 MVP”的旧限制；本目录包含 gzip 日志检索需求，不使用 zgrep。
 
 内置处理器的正式参数和配置 schema（字段结构及校验规则）由 `internal/catalog/builtin.go` 和 `builtin_adapters.go` 定义。P12D 已实现 G30 的 Redis/MySQL 收紧配置，语义见 `builtin-config.md`（含 G31、G34）；四个示例已恢复命令、键前缀、分区和库范围限制。内置参数默认值的剩余缺口见第 4 节。目录校验不检查目标主机的工具、凭据文件或外部服务，不据此宣称这些环境可执行全部 action。
 
@@ -2145,7 +2145,7 @@ builtin_config:
 | `since`、`until` | string | 处理器提供；RFC 3339 时间或正的 Go 时长（相对执行时刻）；可选 | 时间范围；省略 until 为执行时刻，省略 since 为 until 前 1 小时；范围不超过 max_window |
 | `pattern`、`exclude` | string | 处理器提供；`max_len: 200`；可选 | 匹配整条记录（含堆栈续行）的 RE2 模式、排除模式 |
 | `fixed`、`ignore_case` | bool | 处理器提供；默认 `false` | 按字面文本匹配；忽略大小写 |
-| `limit` | int | 处理器提供；`min: 1`；`max: 200`；默认 `50` | 本页最多记录数 |
+| `limit` | int | 处理器提供；`min: 1`；`max` 为 builtin_config 的 `max_page_records`（上限 500，示例为 200）；默认 `50` | 本页最多记录数 |
 | `order` | enum | 处理器提供；`desc`、`asc`；默认 `desc` | 新的在前或旧的在前 |
 | `cursor` | string | 处理器提供；`max_len: 4096`；可选 | 上一页的 next_cursor，其他参数须与上一页相同 |
 
@@ -2181,6 +2181,105 @@ builtin_config:
   max_scan: 256MB
   max_window: 24h
   max_page_records: 200
+  max_record_bytes: 64KB
+```
+
+### `log_search_containers`
+
+按目录中声明的日志源名称和时间范围检索容器标准输出、容器内日志文件和 Kubernetes Pod 日志，返回分页的 JSON 记录。参数、输出和分页与 `log_search` 相同。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（log_query，mode: search） |
+| filters | 无 |
+| redact | secrets, pii |
+| 执行限制 | timeout=30s；max_output=64KB |
+| CentOS 7 | 由 Go 实现。`container_stdout` 和 `container_file` 通过 `/var/run/docker.sock` 调用 Docker Engine API（不带版本前缀，不传 `until`）；`k8s_pod` 读取节点的 `/var/log/pods`，不调用 kubectl。主机端须在能力中声明 `log_query`。 |
+| 安全说明 | 容器名、namespace、Pod 名前缀和容器内路径都写死在签名的 builtin_config 中，调用方只选择源名称。`container_stdout` 只发送 GET `/containers/{name}/json` 和 `/containers/{name}/logs?stdout=1&stderr=1&timestamps=1&since=…`，不传 `tail`，读取的字节计入 max_scan，记录时间取 Docker 记录的时间。`container_file` 的 paths 和 allowed_roots 是容器内路径；位于 bind mount 或卷内的根目录换算到挂载的宿主机路径，其他根目录使用 overlay2 的 `GraphDriver.Data.MergedDir`，两者都没有时（其他存储驱动、containerd 快照存储、tmpfs）返回 `SOURCE_UNSUPPORTED`。换算后的目录用 os.Root 打开，容器内的符号链接在该目录内解析，指向容器根目录以外（包括绝对路径 `/etc/passwd`）返回 `PATH_OUTSIDE_ROOTS`。`k8s_pod` 只读取 `<namespace>_<Pod 名前缀…>_<uid>/<container>/*.log*`，同样用 os.Root 打开。容器不存在或 Docker API 不可达返回 `SOURCE_UNAVAILABLE`。匹配与脱敏顺序同 `log_search`。依据：`internal/builtin/logquery/container.go`、`docker.go`、`k8s.go`。 |
+
+builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: log_query
+builtin_config:
+  mode: search
+  sources:
+    web-app-stdout:
+      type: container_stdout
+      container: web-app
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+    web-app-files:
+      type: container_file
+      container: web-app
+      paths: [/opt/app/logs/*.log, /opt/app/logs/*.log.*]
+      allowed_roots: [/opt/app/logs]
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+    web-app-pod:
+      type: k8s_pod
+      namespace: default
+      pod: web-app-
+      container: app
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+  max_files: 50
+  max_scan: 256MB
+  max_window: 24h
+  max_page_records: 200
+  max_record_bytes: 64KB
+```
+
+### `log_export`
+
+按时间顺序导出一个日志源在时间范围内的记录，每行一条：`<时间> <记录文本>`，记录内的反斜杠、换行、回车写成 `\\`、`\n`、`\r`。最后一行以 `# ` 开头，给出 `matched`、`scanned_bytes`、`scan_limit_reached`，还有剩余记录时给出 `next_cursor`。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（log_query，mode: export） |
+| filters | 无 |
+| redact | secrets, pii |
+| 执行限制 | timeout=60s；max_output=8MB |
+| CentOS 7 | 同 `log_search` 和 `log_search_containers`。 |
+| 安全说明 | 源和路径规则同 `log_search`、`log_search_containers`。记录逐条脱敏后再转义写出。builtin 按 max_output 在第一条放不下的记录处结束本页，并给出从该记录继续的 next_cursor；单条记录本身放不下时截短。导出作为普通作业记入审计。调用方用 `jobs_get encoding=text` 分页读取，或用 `allowops jobs output` 保存。 |
+
+参数：与 `log_search` 相同，但没有 `order`（固定从旧到新）；`limit` 的 `max` 和默认值为 100000，`cursor` 取上一页最后一行中的 `next_cursor`。
+
+builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: log_query
+builtin_config:
+  mode: export
+  sources:
+    app:
+      type: file
+      paths: [/data/logs/app/*.log, /data/logs/app/*.log.*]
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+    web-app-stdout:
+      type: container_stdout
+      container: web-app
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+  allowed_roots: [/data/logs]
+  max_files: 50
+  max_scan: 256MB
+  max_window: 24h
   max_record_bytes: 64KB
 ```
 
@@ -2226,7 +2325,7 @@ exec: [/usr/bin/grep, -r, -E, -m, '{max_matches}', -e, '{pattern}', --, '{path}'
 | filters | 无 |
 | redact | secrets, pii |
 | 执行限制 | timeout=30s；max_output=64KB |
-| 安全说明 | 只读取每个文件的元数据和开头（最多 64 行、解压后 256KB），不扫描全文。路径规则同 `log_search`。输出 status 为 `ok`、`no_files`、`timestamp_unparsed` 之一。 |
+| 安全说明 | 只读取每个文件的元数据和开头（最多 64 行、解压后 256KB），不扫描全文。路径规则同 `log_search`。输出 status 为 `ok`、`no_files`、`timestamp_unparsed` 之一；容器和 Pod 类型的源另有 `no_records`（容器没有输出）、`unavailable`、`unsupported`，后两者带 `reason`。 |
 
 参数：无（targets 等公共参数除外）。builtin_config 为 `mode: sources` 加上与 `log_search` 相同的 sources 和 allowed_roots。
 
@@ -3066,7 +3165,7 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 
 ## 5. 本地示例检查
 
-`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 93 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 95 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
 
 配置脱敏冒烟在同一临时目录中把 app_config_view、app_config_keys 的 allowed_roots 改为临时配置目录，写入 properties、JSON、XML 形式的凭据和 PEM 私钥：断言 app_config_view 输出不含凭据值、match 过滤命中与否都以退出码 0 返回，app_config_keys 只输出键名且不输出 PEM 内容。该检查依赖本机 grep 支持 -P 和 head。
 
