@@ -66,6 +66,12 @@ type testGateway struct {
 	packages    map[string][]byte
 	badOffset   bool
 	renewSoon   bool
+	// hello overrides the gateway hello. A nil response sends none; an error ends the stream.
+	hello func() (*v1.ConnectResponse, error)
+	// silent stops the gateway from answering agent heartbeats.
+	silent bool
+	// blockPull holds catalog pulls open until the stream context ends.
+	blockPull bool
 }
 type testConnection struct {
 	stream   *connect.BidiStream[v1.ConnectRequest, v1.ConnectResponse]
@@ -146,8 +152,20 @@ func (g *testGateway) Connect(ctx context.Context, stream *connect.BidiStream[v1
 	}
 	c := &testConnection{stream: stream, hello: first.GetHello(), messages: make(chan *v1.ConnectRequest, 256), closed: make(chan struct{})}
 	defer func() { c.mu.Lock(); defer c.mu.Unlock(); close(c.closed) }()
-	if err := stream.Send(&v1.ConnectResponse{Message: &v1.ConnectResponse_Hello{Hello: &v1.GatewayHello{GatewayVersion: "0.1.0", ConnectionId: "test-connection", Limits: &v1.ConnectionLimits{HeartbeatInterval: durationpb.New(50 * time.Millisecond), HeartbeatTimeout: durationpb.New(time.Second), MaxMessageBytes: MaxMessageBytes, MaxChunkBytes: 7, MaxInflightTasks: MaxConcurrentTasks}}}}); err != nil {
-		return err
+	g.mu.Lock()
+	helloOverride, silent := g.hello, g.silent
+	g.mu.Unlock()
+	hello := &v1.ConnectResponse{Message: &v1.ConnectResponse_Hello{Hello: &v1.GatewayHello{GatewayVersion: "0.1.0", ConnectionId: "test-connection", Limits: &v1.ConnectionLimits{HeartbeatInterval: durationpb.New(50 * time.Millisecond), HeartbeatTimeout: durationpb.New(time.Second), MaxMessageBytes: MaxMessageBytes, MaxChunkBytes: 7, MaxInflightTasks: MaxConcurrentTasks}}}}
+	if helloOverride != nil {
+		hello, err = helloOverride()
+		if err != nil {
+			return err
+		}
+	}
+	if hello != nil {
+		if err := stream.Send(hello); err != nil {
+			return err
+		}
 	}
 	select {
 	case g.connections <- c:
@@ -159,7 +177,7 @@ func (g *testGateway) Connect(ctx context.Context, stream *connect.BidiStream[v1
 		if err != nil {
 			return err
 		}
-		if heartbeat := message.GetHeartbeat(); heartbeat != nil {
+		if heartbeat := message.GetHeartbeat(); heartbeat != nil && !silent {
 			c.mu.Lock()
 			err = stream.Send(&v1.ConnectResponse{Message: &v1.ConnectResponse_Heartbeat{Heartbeat: &v1.GatewayHeartbeat{Sequence: heartbeat.Sequence}}})
 			c.mu.Unlock()
@@ -174,11 +192,16 @@ func (g *testGateway) Connect(ctx context.Context, stream *connect.BidiStream[v1
 		}
 	}
 }
-func (g *testGateway) PullCatalog(_ context.Context, request *connect.Request[v1.PullCatalogRequest], stream *connect.ServerStream[v1.PullCatalogResponse]) error {
+func (g *testGateway) PullCatalog(ctx context.Context, request *connect.Request[v1.PullCatalogRequest], stream *connect.ServerStream[v1.PullCatalogResponse]) error {
 	g.mu.Lock()
 	data := g.packages[request.Msg.Catalog.CatalogId+":"+strconv.FormatUint(request.Msg.Catalog.Version, 10)]
 	bad := g.badOffset
+	block := g.blockPull
 	g.mu.Unlock()
+	if block {
+		<-ctx.Done()
+		return ctx.Err()
+	}
 	if len(data) == 0 {
 		return connect.NewError(connect.CodeNotFound, errors.New("catalog"))
 	}
