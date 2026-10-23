@@ -441,6 +441,34 @@ sources:
 3. `k8s_pod` 在本地 k3s 集群上读取一个 Pod 的日志，结果与 `kubectl logs --since-time` 一致。
 4. `jobs_get encoding=text` 和 `log_export` 在 compose 演示主机上执行成功。
 
+### 8.6 第三阶段实现记录
+
+第三阶段已在 `internal/builtin/logquery` 实现（2026-10-24）。源类型 `container_stdout`、`container_file`、`k8s_pod` 分别在 `container.go`（经 `docker.go`）、`container.go`、`k8s.go`；`log_export` 是 `log_query` 的 `mode: export`，在 `export.go`。示例 catalog 增加 `log_search_containers`（三种新类型各一个源）和 `log_export`。8.4 第 1 项 `jobs_get encoding=text` 由另一项工作完成（`ebabcb9`），不在本包内。
+
+与上文设计不一致之处：
+
+1. `container_stdout` 调用 logs API 时只传 `since`，不传 `until`（8.1 第 1 项）。较旧的 Docker 不支持 `until`；读取器在第一条晚于范围的记录处停止。请求不带 API 版本前缀，由 daemon 使用其当前版本。
+2. Docker API 只能从早到晚读取。`desc` 把时间范围等分为 8 个窗口，从最新的窗口开始读，每个窗口从其起点读到终点，使已扫描部分始终是范围的结尾一段。窗口读取超出剩余 `max_scan` 时丢弃该窗口的命中，把它对半拆分后先读较新的一半；拆分最多 32 次，被丢弃的读取量不超过 4 倍 `max_scan`。`scanned_bytes` 只计入命中被保留的窗口，并包含判断记录结束时预读的一行，因此可能略超 `max_scan`。`asc` 读一个窗口。
+3. 游标的 `seq` 是记录在同一 Docker 时间戳的记录中的序号（8.1 第 5 项），`asc` 和 `desc` 都使用。
+4. 新增错误代码 `SOURCE_UNAVAILABLE`：容器不存在或 Docker API 不可达。Docker API 返回 501（例如日志驱动 `none` 不支持读取）时返回 `SOURCE_UNSUPPORTED`。`log_sources` 中容器和 Pod 源的状态另有 `no_records`、`unavailable`、`unsupported`，后两者带 `reason`。
+5. 容器标准输出和 Pod 日志的记录时间取运行时记录的时间（8.1 第 3 项）。这两种源的 `timestamp.layouts` 只用于 `multiline: timestamp_start` 判断记录起点，可以省略；省略 `multiline` 时默认 `none`（`file` 和 `container_file` 默认 `timestamp_start`）。`timestamp_start` 必须配置 `layouts`。`timestamp_start` 时范围开头属于上一条记录的续行被丢弃。
+6. 记录增加 `stream`（`stdout` 或 `stderr`），只用于容器标准输出和 Pod 日志。
+7. `container_file` 的 `allowed_roots` 写在源上，是容器内路径；`file` 类型继续使用 `builtin_config` 顶层的 `allowed_roots`。只有包含 `file` 类型源时顶层 `allowed_roots` 才是必填。
+8. `container_file` 的根目录换算：按最长前缀选择包含该根目录的 bind mount 或卷，使用其 `Source`；其他挂载类型（如 tmpfs）返回 `SOURCE_UNSUPPORTED`。不在挂载内时使用 overlay2 的 `MergedDir`。挂载在根目录下层的子目录在 `MergedDir` 中不可见，其中的文件不会被读取，除非另一个根目录覆盖该挂载。
+9. Docker 使用 containerd 快照存储时（本机 Docker 的 Storage Driver 为 `overlayfs`、driver-type 为 `io.containerd.snapshotter.v1`），inspect 结果没有 `GraphDriver`，挂载外的路径返回 `SOURCE_UNSUPPORTED`（错误信息中的存储驱动显示为 `none`）。
+10. 根目录按 8.2 第 4 项打开：先以挂载的宿主机路径或 `MergedDir` 打开 `os.Root`，再在其中打开容器内根目录对应的子目录作为第二层 `os.Root`。符号链接不能离开容器内的根目录：指向根目录外的相对链接和任何绝对路径链接（包括 `/etc/passwd`）都返回 `PATH_OUTSIDE_ROOTS`。
+11. `k8s_pod` 的 `pod` 只支持名称前缀，不支持标签匹配（8.3 第 1 项）。标签只能从 API server 获得，与 8.3 第 3 项不调用 kubectl 的约束冲突。文件匹配 `<container>/*.log*`，包含 kubelet 轮转后的 `0.log.<时间>` 和压缩文件。
+12. CRI 格式的标签字段可带 `:` 后的其他标志，只取第一个标志判断 `P`、`F`。不符合 CRI 格式的行按无时间戳的行处理。片段拼接后的长度按 `max_record_bytes` 截断。
+13. `log_export` 的输出格式是 `<时间> <记录文本>`，记录内的 `\`、换行、回车写成 `\\`、`\n`、`\r`。最后一行以 `# ` 开头，给出 `matched`、`scanned_bytes`、`scan_limit_reached`，有剩余记录时给出 `next_cursor`。`log_export` 没有 `order` 参数；`limit` 的上限和默认值是 100000。`max_output` 在第一条放不下的记录处结束本页，从该记录生成 `next_cursor`；本页第一条记录单独放不下时截短。
+14. `max_page_records` 的上限从 200 改为 500，用于 8.5 第 1 项的 `limit=500`。示例 action 仍配置 200。
+
+8.5 的验证结果：
+
+1. `container_stdout`：`TestDockerUntilWithLimit` 在本机 Docker 上执行。容器输出 A1 到 A1000，暂停 4 秒后输出 B1 到 B1000；`mid2` 是 A1000 之后 2 秒。`docker logs --until mid2 --tail 500` 返回 0 行；`log_query` 的 `until=mid2`、`limit=500`、`desc` 返回 A1000 到 A501（500 条，`matched=1000`），第二页返回 A500 到 A1；`since=mid2`、`asc` 返回 B1 到 B500。
+2. `container_file`：bind mount 用 `TestDockerContainerFileBindMount` 在本机 Docker 上验证。本机 Docker 使用 containerd 快照存储，overlay2 用临时启动的第二个 dockerd 验证（独立 data-root、socket 和 containerd 命名空间，`--storage-driver overlay2`，以 root 运行 `TestDockerContainerFileOverlay2`），读到容器内写入的 10 条记录。两种情况下，容器内创建的指向 `/etc/passwd` 的符号链接都返回 `PATH_OUTSIDE_ROOTS`。
+3. `k8s_pod`：在本地 k3s 集群（v1.36.4+k3s1，containerd）的临时 namespace 中运行一个 busybox Pod，输出 A1 到 A1500、一行 40000 字节的长行（日志文件中为 2 个 `P` 片段和 1 个 `F` 片段）、一行 stderr、B1 到 B500。用 `allowops catalog try log_export`（以 root 运行，`limit=700` 分页）读取，与 `kubectl logs --timestamps --since-time` 逐条比较时间和文本：`since` 为第一行所在的整秒时 2002 条（3 页）一致，`since` 为长行所在的整秒时 502 条一致；长行拼接为一条 40009 字节的记录。
+4. `log_export` 由 `make examples-check` 用 `catalog try` 在本机执行（含多行记录转义、脱敏和游标分页）。`jobs_get encoding=text` 由 `internal/gateway/mcp` 的单元测试覆盖。两者未在 compose 演示主机上验证。
+
 ## 9. 待定问题
 
 1. 实际部署中应用日志的位置各不相同：可能在容器内、宿主机的 bind mount 或只在标准输出。私有 catalog 需要按实际位置选择源类型。
