@@ -242,18 +242,45 @@ func ValidateAction(a Action) ([]string, error) {
 
 // Loading a known schema preserves future handlers/types for per-action
 // reporting. Authoring and execution still require supported capabilities.
+// Checks run in a fixed order, so the first failing category is the one reported.
 func validateAction(a Action, allowUnsupported bool) ([]string, error) {
-	if !actionName.MatchString(a.Name) || slices.Contains([]string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel"}, a.Name) {
-		return nil, fmt.Errorf("invalid or reserved action name %q", a.Name)
-	}
-	if strings.TrimSpace(a.Description) == "" {
-		return nil, fmt.Errorf("description required")
-	}
-	if !slices.Contains([]string{"read", "write", "dangerous"}, a.Risk) {
-		return nil, fmt.Errorf("risk allowed: read, write, dangerous")
+	if err := validateIdentity(a); err != nil {
+		return nil, err
 	}
 	_, knownBuiltin := Builtins[a.Builtin]
 	unknownBuiltin := a.Builtin != "" && !knownBuiltin
+	defs, err := validateActionParams(a, allowUnsupported, unknownBuiltin)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateModeFields(a); err != nil {
+		return nil, err
+	}
+	if err := validateBody(a, defs, unknownBuiltin); err != nil {
+		return nil, err
+	}
+	if err := validateLimits(a); err != nil {
+		return nil, err
+	}
+	return actionWarnings(a), nil
+}
+
+func validateIdentity(a Action) error {
+	if !actionName.MatchString(a.Name) || slices.Contains([]string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel"}, a.Name) {
+		return fmt.Errorf("invalid or reserved action name %q", a.Name)
+	}
+	if strings.TrimSpace(a.Description) == "" {
+		return fmt.Errorf("description required")
+	}
+	if !slices.Contains([]string{"read", "write", "dangerous"}, a.Risk) {
+		return fmt.Errorf("risk allowed: read, write, dangerous")
+	}
+	return nil
+}
+
+// validateActionParams resolves the effective parameter definitions (including
+// builtin-owned ones) and validates both them and the action's own.
+func validateActionParams(a Action, allowUnsupported, unknownBuiltin bool) (map[string]params.Definition, error) {
 	var defs map[string]params.Definition
 	var err error
 	if unknownBuiltin && allowUnsupported {
@@ -274,6 +301,12 @@ func validateAction(a Action, allowUnsupported bool) ([]string, error) {
 	if err := validateDefinitions(a.Params); err != nil {
 		return nil, err
 	}
+	return defs, nil
+}
+
+// validateModeFields checks which execution mode is selected and the fields
+// that only apply to a particular mode, plus the output filters.
+func validateModeFields(a Action) error {
 	modes := 0
 	if a.Exec != nil {
 		modes++
@@ -288,87 +321,113 @@ func validateAction(a Action, allowUnsupported bool) ([]string, error) {
 		modes++
 	}
 	if modes != 1 {
-		return nil, fmt.Errorf("exactly one of exec, steps, script, builtin required")
+		return fmt.Errorf("exactly one of exec, steps, script, builtin required")
 	}
 	if a.OnError != "" && (a.Steps == nil || (a.OnError != "continue" && a.OnError != "stop")) {
-		return nil, fmt.Errorf("on_error allowed for steps: continue, stop")
+		return fmt.Errorf("on_error allowed for steps: continue, stop")
 	}
 	if a.ExecFallbacks != nil && a.Exec == nil {
-		return nil, fmt.Errorf("exec_fallbacks requires exec")
+		return fmt.Errorf("exec_fallbacks requires exec")
 	}
 	if a.Args != nil && a.Script == nil {
-		return nil, fmt.Errorf("args requires script")
+		return fmt.Errorf("args requires script")
 	}
 	if a.BuiltinConfig != nil && a.Builtin == "" {
-		return nil, fmt.Errorf("builtin_config requires builtin")
+		return fmt.Errorf("builtin_config requires builtin")
 	}
 	if a.MaxScan < 0 {
-		return nil, fmt.Errorf("max_scan must be nonnegative")
+		return fmt.Errorf("max_scan must be nonnegative")
 	}
 	seenFilters := map[string]bool{}
 	for _, filter := range a.Filters {
 		if !slices.Contains([]string{"match", "exclude", "tail", "head", "count"}, filter) || seenFilters[filter] {
-			return nil, fmt.Errorf("invalid or duplicate filter %q", filter)
+			return fmt.Errorf("invalid or duplicate filter %q", filter)
 		}
 		seenFilters[filter] = true
 	}
+	return nil
+}
+
+// validateBody validates the selected mode's payload. Modes are mutually
+// exclusive here, so the order among them does not change which error is reported.
+func validateBody(a Action, defs map[string]params.Definition, unknownBuiltin bool) error {
 	if a.Exec != nil {
-		if err := validateExec(a.Exec, defs, a.AllowInterpreter); err != nil {
-			return nil, err
-		}
-		for _, fallback := range a.ExecFallbacks {
-			candidate := append([]any(nil), a.Exec...)
-			candidate[0] = fallback
-			if err := validateExec(candidate, defs, a.AllowInterpreter); err != nil {
-				return nil, err
-			}
+		if err := validateExecWithFallbacks(a, defs); err != nil {
+			return err
 		}
 	}
 	if a.Steps != nil {
-		if len(a.Steps) == 0 {
-			return nil, fmt.Errorf("steps must not be empty")
-		}
-		seen := map[string]bool{}
-		for _, step := range a.Steps {
-			if !actionName.MatchString(step.Name) || seen[step.Name] {
-				return nil, fmt.Errorf("invalid or duplicate step name %q", step.Name)
-			}
-			seen[step.Name] = true
-			if err := validateExec(step.Exec, defs, a.AllowInterpreter); err != nil {
-				return nil, fmt.Errorf("step %s: %w", step.Name, err)
-			}
+		if err := validateSteps(a, defs); err != nil {
+			return err
 		}
 	}
 	if a.Script != nil {
 		if err := validateScript(*a.Script); err != nil {
-			return nil, err
+			return err
 		}
 		if err := params.ValidateTemplate(a.Args, defs); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if a.Builtin != "" && !unknownBuiltin {
 		if err := Builtins[a.Builtin].ValidateConfig(a.BuiltinConfig); err != nil {
-			return nil, err
+			return err
 		}
 	}
+	return nil
+}
 
+func validateExecWithFallbacks(a Action, defs map[string]params.Definition) error {
+	if err := validateExec(a.Exec, defs, a.AllowInterpreter); err != nil {
+		return err
+	}
+	for _, fallback := range a.ExecFallbacks {
+		candidate := append([]any(nil), a.Exec...)
+		candidate[0] = fallback
+		if err := validateExec(candidate, defs, a.AllowInterpreter); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateSteps(a Action, defs map[string]params.Definition) error {
+	if len(a.Steps) == 0 {
+		return fmt.Errorf("steps must not be empty")
+	}
+	seen := map[string]bool{}
+	for _, step := range a.Steps {
+		if !actionName.MatchString(step.Name) || seen[step.Name] {
+			return fmt.Errorf("invalid or duplicate step name %q", step.Name)
+		}
+		seen[step.Name] = true
+		if err := validateExec(step.Exec, defs, a.AllowInterpreter); err != nil {
+			return fmt.Errorf("step %s: %w", step.Name, err)
+		}
+	}
+	return nil
+}
+
+// validateLimits checks timeout, output and batch limits, run_as and redaction.
+func validateLimits(a Action) error {
 	timeout, err := time.ParseDuration(a.Timeout)
 	if err != nil || timeout <= 0 {
-		return nil, fmt.Errorf("timeout required: positive Go duration")
+		return fmt.Errorf("timeout required: positive Go duration")
 	}
 	if a.MaxOutput <= 0 {
-		return nil, fmt.Errorf("max_output must be positive integer bytes")
+		return fmt.Errorf("max_output must be positive integer bytes")
 	}
 	if a.BatchSize < 0 || (a.MaxFailures != nil && *a.MaxFailures < 0) {
-		return nil, fmt.Errorf("batch_size and max_failures must be nonnegative")
+		return fmt.Errorf("batch_size and max_failures must be nonnegative")
 	}
 	if strings.ContainsAny(a.RunAs, "\x00\r\n") || strings.HasPrefix(a.RunAs, "-") {
-		return nil, fmt.Errorf("invalid run_as")
+		return fmt.Errorf("invalid run_as")
 	}
-	if _, err := redact.New(a.Redact); err != nil {
-		return nil, err
-	}
+	_, err = redact.New(a.Redact)
+	return err
+}
+
+func actionWarnings(a Action) []string {
 	var warnings []string
 	if a.Script != nil {
 		warnings = append(warnings, fmt.Sprintf("action %s: signed script permits arbitrary execution", a.Name))
@@ -376,7 +435,7 @@ func validateAction(a Action, allowUnsupported bool) ([]string, error) {
 	if a.AllowInterpreter {
 		warnings = append(warnings, fmt.Sprintf("action %s: allow_interpreter permits arbitrary interpreter/script execution", a.Name))
 	}
-	return warnings, nil
+	return warnings
 }
 
 type Package struct {
