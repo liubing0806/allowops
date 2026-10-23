@@ -129,3 +129,10 @@ HTTPS redirects and reads at most 64 KiB. Gateway instances share one result in
 PostgreSQL, so a cluster fetches about once per interval. The gateway only
 informs; it never downloads or installs anything. Development builds report
 `dev` and never show a notice.
+
+When a newer release exists, the sidebar shows an **Update** mark next to the
+gateway version that opens the GitHub release notes, and the overview lists the
+release under **Needs attention**. The system page shows whether the check is
+enabled, when it last ran, the last error, the number of hosts whose agent is
+older than the gateway, and a warning when gateway instances run different
+versions.
