@@ -3,10 +3,13 @@
 package alertmanager
 
 import (
+	"bytes"
+	"container/heap"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -102,6 +105,70 @@ type alert struct {
 	seq     int  // position in the response
 }
 
+// alertHeap keeps the latest kept alert at the root.
+type alertHeap []*alert
+
+func (h alertHeap) Len() int           { return len(h) }
+func (h alertHeap) Less(i, j int) bool { return h[j].before(h[i]) }
+func (h alertHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *alertHeap) Push(x any)        { *h = append(*h, x.(*alert)) }
+func (h *alertHeap) Pop() any {
+	old := *h
+	last := old[len(old)-1]
+	*h = old[:len(old)-1]
+	return last
+}
+
+// decodeAlerts reads the JSON array one alert at a time and keeps the first
+// limit alerts in start order; the others are only counted, so memory does not
+// grow with the number of alerts returned. total counts every non-null element.
+func decodeAlerts(body []byte, limit int) ([]*alert, int, error) {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	token, err := dec.Token()
+	if err != nil {
+		return nil, 0, err
+	}
+	if token == nil { // null: no alerts
+		return nil, 0, nil
+	}
+	if delim, ok := token.(json.Delim); !ok || delim != '[' {
+		return nil, 0, errors.New("not an array")
+	}
+	var h alertHeap
+	total := 0
+	scratch := new(alert)
+	for dec.More() {
+		*scratch = alert{}
+		element := scratch // Decoding null into the pointer sets it to nil.
+		if err := dec.Decode(&element); err != nil {
+			return nil, 0, err
+		}
+		if element == nil {
+			continue
+		}
+		scratch.seq = total
+		total++
+		scratch.started, scratch.parsed = parseTime(scratch.StartsAt)
+		switch {
+		case len(h) < limit:
+			c := *scratch
+			heap.Push(&h, &c)
+		case scratch.before(h[0]):
+			c := *scratch
+			h[0] = &c
+			heap.Fix(&h, 0)
+		}
+	}
+	if _, err := dec.Token(); err != nil { // the closing bracket
+		return nil, 0, err
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, 0, errors.New("trailing data after the array")
+	}
+	sort.Slice(h, func(i, j int) bool { return h[i].before(h[j]) })
+	return h, total, nil
+}
+
 func parseTime(text string) (time.Time, bool) {
 	t, err := time.Parse(time.RFC3339Nano, text)
 	return t, err == nil
@@ -160,19 +227,12 @@ func Run(ctx context.Context, cfg Config, p Params, mask func(string) string) (R
 		failed.Stderr = fmt.Sprintf("alertmanager returned HTTP %d %s: %s\n", resp.StatusCode, http.StatusText(resp.StatusCode), oneLine(resp.Body, maxErrorBytes))
 		return failed, nil
 	}
-	var alerts []*alert
-	if err := json.Unmarshal(resp.Body, &alerts); err != nil {
+	alerts, total, err := decodeAlerts(resp.Body, cfg.MaxAlerts)
+	if err != nil {
 		return failed, errors.New("invalid alertmanager response: expected a JSON array of alerts")
 	}
-	alerts = slicesNonNil(alerts)
-	for i, a := range alerts {
-		a.seq = i
-		a.started, a.parsed = parseTime(a.StartsAt)
-	}
-	sort.Slice(alerts, func(i, j int) bool { return alerts[i].before(alerts[j]) })
 	result := Result{}
-	if total := len(alerts); total > cfg.MaxAlerts {
-		alerts = alerts[:cfg.MaxAlerts]
+	if total > len(alerts) {
 		result.Truncated = true
 		result.Stderr = fmt.Sprintf("truncated: returned %d of %d alerts (max_alerts=%d)\n", len(alerts), total, cfg.MaxAlerts)
 	}
@@ -185,17 +245,6 @@ func Run(ctx context.Context, cfg Config, p Params, mask func(string) string) (R
 	}
 	result.Stdout = out.String()
 	return result, nil
-}
-
-// slicesNonNil drops null array elements.
-func slicesNonNil(alerts []*alert) []*alert {
-	kept := alerts[:0]
-	for _, a := range alerts {
-		if a != nil {
-			kept = append(kept, a)
-		}
-	}
-	return kept
 }
 
 // labelsField is the index of the label set in a row.

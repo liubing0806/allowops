@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -491,7 +492,11 @@ func TestDecodeMemoryIsBounded(t *testing.T) {
 	}
 	srv, _ := serve(t, 200, body)
 	cfg := Config{Address: srv.URL}
-	run(t, cfg, Params{Active: true}, nil) // warm up connection and allocator state
+	// A low GC percentage keeps garbage from inflating the heap, so the memory
+	// requested from the OS tracks what decoding retains.
+	defer debug.SetGCPercent(debug.SetGCPercent(20))
+	runtime.GC()
+	debug.FreeOSMemory()
 	var before, after runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&before)
@@ -500,9 +505,32 @@ func TestDecodeMemoryIsBounded(t *testing.T) {
 	if !r.Truncated || len(lines(r.Stdout)) != DefaultMaxAlerts || !strings.Contains(r.Stderr, fmt.Sprintf("returned %d of %d alerts", DefaultMaxAlerts, count)) {
 		t.Fatalf("truncation: stdout lines=%d stderr=%q", len(lines(r.Stdout)), r.Stderr)
 	}
-	// Request, response body and handler copies are about 4MB each. Retaining
+	// The request, response body and handler copies are a few MB each. Keeping
 	// every decoded alert costs several hundred MB.
-	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 48<<20 {
-		t.Fatalf("allocated %d MB while decoding a %d byte response", allocated>>20, len(body))
+	if grown := int64(after.HeapSys) - int64(before.HeapSys); grown > 100<<20 {
+		t.Fatalf("heap grew by %d MB while decoding a %d byte response", grown>>20, len(body))
+	}
+}
+
+func TestStreamingDecodeEdgeCases(t *testing.T) {
+	good := `{"startsAt":"2026-10-23T02:00:00Z","status":{"state":"active"},"labels":{"alertname":"A"}}`
+	srv, _ := serve(t, 200, "[null,"+good+",null]")
+	r := run(t, Config{Address: srv.URL, MaxAlerts: 1}, Params{Active: true}, nil)
+	if r.Truncated || len(lines(r.Stdout)) != 1 || r.Stderr != "" {
+		t.Fatalf("null elements are neither alerts nor counted: %+v", r)
+	}
+	for name, body := range map[string]string{
+		"object":         `{}`,
+		"string":         `"x"`,
+		"element number": `[1]`,
+		"trailing data":  "[" + good + "] []",
+		"unterminated":   "[" + good,
+		"empty":          ``,
+		"bad label type": `[{"labels":{"a":1}}]`,
+	} {
+		srv, _ := serve(t, 200, body)
+		if _, err := Run(context.Background(), Config{Address: srv.URL}, Params{Active: true}, nil); err == nil {
+			t.Errorf("%s: want an error", name)
+		}
 	}
 }
