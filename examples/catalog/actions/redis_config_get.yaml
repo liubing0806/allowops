@@ -1,0 +1,26 @@
+# CONFIG GET usage: command=CONFIG, args=["GET","maxmemory","maxmemory-policy"].
+# Several names in one CONFIG GET need Redis 7.0 or later; on older servers pass one name per call.
+name: redis_config_get
+description: Read allowed non-sensitive Redis configuration parameters by exact name with CONFIG GET. Several names in one call need Redis 7.0 or later; older servers accept one name per call. Before Redis 5.0 the replica setting is named slave-read-only (replica-read-only returns an empty array there).
+risk: read
+run_as: root
+params:
+  args:
+    type: string_array
+    description: The word GET followed by one to sixteen exact parameter names from the allowlist (more than one name needs Redis 7.0 or later).
+    regex: ^(GET|maxmemory|maxmemory-policy|maxmemory-samples|maxclients|timeout|tcp-keepalive|databases|appendonly|appendfsync|save|slowlog-log-slower-than|slowlog-max-len|latency-monitor-threshold|hz|dir|dbfilename|loglevel|repl-backlog-size|replica-read-only|slave-read-only|protected-mode|port|bind|cluster-enabled|notify-keyspace-events)$
+    max_len: 64
+builtin: redis_command
+builtin_config:
+  credential: /etc/allowops/credentials/redis-main.json
+  address: unix:///var/run/redis/redis.sock
+  timeout: 5s
+  max_response_bytes: 64KB
+  commands: [CONFIG]
+  config_params: [maxmemory, maxmemory-policy, maxmemory-samples, maxclients, timeout, tcp-keepalive, databases, appendonly, appendfsync, save, slowlog-log-slower-than, slowlog-max-len, latency-monitor-threshold, hz, dir, dbfilename, loglevel, repl-backlog-size, replica-read-only, slave-read-only, protected-mode, port, bind, cluster-enabled, notify-keyspace-events]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]
