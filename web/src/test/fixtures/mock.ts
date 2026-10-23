@@ -1249,6 +1249,10 @@ export const mockApi: ConsoleApi = {
         maxCatalogBytes: '67108864',
         maxCsvBytes: 524288,
       },
+      updateCheckEnabled: false,
+      gatewayVersion: 'dev',
+      updateCheckError: '',
+      hostsBelowGatewayVersion: '0',
     }
   },
   async listGatewayInstances() {
