@@ -34,7 +34,21 @@ type rawLine struct {
 	offset    int64
 	number    int
 	truncated bool
+	// stamped lines carry the time recorded by the container runtime
+	// (Docker or CRI); text is the log content without the runtime prefix.
+	stamped bool
+	time    time.Time
+	stream  string
 }
+
+// lineSource yields the lines of one read. position is the offset after the
+// last line returned, including bytes the source consumed for it.
+type lineSource interface {
+	next() (rawLine, error)
+	position() int64
+}
+
+func (l *lineReader) position() int64 { return l.offset }
 
 func (l *lineReader) next() (rawLine, error) {
 	line := rawLine{offset: l.offset, number: l.number}
@@ -101,19 +115,29 @@ type record struct {
 	line      int
 	text      string
 	truncated bool
+	stream    string
+	seq       int // index among the stream's records with the same time
 }
 
+// recordReader groups lines into records. Unstamped lines (file sources)
+// start a record when parser finds a timestamp. Stamped lines take their time
+// from the runtime; with multiline they start a record when content finds a
+// timestamp in the text, and without content every line is a record.
 type recordReader struct {
-	lines     *lineReader
+	lines     lineSource
 	parser    *timeParser
+	content   *timeParser
 	multiline bool
 	max       int
 	pending   *record
 	last      time.Time
 	done      bool
+	// dropOrphans marks stamped continuation lines before the first record
+	// start as untimed: reading began inside a record that started earlier.
+	dropOrphans bool
 }
 
-func newRecordReader(lines *lineReader, parser *timeParser, multiline string, max int) *recordReader {
+func newRecordReader(lines lineSource, parser *timeParser, multiline string, max int) *recordReader {
 	return &recordReader{lines: lines, parser: parser, multiline: multiline != MultilineNone, max: max}
 }
 
@@ -128,15 +152,26 @@ func (r *recordReader) next() (record, error) {
 		if err != nil {
 			return record{}, err
 		}
-		t, timed := r.parser.parse(line.text)
+		var t time.Time
+		var timed, start bool
+		if line.stamped {
+			t, timed, start = line.time, true, !r.multiline || r.content == nil
+			if !start {
+				_, start = r.content.parse(line.text)
+			}
+		} else {
+			t, timed = r.parser.parse(line.text)
+			start = timed
+		}
 		if !r.multiline {
 			if timed {
 				r.last = t
 			}
-			return record{end: r.lines.offset, time: r.last, timed: !r.last.IsZero(), offset: line.offset, line: line.number, text: line.text, truncated: line.truncated}, nil
+			return record{end: r.lines.position(), time: r.last, timed: !r.last.IsZero(), offset: line.offset, line: line.number, text: line.text, truncated: line.truncated, stream: line.stream}, nil
 		}
-		if timed || r.pending == nil {
-			current := &record{time: t, timed: timed, offset: line.offset, line: line.number, text: line.text, truncated: line.truncated}
+		if start || r.pending == nil {
+			orphan := !start && line.stamped && r.dropOrphans
+			current := &record{time: t, timed: timed && !orphan, offset: line.offset, line: line.number, text: line.text, truncated: line.truncated, stream: line.stream}
 			previous := r.pending
 			r.pending = current
 			if previous != nil {
@@ -150,7 +185,7 @@ func (r *recordReader) next() (record, error) {
 	if r.pending != nil {
 		previous := r.pending
 		r.pending = nil
-		previous.end = r.lines.offset
+		previous.end = r.lines.position()
 		return *previous, nil
 	}
 	return record{}, io.EOF

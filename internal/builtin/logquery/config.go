@@ -153,6 +153,22 @@ func (s Source) validate(roots []string) error {
 	return err
 }
 
+// multiline returns the source's multiline rule with the default applied.
+func (s Source) multiline() string {
+	if s.Multiline == "" {
+		return MultilineTimestampStart
+	}
+	return s.Multiline
+}
+
+// sourceParsers returns the parser of line timestamps, used for record times,
+// bisection and file headers, and the parser of record starts in the text of
+// stamped lines (nil when lines are not stamped).
+func sourceParsers(s Source) (parser, content *timeParser, err error) {
+	parser, err = newTimeParser(s.Timestamp)
+	return parser, nil, err
+}
+
 func (c Config) withDefaults() Config {
 	if c.MaxFiles == 0 {
 		c.MaxFiles = DefaultMaxFiles

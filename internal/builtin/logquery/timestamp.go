@@ -14,6 +14,9 @@ type timeParser struct {
 	layouts   []string
 	location  *time.Location
 	bracketed bool
+	// firstField parses the text before the first space, as in the runtime
+	// prefix of CRI log lines.
+	firstField bool
 }
 
 func newTimeParser(ts Timestamp) (*timeParser, error) {
@@ -25,19 +28,33 @@ func newTimeParser(ts Timestamp) (*timeParser, error) {
 			return nil, errors.New("timestamp.layouts must be nonempty Go time layouts")
 		}
 	}
-	location := time.Local
-	if ts.Timezone != "" {
-		var err error
-		if location, err = time.LoadLocation(ts.Timezone); err != nil {
-			return nil, fmt.Errorf("timestamp.timezone: %w", err)
-		}
+	location, err := loadLocation(ts.Timezone)
+	if err != nil {
+		return nil, err
 	}
 	return &timeParser{layouts: ts.Layouts, location: location, bracketed: ts.Bracketed}, nil
+}
+
+// loadLocation returns the named zone, or the host's local zone for "".
+func loadLocation(name string) (*time.Location, error) {
+	if name == "" {
+		return time.Local, nil
+	}
+	location, err := time.LoadLocation(name)
+	if err != nil {
+		return nil, fmt.Errorf("timestamp.timezone: %w", err)
+	}
+	return location, nil
 }
 
 // parse reads the timestamp at the start of the line, or inside its first
 // [...] when bracketed. Layouts are tried in order.
 func (p *timeParser) parse(line string) (time.Time, bool) {
+	if p.firstField {
+		field, _, _ := strings.Cut(line, " ")
+		t, err := time.Parse(time.RFC3339Nano, field)
+		return t, err == nil
+	}
 	if p.bracketed {
 		open := strings.IndexByte(line[:min(len(line), bracketSearch)], '[')
 		if open < 0 {
