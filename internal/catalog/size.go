@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Size is always a byte count after YAML/JSON decoding. P12 can reuse it in builtin configs.
+// Size is always a byte count after YAML/JSON decoding. Builtin handler configs can reuse it (design P12).
 type Size int64
 
 var sizePattern = regexp.MustCompile(`(?i)^([0-9]+)(B|KB|MB|GB)?$`)

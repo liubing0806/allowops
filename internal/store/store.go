@@ -160,8 +160,9 @@ func (s *Store) CheckIdentity(ctx context.Context, id, serial string) error {
 	return nil
 }
 
-// CheckHostActive is only for an already authenticated Connect stream. G18
-// preserves its original certificate until expiry; deletion still revokes it.
+// CheckHostActive is only for an already authenticated Connect stream. An
+// existing stream keeps its original certificate until expiry; deletion still
+// revokes it (protocol G18).
 func (s *Store) CheckHostActive(ctx context.Context, id string) error {
 	var active bool
 	if err := s.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM hosts WHERE host_id=$1 AND certificate_status='active')", id).Scan(&active); err != nil {
@@ -214,7 +215,7 @@ func (s *Store) DeleteHost(ctx context.Context, id string) error {
 	return tx.Commit(ctx)
 }
 
-// DeleteHostTx applies P4 deletion and notification within the caller transaction.
+// DeleteHostTx applies the gateway's host deletion and notification within the caller transaction.
 func DeleteHostTx(ctx context.Context, tx pgx.Tx, id string) error {
 	if _, err := tx.Exec(ctx, "UPDATE hosts SET certificate_status='deleted',instance_id=NULL,connection_id=NULL WHERE host_id=$1", id); err != nil {
 		return err
@@ -225,8 +226,9 @@ func DeleteHostTx(ctx context.Context, tx pgx.Tx, id string) error {
 	return nil
 }
 
-// CheckActionNames is the single replaceable A11 global-name policy. Publication
-// serializes this check and the version check with the insert under one lock.
+// CheckActionNames is the single replaceable check that action names are
+// globally unique across catalogs (decisions A11). Publication serializes this
+// check and the version check with the insert under one lock.
 func CheckActionNames(incomingID string, names []string, current []db.CurrentCatalogsRow) error {
 	seen := map[string]bool{}
 	for _, v := range current {
@@ -256,7 +258,8 @@ func (s *Store) Publish(ctx context.Context, v db.InsertCatalogParams) error {
 	return tx.Commit(ctx)
 }
 
-// PublishTx shares P4 version, global-name and notification checks with P4B.
+// PublishTx shares the version, global-name and notification checks between the
+// host-facing and management-API publishing paths (design P4, P4B).
 func (s *Store) PublishTx(ctx context.Context, tx pgx.Tx, v db.InsertCatalogParams) error {
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(418001)"); err != nil {
 		return err

@@ -19,7 +19,7 @@ type FilterOptions struct {
 	countSet       bool
 }
 
-// A17: match/exclude may combine with at most one result filter.
+// match/exclude may combine with at most one result filter (decisions A17).
 func validateFilterCombination(options FilterOptions) error {
 	selected := 0
 	if options.Tail > 0 {

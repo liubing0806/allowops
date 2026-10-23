@@ -977,7 +977,7 @@ export const mockApi: ConsoleApi = {
       retainsPolicyAdministrator: true,
       expiresAt: date(10 / 1440),
     }
-    // console-user is the mock bootstrap administrator. P5 owns real lockout checking.
+    // console-user is the mock bootstrap administrator. The gateway's identity module owns real lockout checking (design P5).
     tests.set(test.testId, {
       test,
       candidate,
