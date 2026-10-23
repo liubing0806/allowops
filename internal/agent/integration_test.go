@@ -721,6 +721,8 @@ func TestVersionRejectionIsLoggedOncePerStreak(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	g, _, config := startGateway(t, false)
 	g.reject.Store(versionRejection("agent version dev unsupported by gateway 0.1.0"))
+	// With the default 1s-30s limits the retry after three rejections can wait 8s, longer than connection() allows.
+	config.Limits.ReconnectMin, config.Limits.ReconnectMax = 10*time.Millisecond, 100*time.Millisecond
 	startAgent(t, config)
 	waitRejected := func(n int32) {
 		t.Helper()
