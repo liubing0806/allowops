@@ -92,7 +92,7 @@ func (s *Service) GetSystemStatus(ctx context.Context, _ *connect.Request[v1.Get
 		return nil, err
 	}
 	if ok {
-		if err = s.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM catalog_versions c WHERE c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id) AND expires_at>now() AND expires_at<=now()+interval '14 days'`).Scan(&out.ExpiringCatalogs); err != nil {
+		if out.ExpiringCatalogs, err = countExpiringCatalogs(ctx, s.Store.Pool); err != nil {
 			return nil, dbError(err)
 		}
 	}
@@ -101,7 +101,7 @@ func (s *Service) GetSystemStatus(ctx context.Context, _ *connect.Request[v1.Get
 		return nil, err
 	}
 	if ok {
-		if err = s.Store.Pool.QueryRow(ctx, "SELECT count(*) FROM service_account_tokens WHERE revoked_at IS NULL AND expires_at>now() AND expires_at<=now()+interval '7 days'").Scan(&out.ExpiringServiceAccountTokens); err != nil {
+		if out.ExpiringServiceAccountTokens, err = countExpiringAccountTokens(ctx, s.Store.Pool); err != nil {
 			return nil, dbError(err)
 		}
 	}
@@ -118,19 +118,15 @@ func (s *Service) ListGatewayInstances(ctx context.Context, req *connect.Request
 			ids = append(ids, h.HostId)
 		}
 	}
-	rows, err := s.Store.Pool.Query(ctx, `SELECT i.instance_id,i.version,i.draining,i.started_at,i.last_seen,(SELECT count(*) FROM hosts h WHERE h.instance_id=i.instance_id AND host_id=ANY($1::text[]) AND certificate_status='active') FROM gateway_instances i ORDER BY instance_id`, ids)
+	rows, err := gatewayInstanceRows(ctx, s.Store.Pool, ids)
 	if err != nil {
 		return nil, dbError(err)
 	}
-	defer rows.Close()
 	items := []*v1.GatewayInstance{}
-	for rows.Next() {
-		item := &v1.GatewayInstance{}
-		var started, last time.Time
-		if err = rows.Scan(&item.InstanceId, &item.Version, &item.Draining, &started, &last, &item.ConnectedHosts); err != nil {
-			return nil, dbError(err)
-		}
-		item.StartedAt = stamp(started)
+	for _, r := range rows {
+		item := &v1.GatewayInstance{InstanceId: r.InstanceID, Version: r.Version, Draining: r.Draining, ConnectedHosts: uint64(r.ConnectedHosts)}
+		last := r.LastSeen.Time
+		item.StartedAt = stamp(r.StartedAt.Time)
 		item.LastSeen = stamp(last)
 		status := v1.HealthStatus_HEALTH_STATUS_HEALTHY
 		reason := ""
@@ -140,9 +136,6 @@ func (s *Service) ListGatewayInstances(ctx context.Context, req *connect.Request
 		}
 		item.Dependencies = []*v1.DependencyHealth{{Name: "instance_heartbeat", Status: status, Reason: reason}}
 		items = append(items, item)
-	}
-	if err = rows.Err(); err != nil {
-		return nil, dbError(err)
 	}
 	items, cursor, err := page(ctx, s.Config, "gateway_instances", req.Msg.Page, items)
 	if err != nil {
