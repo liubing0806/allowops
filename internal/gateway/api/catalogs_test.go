@@ -29,9 +29,11 @@ func catalogFixture(t *testing.T) (*fixture, ed25519.PrivateKey) {
 	}
 	return f, key
 }
+
 func catalogClient(f *fixture, token string) rpc.CatalogServiceClient {
 	return rpc.NewCatalogServiceClient(f.server.Client(), f.server.URL, connect.WithInterceptors(bearerTest(token)))
 }
+
 func signedTestCatalog(t *testing.T, key ed25519.PrivateKey, id, name string, now time.Time) []byte {
 	t.Helper()
 	p, err := catalog.Build(&catalog.Catalog{Config: catalog.Config{SchemaVersion: 1, CatalogID: id}, Actions: map[string]catalog.Action{name: {Name: name, Description: "fixture", Risk: "read", Exec: []any{"/usr/bin/true"}, Timeout: "1s", MaxOutput: 1024}}}, catalog.BuildOptions{Now: now})
@@ -52,6 +54,7 @@ func signedTestCatalog(t *testing.T, key ed25519.PrivateKey, id, name string, no
 	}
 	return b
 }
+
 func uploadTestCatalog(t *testing.T, client rpc.CatalogServiceClient, raw []byte) string {
 	t.Helper()
 	ctx := context.Background()
@@ -68,6 +71,7 @@ func uploadTestCatalog(t *testing.T, client rpc.CatalogServiceClient, raw []byte
 	}
 	return r.Msg.UploadId
 }
+
 func TestP4BCatalogAtomicPublishAndUpload(t *testing.T) {
 	f, key := catalogFixture(t)
 	client := catalogClient(f, f.adminToken)
@@ -116,6 +120,7 @@ func TestP4BCatalogAtomicPublishAndUpload(t *testing.T) {
 	_, err = client.PublishCatalog(ctx, connect.NewRequest(&v1.PublishCatalogRequest{UploadId: id}))
 	code(t, err, connect.CodeInvalidArgument)
 }
+
 func TestP4BResourcePermissionAndRealAudit(t *testing.T) {
 	f := newFixture(t)
 	addHost(t, f, "test")
@@ -164,6 +169,7 @@ func TestP4BResourcePermissionAndRealAudit(t *testing.T) {
 		t.Fatal("missing denial audit", err)
 	}
 }
+
 func TestP4BHostWriteAuthorizationAuditFailure(t *testing.T) {
 	f := newFixture(t)
 	addHost(t, f, "a")
@@ -192,6 +198,7 @@ func (resultFailureAudit) Append(_ context.Context, e AuditEvent) error {
 	}
 	return nil
 }
+
 func TestP4BHostResultAuditFailureReportsCommittedState(t *testing.T) {
 	f := newFixture(t)
 	addHost(t, f, "a")

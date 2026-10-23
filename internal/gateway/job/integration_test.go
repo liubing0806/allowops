@@ -65,6 +65,7 @@ type gateway struct {
 	Client  rpc.JobServiceClient
 	HTTP    *http.Client
 }
+
 type fixture struct {
 	DB                  *store.Store
 	DSN, RootDir        string
@@ -324,6 +325,7 @@ func eventually(t *testing.T, condition func() bool) {
 	}
 	t.Fatal("condition not satisfied within 10 seconds")
 }
+
 func (f *fixture) addAgent(t *testing.T, g *gateway, name string) {
 	t.Helper()
 	ctx := context.Background()
@@ -369,6 +371,7 @@ func (f *fixture) addAgent(t *testing.T, g *gateway, name string) {
 func request(action string) *v1.RunJobRequest {
 	return &v1.RunJobRequest{Action: action, Reason: "local P6 validation", Targets: &v1.HostTargets{Selection: &v1.HostTargets_Selector{Selector: "env=test"}}, ExpectedCount: proto.Uint64(3), WaitSeconds: proto.Uint32(5)}
 }
+
 func run(t *testing.T, g *gateway, r *v1.RunJobRequest) *v1.RunJobResponse {
 	t.Helper()
 	v, err := g.Client.RunJob(context.Background(), connect.NewRequest(r))
@@ -377,6 +380,7 @@ func run(t *testing.T, g *gateway, r *v1.RunJobRequest) *v1.RunJobResponse {
 	}
 	return v.Msg
 }
+
 func get(t *testing.T, g *gateway, id string) *v1.GetJobResponse {
 	t.Helper()
 	v, err := g.Client.GetJob(context.Background(), connect.NewRequest(&v1.GetJobRequest{JobId: id, WaitSeconds: proto.Uint32(5)}))
@@ -396,6 +400,7 @@ func get(t *testing.T, g *gateway, id string) *v1.GetJobResponse {
 	})
 	return v.Msg
 }
+
 func tasks(t *testing.T, g *gateway, id string) []*v1.Task {
 	t.Helper()
 	v, err := g.Client.ListTasks(context.Background(), connect.NewRequest(&v1.ListTasksRequest{JobId: id}))

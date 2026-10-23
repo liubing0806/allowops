@@ -19,6 +19,7 @@ func revision(value string) (int64, error) {
 	}
 	return n, nil
 }
+
 func (s *Service) CreateServiceAccount(ctx context.Context, r *connect.Request[v1.CreateServiceAccountRequest]) (*connect.Response[v1.CreateServiceAccountResponse], error) {
 	m := r.Msg
 	if strings.TrimSpace(m.Name) == "" || m.OwnerUserId == "" {
@@ -27,10 +28,12 @@ func (s *Service) CreateServiceAccount(ctx context.Context, r *connect.Request[v
 	a, err := insertAccount(ctx, s.Store.Pool, secret("svc_"), m.Name, m.OwnerUserId, m.Description, nonNil(m.Roles), nonNil(m.Teams))
 	return connect.NewResponse(&v1.CreateServiceAccountResponse{Account: a}), dbError(err)
 }
+
 func (s *Service) GetServiceAccount(ctx context.Context, r *connect.Request[v1.GetServiceAccountRequest]) (*connect.Response[v1.GetServiceAccountResponse], error) {
 	a, err := getAccount(ctx, s.Store.Pool, r.Msg.AccountId)
 	return connect.NewResponse(&v1.GetServiceAccountResponse{Account: a}), dbError(err)
 }
+
 func (s *Service) ListServiceAccounts(ctx context.Context, r *connect.Request[v1.ListServiceAccountsRequest]) (*connect.Response[v1.ListServiceAccountsResponse], error) {
 	items, err := listAccounts(ctx, s.Store.Pool)
 	if err != nil {
@@ -39,6 +42,7 @@ func (s *Service) ListServiceAccounts(ctx context.Context, r *connect.Request[v1
 	items, p, err := page(ctx, s.Config, "accounts", r.Msg.Page, items)
 	return connect.NewResponse(&v1.ListServiceAccountsResponse{Accounts: items, Page: p}), err
 }
+
 func (s *Service) UpdateServiceAccount(ctx context.Context, r *connect.Request[v1.UpdateServiceAccountRequest]) (*connect.Response[v1.UpdateServiceAccountResponse], error) {
 	m := r.Msg
 	rev, err := revision(m.ExpectedRevision)
@@ -51,6 +55,7 @@ func (s *Service) UpdateServiceAccount(ctx context.Context, r *connect.Request[v
 	}
 	return connect.NewResponse(&v1.UpdateServiceAccountResponse{Account: a}), dbError(err)
 }
+
 func (s *Service) CreateServiceAccountToken(ctx context.Context, r *connect.Request[v1.CreateServiceAccountTokenRequest]) (*connect.Response[v1.CreateServiceAccountTokenResponse], error) {
 	days := 30
 	if r.Msg.ValidDays != nil {
@@ -69,6 +74,7 @@ func (s *Service) CreateServiceAccountToken(ctx context.Context, r *connect.Requ
 	}
 	return connect.NewResponse(&v1.CreateServiceAccountTokenResponse{Token: t, Secret: raw}), nil
 }
+
 func (s *Service) ListServiceAccountTokens(ctx context.Context, r *connect.Request[v1.ListServiceAccountTokensRequest]) (*connect.Response[v1.ListServiceAccountTokensResponse], error) {
 	items, err := listAccountTokens(ctx, s.Store.Pool, r.Msg.AccountId)
 	if err != nil {
@@ -77,6 +83,7 @@ func (s *Service) ListServiceAccountTokens(ctx context.Context, r *connect.Reque
 	items, p, err := page(ctx, s.Config, "tokens:"+r.Msg.AccountId, r.Msg.Page, items)
 	return connect.NewResponse(&v1.ListServiceAccountTokensResponse{Tokens: items, Page: p}), err
 }
+
 func (s *Service) RevokeServiceAccountToken(ctx context.Context, r *connect.Request[v1.RevokeServiceAccountTokenRequest]) (*connect.Response[v1.RevokeServiceAccountTokenResponse], error) {
 	rows, err := revokeAccountToken(ctx, s.Store.Pool, r.Msg.AccountId, r.Msg.TokenId)
 	if err == nil && rows == 0 {
@@ -84,6 +91,7 @@ func (s *Service) RevokeServiceAccountToken(ctx context.Context, r *connect.Requ
 	}
 	return connect.NewResponse(&v1.RevokeServiceAccountTokenResponse{}), dbError(err)
 }
+
 func allUsers(ctx context.Context, q querier, query string) ([]storedUser, error) {
 	items, err := searchUsers(ctx, q, query)
 	if err != nil {
@@ -96,6 +104,7 @@ func allUsers(ctx context.Context, q querier, query string) ([]storedUser, error
 	}
 	return items, nil
 }
+
 func (s *Service) ListUsers(ctx context.Context, r *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error) {
 	users, err := allUsers(ctx, s.Store.Pool, r.Msg.Query)
 	if err != nil {
@@ -108,10 +117,12 @@ func (s *Service) ListUsers(ctx context.Context, r *connect.Request[v1.ListUsers
 	items, p, err := page(ctx, s.Config, "users:"+r.Msg.Query, r.Msg.Page, items)
 	return connect.NewResponse(&v1.ListUsersResponse{Users: items, Page: p}), err
 }
+
 func (s *Service) GetUser(ctx context.Context, r *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.GetUserResponse], error) {
 	u, err := loadUser(ctx, s.Store.Pool, r.Msg.UserId)
 	return connect.NewResponse(&v1.GetUserResponse{User: u.user}), dbError(err)
 }
+
 func (s *Service) SetUserRoles(ctx context.Context, r *connect.Request[v1.SetUserRolesRequest]) (*connect.Response[v1.SetUserRolesResponse], error) {
 	rev, err := revision(r.Msg.ExpectedRevision)
 	if err != nil {
@@ -128,6 +139,7 @@ func (s *Service) SetUserRoles(ctx context.Context, r *connect.Request[v1.SetUse
 	u, err := loadUser(ctx, s.Store.Pool, r.Msg.UserId)
 	return connect.NewResponse(&v1.SetUserRolesResponse{User: u.user}), dbError(err)
 }
+
 func (s *Service) GetRoleMappings(ctx context.Context, _ *connect.Request[v1.GetRoleMappingsRequest]) (*connect.Response[v1.GetRoleMappingsResponse], error) {
 	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
@@ -144,6 +156,7 @@ func (s *Service) GetRoleMappings(ctx context.Context, _ *connect.Request[v1.Get
 	}
 	return connect.NewResponse(&v1.GetRoleMappingsResponse{Mappings: items, Revision: strconv.FormatInt(rev, 10)}), nil
 }
+
 func (s *Service) SaveRoleMappings(ctx context.Context, r *connect.Request[v1.SaveRoleMappingsRequest]) (*connect.Response[v1.SaveRoleMappingsResponse], error) {
 	rev, err := revision(r.Msg.ExpectedRevision)
 	if err != nil {
@@ -177,6 +190,7 @@ func (s *Service) SaveRoleMappings(ctx context.Context, r *connect.Request[v1.Sa
 	}
 	return connect.NewResponse(&v1.SaveRoleMappingsResponse{Revision: strconv.FormatInt(rev+1, 10)}), nil
 }
+
 func (s *Service) ListRoles(ctx context.Context, r *connect.Request[v1.ListRolesRequest]) (*connect.Response[v1.ListRolesResponse], error) {
 	items, err := listRoleNames(ctx, s.Store.Pool)
 	if err != nil {

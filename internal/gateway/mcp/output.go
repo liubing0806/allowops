@@ -23,6 +23,7 @@ type ToolResult struct {
 	StructuredContent any            `json:"structuredContent"`
 	IsError           bool           `json:"isError,omitempty"`
 }
+
 type TextContent struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
@@ -37,9 +38,11 @@ func toolResult(value any) (*ToolResult, int, error) {
 	encoded, err := json.Marshal(result)
 	return result, len(encoded), err
 }
+
 func taskStatus(status v1.TaskStatus) string {
 	return strings.ToLower(strings.TrimPrefix(status.String(), "TASK_STATUS_"))
 }
+
 func textPrefix(text string, limit int) string {
 	text = strings.ToValidUTF8(text, "\ufffd")
 	if len(text) <= limit {

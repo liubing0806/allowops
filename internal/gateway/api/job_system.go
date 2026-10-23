@@ -8,6 +8,7 @@ import (
 type JobStatistics interface {
 	Statistics(context.Context) (running, failed uint64, err error)
 }
+
 type ObjectStorageHealth interface{ Check(context.Context) error }
 
 // ConfigureJobDependencies is called during startup before serving requests.

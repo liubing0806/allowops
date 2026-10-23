@@ -47,6 +47,7 @@ func credentialPath() (string, error) {
 	}
 	return filepath.Join(dir, "allowops", "credentials"), nil
 }
+
 func saveCredentials(c credentials) error {
 	path, err := credentialPath()
 	if err != nil {
@@ -77,6 +78,7 @@ func saveCredentials(c credentials) error {
 	}
 	return os.Rename(f.Name(), path)
 }
+
 func loadCredentials() (credentials, error) {
 	path, err := credentialPath()
 	if err != nil {
@@ -102,6 +104,7 @@ func loadCredentials() (credentials, error) {
 	}
 	return c, nil
 }
+
 func gatewayClient(gateway, caFile string) (*http.Client, error) {
 	u, err := url.Parse(gateway)
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
@@ -122,6 +125,7 @@ func gatewayClient(gateway, caFile string) (*http.Client, error) {
 	}
 	return &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS13}}, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, nil
 }
+
 func randomState() string {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -129,6 +133,7 @@ func randomState() string {
 	}
 	return base64.RawURLEncoding.EncodeToString(b)
 }
+
 func rpcError(err error) error {
 	if err == nil {
 		return nil
@@ -216,6 +221,7 @@ func NewLoginCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&passwordStdin, "password-stdin", false, "Read the LDAP password from stdin")
 	return cmd
 }
+
 func readPassword(c *cobra.Command, stdin bool) (string, error) {
 	input := c.InOrStdin()
 	if !stdin {
@@ -245,6 +251,7 @@ func readPassword(c *cobra.Command, stdin bool) (string, error) {
 	}
 	return strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"), nil
 }
+
 func oidcLogin(c *cobra.Command, auth rpc.AuthServiceClient, gateway, provider string, noBrowser bool) (*v1.CliSession, string, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -310,6 +317,7 @@ func outputProto(c *cobra.Command, m proto.Message) error {
 	_, err = fmt.Fprintln(c.OutOrStdout(), string(b))
 	return err
 }
+
 func readRules(path string) (*v1.PolicyRules, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -346,6 +354,7 @@ func readRules(path string) (*v1.PolicyRules, error) {
 	}
 	return p, nil
 }
+
 func NewPolicyCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "policy", Short: "Read, simulate and apply structured gateway policies", SilenceUsage: true}
 	var asJSON bool
@@ -458,6 +467,7 @@ func NewPolicyCmd() *cobra.Command {
 	}
 	return cmd
 }
+
 func bearer(token string) connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, r connect.AnyRequest) (connect.AnyResponse, error) {

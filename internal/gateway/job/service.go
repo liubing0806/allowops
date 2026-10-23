@@ -117,6 +117,7 @@ func (s *Service) clearTasks(jobID string, taskIDs ...string) {
 }
 
 type operationKey struct{}
+
 type operationState struct {
 	JobID                               string
 	Version                             uint64

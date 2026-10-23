@@ -58,6 +58,7 @@ func mapped(ctx context.Context, q querier, u *v1.User) error {
 	u.EffectiveRoles = unique(append(append([]string{}, u.ManualRoles...), u.MappedRoles...))
 	return nil
 }
+
 func loadUser(ctx context.Context, q querier, id string) (storedUser, error) {
 	u, err := getUser(ctx, q, id)
 	if err == nil {
@@ -65,6 +66,7 @@ func loadUser(ctx context.Context, q querier, id string) (storedUser, error) {
 	}
 	return u, err
 }
+
 func subject(u storedUser) authz.Subject {
 	return authz.Subject{ID: u.subject, Kind: u.kind, Email: u.user.Email, Roles: u.user.EffectiveRoles, Teams: u.user.Teams}
 }
@@ -80,12 +82,14 @@ func (s *Service) syncUser(ctx context.Context, provider string, id authn.Identi
 	u, err := loadUser(ctx, s.Store.Pool, uid)
 	return u.user, dbError(err)
 }
+
 func nonNil(v []string) []string {
 	if v == nil {
 		return []string{}
 	}
 	return unique(v)
 }
+
 func nullable(t pgtype.Timestamptz) *timestamppb.Timestamp {
 	if !t.Valid {
 		return nil
@@ -102,6 +106,7 @@ func authLookupError(err error) error {
 	}
 	return failure(connect.CodeUnavailable, "identity database unavailable")
 }
+
 func (s *Service) authenticate(ctx context.Context, token string, cookie bool) (*Identity, error) {
 	if !cookie && strings.HasPrefix(token, "aops_") && len(token) == len("aops_")+43 {
 		// Validate the canonical authn token format (aops_ prefix) before lookup (design P5A).
@@ -151,6 +156,7 @@ func (s *Service) authenticate(ctx context.Context, token string, cookie bool) (
 	}
 	return &Identity{Subject: subject(u), User: u.user, Session: sess, Client: kind, CSRF: csrf}, nil
 }
+
 func (s *Service) issueSession(ctx context.Context, q querier, userID string, client v1.LoginClient) (*v1.CliSession, string, error) {
 	kind, prefix, ttl, csrf := "cli", "aops_cli_", s.Config.CliTTL, ""
 	if client == v1.LoginClient_LOGIN_CLIENT_CONSOLE {

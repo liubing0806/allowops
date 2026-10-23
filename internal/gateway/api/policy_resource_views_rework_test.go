@@ -34,6 +34,7 @@ type viewFixtureOutput []byte
 func (v viewFixtureOutput) Put(context.Context, string, []byte) error {
 	return fmt.Errorf("read-only output fixture")
 }
+
 func (v viewFixtureOutput) Get(context.Context, string, int64) ([]byte, error) {
 	return bytes.Clone(v), nil
 }

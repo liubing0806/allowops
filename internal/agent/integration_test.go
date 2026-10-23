@@ -73,6 +73,7 @@ type testGateway struct {
 	// blockPull holds catalog pulls open until the stream context ends.
 	blockPull bool
 }
+
 type testConnection struct {
 	stream   *connect.BidiStream[v1.ConnectRequest, v1.ConnectResponse]
 	mu       sync.Mutex
@@ -89,6 +90,7 @@ func (c *testConnection) send(t *testing.T, message *v1.ConnectResponse) {
 		t.Fatal(err)
 	}
 }
+
 func (c *testConnection) next(t *testing.T, match func(*v1.ConnectRequest) bool) *v1.ConnectRequest {
 	t.Helper()
 	timer := time.NewTimer(5 * time.Second)
@@ -129,6 +131,7 @@ func (g *testGateway) issue(csrPEM []byte) (*v1.HostCertificate, error) {
 	}
 	return &v1.HostCertificate{HostId: "host-test", CertificateChainPem: chain, ExpiresAt: timestamppb.New(leaf.NotAfter), RenewAfter: timestamppb.New(renewAt)}, nil
 }
+
 func (g *testGateway) Join(_ context.Context, request *connect.Request[v1.JoinRequest]) (*connect.Response[v1.JoinResponse], error) {
 	if request.Msg.JoinToken != "test-token" {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("token"))
@@ -137,11 +140,13 @@ func (g *testGateway) Join(_ context.Context, request *connect.Request[v1.JoinRe
 	certificate, err := g.issue(request.Msg.CsrPem)
 	return connect.NewResponse(&v1.JoinResponse{Certificate: certificate}), err
 }
+
 func (g *testGateway) RenewCertificate(_ context.Context, request *connect.Request[v1.RenewCertificateRequest]) (*connect.Response[v1.RenewCertificateResponse], error) {
 	g.renewals.Add(1)
 	certificate, err := g.issue(request.Msg.CsrPem)
 	return connect.NewResponse(&v1.RenewCertificateResponse{Certificate: certificate}), err
 }
+
 func (g *testGateway) Connect(ctx context.Context, stream *connect.BidiStream[v1.ConnectRequest, v1.ConnectResponse]) error {
 	first, err := stream.Receive()
 	if err != nil {
@@ -192,6 +197,7 @@ func (g *testGateway) Connect(ctx context.Context, stream *connect.BidiStream[v1
 		}
 	}
 }
+
 func (g *testGateway) PullCatalog(ctx context.Context, request *connect.Request[v1.PullCatalogRequest], stream *connect.ServerStream[v1.PullCatalogResponse]) error {
 	g.mu.Lock()
 	data := g.packages[request.Msg.Catalog.CatalogId+":"+strconv.FormatUint(request.Msg.Catalog.Version, 10)]
@@ -327,6 +333,7 @@ func startAgent(t *testing.T, config Config) (*Agent, context.CancelFunc) {
 	})
 	return a, cancel
 }
+
 func connection(t *testing.T, g *testGateway) *testConnection {
 	t.Helper()
 	select {
@@ -395,14 +402,17 @@ func publish(t *testing.T, g *testGateway, a *Agent, actions []catalog.Action, n
 	sum := sha256.Sum256(data)
 	return p, &v1.CatalogAvailable{Catalog: &v1.CatalogRef{CatalogId: p.CatalogID, Version: uint64(p.Version)}, EnvelopeSha256: sum[:], EnvelopeSizeBytes: uint64(len(data))}
 }
+
 func task(p *catalog.Package, name, id string) *v1.TaskAssignment {
 	digest, _ := hex.DecodeString(p.Digests[name])
 	return &v1.TaskAssignment{JobId: "job-test", TaskId: id, Catalog: &v1.CatalogRef{CatalogId: p.CatalogID, Version: uint64(p.Version)}, Action: name, ActionSha256: digest, Params: &v1.Parameters{Json: []byte("{}")}, Timeout: durationpb.New(5 * time.Second)}
 }
+
 func sendTask(t *testing.T, c *testConnection, assignment *v1.TaskAssignment) {
 	t.Helper()
 	c.send(t, &v1.ConnectResponse{Message: &v1.ConnectResponse_Task{Task: assignment}})
 }
+
 func collectTask(t *testing.T, c *testConnection, id string) []*v1.ConnectRequest {
 	t.Helper()
 	var messages []*v1.ConnectRequest
@@ -567,6 +577,7 @@ func waitPIDs(t *testing.T, path string) []int {
 	t.Fatal("process fixture did not start")
 	return nil
 }
+
 func assertTerminated(t *testing.T, ids []int) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)

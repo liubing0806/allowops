@@ -28,6 +28,7 @@ func (s *Service) systemHosts(ctx context.Context) ([]*v1.Host, error) {
 	}
 	return out, nil
 }
+
 func (s *Service) dependencyHealth(ctx context.Context) []*v1.DependencyHealth {
 	postgres := &v1.DependencyHealth{Name: "postgresql", Status: v1.HealthStatus_HEALTH_STATUS_HEALTHY}
 	if s.Store.Pool.Ping(ctx) != nil {
@@ -51,6 +52,7 @@ func (s *Service) dependencyHealth(ctx context.Context) []*v1.DependencyHealth {
 	}
 	return []*v1.DependencyHealth{postgres, jobs, objects}
 }
+
 func (s *Service) GetSystemStatus(ctx context.Context, _ *connect.Request[v1.GetSystemStatusRequest]) (*connect.Response[v1.GetSystemStatusResponse], error) {
 	out := &v1.GetSystemStatusResponse{ObservedAt: stamp(time.Now()), Status: v1.HealthStatus_HEALTH_STATUS_DEGRADED, Dependencies: s.dependencyHealth(ctx)}
 	g := s.gatewayConfig()
@@ -107,6 +109,7 @@ func (s *Service) GetSystemStatus(ctx context.Context, _ *connect.Request[v1.Get
 	}
 	return connect.NewResponse(out), nil
 }
+
 func (s *Service) ListGatewayInstances(ctx context.Context, req *connect.Request[v1.ListGatewayInstancesRequest]) (*connect.Response[v1.ListGatewayInstancesResponse], error) {
 	hosts, err := s.systemHosts(ctx)
 	if err != nil {
@@ -143,6 +146,7 @@ func (s *Service) ListGatewayInstances(ctx context.Context, req *connect.Request
 	}
 	return connect.NewResponse(&v1.ListGatewayInstancesResponse{Instances: items, Page: cursor}), nil
 }
+
 func (s *Service) GetAgentVersionDistribution(ctx context.Context, req *connect.Request[v1.GetAgentVersionDistributionRequest]) (*connect.Response[v1.GetAgentVersionDistributionResponse], error) {
 	hosts, err := s.systemHosts(ctx)
 	if err != nil {

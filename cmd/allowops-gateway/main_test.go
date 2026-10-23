@@ -46,6 +46,7 @@ func (b *safeBuffer) Write(p []byte) (int, error) {
 	defer b.mu.Unlock()
 	return b.b.Write(p)
 }
+
 func (b *safeBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return b.b.String() }
 
 func TestGatewayCommands(t *testing.T) {

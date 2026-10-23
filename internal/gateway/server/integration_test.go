@@ -37,6 +37,7 @@ type gateway struct {
 	address string
 	roots   *x509.CertPool
 }
+
 type fixture struct {
 	store       *store.Store
 	ca          *hostconn.CA

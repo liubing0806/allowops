@@ -263,6 +263,7 @@ func waitReport(t *testing.T, ready func() bool) {
 	}
 	t.Fatal("complete report persistence timed out")
 }
+
 func managementTLS(t *testing.T) (tls.Certificate, *x509.CertPool) {
 	t.Helper()
 	pub, key, _ := ed25519.GenerateKey(rand.Reader)

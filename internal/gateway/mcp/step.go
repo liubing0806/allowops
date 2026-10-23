@@ -13,6 +13,7 @@ import (
 func outputStepSchema() map[string]any {
 	return map[string]any{"type": "integer", "description": "Required zero-based step for composite action output; read one step at a time. Only with host. P6 validates the step. Omit for a single-step action.", "minimum": 0, "maximum": uint64(^uint32(0))}
 }
+
 func outputStepArgument(args map[string]json.RawMessage, host string) (*uint32, error) {
 	if args["step_index"] == nil {
 		return nil, nil

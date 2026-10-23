@@ -19,10 +19,12 @@ type outgoing struct {
 	message *v1.ConnectRequest
 	done    chan error
 }
+
 type received struct {
 	message *v1.ConnectResponse
 	err     error
 }
+
 type runningTask struct {
 	job    string
 	cancel context.CancelFunc

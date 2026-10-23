@@ -23,6 +23,7 @@ type importTarget struct {
 	HostID, Revision, Hostname string
 	After                      map[string]string
 }
+
 type storedPreview struct {
 	meta    *v1.HostImportPreview
 	rows    []*v1.HostImportRow
@@ -198,6 +199,7 @@ func (s *Service) PreviewHostImport(ctx context.Context, req *connect.Request[v1
 	}
 	return connect.NewResponse(&v1.PreviewHostImportResponse{Preview: &v1.HostImportPreview{PreviewId: id, CsvSha256: digest, RowCount: uint64(len(rows)), InvalidRowCount: invalid, ExpiresAt: stamp(expires)}}), nil
 }
+
 func (s *Service) preview(ctx context.Context, q querier, id string, lock bool) (*storedPreview, error) {
 	p := &storedPreview{meta: &v1.HostImportPreview{PreviewId: id}}
 	r, err := importPreview(ctx, q, id, lock)
@@ -219,6 +221,7 @@ func (s *Service) preview(ctx context.Context, q querier, id string, lock bool) 
 	p.meta.ExpiresAt = stamp(expires)
 	return p, nil
 }
+
 func (s *Service) previewTargets(ctx context.Context, q querier, p *storedPreview, lock, checkRevision bool) ([]*v1.Host, error) {
 	all, err := s.hosts(ctx, q, lock)
 	if err != nil {
@@ -249,6 +252,7 @@ func (s *Service) previewTargets(ctx context.Context, q querier, p *storedPrevie
 	}
 	return out, nil
 }
+
 func (s *Service) GetHostImportPreview(ctx context.Context, req *connect.Request[v1.GetHostImportPreviewRequest]) (*connect.Response[v1.GetHostImportPreviewResponse], error) {
 	p, err := s.preview(ctx, s.Store.Pool, req.Msg.PreviewId, false)
 	if err != nil {
@@ -265,6 +269,7 @@ func (s *Service) GetHostImportPreview(ctx context.Context, req *connect.Request
 	}
 	return connect.NewResponse(&v1.GetHostImportPreviewResponse{Preview: p.meta, Rows: rows, Page: cursor}), nil
 }
+
 func (s *Service) ExecuteHostImport(ctx context.Context, req *connect.Request[v1.ExecuteHostImportRequest]) (*connect.Response[v1.ExecuteHostImportResponse], error) {
 	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {

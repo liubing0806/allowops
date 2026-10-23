@@ -21,6 +21,7 @@ import (
 func (s *Service) hostWindow() string {
 	return max(2*s.gatewayConfig().FlushInterval, s.gatewayConfig().HeartbeatTimeout).String()
 }
+
 func (s *Service) hosts(ctx context.Context, q querier, lock bool) ([]*v1.Host, error) {
 	out, err := activeHosts(ctx, q, s.hostWindow(), lock)
 	if err != nil {
@@ -28,6 +29,7 @@ func (s *Service) hosts(ctx context.Context, q querier, lock bool) ([]*v1.Host, 
 	}
 	return out, nil
 }
+
 func hostAttributes(h *v1.Host) authz.Host {
 	return authz.Host{ID: h.HostId, Labels: h.AuthorizationLabels}
 }
@@ -66,6 +68,7 @@ func parseSelector(selector string, empty bool) ([]labelCondition, error) {
 	}
 	return out, nil
 }
+
 func matches(h *v1.Host, conditions []labelCondition) bool {
 	for _, c := range conditions {
 		labels := h.AuthorizationLabels
@@ -79,6 +82,7 @@ func matches(h *v1.Host, conditions []labelCondition) bool {
 	}
 	return true
 }
+
 func filterTargets(hosts []*v1.Host, targets *v1.HostTargets) ([]*v1.Host, error) {
 	if targets == nil {
 		return nil, failure(connect.CodeInvalidArgument, "targets required")
@@ -120,6 +124,7 @@ func filterTargets(hosts []*v1.Host, targets *v1.HostTargets) ([]*v1.Host, error
 	}
 	return nil, failure(connect.CodeInvalidArgument, "targets required")
 }
+
 func (s *Service) visibleHosts(ctx context.Context, hosts []*v1.Host) ([]*v1.Host, error) {
 	out := []*v1.Host{}
 	for _, h := range hosts {
@@ -138,6 +143,7 @@ func (s *Service) visibleHosts(ctx context.Context, hosts []*v1.Host) ([]*v1.Hos
 	}
 	return out, nil
 }
+
 func (s *Service) ListHosts(ctx context.Context, req *connect.Request[v1.ListHostsRequest]) (*connect.Response[v1.ListHostsResponse], error) {
 	query := req.Msg.GetQuery()
 	conditions, err := parseSelector(query.GetSelector(), true)
@@ -206,6 +212,7 @@ func (s *Service) ListHosts(ctx context.Context, req *connect.Request[v1.ListHos
 	}
 	return connect.NewResponse(&v1.ListHostsResponse{Hosts: paged, Page: cursor, TotalCount: uint64(len(out)), AuthorizationLabelCounts: counts, LabelCountsTruncated: len(counts) < len(buckets)}), nil
 }
+
 func (s *Service) GetHost(ctx context.Context, req *connect.Request[v1.GetHostRequest]) (*connect.Response[v1.GetHostResponse], error) {
 	h, err := activeHostByName(ctx, s.Store.Pool, s.hostWindow(), req.Msg.Hostname)
 	if err != nil {
@@ -216,6 +223,7 @@ func (s *Service) GetHost(ctx context.Context, req *connect.Request[v1.GetHostRe
 	}
 	return connect.NewResponse(&v1.GetHostResponse{Host: h}), nil
 }
+
 func (s *Service) changedLabels(before map[string]string, changes *v1.LabelChanges) (map[string]string, error) {
 	if changes == nil || len(changes.Set)+len(changes.Remove) == 0 {
 		return nil, failure(connect.CodeInvalidArgument, "label changes required")
@@ -251,6 +259,7 @@ func (s *Service) changedLabels(before map[string]string, changes *v1.LabelChang
 	}
 	return out, nil
 }
+
 func (s *Service) SetHostLabels(ctx context.Context, req *connect.Request[v1.SetHostLabelsRequest]) (*connect.Response[v1.SetHostLabelsResponse], error) {
 	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
@@ -307,6 +316,7 @@ func (s *Service) SetHostLabels(ctx context.Context, req *connect.Request[v1.Set
 	}
 	return connect.NewResponse(&v1.SetHostLabelsResponse{UpdatedCount: uint64(len(targets))}), nil
 }
+
 func (s *Service) DeleteHost(ctx context.Context, req *connect.Request[v1.DeleteHostRequest]) (*connect.Response[v1.DeleteHostResponse], error) {
 	if req.Msg.HostId == "" || req.Msg.ExpectedRevision == "" {
 		return nil, failure(connect.CodeInvalidArgument, "host ID and revision required")

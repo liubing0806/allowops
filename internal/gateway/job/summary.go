@@ -19,12 +19,14 @@ import (
 type PreviewSource interface {
 	Load(context.Context, string) ([]Preview, error)
 }
+
 type Preview struct {
 	Task                   *v1.Task
 	Stdout, Stderr         []byte
 	StdoutHash, StderrHash []byte
 	StdoutSize, StderrSize uint64
 }
+
 type DatabasePreviews struct{ Store *store.Store }
 
 func (p *DatabasePreviews) Load(ctx context.Context, id string) ([]Preview, error) {

@@ -16,6 +16,7 @@ type summaryCursor struct {
 	Snapshot string `json:"snapshot"`
 	Offset   int    `json:"offset"`
 }
+
 type summaryItem struct{ group, host, offline int }
 
 // Slice already-authorized job-summary groups for transport (design G57); never group tasks or

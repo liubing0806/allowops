@@ -34,6 +34,7 @@ func catalogMeta(p *catalog.Package, raw []byte, published time.Time, current bo
 	}
 	return meta
 }
+
 func storedPackage(raw []byte) (*catalog.Package, error) {
 	e, err := catalog.ParseEnvelope(raw)
 	if err != nil {
@@ -45,6 +46,7 @@ func storedPackage(raw []byte) (*catalog.Package, error) {
 	}
 	return catalog.ParsePackage(payload)
 }
+
 func (s *Service) storedCatalogs(ctx context.Context, id string, current bool) ([]storedCatalog, error) {
 	rows, err := storedCatalogRows(ctx, s.Store.Pool, id, current)
 	if err != nil {
@@ -60,6 +62,7 @@ func (s *Service) storedCatalogs(ctx context.Context, id string, current bool) (
 	}
 	return out, nil
 }
+
 func (s *Service) getCatalog(ctx context.Context, ref *v1.CatalogRef) (storedCatalog, error) {
 	if ref == nil || ref.CatalogId == "" || ref.Version > 1<<63-1 {
 		return storedCatalog{}, failure(connect.CodeInvalidArgument, "catalog reference required")
@@ -75,6 +78,7 @@ func (s *Service) getCatalog(ctx context.Context, ref *v1.CatalogRef) (storedCat
 	}
 	return storedCatalog{}, failure(connect.CodeNotFound, "catalog not found")
 }
+
 func (s *Service) BeginCatalogUpload(ctx context.Context, req *connect.Request[v1.BeginCatalogUploadRequest]) (*connect.Response[v1.BeginCatalogUploadResponse], error) {
 	cfg := s.gatewayConfig()
 	if req.Msg.EnvelopeSizeBytes == 0 || len(req.Msg.EnvelopeSha256) != 32 {
@@ -141,6 +145,7 @@ func (s *Service) upload(ctx context.Context, tx pgx.Tx, id string) (*upload, er
 	}
 	return u, nil
 }
+
 func (s *Service) UploadCatalogChunk(ctx context.Context, req *connect.Request[v1.UploadCatalogChunkRequest]) (*connect.Response[v1.UploadCatalogChunkResponse], error) {
 	if len(req.Msg.Data) == 0 {
 		return nil, failure(connect.CodeInvalidArgument, "chunk data required")
@@ -176,6 +181,7 @@ func (s *Service) UploadCatalogChunk(ctx context.Context, req *connect.Request[v
 	}
 	return connect.NewResponse(&v1.UploadCatalogChunkResponse{NextOffset: next + uint64(len(req.Msg.Data))}), nil
 }
+
 func (s *Service) PublishCatalog(ctx context.Context, req *connect.Request[v1.PublishCatalogRequest]) (*connect.Response[v1.PublishCatalogResponse], error) {
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {
@@ -232,6 +238,7 @@ func (s *Service) PublishCatalog(ctx context.Context, req *connect.Request[v1.Pu
 	}
 	return connect.NewResponse(&v1.PublishCatalogResponse{Catalog: meta}), nil
 }
+
 func (s *Service) ListCatalogs(ctx context.Context, req *connect.Request[v1.ListCatalogsRequest]) (*connect.Response[v1.ListCatalogsResponse], error) {
 	all, err := s.storedCatalogs(ctx, req.Msg.CatalogId, false)
 	if err != nil {
@@ -247,6 +254,7 @@ func (s *Service) ListCatalogs(ctx context.Context, req *connect.Request[v1.List
 	}
 	return connect.NewResponse(&v1.ListCatalogsResponse{Catalogs: items, Page: cursor}), nil
 }
+
 func (s *Service) GetCatalog(ctx context.Context, req *connect.Request[v1.GetCatalogRequest]) (*connect.Response[v1.GetCatalogResponse], error) {
 	c, err := s.getCatalog(ctx, req.Msg.Catalog)
 	if err != nil {
@@ -254,6 +262,7 @@ func (s *Service) GetCatalog(ctx context.Context, req *connect.Request[v1.GetCat
 	}
 	return connect.NewResponse(&v1.GetCatalogResponse{Catalog: c.meta}), nil
 }
+
 func actionSummary(a catalog.Action, digest string) *v1.ActionSummary {
 	sum, _ := hex.DecodeString(digest)
 	mode := "exec"
@@ -268,6 +277,7 @@ func actionSummary(a catalog.Action, digest string) *v1.ActionSummary {
 	}
 	return &v1.ActionSummary{Name: a.Name, Description: a.Description, Risk: a.Risk, Idempotent: a.Idempotent != nil && *a.Idempotent, ExecutionMode: mode, Builtin: a.Builtin, ActionSha256: sum}
 }
+
 func (s *Service) actionCatalogs(ctx context.Context, ref *v1.CatalogRef) ([]storedCatalog, error) {
 	if ref == nil {
 		return s.storedCatalogs(ctx, "", true)
@@ -278,6 +288,7 @@ func (s *Service) actionCatalogs(ctx context.Context, ref *v1.CatalogRef) ([]sto
 	}
 	return []storedCatalog{c}, nil
 }
+
 func (s *Service) ListActions(ctx context.Context, req *connect.Request[v1.ListActionsRequest]) (*connect.Response[v1.ListActionsResponse], error) {
 	all, err := s.actionCatalogs(ctx, req.Msg.Catalog)
 	if err != nil {
@@ -316,6 +327,7 @@ func (s *Service) ListActions(ctx context.Context, req *connect.Request[v1.ListA
 	}
 	return connect.NewResponse(&v1.ListActionsResponse{Actions: items, Page: cursor}), nil
 }
+
 func (s *Service) GetAction(ctx context.Context, req *connect.Request[v1.GetActionRequest]) (*connect.Response[v1.GetActionResponse], error) {
 	if req.Msg.Action == "" {
 		return nil, failure(connect.CodeInvalidArgument, "action name required")
@@ -340,6 +352,7 @@ func (s *Service) GetAction(ctx context.Context, req *connect.Request[v1.GetActi
 	}
 	return nil, failure(connect.CodeNotFound, "action not found")
 }
+
 func (s *Service) GetCatalogDistribution(ctx context.Context, req *connect.Request[v1.GetCatalogDistributionRequest]) (*connect.Response[v1.GetCatalogDistributionResponse], error) {
 	if req.Msg.CatalogId == "" {
 		return nil, failure(connect.CodeInvalidArgument, "catalog ID required")

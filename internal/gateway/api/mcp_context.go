@@ -36,6 +36,7 @@ func (s *Service) Database() *store.Store {
 	}
 	return s.Store
 }
+
 func (s *Service) AuditConfigured() bool { return s != nil && s.Audit != nil }
 func (s *Service) Origin() string        { return s.Config.Origin }
 func (s *Service) MessageBytes() int     { return s.Config.MessageBytes }

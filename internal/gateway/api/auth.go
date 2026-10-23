@@ -30,6 +30,7 @@ type OIDCProvider struct {
 	oauth    oauth2.Config
 	client   *http.Client
 }
+
 type LDAPProvider struct {
 	Method        *v1.LoginMethod
 	Authenticator *authn.LDAP
@@ -63,6 +64,7 @@ func (s *Service) AddOIDC(ctx context.Context, id, name, clientSecret string, cf
 	s.oidc[id] = &OIDCProvider{method: &v1.LoginMethod{ProviderId: id, DisplayName: name, Kind: "oidc"}, verifier: verifier, oauth: oauth2.Config{ClientID: cfg.ClientID, ClientSecret: clientSecret, Endpoint: endpoint, RedirectURL: s.Config.Origin + "/auth/oidc/callback", Scopes: []string{oidc.ScopeOpenID, "profile", "email", "groups"}}, client: cfg.HTTPClient}
 	return nil
 }
+
 func (s *Service) AddLDAP(id, name string, auth *authn.LDAP, directory authn.DirectoryCredentials) error {
 	if id == "" || auth == nil || s.oidc[id] != nil || s.ldap[id].Method != nil {
 		return errors.New("invalid LDAP provider")
@@ -70,6 +72,7 @@ func (s *Service) AddLDAP(id, name string, auth *authn.LDAP, directory authn.Dir
 	s.ldap[id] = LDAPProvider{Method: &v1.LoginMethod{ProviderId: id, DisplayName: name, Kind: "ldap"}, Authenticator: auth, Directory: directory}
 	return nil
 }
+
 func (s *Service) GetLoginMethods(context.Context, *connect.Request[v1.GetLoginMethodsRequest]) (*connect.Response[v1.GetLoginMethodsResponse], error) {
 	ids := []string{}
 	for id := range s.oidc {
@@ -88,6 +91,7 @@ func (s *Service) GetLoginMethods(context.Context, *connect.Request[v1.GetLoginM
 	}
 	return connect.NewResponse(&v1.GetLoginMethodsResponse{Methods: methods}), nil
 }
+
 func loopback(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "http" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "/callback" {
@@ -100,10 +104,12 @@ func loopback(raw string) bool {
 	port, err := strconv.Atoi(u.Port())
 	return err == nil && port > 0 && port <= 65535
 }
+
 func challenge(raw string) bool {
 	b, err := base64.RawURLEncoding.Strict().DecodeString(raw)
 	return err == nil && len(b) == sha256.Size
 }
+
 func verifier(raw string) bool {
 	if len(raw) < 43 || len(raw) > 128 {
 		return false
@@ -170,6 +176,7 @@ func (s *Service) BeginOidcLogin(ctx context.Context, r *connect.Request[v1.Begi
 	}
 	return connect.NewResponse(&v1.BeginOidcLoginResponse{AuthorizationUrl: s.Config.Origin + "/auth/oidc/start?state=" + url.QueryEscape(state)}), nil
 }
+
 func (s *Service) oidcStart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
@@ -209,6 +216,7 @@ func (s *Service) oidcStart(w http.ResponseWriter, r *http.Request) {
 	dest := s.oidc[provider].oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(pv))
 	http.Redirect(w, r, dest, http.StatusFound)
 }
+
 func (s *Service) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
@@ -221,6 +229,7 @@ func (s *Service) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	fragment := url.Values{"code": {r.URL.Query().Get("code")}, "state": {r.URL.Query().Get("state")}}.Encode()
 	http.Redirect(w, r, s.Config.Origin+"/auth/oidc/complete#"+fragment, http.StatusFound)
 }
+
 func (s *Service) oidcPage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet || r.TLS == nil {
 		http.Error(w, "invalid login", http.StatusBadRequest)
@@ -233,6 +242,7 @@ func (s *Service) oidcPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'nonce-"+nonce+"'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
 	fmt.Fprintf(w, `<!doctype html><title>allowops login</title><p id="status">Completing login</p><script nonce="%s">const p=new URLSearchParams(location.hash.slice(1));history.replaceState(null,'',location.pathname);fetch('/allowops.v1.AuthService/CompleteOidcLogin',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Connect-Protocol-Version':'1'},body:JSON.stringify({code:p.get('code'),state:p.get('state')})}).then(async r=>{if(!r.ok)throw Error();const v=await r.json();location.replace(v.redirectUri||v.redirect_uri)}).catch(()=>document.getElementById('status').textContent='Login failed');</script>`, nonce)
 }
+
 func (s *Service) CompleteOidcLogin(ctx context.Context, r *connect.Request[v1.CompleteOidcLoginRequest]) (*connect.Response[v1.CompleteOidcLoginResponse], error) {
 	t := transport(ctx)
 	if t == nil || r.Header().Get("Origin") != s.Config.Origin {
@@ -282,6 +292,7 @@ func (s *Service) CompleteOidcLogin(ctx context.Context, r *connect.Request[v1.C
 	s.sessionCookie(ctx, raw, sess.ExpiresAt.AsTime())
 	return connect.NewResponse(&v1.CompleteOidcLoginResponse{RedirectUri: s.Config.Origin + "/"}), nil
 }
+
 func (s *Service) ExchangeCliSession(ctx context.Context, r *connect.Request[v1.ExchangeCliSessionRequest]) (*connect.Response[v1.ExchangeCliSessionResponse], error) {
 	if !verifier(r.Msg.CodeVerifier) {
 		return nil, failure(connect.CodeUnauthenticated, "invalid PKCE verifier")
@@ -312,9 +323,11 @@ func (s *Service) ExchangeCliSession(ctx context.Context, r *connect.Request[v1.
 	transport(ctx).auditActor = userID
 	return connect.NewResponse(&v1.ExchangeCliSessionResponse{Session: sess, SessionToken: token}), nil
 }
+
 func (s *Service) sessionCookie(ctx context.Context, raw string, expires time.Time) {
 	http.SetCookie(transport(ctx).writer, &http.Cookie{Name: "__Host-allowops-session", Value: raw, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode, Expires: expires, MaxAge: max(1, int(time.Until(expires).Seconds()))})
 }
+
 func (s *Service) LoginLdap(ctx context.Context, r *connect.Request[v1.LoginLdapRequest]) (*connect.Response[v1.LoginLdapResponse], error) {
 	p := s.ldap[r.Msg.ProviderId]
 	if p.Authenticator == nil {
@@ -355,6 +368,7 @@ func (s *Service) LoginLdap(ctx context.Context, r *connect.Request[v1.LoginLdap
 	}
 	return connect.NewResponse(response), nil
 }
+
 func (s *Service) GetCurrentSession(ctx context.Context, _ *connect.Request[v1.GetCurrentSessionRequest]) (*connect.Response[v1.GetCurrentSessionResponse], error) {
 	id, ok := reqctx.FromContext(ctx)
 	if !ok || id.Session == nil {
@@ -362,6 +376,7 @@ func (s *Service) GetCurrentSession(ctx context.Context, _ *connect.Request[v1.G
 	}
 	return connect.NewResponse(&v1.GetCurrentSessionResponse{User: id.User, Client: id.Client, ExpiresAt: id.Session.ExpiresAt, CsrfToken: id.CSRF}), nil
 }
+
 func (s *Service) Logout(ctx context.Context, _ *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error) {
 	id, ok := reqctx.FromContext(ctx)
 	if !ok || id.Session == nil {
@@ -375,6 +390,7 @@ func (s *Service) Logout(ctx context.Context, _ *connect.Request[v1.LogoutReques
 	}
 	return connect.NewResponse(&v1.LogoutResponse{}), nil
 }
+
 func (s *Service) sessionUser(ctx context.Context, userID string) (string, error) {
 	id, ok := reqctx.FromContext(ctx)
 	if !ok || id.User == nil {
@@ -397,6 +413,7 @@ func (s *Service) sessionUser(ctx context.Context, userID string) (string, error
 	}
 	return userID, nil
 }
+
 func (s *Service) ListCliSessions(ctx context.Context, r *connect.Request[v1.ListCliSessionsRequest]) (*connect.Response[v1.ListCliSessionsResponse], error) {
 	uid, err := s.sessionUser(ctx, r.Msg.UserId)
 	if err != nil {
@@ -409,6 +426,7 @@ func (s *Service) ListCliSessions(ctx context.Context, r *connect.Request[v1.Lis
 	items, p, err := page(ctx, s.Config, "cli_sessions:"+uid, r.Msg.Page, items)
 	return connect.NewResponse(&v1.ListCliSessionsResponse{Sessions: items, Page: p}), err
 }
+
 func (s *Service) RevokeCliSession(ctx context.Context, r *connect.Request[v1.RevokeCliSessionRequest]) (*connect.Response[v1.RevokeCliSessionResponse], error) {
 	uid, err := s.sessionUser(ctx, r.Msg.UserId)
 	if err != nil {

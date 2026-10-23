@@ -14,10 +14,12 @@ import (
 )
 
 type cancelAuditKey struct{}
+
 type cancelAuditRequest struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 }
+
 type cancelledResultAudit struct {
 	delegate Auditor
 	t        *testing.T

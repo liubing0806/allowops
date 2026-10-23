@@ -30,6 +30,7 @@ type SigningKey struct {
 	KeyID      string
 	PrivateKey ed25519.PrivateKey
 }
+
 type VerifyOptions struct {
 	Now            time.Time
 	HighestVersion int64

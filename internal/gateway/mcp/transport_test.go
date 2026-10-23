@@ -51,6 +51,7 @@ func (a *toolAudit) Append(ctx context.Context, e api.AuditEvent) error {
 	a.events = append(a.events, e)
 	return nil
 }
+
 func (a *toolAudit) snapshot() []api.AuditEvent {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -131,6 +132,7 @@ func newTransportFixture(t *testing.T) *transportFixture {
 	f.publish(t, 0)
 	return f
 }
+
 func (f *transportFixture) publish(t *testing.T, offset time.Duration) {
 	t.Helper()
 	c := &catalog.Catalog{Config: catalog.Config{SchemaVersion: 1, CatalogID: "fixture"}, Actions: map[string]catalog.Action{"logs_read": testAction()}}
@@ -176,6 +178,7 @@ func (b *bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	return response, err
 }
+
 func (f *transportFixture) client(t *testing.T, token string, progress func(context.Context, *sdk.ProgressNotificationClientRequest)) (*sdk.ClientSession, *bearerTransport) {
 	t.Helper()
 	transport := &bearerTransport{base: f.gateway.Client().Transport, token: token}
@@ -187,6 +190,7 @@ func (f *transportFixture) client(t *testing.T, token string, progress func(cont
 	t.Cleanup(func() { _ = session.Close() })
 	return session, transport
 }
+
 func call(t *testing.T, c *sdk.ClientSession, name string, args any) *sdk.CallToolResult {
 	t.Helper()
 	r, err := c.CallTool(context.Background(), &sdk.CallToolParams{Name: name, Arguments: args})
@@ -195,6 +199,7 @@ func call(t *testing.T, c *sdk.ClientSession, name string, args any) *sdk.CallTo
 	}
 	return r
 }
+
 func content(t *testing.T, r *sdk.CallToolResult) map[string]any {
 	t.Helper()
 	b, err := json.Marshal(r.StructuredContent)
@@ -207,6 +212,7 @@ func content(t *testing.T, r *sdk.CallToolResult) map[string]any {
 	}
 	return m
 }
+
 func actionArgs() map[string]any {
 	return map[string]any{"targets": map[string]any{"hosts": []string{"web-01"}}, "params": map[string]any{"mode": "recent"}, "reason": "inspect", "wait_seconds": 0}
 }
@@ -266,6 +272,7 @@ func TestSDKToolFilteringCacheInvalidationAndRevocation(t *testing.T) {
 		t.Fatal("revoked token reached cached tools")
 	}
 }
+
 func TestSDKParameterErrorsUnknownToolAndJobDenial(t *testing.T) {
 	f := newTransportFixture(t)
 	c, _ := f.client(t, f.admin, nil)
@@ -328,6 +335,7 @@ func TestSDKParameterErrorsUnknownToolAndJobDenial(t *testing.T) {
 		t.Fatalf("error audits=%d authorized=%d", denied, authorized)
 	}
 }
+
 func TestSDKBearerRequiredAndQueryRejected(t *testing.T) {
 	f := newTransportFixture(t)
 	for _, tc := range []struct {
@@ -353,6 +361,7 @@ func TestSDKBearerRequiredAndQueryRejected(t *testing.T) {
 		}
 	}
 }
+
 func TestSDKProgressAndTimeout(t *testing.T) {
 	f := newTransportFixture(t)
 	f.jobs.delay = time.Second
@@ -378,6 +387,7 @@ func TestSDKProgressAndTimeout(t *testing.T) {
 		t.Fatal("no SSE progress notification")
 	}
 }
+
 func TestSDKCommentHeartbeatWithoutProgressToken(t *testing.T) {
 	f := newTransportFixture(t)
 	f.jobs.delay = 250 * time.Millisecond
@@ -462,6 +472,7 @@ func (j *testJobs) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobR
 	}
 	return &v1.RunJobResponse{Job: proto.Clone(job).(*v1.Job), Summary: fixtureSummary()}, nil
 }
+
 func (j *testJobs) GetJob(ctx context.Context, r *v1.GetJobRequest) (*v1.GetJobResponse, error) {
 	j.mu.Lock()
 	job := j.jobs[r.JobId]
@@ -478,6 +489,7 @@ func (j *testJobs) GetJob(ctx context.Context, r *v1.GetJobRequest) (*v1.GetJobR
 	}
 	return &v1.GetJobResponse{Job: proto.Clone(job).(*v1.Job), Summary: fixtureSummary()}, nil
 }
+
 func (j *testJobs) ListJobs(ctx context.Context, r *v1.ListJobsRequest) (*v1.ListJobsResponse, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -489,9 +501,11 @@ func (j *testJobs) ListJobs(ctx context.Context, r *v1.ListJobsRequest) (*v1.Lis
 	}
 	return out, nil
 }
+
 func (j *testJobs) ListTasks(context.Context, *v1.ListTasksRequest) (*v1.ListTasksResponse, error) {
 	return &v1.ListTasksResponse{}, nil
 }
+
 func (j *testJobs) CancelJob(ctx context.Context, r *v1.CancelJobRequest) (*v1.CancelJobResponse, error) {
 	response, err := j.GetJob(ctx, &v1.GetJobRequest{JobId: r.JobId})
 	if err != nil {
@@ -499,6 +513,7 @@ func (j *testJobs) CancelJob(ctx context.Context, r *v1.CancelJobRequest) (*v1.C
 	}
 	return &v1.CancelJobResponse{Job: response.Job}, nil
 }
+
 func (j *testJobs) GetJobOutput(ctx context.Context, r *v1.GetJobOutputRequest) (*v1.GetJobOutputResponse, error) {
 	if _, err := j.GetJob(ctx, &v1.GetJobRequest{JobId: r.JobId}); err != nil {
 		return nil, err

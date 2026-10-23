@@ -26,6 +26,7 @@ type rfSQLFault struct {
 	errors          chan error
 	injectionErrors chan error
 }
+
 type rfFaultQuery struct{}
 
 func (p *rfSQLFault) TraceQueryStart(ctx context.Context, c *pgx.Conn, d pgx.TraceQueryStartData) context.Context {
@@ -46,6 +47,7 @@ func (p *rfSQLFault) TraceQueryStart(ctx context.Context, c *pgx.Conn, d pgx.Tra
 	}
 	return ctx
 }
+
 func (p *rfSQLFault) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, d pgx.TraceQueryEndData) {
 	if ctx.Value(rfFaultQuery{}) == true {
 		select {

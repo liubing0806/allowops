@@ -44,6 +44,7 @@ func (s *Service) currentAction(ctx context.Context, name string) (catalog.Actio
 	}
 	return catalog.Action{}, accessError(connect.CodeNotFound, "action removed or expired; call tools/list to refresh")
 }
+
 func (s *Service) searchHosts(ctx context.Context, raw []byte) (*ToolResult, error) {
 	args, err := fixedArguments(raw, "hostname", "selector", "next_cursor")
 	if err != nil {

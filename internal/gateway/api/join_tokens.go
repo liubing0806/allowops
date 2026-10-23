@@ -48,6 +48,7 @@ func (s *Service) CreateJoinToken(ctx context.Context, req *connect.Request[v1.C
 	}
 	return connect.NewResponse(&v1.CreateJoinTokenResponse{Token: t, Secret: raw, Upstream: upstream, CaPin: s.management.config.CAPin}), nil
 }
+
 func (s *Service) ListJoinTokens(ctx context.Context, req *connect.Request[v1.ListJoinTokensRequest]) (*connect.Response[v1.ListJoinTokensResponse], error) {
 	tokens, err := listJoinTokens(ctx, s.Store.Pool)
 	if err != nil {
@@ -59,6 +60,7 @@ func (s *Service) ListJoinTokens(ctx context.Context, req *connect.Request[v1.Li
 	}
 	return connect.NewResponse(&v1.ListJoinTokensResponse{Tokens: tokens, Page: cursor}), nil
 }
+
 func (s *Service) RevokeJoinToken(ctx context.Context, req *connect.Request[v1.RevokeJoinTokenRequest]) (*connect.Response[v1.RevokeJoinTokenResponse], error) {
 	revoked, err := revokeJoinToken(ctx, s.Store.Pool, req.Msg.TokenId)
 	if err != nil {

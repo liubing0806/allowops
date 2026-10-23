@@ -25,6 +25,7 @@ import (
 type ruleSource []authz.Rule
 
 func (r ruleSource) LoadRules(context.Context) ([]authz.Rule, error) { return r, nil }
+
 func rulesFromProto(p *v1.PolicyRules) ([]authz.Rule, error) {
 	if p == nil {
 		return nil, failure(connect.CodeInvalidArgument, "rules required")
@@ -53,6 +54,7 @@ func rulesFromProto(p *v1.PolicyRules) ([]authz.Rule, error) {
 	}
 	return rules, nil
 }
+
 func defaultRules() *v1.PolicyRules {
 	p := &v1.PolicyRules{}
 	for _, r := range authz.DefaultRules() {
@@ -64,6 +66,7 @@ func defaultRules() *v1.PolicyRules {
 	}
 	return p
 }
+
 func (s *Service) initialize(ctx context.Context) error {
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {
@@ -99,6 +102,7 @@ func (s *Service) initialize(ctx context.Context) error {
 	}
 	return tx.Commit(ctx)
 }
+
 func loadPolicy(ctx context.Context, q querier, version uint64) (*v1.PolicyVersion, error) {
 	row, err := getPolicyVersion(ctx, q, version)
 	if err != nil {
@@ -112,6 +116,7 @@ func loadPolicy(ctx context.Context, q querier, version uint64) (*v1.PolicyVersi
 	}
 	return p, decode(row.Rules, p.Rules)
 }
+
 func (s *Service) refresh(ctx context.Context) error {
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
@@ -203,6 +208,7 @@ func (s *Service) Start(ctx context.Context) error {
 	}()
 	return nil
 }
+
 func (s *Service) Close() {
 	if s.cancel != nil {
 		s.cancel()
@@ -214,6 +220,7 @@ type policySubject struct {
 	ID         string
 	Attributes authz.Subject
 }
+
 type policySnapshot struct {
 	Subjects        []policySubject
 	Hosts           []authz.Host
@@ -482,6 +489,7 @@ func caseInput(snap *policySnapshot, c *v1.PolicyTestCase, env authz.Environment
 	}
 	return input, hosts, nil
 }
+
 func selectHosts(hosts []authz.Host, t *v1.HostTargets, reported ...map[string]map[string]string) ([]authz.Host, error) {
 	if t == nil {
 		return nil, nil
@@ -542,6 +550,7 @@ func selectHosts(hosts []authz.Host, t *v1.HostTargets, reported ...map[string]m
 	}
 	return out, nil
 }
+
 func decision(r authz.Result, reason string) *v1.PolicyDecision {
 	effect := v1.PolicyEffect_POLICY_EFFECT_DENY
 	if r.Decision == "allow" {
@@ -549,10 +558,12 @@ func decision(r authz.Result, reason string) *v1.PolicyDecision {
 	}
 	return &v1.PolicyDecision{Effect: effect, MatchedRules: r.RuleIDs, ErrorReason: reason}
 }
+
 func (s *Service) GetPolicy(ctx context.Context, r *connect.Request[v1.GetPolicyRequest]) (*connect.Response[v1.GetPolicyResponse], error) {
 	p, err := loadPolicy(ctx, s.Store.Pool, r.Msg.GetVersion())
 	return connect.NewResponse(&v1.GetPolicyResponse{Policy: p}), dbError(err)
 }
+
 func (s *Service) TestPolicy(ctx context.Context, r *connect.Request[v1.TestPolicyRequest]) (*connect.Response[v1.TestPolicyResponse], error) {
 	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 	if err != nil {
@@ -645,6 +656,7 @@ func (s *Service) TestPolicy(ctx context.Context, r *connect.Request[v1.TestPoli
 	}
 	return connect.NewResponse(&v1.TestPolicyResponse{Test: test}), nil
 }
+
 func (s *Service) GetPolicyTestChanges(ctx context.Context, r *connect.Request[v1.GetPolicyTestChangesRequest]) (*connect.Response[v1.GetPolicyTestChangesResponse], error) {
 	b, err := policyTestChanges(ctx, s.Store.Pool, r.Msg.TestId, reqctx.ActorID(ctx))
 	if err != nil {
@@ -657,6 +669,7 @@ func (s *Service) GetPolicyTestChanges(ctx context.Context, r *connect.Request[v
 	changes, p, err := page(ctx, s.Config, "changes:"+r.Msg.TestId+":"+reqctx.ActorID(ctx), r.Msg.Page, changes)
 	return connect.NewResponse(&v1.GetPolicyTestChangesResponse{Changes: changes, Page: p}), err
 }
+
 func (s *Service) persistPolicy(ctx context.Context, base uint64, candidate *v1.PolicyRules, target uint64, testID, reason string) (*v1.PolicyVersion, error) {
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {
@@ -815,10 +828,12 @@ func writePolicyVersion(ctx context.Context, tx pgx.Tx, base uint64, b []byte, r
 	}
 	return p, nil
 }
+
 func (s *Service) SavePolicy(ctx context.Context, r *connect.Request[v1.SavePolicyRequest]) (*connect.Response[v1.SavePolicyResponse], error) {
 	p, err := s.persistPolicy(ctx, r.Msg.BaseVersion, r.Msg.Rules, 0, r.Msg.TestId, r.Msg.Reason)
 	return connect.NewResponse(&v1.SavePolicyResponse{Policy: p}), err
 }
+
 func (s *Service) RollbackPolicy(ctx context.Context, r *connect.Request[v1.RollbackPolicyRequest]) (*connect.Response[v1.RollbackPolicyResponse], error) {
 	if r.Msg.TargetVersion == 0 {
 		return nil, failure(connect.CodeInvalidArgument, "target version required")
@@ -826,6 +841,7 @@ func (s *Service) RollbackPolicy(ctx context.Context, r *connect.Request[v1.Roll
 	p, err := s.persistPolicy(ctx, r.Msg.BaseVersion, nil, r.Msg.TargetVersion, r.Msg.TestId, r.Msg.Reason)
 	return connect.NewResponse(&v1.RollbackPolicyResponse{Policy: p}), err
 }
+
 func (s *Service) ListPolicyHistory(ctx context.Context, r *connect.Request[v1.ListPolicyHistoryRequest]) (*connect.Response[v1.ListPolicyHistoryResponse], error) {
 	versions, err := listPolicyVersions(ctx, s.Store.Pool)
 	if err != nil {

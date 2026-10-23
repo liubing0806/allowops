@@ -42,6 +42,7 @@ type Config struct {
 	CacheEntries     int
 	ProgressInterval time.Duration
 }
+
 type Service struct {
 	identity Identity
 	catalogs *catalogsvc.Service
@@ -52,10 +53,12 @@ type Service struct {
 	lru      *list.List
 	versions string
 }
+
 type cacheEntry struct {
 	key    string
 	server *sdk.Server
 }
+
 type serverContextKey struct{}
 type heartbeatContextKey struct{}
 
@@ -151,6 +154,7 @@ func (s *Service) Handler() http.Handler {
 		authenticated.ServeHTTP(w, copy)
 	})
 }
+
 func (s *Service) auditHTTP(ctx context.Context, outcome string) error {
 	e := reqctx.RequestAuditInfo(ctx)
 	e.Operation = "mcp/authenticate"

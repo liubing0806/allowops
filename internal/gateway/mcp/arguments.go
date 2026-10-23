@@ -370,6 +370,7 @@ func argumentObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	}
 	return object, nil
 }
+
 func checkArgumentJSON(d *json.Decoder, depth int) error {
 	if depth > 1000 {
 		return errors.New("arguments exceed maximum JSON depth")

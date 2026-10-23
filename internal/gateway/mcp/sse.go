@@ -22,6 +22,7 @@ type sseWriter struct {
 func newSSEWriter(w http.ResponseWriter) *sseWriter { return &sseWriter{w: w} }
 func (w *sseWriter) Header() http.Header            { return w.w.Header() }
 func (w *sseWriter) Unwrap() http.ResponseWriter    { return w.w }
+
 func (w *sseWriter) start(status int) {
 	if w.started {
 		return
@@ -31,20 +32,25 @@ func (w *sseWriter) start(status int) {
 	w.w.Header().Del("Mcp-Session-Id")
 	w.w.WriteHeader(status)
 }
+
 func (w *sseWriter) WriteHeader(status int) { w.mu.Lock(); defer w.mu.Unlock(); w.start(status) }
+
 func (w *sseWriter) Write(data []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.start(http.StatusOK)
 	return w.w.Write(data)
 }
+
 func (w *sseWriter) FlushError() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.start(http.StatusOK)
 	return http.NewResponseController(w.w).Flush()
 }
+
 func (w *sseWriter) Flush() { _ = w.FlushError() }
+
 func (w *sseWriter) keepalive() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -54,6 +60,7 @@ func (w *sseWriter) keepalive() {
 	_, _ = w.w.Write([]byte(": keepalive\n\n"))
 	_ = http.NewResponseController(w.w).Flush()
 }
+
 func (w *sseWriter) progressStart() { w.mu.Lock(); w.progress++; w.mu.Unlock() }
 func (w *sseWriter) progressEnd()   { w.mu.Lock(); w.progress--; w.mu.Unlock() }
 

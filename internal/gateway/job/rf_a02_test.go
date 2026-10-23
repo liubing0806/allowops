@@ -22,6 +22,7 @@ import (
 
 type rfA02Request struct{}
 type rfA02Commit struct{}
+
 type rfA02Tracer struct {
 	admin           *pgxpool.Pool
 	cancel          context.CancelFunc
@@ -54,6 +55,7 @@ func (p *rfA02Tracer) TraceQueryStart(ctx context.Context, c *pgx.Conn, d pgx.Tr
 	}
 	return ctx
 }
+
 func (p *rfA02Tracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, d pgx.TraceQueryEndData) {
 	if ctx.Value(rfA02Commit{}) == true && d.Err == nil {
 		p.committed.Store(true)
@@ -62,6 +64,7 @@ func (p *rfA02Tracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, d pgx.Trac
 		}
 	}
 }
+
 func TestRFA02CommittedJobRetainsScheduler(t *testing.T) {
 	for _, mode := range []string{"request_cancelled_after_commit", "postcommit_get_connection_failure", "commit_rejected"} {
 		t.Run(mode, func(t *testing.T) {

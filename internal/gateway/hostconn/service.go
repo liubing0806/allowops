@@ -80,6 +80,7 @@ type outbound struct {
 	receipt chan error
 	mailbox string
 }
+
 type connection struct {
 	identity    Identity
 	id          string
@@ -640,6 +641,7 @@ func (s *Service) snapshot() []*connection {
 	}
 	return out
 }
+
 func (s *Service) disconnectAll() {
 	for _, c := range s.snapshot() {
 		c.cancel()

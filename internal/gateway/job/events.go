@@ -24,10 +24,12 @@ type streamKey struct {
 	Step   int
 	Stream v1.OutputStream
 }
+
 type streamOutput struct {
 	Data []byte
 	EOF  bool
 }
+
 type taskOutput struct {
 	mu      sync.Mutex
 	Streams map[streamKey]*streamOutput
@@ -38,6 +40,7 @@ type taskOutput struct {
 var resultReason = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
 
 func outputID(jobID, taskID string) string { return jobID + "/" + taskID }
+
 func stepValue(step *uint32) int {
 	if step == nil {
 		return -1
@@ -451,7 +454,9 @@ func (s *Service) terminalCommitted(ctx context.Context, jobID, taskID string, s
 func terminalAgentStatus(status v1.TaskStatus) bool {
 	return status == v1.TaskStatus_TASK_STATUS_SUCCEEDED || status == v1.TaskStatus_TASK_STATUS_FAILED || status == v1.TaskStatus_TASK_STATUS_TIMEOUT || status == v1.TaskStatus_TASK_STATUS_CANCELLED || status == v1.TaskStatus_TASK_STATUS_UNSUPPORTED
 }
+
 func equalExit(a, b *int32) bool { return (a == nil && b == nil) || (a != nil && b != nil && *a == *b) }
+
 func validateResultScalars(r *v1.ExecutionResult, isStep bool) error {
 	if r == nil || (r.Reason != "" && !resultReason.MatchString(r.Reason)) {
 		return errors.New("INVALID_EXECUTION_RESULT")
@@ -478,6 +483,7 @@ func validateResultScalars(r *v1.ExecutionResult, isStep bool) error {
 	}
 	return nil
 }
+
 func validateResult(r *v1.ExecutionResult, out *taskOutput, step int, isStep bool) error {
 	if err := validateResultScalars(r, isStep); err != nil {
 		return err

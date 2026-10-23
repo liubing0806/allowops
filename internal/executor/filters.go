@@ -111,6 +111,7 @@ func newFilterWriter(output io.Writer, options FilterOptions) *filterWriter {
 	}
 	return w
 }
+
 func (w *filterWriter) emit(line string) error {
 	if w.options.Head > 0 && w.lines >= w.options.Head {
 		return nil
@@ -122,6 +123,7 @@ func (w *filterWriter) emit(line string) error {
 	_, err := io.WriteString(w.output, line)
 	return err
 }
+
 func (w *filterWriter) Write(p []byte) (int, error) {
 	line := string(p)
 	text := strings.TrimSuffix(line, "\n")
@@ -139,6 +141,7 @@ func (w *filterWriter) Write(p []byte) (int, error) {
 	}
 	return len(p), w.emit(line)
 }
+
 func (w *filterWriter) finish() error {
 	for i := range w.tail {
 		if err := w.emit(w.tail[(w.next+i)%len(w.tail)]); err != nil {

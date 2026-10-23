@@ -24,11 +24,13 @@ func (b *schedulerLogBuffer) Write(p []byte) (int, error) {
 	defer b.mu.Unlock()
 	return b.data.Write(p)
 }
+
 func (b *schedulerLogBuffer) snapshot() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.data.String()
 }
+
 func schedulerRecords(t *testing.T, b *schedulerLogBuffer, id, msg string) []map[string]any {
 	t.Helper()
 	var out []map[string]any

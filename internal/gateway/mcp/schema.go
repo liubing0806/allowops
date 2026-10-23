@@ -150,9 +150,11 @@ func batchLimits(a catalog.Action) (uint32, uint32, error) {
 	}
 	return batch, failures, nil
 }
+
 func waitSchema() map[string]any {
 	return map[string]any{"type": "integer", "description": "Wait for completion, then return the job ID and progress. Zero returns immediately.", "minimum": 0, "maximum": maxWaitSeconds, "default": defaultWaitSeconds}
 }
+
 func formatSchema() map[string]any {
 	return map[string]any{"type": "string", "description": "concise shows two sample hostnames per group; detailed includes paginated hostnames from P6 groups; P6 may already have truncated its source summary.", "enum": []string{"concise", "detailed"}, "default": "concise"}
 }

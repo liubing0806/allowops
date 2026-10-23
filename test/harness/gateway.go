@@ -223,6 +223,7 @@ func Environment(t *testing.T) {
 }
 
 func (g *Gateway) PID() int { return g.cmd.Process.Pid }
+
 func (g *Gateway) Log(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(g.Dir, "gateway.log"))
 	Check(t, err)

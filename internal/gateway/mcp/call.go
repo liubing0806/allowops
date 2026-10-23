@@ -58,6 +58,7 @@ func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, available ma
 	}
 	return sdkResult(result), nil
 }
+
 func sdkResult(result *ToolResult) *sdk.CallToolResult {
 	content := make([]sdk.Content, len(result.Content))
 	for i, c := range result.Content {
@@ -65,6 +66,7 @@ func sdkResult(result *ToolResult) *sdk.CallToolResult {
 	}
 	return &sdk.CallToolResult{Meta: sdk.Meta(result.Meta), Content: content, StructuredContent: result.StructuredContent, IsError: result.IsError}
 }
+
 func toolError(err error, state *callState) *sdk.CallToolResult {
 	data := map[string]any{"error": "tool unavailable", "output_trust": "untrusted"}
 	var ce *connect.Error
@@ -203,6 +205,7 @@ func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, available
 		return nativeSummaryResult(reqctx.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, "")
 	}
 }
+
 func fixedArguments(raw json.RawMessage, allowed ...string) (map[string]json.RawMessage, error) {
 	if len(raw) == 0 {
 		raw = json.RawMessage(`{}`)
@@ -224,6 +227,7 @@ func fixedArguments(raw json.RawMessage, allowed ...string) (map[string]json.Raw
 	}
 	return args, nil
 }
+
 func jobArgument(args map[string]json.RawMessage) (string, error) {
 	var id string
 	if decodeField(args, "job_id", &id, true) != nil || !shortJobID.MatchString(id) {
@@ -231,6 +235,7 @@ func jobArgument(args map[string]json.RawMessage) (string, error) {
 	}
 	return id, nil
 }
+
 func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *callState) (*ToolResult, error) {
 	args, err := fixedArguments(r.Params.Arguments, "job_id", "host", "wait_seconds", "response_format", "next_cursor", "stream", "offset", "step_index")
 	if err != nil {
@@ -299,6 +304,7 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 	}
 	return outputPageResult(id, host, outputStream, offset, output, step)
 }
+
 func (s *Service) listJobs(ctx context.Context, raw json.RawMessage) (*ToolResult, error) {
 	args, err := fixedArguments(raw, "next_cursor")
 	if err != nil {
@@ -331,6 +337,7 @@ func (s *Service) listJobs(ctx context.Context, raw json.RawMessage) (*ToolResul
 	}
 	return result, err
 }
+
 func jobMetadata(job *v1.Job) map[string]any {
 	counts := map[string]uint64{}
 	for _, c := range job.Counts {
@@ -338,6 +345,7 @@ func jobMetadata(job *v1.Job) map[string]any {
 	}
 	return map[string]any{"counts": counts, "job_id": job.JobId, "action": job.Action, "status": strings.ToLower(strings.TrimPrefix(job.Status.String(), "JOB_STATUS_")), "total": job.TotalTasks, "output_trust": "untrusted"}
 }
+
 func jobMetadataResult(job *v1.Job) (*ToolResult, error) {
 	result, size, err := toolResult(jobMetadata(job))
 	if size > resultByteLimit {
@@ -345,6 +353,7 @@ func jobMetadataResult(job *v1.Job) (*ToolResult, error) {
 	}
 	return result, err
 }
+
 func invalidArguments(err error) error {
 	if err == nil {
 		return nil

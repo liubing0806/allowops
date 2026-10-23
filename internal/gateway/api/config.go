@@ -41,6 +41,7 @@ func envSecret(name string) (string, error) {
 	}
 	return v, nil
 }
+
 func (s *Service) ConfigureProviders(ctx context.Context, configs []ProviderConfig) error {
 	ldapCount := 0
 	for _, cfg := range configs {

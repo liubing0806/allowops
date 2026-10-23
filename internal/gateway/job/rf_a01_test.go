@@ -52,6 +52,7 @@ func (p *rfA01Tracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d pgx.Tr
 	}
 	return context.WithValue(ctx, rfA01Query{}, q)
 }
+
 func (p *rfA01Tracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, d pgx.TraceQueryEndData) {
 	if q, ok := ctx.Value(rfA01Query{}).(rfA01Query); ok && d.Err == nil {
 		if q.cancel {

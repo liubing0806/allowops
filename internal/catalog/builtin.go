@@ -97,10 +97,12 @@ func MySQLConfig(config map[string]any) (mysql.Config, error) {
 	}
 	return c, c.Validate()
 }
+
 func (mysqlHandler) ValidateConfig(config map[string]any) error {
 	_, err := MySQLConfig(config)
 	return err
 }
+
 func (mysqlHandler) Run(ctx context.Context, config map[string]any, values map[string]any) (BuiltinResult, error) {
 	return (mysqlHandler{}).RunRedacted(ctx, config, values, nil)
 }

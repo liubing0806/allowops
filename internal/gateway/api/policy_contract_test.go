@@ -105,6 +105,7 @@ func TestPolicyHistoryRespectsWireBudgetAndRealCursor(t *testing.T) {
 		t.Fatalf("history versions=%v", seen)
 	}
 }
+
 func TestExistingHostsSimulationAndActionAuthorization(t *testing.T) {
 	f := newFixture(t)
 	populateResources(t, f)

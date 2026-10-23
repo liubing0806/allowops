@@ -305,9 +305,11 @@ func TestRawValueIsNotOutputTruncated(t *testing.T) {
 type afterCommandHook struct{ after func(redisclient.Cmder) }
 
 func (h afterCommandHook) DialHook(next redisclient.DialHook) redisclient.DialHook { return next }
+
 func (h afterCommandHook) ProcessPipelineHook(next redisclient.ProcessPipelineHook) redisclient.ProcessPipelineHook {
 	return next
 }
+
 func (h afterCommandHook) ProcessHook(next redisclient.ProcessHook) redisclient.ProcessHook {
 	return func(ctx context.Context, cmd redisclient.Cmder) error {
 		err := next(ctx, cmd)

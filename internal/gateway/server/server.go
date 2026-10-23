@@ -296,6 +296,7 @@ func (l *singleListener) Accept() (net.Conn, error) {
 	<-l.done
 	return nil, net.ErrClosed
 }
+
 func (l *singleListener) Close() error   { l.once.Do(func() { close(l.done) }); return nil }
 func (l *singleListener) Addr() net.Addr { return l.conn.LocalAddr() }
 

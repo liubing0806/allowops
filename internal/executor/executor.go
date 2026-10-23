@@ -36,6 +36,7 @@ type Result struct {
 	ResourceLimitReached bool         `json:"resource_limit_reached,omitempty"`
 	Steps                []StepResult `json:"steps,omitempty"`
 }
+
 type StepResult struct {
 	Index            int    `json:"index"`
 	Name             string `json:"name"`
@@ -64,6 +65,7 @@ type outputBudget struct {
 	mu        sync.Mutex
 	remaining int64
 }
+
 type limitedOutput struct {
 	buffer    bytes.Buffer
 	limit     int64
@@ -357,6 +359,7 @@ func subset(input map[string]any, defs map[string]params.Definition) map[string]
 	}
 	return out
 }
+
 func renderCommand(template []any, fallbacks []string, allow bool, defs map[string]params.Definition, values map[string]any) ([]string, error) {
 	program, err := catalog.ResolveExecutable(template, fallbacks, allow)
 	if err != nil {
@@ -381,6 +384,7 @@ func streamStdout(input io.Reader, output *limitedOutput, r *redact.Redactor, fi
 	}
 	return err
 }
+
 func processOutput(stdout, stderr io.Reader, stdoutRedactor, stderrRedactor *redact.Redactor, filters FilterOptions, limit, scan int64, budget *outputBudget) (Result, error) {
 	out := &limitedOutput{limit: limit, budget: budget}
 	diagnostic := &limitedOutput{limit: limit, budget: budget}

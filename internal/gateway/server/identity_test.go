@@ -30,6 +30,7 @@ func (a *identityAudit) Append(_ context.Context, e api.AuditEvent) error {
 	a.events = append(a.events, e)
 	return nil
 }
+
 func TestIdentityMountedOnP4TLS(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()

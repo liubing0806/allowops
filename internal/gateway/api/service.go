@@ -55,6 +55,7 @@ type Config struct {
 	MessageBytes       int                 `yaml:"message_bytes"`
 	RoleMappings       []RoleMappingConfig `yaml:"role_mappings"`
 }
+
 type RoleMappingConfig struct {
 	ProviderID string   `yaml:"provider_id"`
 	Group      string   `yaml:"group"`
@@ -65,6 +66,7 @@ type policyState struct {
 	engine  *authz.Engine
 	version uint64
 }
+
 type Service struct {
 	Store         *store.Store
 	Config        Config
@@ -301,6 +303,7 @@ func (s *Service) InterceptorFor(procedures map[string]RPCPermission) connect.In
 		return p.Operation, false, p.Write
 	}, func(procedure string) bool { return permissions[procedure].Resource })
 }
+
 func (s *Service) checkCSRF(ctx context.Context) error {
 	t := transport(ctx)
 	if t.header.Get("Origin") != s.Config.Origin || subtle.ConstantTimeCompare([]byte(t.header.Get("X-CSRF-Token")), []byte(t.identity.CSRF)) != 1 {
@@ -308,6 +311,7 @@ func (s *Service) checkCSRF(ctx context.Context) error {
 	}
 	return nil
 }
+
 func (s *Service) unaryInterceptor(resolve func(string) (authz.Operation, bool, bool), resource ...func(string) bool) connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (response connect.AnyResponse, err error) {
@@ -405,10 +409,13 @@ func credentialError(err error) error {
 	}
 	return failure(connect.CodeUnauthenticated, "invalid credential")
 }
+
 func failure(code connect.Code, message string) error {
 	return connect.NewError(code, errors.New(message))
 }
+
 func hash(secret string) []byte { h := sha256.Sum256([]byte(secret)); return h[:] }
+
 func secret(prefix string) string {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -416,12 +423,15 @@ func secret(prefix string) string {
 	}
 	return prefix + base64.RawURLEncoding.EncodeToString(b)
 }
+
 func stamp(t time.Time) *timestamppb.Timestamp { return timestamppb.New(t) }
+
 func unique(values []string) []string {
 	v := slices.Clone(values)
 	slices.Sort(v)
 	return slices.Compact(v)
 }
+
 func encode(m proto.Message) ([]byte, error) {
 	b, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(m)
 	if err != nil {
@@ -431,4 +441,5 @@ func encode(m proto.Message) ([]byte, error) {
 	// catalog's canonical JSON so a preview can be saved on another instance.
 	return catalog.CanonicalJSON(json.RawMessage(b))
 }
+
 func decode(b []byte, m proto.Message) error { return protojson.Unmarshal(b, m) }

@@ -32,6 +32,7 @@ type ManagementConfig struct {
 	Upstream          string        `yaml:"upstream"`
 	CAPin             string        `yaml:"ca_pin"`
 }
+
 type management struct {
 	config   ManagementConfig
 	agent    *hostconn.Service
@@ -41,6 +42,7 @@ type management struct {
 func defaultManagement() *management {
 	return &management{config: ManagementConfig{PreviewTTL: 10 * time.Minute, UploadTTL: time.Hour, MaxCSVBytes: 512 << 10, MaxCSVRows: 5000, LabelCount: 128, LabelKeyBytes: 128, LabelValueBytes: 1024, LabelCountBuckets: 200}}
 }
+
 func (s *Service) ConfigureManagement(cfg ManagementConfig, agent *hostconn.Service, catalogs *catalogsvc.Service) error {
 	d := defaultManagement().config
 	if cfg.PreviewTTL == 0 {
@@ -79,12 +81,14 @@ func (s *Service) ConfigureManagement(cfg ManagementConfig, agent *hostconn.Serv
 	s.management = &management{cfg, agent, catalogs}
 	return nil
 }
+
 func (s *Service) gatewayConfig() hostconn.Config {
 	if s.management.agent != nil {
 		return s.management.agent.Config
 	}
 	return hostconn.DefaultConfig()
 }
+
 func (s *Service) mountManagement(mux *http.ServeMux) {
 	p := map[string]RPCPermission{}
 	for _, proc := range []string{rpc.HostServiceListHostsProcedure, rpc.HostServiceGetHostProcedure} {
@@ -131,6 +135,7 @@ func (s *Service) authorizeWrite(ctx context.Context) error {
 	t.writeAuthorized = true
 	return nil
 }
+
 func (s *Service) can(ctx context.Context, op authz.Operation, action authz.Action, host authz.Host) (bool, error) {
 	previous := slices.Clone(transport(ctx).matchedRules)
 	_, err := s.Require(ctx, op, action, host)
