@@ -37,8 +37,14 @@ type RedactingBuiltinHandler interface {
 	RunRedacted(context.Context, map[string]any, map[string]any, func(string) string) (BuiltinResult, error)
 }
 
+// ActionBuiltinValidator checks rules that depend on action fields outside
+// builtin_config. ValidateAction calls it after ValidateConfig succeeds.
+type ActionBuiltinValidator interface {
+	ValidateActionFields(Action) error
+}
+
 // Builtins is the process-local registration table; registration occurs at startup.
-var Builtins = map[string]BuiltinHandler{"mysql_query": mysqlHandler{}, "log_search": logSearchHandler{}, "http_get": httpGetHandler{}, "redis_command": redisHandler{}}
+var Builtins = map[string]BuiltinHandler{"mysql_query": mysqlHandler{}, "log_search": logSearchHandler{}, "http_get": httpGetHandler{}, "redis_command": redisHandler{}, "prometheus_query": prometheusHandler{}}
 
 type mysqlHandler struct{}
 
