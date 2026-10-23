@@ -27,9 +27,14 @@ func TestRuleNeedsNeverChangeTheResult(t *testing.T) {
 		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig", "13800138000", "4111111111111111",
 		"=", ":", " ", "  ", "\"", "'", ",", ";", "value", "v@lue", "/", "@", "[", "]", "-", "_", ".",
 		"pas\u017Fword", "\u212A", "s\u017Fecret", "中文",
+		"pass", "DB_PASS", "bypass", "keystorePass", "Pass", "app_key", "APP_KEY", "sign.key", "SECRET_KEY_BASE", "jwt.secret.key", "encrypt_key",
+		"-uadmin:pw", "-sSu", "-aPw", "--secret-key", "--client_secret", "--admin.password", "--auth", "--access-key", "\\'", "''",
+		"ghp_abc123", "gho_x", "github_pat_x1", "glpat-x1", "://", "ghp_abc@", "@tcp(", "@unix(", "root:pw@tcp(h)/db",
+		"HTTP_AUTHORIZATION", "grpc_set_header", "fastcgi_param", "authorization", "Proxy-Authorization", "> ", "{", "?token=", "&",
+		"X509_check_private_key", "?db_pass=v", "&pass=v", "db_pass=v", "keystorePass: v", "volume \"x-secret\" :", "\\\"", "\\",
 	}
 	rng := rand.New(rand.NewSource(7))
-	for i := 0; i < 8000; i++ {
+	for i := 0; i < 30000; i++ {
 		var b strings.Builder
 		for n := rng.Intn(9) + 1; n > 0; n-- {
 			b.WriteString(words[rng.Intn(len(words))])
