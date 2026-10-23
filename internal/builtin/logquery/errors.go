@@ -14,6 +14,9 @@ const (
 	CodePatternInvalid    = "PATTERN_INVALID"
 	CodeCursorInvalid     = "CURSOR_INVALID"
 	CodeCursorExpired     = "CURSOR_EXPIRED"
+	// CodeLevelUnsupported: level was given for a source without a level
+	// rule (design 7.3).
+	CodeLevelUnsupported = "LEVEL_UNSUPPORTED"
 )
 
 // Error carries a fixed reason code. Message holds request-specific detail,

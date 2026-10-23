@@ -16,13 +16,16 @@ const (
 	ReasonPatternInvalid    = "PATTERN_INVALID"
 	ReasonCursorInvalid     = "CURSOR_INVALID"
 	ReasonCursorExpired     = "CURSOR_EXPIRED"
+	// ReasonLevelUnsupported: the log source declares no level rule (log
+	// search design 7.3).
+	ReasonLevelUnsupported = "LEVEL_UNSUPPORTED"
 )
 
 var reasons = map[string]bool{
 	ReasonSourceUnknown: true, ReasonSourceNoFiles: true, ReasonSourceUnsupported: true,
 	ReasonPathOutsideRoots: true, ReasonWindowTooLarge: true, ReasonTimeInvalid: true,
 	ReasonTimestampUnparsed: true, ReasonPatternInvalid: true, ReasonCursorInvalid: true,
-	ReasonCursorExpired: true,
+	ReasonCursorExpired: true, ReasonLevelUnsupported: true,
 }
 
 // KnownReason reports whether code may be forwarded unchanged.

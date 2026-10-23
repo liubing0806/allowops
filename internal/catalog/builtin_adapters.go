@@ -184,8 +184,10 @@ func (logQueryHandler) RunBudgeted(ctx context.Context, input, values map[string
 	text := func(name string) string { s, _ := values[name].(string); return s }
 	flag := func(name string) bool { b, _ := values[name].(bool); return b }
 	limit, _ := values["limit"].(int64)
+	top, _ := values["top"].(int64)
+	level, _ := values["level"].([]string)
 	p := logquery.Params{Source: text("source"), Since: text("since"), Until: text("until"), Pattern: text("pattern"), Fixed: flag("fixed"), Exclude: text("exclude"),
-		IgnoreCase: flag("ignore_case"), Limit: int(limit), Order: text("order"), Cursor: text("cursor")}
+		IgnoreCase: flag("ignore_case"), Limit: int(limit), Order: text("order"), Cursor: text("cursor"), Level: level, Bucket: text("bucket"), Top: int(top)}
 	r, err := logquery.Run(ctx, cfg, p, redact, maxOutput)
 	return adaptBuiltinResult(r), err
 }
