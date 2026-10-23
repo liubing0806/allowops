@@ -69,7 +69,7 @@ func RunRedacted(ctx context.Context, cfg Config, p Params, mask func(string) st
 		result.Stderr += failureLine(resp.StatusCode, env, jsonErr)
 		return result, nil
 	}
-	f := formatter{api: cfg.API, maxSeries: cfg.MaxSeries, mask: mask}
+	f := formatter{api: cfg.API, label: p.Label, maxSeries: cfg.MaxSeries, mask: mask}
 	f.header(req.header)
 	if err := f.format(env.Data, p.Summary); err != nil {
 		result.Stderr = ""

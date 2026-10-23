@@ -6,16 +6,20 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// formatter writes the TSV output. Every cell is masked first and escaped
-// second, so a mask cannot introduce a field or line separator.
+// formatter writes the TSV output. Text cells go through m before row, which
+// only escapes, so a mask cannot introduce a field or line separator. Numbers
+// and times that Prometheus guarantees or the formatter generates are not text:
+// masking them would turn an 11-digit value into a phone number.
 type formatter struct {
 	api       string
+	label     string // label_values: the label whose values are listed
 	maxSeries int
 	mask      func(string) string
 
@@ -28,11 +32,27 @@ var tsvEscaper = strings.NewReplacer("\\", "\\\\", "\t", `\t`, "\n", `\n`, "\r",
 
 func (f *formatter) header(text string) { f.out.WriteString("# " + text + "\n") }
 
+// m masks one text cell.
+func (f *formatter) m(s string) string {
+	if f.mask == nil {
+		return s
+	}
+	return f.mask(s)
+}
+
+// num returns s unchanged when it is a number as Prometheus writes it, and
+// masks it otherwise.
+func (f *formatter) num(s string) string {
+	if numberText.MatchString(s) {
+		return s
+	}
+	return f.m(s)
+}
+
+var numberText = regexp.MustCompile(`^([+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?|[+-]?Inf|NaN)$`)
+
 func (f *formatter) row(cells ...string) {
 	for i, cell := range cells {
-		if f.mask != nil {
-			cell = f.mask(cell)
-		}
 		if i > 0 {
 			f.out.WriteByte('\t')
 		}
@@ -66,7 +86,7 @@ func (f *formatter) format(data json.RawMessage, summary bool) error {
 			return err
 		}
 		for _, labels := range series[:f.limit(len(series), false)] {
-			f.row(labelSet(labels))
+			f.row(f.labelSet(labels))
 		}
 	case APILabels, APILabelValues:
 		var values []string
@@ -74,7 +94,7 @@ func (f *formatter) format(data json.RawMessage, summary bool) error {
 			return err
 		}
 		for _, value := range values[:f.limit(len(values), false)] {
-			f.row(value)
+			f.row(f.listed(value))
 		}
 	case APIAlerts:
 		return f.formatAlerts(data)
@@ -86,21 +106,39 @@ func (f *formatter) format(data json.RawMessage, summary bool) error {
 	return nil
 }
 
-// labelSet renders labels in Prometheus notation with sorted label names.
-func labelSet(labels map[string]string) string {
+// listed masks one entry of labels or label_values. A label value is masked as
+// name="value", the form the redaction rules recognize.
+func (f *formatter) listed(value string) string {
+	if f.api != APILabelValues {
+		return f.m(value)
+	}
+	pair := f.label + "=" + quoteLabelValue(value)
+	if masked := f.m(pair); masked != pair {
+		return masked
+	}
+	return value
+}
+
+// labelSet renders labels in Prometheus notation with sorted label names. Each
+// name="value" pair is masked on its own: a rule that matches to the end of the
+// line would otherwise swallow the labels after the one it redacts.
+func (f *formatter) labelSet(labels map[string]string) string {
 	var b strings.Builder
-	b.WriteString(labels["__name__"])
+	name := labels["__name__"]
+	if name != "" {
+		b.WriteString(f.m(name))
+	}
 	names := slices.Sorted(maps.Keys(labels))
 	names = slices.DeleteFunc(names, func(name string) bool { return name == "__name__" })
-	if len(names) == 0 && b.Len() > 0 {
+	if len(names) == 0 && name != "" {
 		return b.String()
 	}
 	b.WriteByte('{')
-	for i, name := range names {
+	for i, n := range names {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		b.WriteString(name + "=" + quoteLabelValue(labels[name]))
+		b.WriteString(f.m(n + "=" + quoteLabelValue(labels[n])))
 	}
 	b.WriteByte('}')
 	return b.String()
@@ -125,10 +163,11 @@ func (s *flexString) UnmarshalJSON(b []byte) error {
 }
 
 type point struct {
-	ts    float64
-	text  string
-	value float64
-	float bool
+	ts      float64
+	text    string
+	value   float64
+	float   bool // text is a float64 and value holds it
+	numeric bool // text is made of numbers only and is not masked
 }
 
 func formatSeconds(ts float64) (string, error) {
@@ -138,12 +177,12 @@ func formatSeconds(ts float64) (string, error) {
 	return time.Unix(int64(math.Floor(ts)), 0).UTC().Format(timeLayout), nil
 }
 
-// utcTime normalizes an RFC 3339 time with any offset to UTC seconds; text
-// that does not parse is returned unchanged.
-func utcTime(s string) string {
+// utcTime normalizes an RFC 3339 time with any offset to UTC seconds. Text
+// that does not parse is returned masked.
+func (f *formatter) utcTime(s string) string {
 	t, err := time.Parse(time.RFC3339Nano, s)
 	if err != nil {
-		return s
+		return f.m(s)
 	}
 	return t.UTC().Format(timeLayout)
 }
@@ -164,6 +203,7 @@ func decodePoint(pair []json.RawMessage, histogram bool) (point, error) {
 			return p, errors.New("invalid histogram sample")
 		}
 		p.text = "count=" + string(h.Count) + " sum=" + string(h.Sum)
+		p.numeric = numberText.MatchString(string(h.Count)) && numberText.MatchString(string(h.Sum))
 		return p, nil
 	}
 	var v flexString
@@ -171,8 +211,10 @@ func decodePoint(pair []json.RawMessage, histogram bool) (point, error) {
 		return p, errors.New("invalid sample value")
 	}
 	p.text = string(v)
-	if f, err := strconv.ParseFloat(p.text, 64); err == nil {
-		p.value, p.float = f, true
+	if p.numeric = numberText.MatchString(p.text); p.numeric {
+		if f, err := strconv.ParseFloat(p.text, 64); err == nil {
+			p.value, p.float = f, true
+		}
 	}
 	return p, nil
 }
@@ -250,7 +292,10 @@ func (f *formatter) formatQuery(data json.RawMessage, summary bool) error {
 		if err != nil {
 			return err
 		}
-		f.row(when, p.text)
+		if d.ResultType == "string" {
+			p.numeric = false
+		}
+		f.row(when, f.val(p))
 	case "vector", "matrix":
 		var samples []sample
 		if err := json.Unmarshal(d.Result, &samples); err != nil {
@@ -261,7 +306,7 @@ func (f *formatter) formatQuery(data json.RawMessage, summary bool) error {
 			if err != nil {
 				return err
 			}
-			if err := f.writeSeries(labelSet(s.Metric), pts, summary && d.ResultType == "matrix"); err != nil {
+			if err := f.writeSeries(f.labelSet(s.Metric), pts, summary && d.ResultType == "matrix"); err != nil {
 				return err
 			}
 		}
@@ -269,6 +314,14 @@ func (f *formatter) formatQuery(data json.RawMessage, summary bool) error {
 		return fmt.Errorf("unsupported result type %q", d.ResultType)
 	}
 	return nil
+}
+
+// val returns the value column of a sample.
+func (f *formatter) val(p point) string {
+	if p.numeric {
+		return p.text
+	}
+	return f.m(p.text)
 }
 
 func (f *formatter) writeSeries(labels string, pts []point, summary bool) error {
@@ -281,7 +334,7 @@ func (f *formatter) writeSeries(labels string, pts []point, summary bool) error 
 		if err != nil {
 			return err
 		}
-		f.row(labels, when, p.text)
+		f.row(labels, when, f.val(p))
 	}
 	return nil
 }
@@ -291,7 +344,7 @@ func (f *formatter) writeSeries(labels string, pts []point, summary bool) error 
 func (f *formatter) summaryRow(labels string, pts []point) {
 	last := ""
 	if len(pts) > 0 {
-		last = pts[len(pts)-1].text
+		last = f.val(pts[len(pts)-1])
 	}
 	var n int
 	var sum float64
@@ -349,7 +402,7 @@ func (f *formatter) formatAlerts(data json.RawMessage) error {
 		return err
 	}
 	for _, a := range d.Alerts[:f.limit(len(d.Alerts), true)] {
-		f.row(a.Labels["alertname"], a.State, utcTime(a.ActiveAt), string(a.Value), labelSet(a.Labels), a.Annotations["summary"])
+		f.row(f.m(a.Labels["alertname"]), f.m(a.State), f.utcTime(a.ActiveAt), f.num(string(a.Value)), f.labelSet(a.Labels), f.m(a.Annotations["summary"]))
 	}
 	return nil
 }
@@ -382,7 +435,7 @@ func (f *formatter) formatRules(data json.RawMessage) error {
 				return nil
 			}
 			remaining--
-			f.row(g.Name, r.Type, r.Name, r.Health, r.State, r.LastError, r.Query)
+			f.row(f.m(g.Name), f.m(r.Type), f.m(r.Name), f.m(r.Health), f.m(r.State), f.m(r.LastError), f.m(r.Query))
 		}
 	}
 	return nil
@@ -407,7 +460,7 @@ func (f *formatter) formatTargets(data json.RawMessage) error {
 		if job == "" {
 			job = t.ScrapePool
 		}
-		f.row(job, t.Labels["instance"], t.Health, utcTime(t.LastScrape), t.LastError, t.ScrapeURL)
+		f.row(f.m(job), f.m(t.Labels["instance"]), f.m(t.Health), f.utcTime(t.LastScrape), f.m(t.LastError), f.m(t.ScrapeURL))
 	}
 	return nil
 }
