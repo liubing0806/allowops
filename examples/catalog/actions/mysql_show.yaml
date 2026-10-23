@@ -1,5 +1,5 @@
 name: mysql_show
-description: Run one fixed SHOW statement against an allowed database.
+description: Run one fixed SHOW TABLES or SHOW STATUS statement against an allowed database; at most 500 rows are returned, so read status variables with a LIKE pattern.
 risk: read
 run_as: root
 params:
@@ -10,15 +10,15 @@ params:
     max_len: 3
   sql:
     type: string
-    description: Fixed SHOW TABLES or SHOW STATUS statement.
-    regex: ^SHOW (TABLES|STATUS)$
-    max_len: 11
+    description: SHOW TABLES, or SHOW STATUS with an optional LIKE pattern of letters, digits, underscore and percent. The server returns about 500 status variables and at most 500 rows are returned, so use LIKE to select them.
+    regex: ^SHOW (TABLES|(GLOBAL )?STATUS( LIKE '[A-Za-z0-9_%]{1,64}')?)$
+    max_len: 100
 timeout: 15s
 builtin: mysql_query
 builtin_config:
   credential: /etc/allowops/credentials/mysql-main.json
   address: unix:///var/run/mysqld/mysqld.sock
-  max_rows: 200
+  max_rows: 500
   timeout: 10s
   databases: [app]
   statement_types: [SHOW]

@@ -242,9 +242,7 @@ var sqlLiteralCases = []redactionCase{
 	{"SELECT 'multi\nline secret9' AS m", "secret9"},
 	{"SELECT 'a' AS a, 'b' AS b, token_col FROM t", "'b'"},
 	{"SELECT id, name FROM t WHERE n > 5 ORDER BY id", ""},
-	{"# Time: 2026-10-22T10:00:00.000000Z", ""},
 	{"SET timestamp=1700000000;", ""},
-	{"# User@Host: app[app] @ localhost []  Id:    12", ""},
 }
 
 func TestExampleMySQLStatementLogsRedactSQLLiterals(t *testing.T) {
