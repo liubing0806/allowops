@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/liubing0806/allowops/internal/builtin/apiclient"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -28,7 +29,7 @@ rule_files:
 scrape_configs:
   - job_name: prometheus
     static_configs:
-      - targets: ['127.0.0.1:%d']
+      - targets: ['127.0.0.1:9090']
 `
 
 const prometheusRulesYAML = `groups:
@@ -44,10 +45,8 @@ const prometheusRulesYAML = `groups:
         expr: sum(up)
 `
 
-// Only the local Unix socket is used. The container runs in the host network
-// namespace and listens on 127.0.0.1 only, so no Docker bridge or published
-// port is involved. The reaper container is disabled because it needs a bridge;
-// the test terminates its own container.
+// Only the local Unix socket is used, regardless of remote Docker environment
+// settings. The container's port is published on 127.0.0.1 only.
 func TestPrometheusIntegration(t *testing.T) {
 	const socket = "/var/run/docker.sock"
 	probeCtx, probeCancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -70,33 +69,26 @@ func TestPrometheusIntegration(t *testing.T) {
 	t.Setenv("DOCKER_CERT_PATH", "")
 	t.Setenv("TESTCONTAINERS_HOST_OVERRIDE", "127.0.0.1")
 	t.Setenv("TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE", socket)
-	t.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	listener.Close()
-	address := "127.0.0.1:" + strconv.Itoa(port)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image: prometheusImage,
+			Image:        prometheusImage,
+			ExposedPorts: []string{"9090/tcp"},
 			Cmd: []string{
 				"--config.file=/etc/prometheus/prometheus.yml",
-				"--web.listen-address=" + address,
 				"--storage.tsdb.path=/prometheus",
 				"--storage.tsdb.retention.time=1h",
 			},
 			Files: []testcontainers.ContainerFile{
-				{Reader: strings.NewReader(fmt.Sprintf(prometheusConfigYAML, port)), ContainerFilePath: "/etc/prometheus/prometheus.yml", FileMode: 0o644},
+				{Reader: strings.NewReader(prometheusConfigYAML), ContainerFilePath: "/etc/prometheus/prometheus.yml", FileMode: 0o644},
 				{Reader: strings.NewReader(prometheusRulesYAML), ContainerFilePath: "/etc/prometheus/rules.yml", FileMode: 0o644},
 			},
-			HostConfigModifier: func(h *container.HostConfig) { h.NetworkMode = "host" },
-			WaitingFor:         wait.ForLog("Server is ready to receive web requests.").WithStartupTimeout(2 * time.Minute),
+			HostConfigModifier: func(h *container.HostConfig) {
+				h.PortBindings = network.PortMap{network.MustParsePort("9090/tcp"): {{HostIP: netip.MustParseAddr("127.0.0.1")}}}
+			},
+			WaitingFor: wait.ForLog("Server is ready to receive web requests.").WithStartupTimeout(2 * time.Minute),
 		},
 		Started: true,
 	})
@@ -113,6 +105,13 @@ func TestPrometheusIntegration(t *testing.T) {
 		t.Fatalf("start local Prometheus: %v", err)
 	}
 
+	mapped, err := c.MappedPort(ctx, "9090/tcp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The target is the container's own listener; the client uses the mapped port.
+	const target = "127.0.0.1:9090"
+	address := net.JoinHostPort("127.0.0.1", mapped.Port())
 	cfg := func(api string) Config {
 		return Config{API: api, Config: apiclient.Config{Address: "http://" + address}}
 	}
@@ -138,7 +137,7 @@ func TestPrometheusIntegration(t *testing.T) {
 		t.Fatalf("condition not met; last result %+v", r)
 		return r
 	}
-	upSeries := fmt.Sprintf(`up{instance="%s",job="prometheus"}`, address)
+	upSeries := fmt.Sprintf(`up{instance="%s",job="prometheus"}`, target)
 
 	t.Run("query", func(t *testing.T) {
 		r := eventually(t, cfg("query"), Params{Query: "up"}, func(r Result) bool { return strings.Contains(r.Stdout, upSeries) })
@@ -229,8 +228,8 @@ func TestPrometheusIntegration(t *testing.T) {
 
 	t.Run("targets", func(t *testing.T) {
 		targets := eventually(t, cfg("targets"), Params{}, func(r Result) bool { return strings.Contains(r.Stdout, "\tup\t") })
-		want := "prometheus\t" + address + "\tup\t"
-		if row := lines(targets.Stdout)[1]; !strings.HasPrefix(row, want) || !strings.HasSuffix(row, "\t\thttp://"+address+"/metrics") {
+		want := "prometheus\t" + target + "\tup\t"
+		if row := lines(targets.Stdout)[1]; !strings.HasPrefix(row, want) || !strings.HasSuffix(row, "\t\thttp://"+target+"/metrics") {
 			t.Errorf("target row = %q; want prefix %q", row, want)
 		}
 	})
