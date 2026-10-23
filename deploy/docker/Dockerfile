@@ -11,7 +11,7 @@ COPY LICENSE ./LICENSE
 ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1
 
 FROM source AS gateway-build
-ARG VERSION=0.1.0
+ARG VERSION=0.2.0
 RUN go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/allowops-gateway ./cmd/allowops-gateway \
     && sh deploy/packaging/notices.sh
 

@@ -8,9 +8,9 @@ from your administrator.
 
 ```sh
 # Debian / Ubuntu (local file):
-sudo dpkg -i /absolute/path/allowops-agent_0.1.0_amd64.deb
+sudo dpkg -i /absolute/path/allowops-agent_0.2.0_amd64.deb
 # RHEL / Rocky / Alma / CentOS (local file):
-sudo rpm -Uvh /absolute/path/allowops-agent-0.1.0-1.x86_64.rpm
+sudo rpm -Uvh /absolute/path/allowops-agent-0.2.0-1.x86_64.rpm
 
 sudo install -o root -g root -m 0644 /absolute/path/catalog.pub.pem \
   /etc/allowops/catalog-keys/catalog.pub.pem

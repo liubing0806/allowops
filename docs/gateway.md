@@ -19,7 +19,7 @@ ca_certificate: /etc/allowops/host-ca.pem
 ca_key: /etc/allowops/host-ca.key
 catalog_keys: /etc/allowops/catalog-keys
 gateway:
-  version: '0.1.0'
+  version: '0.2.0'
   certificate_ttl: 24h
   single_join_ttl: 24h
   multi_join_ttl: 24h
