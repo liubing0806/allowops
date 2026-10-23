@@ -286,6 +286,7 @@ result := {"decision": decision, "rules": [rule.name | some rule in matched]}
   - 版本参数用 enum，只列出不高于当前网关的版本。每次网关升级后再发布含新版本的目录。
   - 校验分工：action 由目录签名密钥签名；安装包由 rpm/deb GPG 签名校验；OPA 策略控制谁能执行；审计记录执行。软件源和包签名密钥仍由运维人员维护。
   - 灰度：用 job 的主机选择器按授权标签分批执行。
+  - 示例 action（2026-10-23）：`examples/catalog/actions/agent_upgrade.yaml` 与脚本 `scripts/agent_upgrade.sh`。已是目标版本时不安装、不重启；deb 先 `apt-get update` 再安装 `allowops-agent=<版本>`，rpm 先 `yum clean expire-cache` 再 `yum upgrade allowops-agent-<版本>`；安装后版本与请求不一致时返回失败且不重启。不支持降级：apt 拒绝降级，dnf 的 `install` 会降级而 `upgrade` 不会，因此 rpm 用 `upgrade`。batch_size、max_failures 为 1。验证：容器内用本地软件源在 Ubuntu 20.04、Rocky 9、CentOS 7 上执行 0.0.0 快照包到 0.1.0 的升级、重复执行、请求旧版本和不存在的版本，systemd-run 用替身；未经网关和真实重启端到端验证，重启部分沿用下面 `TestOnlineUpgrade` 的结果。
   - 限制：比网关新的主机端会被拒绝连接，之后无法再通过网关下发降级。恢复方式是运维人员在主机上降级，或把网关升级到不低于该主机端的版本（后者按版本检查规则推断，未实测）。
   - 版本拒绝日志：网关按主机和版本各记一次 Warn（host_id、hostname、agent 与网关版本），主机以新的受支持版本连接后重新计数；拒绝消息包含两个版本号。agent 在 journal 中输出拒绝原因，同一原因只输出一次，下次结果不同后重新计数。控制台仍只显示主机离线。
   - 限制：systemd 219 上临时定时器触发后保持 `elapsed` 状态，每次升级留下一个 `run-*.timer`，重启主机后消失。

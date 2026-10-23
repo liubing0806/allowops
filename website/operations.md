@@ -28,6 +28,19 @@ release. A gateway supports its own and previous major host versions (only major
 zero for a major-zero gateway), but rejects a host with a newer full SemVer.
 Do not introduce a new host version before the gateway supports it.
 
+Hosts can be upgraded online with the `agent_upgrade` example action
+(`risk: dangerous`, `run_as: root`). It installs the selected `allowops-agent`
+version from the host's configured apt or yum repository, then restarts the
+agent from a transient systemd timer about 5 seconds later so the task result
+reaches the gateway first. List only versions not newer than the gateway in the
+`version` enum and publish a new catalog after each gateway upgrade. The action
+does nothing on a host already at the requested version and fails without
+restarting when the installed version does not match afterwards; it does not
+downgrade. Package signatures are checked by apt/yum according to the
+repository configuration. Roll out in batches with host selectors, and grant
+the action through a dedicated policy rule. A host upgraded beyond the gateway
+is refused and must be downgraded on the host.
+
 Run the release migration with the maintenance database role. Helm uses a
 pre-install/pre-upgrade migration hook; deployments that manage binaries run
 `allowops-gateway migrate` separately. Preserve the runtime role's restricted

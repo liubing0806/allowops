@@ -20,6 +20,7 @@ $(BINARIES):
 
 examples-check: allowops
 	python3 test/examples/check_examples.py ./bin/allowops examples/catalog
+	python3 test/examples/check_agent_upgrade.py
 
 test: examples-check
 	go test -race -timeout=20m ./...
