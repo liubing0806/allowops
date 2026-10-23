@@ -215,7 +215,7 @@ func (s *Store) DeleteHost(ctx context.Context, id string) error {
 	return tx.Commit(ctx)
 }
 
-// DeleteHostTx applies the gateway's host deletion and notification within the caller transaction.
+// DeleteHostTx applies the gateway's host deletion and notification within the caller transaction (design P4).
 func DeleteHostTx(ctx context.Context, tx pgx.Tx, id string) error {
 	if _, err := tx.Exec(ctx, "UPDATE hosts SET certificate_status='deleted',instance_id=NULL,connection_id=NULL WHERE host_id=$1", id); err != nil {
 		return err
@@ -258,8 +258,8 @@ func (s *Store) Publish(ctx context.Context, v db.InsertCatalogParams) error {
 	return tx.Commit(ctx)
 }
 
-// PublishTx shares the version, global-name and notification checks between the
-// host-facing and management-API publishing paths (design P4, P4B).
+// PublishTx shares the version, global-name and notification checks between
+// catalog publication through catalogsvc (design P4) and the management API (design P4B).
 func (s *Store) PublishTx(ctx context.Context, tx pgx.Tx, v db.InsertCatalogParams) error {
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(418001)"); err != nil {
 		return err

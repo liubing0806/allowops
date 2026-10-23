@@ -71,7 +71,7 @@ type HostOutputPage struct {
 	OutputTrust      string  `json:"output_trust"`
 }
 
-// Call only after the job module has authorized view_output for this job and hostname.
+// Call only after the job module (design P6) has authorized view_output for this job and hostname.
 // A result-budget cut is a page boundary, not permanent output truncation.
 func outputPageResult(jobID, host string, stream v1.OutputStream, offset uint64, response *v1.GetJobOutputResponse, index *uint32) (*ToolResult, error) {
 	if jobID == "" || host == "" || response == nil {

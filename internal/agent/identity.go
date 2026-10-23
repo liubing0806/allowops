@@ -113,7 +113,7 @@ func newClient(config Config, identity *identityStore) (allowopsv1connect.AgentS
 		protocol = JoinALPN
 	}
 	tlsConfig.NextProtos = []string{protocol}
-	//lint:ignore SA1019 the gateway's custom ALPN carries raw HTTP/2; the standard transport only selects h2.
+	//lint:ignore SA1019 the gateway's custom ALPN (design P4) carries raw HTTP/2; the standard transport only selects h2.
 	transport := &http2.Transport{DialTLSContext: func(ctx context.Context, network, address string, _ *tls.Config) (net.Conn, error) {
 		dialer := tls.Dialer{Config: tlsConfig, NetDialer: &net.Dialer{Timeout: 10 * time.Second}}
 		connection, err := dialer.DialContext(ctx, network, address)

@@ -6,7 +6,7 @@ import (
 )
 
 // JobService is the job module's boundary (design P6). Messages retain protobuf presence and types.
-// Each method derives identity from the request context set by the identity middleware and owns authorization and audit,
+// Each method derives identity from the request context set by the identity middleware (design P5B) and owns authorization and audit,
 // including direct in-process calls. RunJob/CancelJob write the authorized audit event
 // before any write (design G28); MCP records only its tool-level result (design G49). Do not retry RunJob after
 // an indeterminate response. Output must already be redacted and authorized.

@@ -99,7 +99,7 @@ type batchResource struct {
 }
 
 func resultResources(targets []auditTarget) ([]string, error) {
-	const limit = 8 << 10 // Leaves room for JSON escaping and the audit event's other metadata.
+	const limit = 8 << 10 // Leaves room for JSON escaping and the audit event's other metadata (design P7).
 	if len(targets) == 1 {
 		resource := targetResource(targets[0])
 		if len(resource) > limit {

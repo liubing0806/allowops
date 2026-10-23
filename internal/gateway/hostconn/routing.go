@@ -37,7 +37,7 @@ func (s *Service) Send(ctx context.Context, host string, message *v1.ConnectResp
 	return s.sendToConnection(ctx, host, "", message)
 }
 
-// SendToConnection binds dispatch/cancellation to the generation reserved by the job module.
+// SendToConnection binds dispatch/cancellation to the generation reserved by the job module (design P6).
 // A replacement connection is offline for that task and must not execute it.
 func (s *Service) SendToConnection(ctx context.Context, host, connectionID string, message *v1.ConnectResponse) (*v1.TaskCompleted, error) {
 	if connectionID == "" {
@@ -357,7 +357,7 @@ func (s *Service) complete(c *connection, result *v1.TaskCompleted) error {
 	c.mu.Unlock()
 	if len(ids) == 0 {
 		return nil
-	} // Unsolicited results are handled by the job module's callback.
+	} // Unsolicited results are handled by the job module's callback (design P6).
 	raw, err := proto.Marshal(result)
 	if err != nil {
 		return err

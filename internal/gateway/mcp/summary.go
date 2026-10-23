@@ -19,7 +19,7 @@ type summaryCursor struct {
 
 type summaryItem struct{ group, host, offline int }
 
-// Slice already-authorized job-summary groups for transport (design G57); never group tasks or
+// Slice already-authorized job-summary groups for transport (design G57, P6); never group tasks or
 // read additional job data. Detailed pages may continue the hosts of one group.
 func nativeSummaryResult(scope string, j *v1.Job, summary *v1.JobSummary, format, cursor string) (*ToolResult, error) {
 	if scope == "" || j == nil || summary == nil || summary.OutputTrust != v1.OutputTrust_OUTPUT_TRUST_UNTRUSTED {

@@ -54,7 +54,7 @@ func (a auditAdapter) Append(ctx context.Context, e AuditEvent) error {
 	return err
 }
 
-// Authorize implements the audit module's Access. The shared middleware and interceptor supply
+// Authorize implements the audit module's Access (design P7). The shared middleware and interceptor supply
 // authentication, per-RPC auditing and CSRF before AuditService invokes it.
 func (s *Service) Authorize(ctx context.Context, _ http.Header, operation string) (string, error) {
 	if operation != string(authz.ViewAudit) {

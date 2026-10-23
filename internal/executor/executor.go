@@ -58,7 +58,7 @@ type Callbacks struct {
 }
 
 // Steps share one stdout+stderr budget and use the first failed exit code (decisions A13).
-// Non-step actions keep independent stdout/stderr budgets.
+// Non-step actions keep independent stdout/stderr budgets (design P1).
 func stepBudget(limit int64) *outputBudget { return &outputBudget{remaining: limit} }
 
 type outputBudget struct {
