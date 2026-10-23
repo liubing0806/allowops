@@ -81,6 +81,9 @@ function Layout() {
   const session = useQuery({
     queryKey: ['session'],
     queryFn: () => api.getCurrentSession(),
+    // The update notice comes with the session; a release found later must
+    // appear without a reload.
+    refetchInterval: 10 * 60 * 1000,
   })
   if (
     session.error instanceof ApiError &&

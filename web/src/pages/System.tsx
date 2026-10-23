@@ -83,7 +83,7 @@ export default function System() {
               {t('system.currentVersion')}
             </dt>
             <dd className="min-w-0 break-words">
-              {displayVersion(status.data.gatewayVersion)}
+              {displayVersion(status.data.gatewayVersion) || t('common.none')}
             </dd>
             <dt className="text-muted-foreground">{t('system.updateCheck')}</dt>
             <dd className="min-w-0">
@@ -122,7 +122,8 @@ export default function System() {
                         ),
                       })}
                     </a>
-                  ) : status.data.updateCheckedAt ? (
+                  ) : status.data.updateCheckedAt &&
+                    !status.data.updateCheckError ? (
                     t('system.upToDate')
                   ) : (
                     t('common.none')
