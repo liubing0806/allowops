@@ -1,6 +1,9 @@
 package redact
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // N3: the OpenSSL exception covers the message text only. A value after the
 // function name, and any credential later on the same line, is still scanned.
@@ -108,5 +111,38 @@ func TestCredentialAfterReplacedTextIsRedacted(t *testing.T) {
 	got := r.Line("a:b@tcp( a:b@tcp( a://b:c@d x_token=LEAKN83")
 	if got != "[REDACTED:url_credentials]tcp( [REDACTED:url_credentials]tcp( [REDACTED:url_credentials]d [REDACTED:credential]" {
 		t.Errorf("got %q", got)
+	}
+}
+
+// A custom rule with BeforeBuiltin runs before the builtin rules, in the order
+// of the configuration. Without it the rule runs after them.
+func TestCustomRuleBeforeBuiltin(t *testing.T) {
+	quoted := Rule{Name: "quoted", Regex: `'[^']*'`}
+	line := `h = 'Authorization: Bearer abcd' AND x = 'LEAKSEP'`
+	after, err := New(&Config{Custom: []Rule{quoted}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := after.Line(line); !strings.Contains(got, "LEAKSEP") {
+		t.Fatalf("control: the builtin bearer rule is expected to consume the closing quote first, got %q", got)
+	}
+	quoted.BeforeBuiltin = true
+	before, err := New(&Config{Custom: []Rule{quoted, {Name: "digits", Regex: `[0-9]+`, BeforeBuiltin: true}, {Name: "last", Regex: `AND`}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := before.Line(line), "h = [REDACTED:quoted] [REDACTED:last] x = [REDACTED:quoted]"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// Only the custom rules move; the builtin rules still run on the rest.
+	if got := before.Line("token=Hunter2 'a'"); strings.Contains(got, "Hunter2") {
+		t.Errorf("builtin rule did not run: %q", got)
+	}
+	none, err := New(&Config{Builtin: []string{}, Custom: []Rule{quoted}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := none.Line("'a' 'b'"); got != "[REDACTED:quoted] [REDACTED:quoted]" {
+		t.Errorf("without builtins: %q", got)
 	}
 }

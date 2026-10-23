@@ -15,6 +15,10 @@ const DefaultMaxLine = 1024 * 1024
 type Rule struct {
 	Name  string `json:"name" yaml:"name"`
 	Regex string `json:"regex" yaml:"regex"`
+	// BeforeBuiltin runs the rule before the builtin rules instead of after
+	// them. A rule that replaces whole quoted strings needs it: a builtin rule
+	// that consumes a closing quote would change how the quotes pair.
+	BeforeBuiltin bool `json:"before_builtin,omitempty" yaml:"before_builtin,omitempty"`
 }
 
 type Config struct {
@@ -202,6 +206,7 @@ func New(config *Config) (*Redactor, error) {
 		builtins = config.Builtin
 	}
 	r := &Redactor{}
+	var before []compiledRule
 	for _, name := range builtins {
 		if !slices.Contains([]string{"secrets", "pii"}, name) {
 			return nil, fmt.Errorf("unknown redaction builtin %q; allowed: secrets, pii", name)
@@ -233,9 +238,14 @@ func New(config *Config) (*Redactor, error) {
 			if re.MatchString("") {
 				return nil, fmt.Errorf("custom redaction %s must not match empty input", rule.Name)
 			}
-			r.rules = append(r.rules, compiledRule{name: rule.Name, re: re})
+			if rule.BeforeBuiltin {
+				before = append(before, compiledRule{name: rule.Name, re: re})
+			} else {
+				r.rules = append(r.rules, compiledRule{name: rule.Name, re: re})
+			}
 		}
 	}
+	r.rules = append(before, r.rules...)
 	return r, nil
 }
 

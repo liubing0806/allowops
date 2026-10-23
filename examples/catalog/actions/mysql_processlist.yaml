@@ -30,6 +30,7 @@ redact:
   builtin: [secrets, pii]
   custom:
     - name: sql_text
+      before_builtin: true
       regex: '(?s)/\*.*?(?:\*/|$)|--(?:[ \t\r\f\v][^\n]*|$)|#[^\n]*|''(?:[^''\\]|\\.|'''')*(?:''|\\?$)|"(?:[^"\\]|\\.|"")*(?:"|\\?$)|`(?:[^`]|``)*(?:`|$)'
     - name: sql_hex_literal
       regex: '(?i)\b0x[0-9a-f]+\b'
