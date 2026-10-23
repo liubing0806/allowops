@@ -100,11 +100,6 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 	if !ok {
 		return nil
 	}
-	// A database failure is not a protocol violation. Closing the stream would
-	// end every running task on the host, so retry the whole transaction while
-	// the connection lives. In-memory task state changes only after COMMIT.
-	// A failed attempt may still have committed, so later attempts are replays
-	// that accept the state an earlier attempt wrote for this same event.
 	replay := false
 	return retrySQL(ctx, jobID, func(ctx context.Context) error {
 		err := s.taskEvent(ctx, e, jobID, taskID, replay)
