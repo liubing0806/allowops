@@ -134,9 +134,11 @@ var secretRules = []secretRule{
 	{name: "url_credentials", needs: []string{"://"}, regex: `[A-Za-z][A-Za-z0-9+.-]*://[^\s/@:]*:[^\s/"']+@`},
 	// A password that holds a quote: a quote of the same kind as the one in
 	// front of the URL ends the match, any other quote is part of the password.
+	// An escaped quote of the same kind (\" in a double-quoted string, '' in a
+	// single-quoted string) is part of the password too.
 	{name: "url_credentials", needs: []string{"://"}, group: 1, regex: `(?:^|[^"'A-Za-z0-9+.-])([A-Za-z][A-Za-z0-9+.-]*://[^\s/@:"']*:[^\s/]+@)`},
-	{name: "url_credentials", needs: []string{"://"}, group: 1, regex: `"([A-Za-z][A-Za-z0-9+.-]*://[^\s/@:"']*:[^\s/"]+@)`},
-	{name: "url_credentials", needs: []string{"://"}, group: 1, regex: `'([A-Za-z][A-Za-z0-9+.-]*://[^\s/@:"']*:[^\s/']+@)`},
+	{name: "url_credentials", needs: []string{"://"}, group: 1, regex: `"([A-Za-z][A-Za-z0-9+.-]*://[^\s/@:"']*:(?:[^\s/"\\]|\\[^\s/])+@)`},
+	{name: "url_credentials", needs: []string{"://"}, group: 1, regex: `'([A-Za-z][A-Za-z0-9+.-]*://[^\s/@:"']*:(?:[^\s/']|'')+@)`},
 	// A token as the only userinfo: https://ghp_xxx@github.com. Other userinfo
 	// without a password, such as ssh://git@host, is not a secret.
 	{name: "url_credentials", needs: []string{"ghp_", "gho_", "ghs_", "ghu_", "ghr_", "github_pat_", "glpat-"}, regex: `[A-Za-z][A-Za-z0-9+.-]*://(?:(?:ghp|gho|ghs|ghu|ghr)_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+|glpat-[A-Za-z0-9_-]+)@`},

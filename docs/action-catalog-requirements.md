@@ -1451,7 +1451,7 @@ exec_fallbacks: [/usr/local/bin/kubectl]
 | 扩展能力 | D1 |
 | 执行限制 | timeout=10s；max_output=64KB |
 | CentOS 7 | 依赖目标节点的 kubectl 和只读 kubeconfig；go-template 输出须在目标版本验证。 |
-| 安全说明 | 输出格式为每个键一段：`### <键>` 后接值。命名空间使用签名枚举，ConfigMap 名称用 DNS 子域名正则且不以连字符开头。由原 `k8s_configmap_grep` 改名，行为不变：始终输出整个 ConfigMap 的 data，退出码只反映 kubectl 能否读取，与内容无关。脱敏规则同 `app_config_view`，覆盖 properties、YAML、JSON、XML 形式。match 在脱敏之后执行，无法探测被脱敏的值。限制：多行值中不含敏感词的键下的敏感值、binaryData 不处理（模板只遍历 .data）。同一行的 `<name>`/`<value>` 元素由 xml_name_value_credential 脱敏，分处两行的、JSON 数组或对象值的第一个元素之后的内容不脱敏（同 `app_config_view`）。 |
+| 安全说明 | 输出格式为每个键一段：`### <键>=<值>`，单行值与键在同一行，由 `NAME=value` 形式的规则按键名脱敏；多行值从第二行起按内容逐行脱敏。命名空间使用签名枚举，ConfigMap 名称用 DNS 子域名正则且不以连字符开头。由原 `k8s_configmap_grep` 改名，行为不变：始终输出整个 ConfigMap 的 data，退出码只反映 kubectl 能否读取，与内容无关。脱敏规则同 `app_config_view`，覆盖 properties、YAML、JSON、XML 形式。match 在脱敏之后执行，无法探测被脱敏的值。限制：多行值中不含敏感词的键下的敏感值、binaryData 不处理（模板只遍历 .data）。同一行的 `<name>`/`<value>` 元素由 xml_name_value_credential 脱敏，分处两行的、JSON 数组或对象值的第一个元素之后的内容不脱敏（同 `app_config_view`）。 |
 
 参数：
 
@@ -1464,7 +1464,7 @@ argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
 exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, configmap, '{name}', -n, '{namespace}',
-  -o, 'go-template={{range $key, $value := .data}}### {{$key}}{{"\n"}}{{$value}}{{"\n"}}{{end}}']
+  -o, 'go-template={{range $key, $value := .data}}### {{$key}}={{$value}}{{"\n"}}{{end}}']
 exec_fallbacks: [/usr/local/bin/kubectl]
 ```
 
