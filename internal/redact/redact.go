@@ -85,6 +85,10 @@ const (
 // start with '-' (so a following option is never taken as the value).
 const optionValue = `((?:"(?:[^"\\\r\n]|\\.)*"|'[^'\r\n]*'|\\.|[^\s"'\\-])(?:"(?:[^"\\\r\n]|\\.)*"|'[^'\r\n]*'|\\.|[^\s"'\\]|["'\\])*)`
 
+// A shell word: quoted strings, backslash escapes and plain characters joined
+// without whitespace. A quote that does not close is a plain character.
+const shellWord = `(?:"(?:[^"\\\r\n]|\\.)*"|'[^'\r\n]*'|\\.|[^\s"'\\]|["'\\])+`
+
 // Option names that carry a credential. Prefixes join with '-', '_' or '.'.
 const optionWords = `(?:[a-z0-9]+[-_.])*(?:password|passwd|pass|pwd|secret|token|auth|api[-_.]?key|(?:access|secret|private|encrypt|encryption|signing|master)[-_.]?key|passphrase|requirepass|masterauth|bindpw)`
 
@@ -173,8 +177,11 @@ var secretRules = []secretRule{
 	{name: "cli_password", needs: []string{"--"}, regex: `(?i)(?:^|\s)--` + optionWords + `(?:\s+|=)` + optionValue, keep: negatedOption, group: 1},
 	// The same options as elements of a JSON array: ["--requirepass","value"].
 	{name: "cli_password", needs: []string{`"--`}, regex: `(?i)"--` + optionWords + `"\s*,\s*"((?:[^"\\]|\\.)*)"`, keep: negatedOption, group: 1},
-	// curl -u user:password, also attached (-uuser:password) and repeated.
-	{name: "cli_password", needs: []string{"curl"}, anchor: `(?i)\bcurl\b`, regex: `(?i)\s-(?:(?:-user|-proxy-user)(?:\s+|=)|[A-Za-z]*?[uU](?:\s*|=))("[^"\r\n]*:[^"\r\n]*"|'[^'\r\n]*:[^'\r\n]*'|[^\s:"']*:\S*)`, group: 1},
+	// curl -u user:password, also attached (-uuser:password) and repeated. The
+	// value is one shell word, in which quoted and unquoted parts follow each
+	// other: -u "a b":'p w'. Without a colon it is only a user name; curl asks
+	// for the password, so it stays.
+	{name: "cli_password", needs: []string{"curl"}, anchor: `(?i)\bcurl\b`, regex: `(?i)\s-(?:(?:-user|-proxy-user)(?:\s+|=)|[A-Za-z]*?[uU](?:\s*|=))(` + shellWord + `)`, keep: withoutColon, group: 1},
 	{name: "cli_password", needs: []string{"redis-cli", "valkey-cli"}, regex: `(?i)\b(?:redis|valkey)-cli\b[^\r\n]*?\s-a\s*("[^"\r\n]*"|'[^'\r\n]*'|\S+)`, group: 1},
 	{name: "cli_password", needs: []string{"sshpass"}, regex: `(?i)\bsshpass\b[^\r\n]*?\s-p\s+("[^"\r\n]*"|'[^'\r\n]*'|\S+)`, group: 1},
 	// Keep the boundary out of the replacement; -p without a value stays unchanged.
@@ -210,6 +217,9 @@ func skipOpenSSLMessage(match string) int {
 var volumeEvent = regexp.MustCompile(`(?i)^failed\s+for\s+volume\s+[^:]*:\s*`)
 
 func skipVolumeEvent(match string) int { return len(volumeEvent.FindString(match)) }
+
+// withoutColon reports a curl -u value that holds no user:password separator.
+func withoutColon(match string) bool { return !strings.Contains(match, ":") }
 
 var negatedOptionName = regexp.MustCompile(`(?i)^\s*"?--(?:no|ask|skip|disable|without)-`)
 
