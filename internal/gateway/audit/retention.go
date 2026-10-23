@@ -23,8 +23,7 @@ type RetentionOptions struct {
 // CreatePartitions uses maintenance credentials. Run monthly before the existing
 // three-month partition horizon expires; append never performs privileged DDL.
 func (s *Store) CreatePartitions(ctx context.Context, first time.Time, months int) error {
-	_, err := s.Pool.Exec(ctx, "SELECT audit_create_partitions($1,$2)", first, months)
-	return err
+	return createPartitions(ctx, s.Pool, first, months)
 }
 
 // Prune deletes whole expired UTC calendar partitions, keeping the partial
@@ -44,67 +43,49 @@ func (s *Store) Prune(ctx context.Context, o RetentionOptions) (Anchor, error) {
 		return Anchor{}, err
 	}
 	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", exportLock); err != nil {
+	if err := lockXact(ctx, tx, exportLock); err != nil {
 		return Anchor{}, err
 	}
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock($1)", appendLock); err != nil {
+	if err := lockXact(ctx, tx, appendLock); err != nil {
 		return Anchor{}, err
 	}
 	var boundary Anchor
-	if err := tx.QueryRow(ctx, "SELECT seq,hash FROM audit_boundary WHERE singleton").Scan(&boundary.Seq, &boundary.Hash); err != nil {
+	if boundary.Seq, boundary.Hash, err = currentBoundary(ctx, tx); err != nil {
 		return boundary, err
 	}
-	var seq *uint64
-	var hash []byte
-	err = tx.QueryRow(ctx, "SELECT seq,hash FROM audit_events WHERE at<$1 ORDER BY seq DESC LIMIT 1", cutoff).Scan(&seq, &hash)
-	if err != nil && err != pgx.ErrNoRows {
+	last, err := lastEventBefore(ctx, tx, cutoff)
+	if err != nil {
 		return boundary, err
 	}
-	if seq != nil {
-		boundary = Anchor{Seq: *seq, Hash: hash}
+	if last != nil {
+		boundary = *last
 		if o.RequireExternalCheckpoint && (o.ExternalCheckpoint == nil || o.ExternalCheckpoint.Seq != boundary.Seq || !bytes.Equal(o.ExternalCheckpoint.Hash, boundary.Hash)) {
 			return boundary, fmt.Errorf("external retention checkpoint required or mismatched")
 		}
-		var retainedHash []byte
-		if err := tx.QueryRow(ctx, "SELECT prev_hash FROM audit_events WHERE seq=$1 AND at>=$2", boundary.Seq+1, cutoff).Scan(&retainedHash); err != nil {
+		retainedHash, err := retainedPrevHash(ctx, tx, boundary.Seq+1, cutoff)
+		if err != nil {
 			return boundary, ErrUnavailable
 		}
 		if !bytes.Equal(retainedHash, boundary.Hash) {
 			return boundary, ErrUnavailable
 		}
-		var pending bool
-		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT FROM audit_export_cursors WHERE next_seq<=$1)", boundary.Seq).Scan(&pending); err != nil {
+		pending, err := exportPending(ctx, tx, boundary.Seq)
+		if err != nil {
 			return boundary, err
 		}
 		if pending {
 			return boundary, fmt.Errorf("retention would delete unexported audit events")
 		}
-		if _, err := tx.Exec(ctx, "UPDATE audit_boundary SET seq=$1,hash=$2 WHERE singleton", boundary.Seq, boundary.Hash); err != nil {
+		if err := updateBoundary(ctx, tx, boundary); err != nil {
 			return boundary, err
 		}
 	}
-	rows, err := tx.Query(ctx, "SELECT name FROM audit_partitions WHERE ends_at<=$1 ORDER BY starts_at", cutoff)
+	names, err := expiredPartitions(ctx, tx, cutoff)
 	if err != nil {
 		return boundary, err
 	}
-	var names []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			rows.Close()
-			return boundary, err
-		}
-		names = append(names, name)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return boundary, err
-	}
 	for _, name := range names {
-		if _, err := tx.Exec(ctx, "DROP TABLE "+pgx.Identifier{name}.Sanitize()); err != nil {
-			return boundary, err
-		}
-		if _, err := tx.Exec(ctx, "DELETE FROM audit_partitions WHERE name=$1", name); err != nil {
+		if err := dropPartition(ctx, tx, name); err != nil {
 			return boundary, err
 		}
 	}

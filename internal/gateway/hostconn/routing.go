@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/store"
+	"github.com/liubing0806/allowops/internal/store/db"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -64,28 +65,29 @@ func (s *Service) sendToConnection(ctx context.Context, host, expectedConnection
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	q := s.Store.Queries.WithTx(tx)
 	// One global capacity lock also reserves space for a maximum-sized response.
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(418002)"); err != nil {
+	if err := q.LockMailboxCapacity(ctx); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(ctx, "DELETE FROM gateway_messages WHERE expires_at<=now()"); err != nil {
+	if err := q.DeleteExpiredMessages(ctx); err != nil {
 		return nil, err
 	}
-	var rows, bytes int64
-	if err := tx.QueryRow(ctx, "SELECT count(*),COALESCE(sum(octet_length(request)+1048576),0)::bigint FROM gateway_messages").Scan(&rows, &bytes); err != nil {
+	usage, err := q.GetMailboxUsage(ctx)
+	if err != nil {
 		return nil, err
 	}
-	if rows >= s.Config.MailboxRows || bytes+int64(len(raw))+(1<<20) > s.Config.MailboxBytes {
+	if usage.Count >= s.Config.MailboxRows || usage.Column2+int64(len(raw))+(1<<20) > s.Config.MailboxBytes {
 		return nil, store.ErrCapacity
 	}
-	var connectionID string
-	err = tx.QueryRow(ctx, "SELECT connection_id FROM hosts WHERE host_id=$1 AND certificate_status='active' AND instance_id IS NOT NULL FOR SHARE", host).Scan(&connectionID)
+	current, err := q.GetOnlineHostConnectionForShare(ctx, host)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, store.ErrOffline
 	}
 	if err != nil {
 		return nil, err
 	}
+	connectionID := current.String
 	if expectedConnection != "" && connectionID != expectedConnection {
 		return nil, store.ErrOffline
 	}
@@ -101,7 +103,7 @@ func (s *Service) sendToConnection(ctx context.Context, host, expectedConnection
 			expires = deadline
 		}
 	}
-	if _, err := tx.Exec(ctx, "INSERT INTO gateway_messages(message_id,origin_instance,host_id,connection_id,request,expires_at) VALUES ($1,$2,$3,$4,$5,$6)", id, s.InstanceID, host, connectionID, raw, expires); err != nil {
+	if err := insertMessage(ctx, tx, id, s.InstanceID, host, connectionID, raw, expires); err != nil {
 		return nil, err
 	}
 	if err := store.Notify(ctx, tx, "message:"+id); err != nil {
@@ -113,7 +115,7 @@ func (s *Service) sendToConnection(ctx context.Context, host, expectedConnection
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_, _ = s.Store.Pool.Exec(cleanup, "DELETE FROM gateway_messages WHERE message_id=$1", id)
+		_ = s.Store.Queries.DeleteGatewayMessage(cleanup, id)
 		s.forgetPending(host, connectionID, taskID(message), id)
 	}()
 	// NOTIFY wakes the owner. The origin reads the small final metadata using a
@@ -138,27 +140,25 @@ func (s *Service) sendToConnection(ctx context.Context, host, expectedConnection
 				}
 				return nil, store.ErrOffline
 			}
-			var response []byte
-			var failure string
-			err := s.Store.Pool.QueryRow(ctx, "SELECT response,failure FROM gateway_messages WHERE message_id=$1", id).Scan(&response, &failure)
+			result, err := s.Store.Queries.GetGatewayMessageResult(ctx, id)
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, store.ErrOffline
 			}
 			if err != nil {
 				return nil, err
 			}
-			if failure != "" {
-				if failure == "capacity" {
+			if result.Failure != "" {
+				if result.Failure == "capacity" {
 					return nil, store.ErrCapacity
 				}
 				return nil, store.ErrOffline
 			}
-			if response != nil {
-				result := new(v1.TaskCompleted)
-				if err := proto.Unmarshal(response, result); err != nil {
+			if result.Response != nil {
+				completed := new(v1.TaskCompleted)
+				if err := proto.Unmarshal(result.Response, completed); err != nil {
 					return nil, err
 				}
-				return result, nil
+				return completed, nil
 			}
 		}
 	}
@@ -206,20 +206,18 @@ func (s *Service) notification(payload string) {
 }
 
 func (s *Service) dispatch(id string) {
-	var host, generation string
-	var raw []byte
-	err := s.Store.Pool.QueryRow(s.ctx, "SELECT host_id,connection_id,request FROM gateway_messages WHERE message_id=$1 AND expires_at>now() AND response IS NULL AND failure=''", id).Scan(&host, &generation, &raw)
+	message, err := s.Store.Queries.GetLiveGatewayMessage(s.ctx, id)
 	if err != nil {
 		return
 	}
 	s.mu.Lock()
-	c := s.connections[host]
+	c := s.connections[message.HostID]
 	s.mu.Unlock()
-	if c == nil || c.id != generation {
+	if c == nil || c.id != message.ConnectionID {
 		return
 	}
 	m := new(v1.ConnectResponse)
-	if err := proto.Unmarshal(raw, m); err != nil {
+	if err := proto.Unmarshal(message.Request, m); err != nil {
 		c.cancel()
 		return
 	}
@@ -240,15 +238,15 @@ func (s *Service) write(c *connection, stream *connect.BidiStream[v1.ConnectRequ
 		return err
 	}
 	defer tx.Rollback(c.ctx)
+	q := s.Store.Queries.WithTx(tx)
 	// Hold FOR SHARE until the actual write. A newer connection cannot commit
 	// ownership while a message is being written to the old generation.
-	var current string
-	err = tx.QueryRow(c.ctx, "SELECT connection_id FROM hosts WHERE host_id=$1 AND certificate_status='active' FOR SHARE", c.identity.HostID).Scan(&current)
-	if err != nil || current != c.id {
+	current, err := q.GetActiveHostConnectionForShare(c.ctx, c.identity.HostID)
+	if err != nil || current.String != c.id {
 		return store.ErrOffline
 	}
-	var live bool
-	if err := tx.QueryRow(c.ctx, "SELECT EXISTS(SELECT 1 FROM gateway_messages WHERE message_id=$1 AND connection_id=$2 AND expires_at>now() AND response IS NULL AND failure='')", item.mailbox, c.id).Scan(&live); err != nil {
+	live, err := messageLive(c.ctx, tx, item.mailbox, c.id)
+	if err != nil {
 		return err
 	}
 	if !live {
@@ -258,27 +256,24 @@ func (s *Service) write(c *connection, stream *connect.BidiStream[v1.ConnectRequ
 		// Cancel/recovery can commit on another instance after reservation or
 		// enqueue. Order the actual stream write against those transactions,
 		// taking the job lock before the task lock just as they do.
-		var status int16
-		var cancelled bool
-		err := tx.QueryRow(c.ctx, "SELECT status,cancel_requested FROM jobs WHERE job_id=$1 FOR SHARE", task.JobId).Scan(&status, &cancelled)
+		job, err := q.GetJobDispatchStateForShare(c.ctx, task.JobId)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
 		// Standalone P4 routing predates persisted jobs. Only an explicit
 		// missing job preserves that path; all other SQL errors fail closed.
 		if !errors.Is(err, pgx.ErrNoRows) {
-			live = status <= 2 && !cancelled
+			live = job.Status <= 2 && !job.CancelRequested
 			if live {
-				var dispatched bool
-				var host, generation string
-				err = tx.QueryRow(c.ctx, "SELECT status,dispatched,host_id,COALESCE(connection_id,'') FROM tasks WHERE job_id=$1 AND task_id=$2 FOR SHARE", task.JobId, task.TaskId).Scan(&status, &dispatched, &host, &generation)
+				var state db.GetTaskDispatchStateForShareRow
+				state, err = q.GetTaskDispatchStateForShare(c.ctx, db.GetTaskDispatchStateForShareParams{JobID: task.JobId, TaskID: task.TaskId})
 				if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 					return err
 				}
-				live = err == nil && status <= 2 && dispatched && host == c.identity.HostID && generation == c.id
+				live = err == nil && state.Status <= 2 && state.Dispatched && state.HostID == c.identity.HostID && state.ConnectionID == c.id
 			}
 			if !live {
-				if _, err := tx.Exec(c.ctx, "UPDATE gateway_messages SET failure='offline' WHERE message_id=$1", item.mailbox); err != nil {
+				if err := q.FailGatewayMessageOffline(c.ctx, item.mailbox); err != nil {
 					return err
 				}
 				return tx.Commit(c.ctx)
@@ -291,7 +286,7 @@ func (s *Service) write(c *connection, stream *connect.BidiStream[v1.ConnectRequ
 	existing := c.pending[id]
 	if (len(existing) > 0 && item.message.GetCancel() == nil) || (len(existing) == 0 && len(c.pending) >= c.maxInflight) || len(existing) >= 2 {
 		c.mu.Unlock()
-		_, err := tx.Exec(c.ctx, "UPDATE gateway_messages SET failure='capacity' WHERE message_id=$1", item.mailbox)
+		err := failMessageCapacity(c.ctx, tx, item.mailbox)
 		if err != nil {
 			return err
 		}
@@ -317,11 +312,9 @@ func (s *Service) complete(c *connection, result *v1.TaskCompleted) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.Store.Pool.Exec(c.ctx, "UPDATE gateway_messages SET response=$2 WHERE message_id=ANY($1::text[]) AND connection_id=$3 AND expires_at>now() AND response IS NULL AND failure='' AND EXISTS(SELECT 1 FROM hosts WHERE host_id=$4 AND connection_id=$3 AND certificate_status='active')", ids, raw, c.id, c.identity.HostID)
-	return err
+	return s.Store.Queries.CompleteGatewayMessages(c.ctx, db.CompleteGatewayMessagesParams{Column1: ids, Response: raw, ConnectionID: c.id, HostID: c.identity.HostID})
 }
 
 func (s *Service) failConnection(ctx context.Context, generation string) error {
-	_, err := s.Store.Pool.Exec(ctx, "UPDATE gateway_messages SET failure='offline' WHERE connection_id=$1 AND response IS NULL", generation)
-	return err
+	return s.Store.Queries.FailConnectionMessages(ctx, generation)
 }

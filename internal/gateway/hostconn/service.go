@@ -130,7 +130,7 @@ func (s *Service) Start(ctx context.Context) error {
 	if err := s.Store.Queries.RegisterInstance(ctx, s.InstanceID); err != nil {
 		return err
 	}
-	if _, err := s.Store.Pool.Exec(ctx, "UPDATE gateway_instances SET version=$2 WHERE instance_id=$1", s.InstanceID, s.Config.Version); err != nil {
+	if err := s.Store.Queries.SetGatewayInstanceVersion(ctx, db.SetGatewayInstanceVersionParams{InstanceID: s.InstanceID, Version: s.Config.Version}); err != nil {
 		return err
 	}
 	run, cancel := context.WithCancel(ctx)
@@ -139,7 +139,7 @@ func (s *Service) Start(ctx context.Context) error {
 		cancel()
 		return err
 	}
-	if _, err := l.Exec(run, "LISTEN "+store.NotificationChannel); err != nil {
+	if err := listen(run, l); err != nil {
 		l.Close(run)
 		cancel()
 		return err
@@ -334,6 +334,93 @@ func (s *Service) validateLabels(labels map[string]string) error {
 	return nil
 }
 
+// received is one result of the stream receive goroutine.
+type received struct {
+	message *v1.ConnectRequest
+	err     error
+}
+
+// receiveMessages reads stream in a goroutine and delivers each result, in
+// order, until the first error or until ctx ends.
+func receiveMessages(ctx context.Context, stream *connect.BidiStream[v1.ConnectRequest, v1.ConnectResponse]) <-chan received {
+	incoming := make(chan received, 1)
+	go func() {
+		for {
+			m, e := stream.Receive()
+			select {
+			case incoming <- received{m, e}:
+			case <-ctx.Done():
+				return
+			}
+			if e != nil {
+				return
+			}
+		}
+	}()
+	return incoming
+}
+
+// awaitHello waits for the first message and validates it as AgentHello.
+func (s *Service) awaitHello(ctx context.Context, incoming <-chan received) (*v1.AgentHello, error) {
+	timer := time.NewTimer(s.Config.HeartbeatTimeout)
+	defer timer.Stop()
+	var first received
+	select {
+	case first = <-incoming:
+	case <-timer.C:
+		return nil, rpcFailure(connect.CodeDeadlineExceeded, errors.New("agent hello timeout"))
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	if first.err != nil {
+		return nil, first.err
+	}
+	h := first.message.GetHello()
+	if h == nil || h.MaxConcurrentTasks == 0 {
+		return nil, rpcFailure(connect.CodeInvalidArgument, errors.New("first message must be AgentHello with positive capacity"))
+	}
+	if err := CheckVersion(s.Config.Version, h.AgentVersion); err != nil {
+		return nil, rpcFailure(connect.CodeUnimplemented, errors.New("agent version unsupported"))
+	}
+	if err := s.validateLabels(h.ReportedLabels); err != nil {
+		return nil, rpcFailure(connect.CodeInvalidArgument, err)
+	}
+	return h, nil
+}
+
+func (s *Service) newConnection(ctx context.Context, cancel context.CancelFunc, id Identity, h *v1.AgentHello) *connection {
+	c := &connection{identity: id, id: rand.Text(), ctx: ctx, cancel: cancel, queue: make(chan outbound, s.Config.QueueMessages), catalogWake: make(chan struct{}, 1), maxInflight: min(s.Config.MaxInflight, int(h.MaxConcurrentTasks)), pending: map[string][]string{}, loaded: map[string]*v1.CatalogLoadReport{}}
+	connectedAt := time.Now()
+	c.lastSeen.Store(&connectedAt)
+	return c
+}
+
+// claimHost makes c the host's current connection inside tx. The host row lock
+// serializes replacement with sends.
+func (s *Service) claimHost(ctx context.Context, tx pgx.Tx, c *connection, h *v1.AgentHello) error {
+	labels, _ := json.Marshal(h.ReportedLabels)
+	capabilities, _ := proto.Marshal(h.Capabilities)
+	_, err := s.Store.Queries.WithTx(tx).ClaimHostConnection(ctx, db.ClaimHostConnectionParams{HostID: c.identity.HostID, InstanceID: pgtype.Text{String: s.InstanceID, Valid: true}, ConnectionID: pgtype.Text{String: c.id, Valid: true}, ReportedLabels: labels, AgentVersion: h.AgentVersion, CertificateSerial: c.identity.Serial, Capabilities: capabilities})
+	return err
+}
+
+// replaceConnection registers c in memory and cancels the connection it replaces.
+func (s *Service) replaceConnection(c *connection) {
+	s.mu.Lock()
+	old := s.connections[c.identity.HostID]
+	s.connections[c.identity.HostID] = c
+	s.mu.Unlock()
+	if old != nil {
+		old.cancel()
+	}
+}
+
+func (s *Service) sendHello(stream *connect.BidiStream[v1.ConnectRequest, v1.ConnectResponse], c *connection) error {
+	return s.send(c.ctx, func() error {
+		return stream.Send(&v1.ConnectResponse{Message: &v1.ConnectResponse_Hello{Hello: &v1.GatewayHello{GatewayVersion: s.Config.Version, ConnectionId: c.id, ServerTime: timestamppb.Now(), Limits: &v1.ConnectionLimits{HeartbeatInterval: durationpb.New(s.Config.HeartbeatInterval), HeartbeatTimeout: durationpb.New(s.Config.HeartbeatTimeout), MaxMessageBytes: uint32(s.Config.MessageBytes), MaxChunkBytes: uint32(s.Config.ChunkBytes), MaxInflightTasks: uint32(c.maxInflight)}}}})
+	})
+}
+
 func (s *Service) Connect(ctx context.Context, stream *connect.BidiStream[v1.ConnectRequest, v1.ConnectResponse]) error {
 	id, err := s.authenticate(ctx)
 	if err != nil {
@@ -344,50 +431,12 @@ func (s *Service) Connect(ctx context.Context, stream *connect.BidiStream[v1.Con
 	}
 	cctx, cancel := context.WithDeadline(ctx, id.ExpiresAt)
 	defer cancel()
-	type received struct {
-		message *v1.ConnectRequest
-		err     error
+	incoming := receiveMessages(cctx, stream)
+	h, err := s.awaitHello(ctx, incoming)
+	if err != nil {
+		return err
 	}
-	incoming := make(chan received, 1)
-	go func() {
-		for {
-			m, e := stream.Receive()
-			select {
-			case incoming <- received{m, e}:
-			case <-cctx.Done():
-				return
-			}
-			if e != nil {
-				return
-			}
-		}
-	}()
-	timer := time.NewTimer(s.Config.HeartbeatTimeout)
-	defer timer.Stop()
-	var first received
-	select {
-	case first = <-incoming:
-	case <-timer.C:
-		return rpcFailure(connect.CodeDeadlineExceeded, errors.New("agent hello timeout"))
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	if first.err != nil {
-		return first.err
-	}
-	h := first.message.GetHello()
-	if h == nil || h.MaxConcurrentTasks == 0 {
-		return rpcFailure(connect.CodeInvalidArgument, errors.New("first message must be AgentHello with positive capacity"))
-	}
-	if err := CheckVersion(s.Config.Version, h.AgentVersion); err != nil {
-		return rpcFailure(connect.CodeUnimplemented, errors.New("agent version unsupported"))
-	}
-	if err := s.validateLabels(h.ReportedLabels); err != nil {
-		return rpcFailure(connect.CodeInvalidArgument, err)
-	}
-	c := &connection{identity: id, id: rand.Text(), ctx: cctx, cancel: cancel, queue: make(chan outbound, s.Config.QueueMessages), catalogWake: make(chan struct{}, 1), maxInflight: min(s.Config.MaxInflight, int(h.MaxConcurrentTasks)), pending: map[string][]string{}, loaded: map[string]*v1.CatalogLoadReport{}}
-	connectedAt := time.Now()
-	c.lastSeen.Store(&connectedAt)
+	c := s.newConnection(cctx, cancel, id, h)
 	// Serialize replacement with sends using the host row lock. Register in memory
 	// before commit so a committed NOTIFY always has a local destination.
 	tx, err := s.Store.Pool.Begin(ctx)
@@ -395,20 +444,10 @@ func (s *Service) Connect(ctx context.Context, stream *connect.BidiStream[v1.Con
 		return rpcError(err)
 	}
 	defer tx.Rollback(ctx)
-	labels, _ := json.Marshal(h.ReportedLabels)
-	capabilities, _ := proto.Marshal(h.Capabilities)
-	var ok string
-	err = tx.QueryRow(ctx, "UPDATE hosts SET instance_id=$2,connection_id=$3,reported_labels=$4,agent_version=$5,last_seen=now(),capabilities=$7 WHERE host_id=$1 AND certificate_status='active' AND certificate_serial=$6 RETURNING host_id", id.HostID, s.InstanceID, c.id, labels, h.AgentVersion, id.Serial, capabilities).Scan(&ok)
-	if err != nil {
+	if err := s.claimHost(ctx, tx, c, h); err != nil {
 		return rpcError(err)
 	}
-	s.mu.Lock()
-	old := s.connections[id.HostID]
-	s.connections[id.HostID] = c
-	s.mu.Unlock()
-	if old != nil {
-		old.cancel()
-	}
+	s.replaceConnection(c)
 	defer s.disconnected(c)
 	if err := store.Notify(ctx, tx, "host:"+id.HostID); err != nil {
 		return rpcError(err)
@@ -416,98 +455,157 @@ func (s *Service) Connect(ctx context.Context, stream *connect.BidiStream[v1.Con
 	if err := tx.Commit(ctx); err != nil {
 		return rpcError(err)
 	}
-	if err := s.send(cctx, func() error {
-		return stream.Send(&v1.ConnectResponse{Message: &v1.ConnectResponse_Hello{Hello: &v1.GatewayHello{GatewayVersion: s.Config.Version, ConnectionId: c.id, ServerTime: timestamppb.Now(), Limits: &v1.ConnectionLimits{HeartbeatInterval: durationpb.New(s.Config.HeartbeatInterval), HeartbeatTimeout: durationpb.New(s.Config.HeartbeatTimeout), MaxMessageBytes: uint32(s.Config.MessageBytes), MaxChunkBytes: uint32(s.Config.ChunkBytes), MaxInflightTasks: uint32(c.maxInflight)}}}})
-	}); err != nil {
+	if err := s.sendHello(stream, c); err != nil {
 		return err
 	}
 	go s.catalogWorker(c)
 	s.catalogs(c)
+	session := &connectSession{s: s, c: c, stream: stream, tokens: float64(s.Config.ReceiveBurst), refilled: time.Now()}
+	return session.run(incoming)
+}
+
+// connectSession holds the message loop state of one established connection.
+type connectSession struct {
+	s        *Service
+	c        *connection
+	stream   *connect.BidiStream[v1.ConnectRequest, v1.ConnectResponse]
+	tokens   float64   // receive rate limiter bucket
+	refilled time.Time // last bucket refill
+	sequence uint64    // last heartbeat sequence
+}
+
+// run serves the connection until it ends. It returns nil only when the agent
+// closes the stream.
+func (cs *connectSession) run(incoming <-chan received) error {
+	s, c := cs.s, cs.c
 	ticker := time.NewTicker(min(s.Config.HeartbeatInterval, time.Second))
 	defer ticker.Stop()
-	tokens, lastRefill := float64(s.Config.ReceiveBurst), time.Now()
-	var sequence uint64
 	for {
 		select {
-		case <-cctx.Done():
-			if !time.Now().Before(id.ExpiresAt) {
-				return rpcError(store.ErrCredential)
-			}
-			return rpcFailure(connect.CodeUnavailable, errors.New("connection replaced or gateway draining"))
+		case <-c.ctx.Done():
+			return cs.contextEnded()
 		case <-ticker.C:
-			if time.Since(*c.lastSeen.Load()) > s.Config.HeartbeatTimeout {
-				return rpcFailure(connect.CodeDeadlineExceeded, errors.New("heartbeat timeout"))
-			}
-			if err := s.Store.CheckHostActive(cctx, id.HostID); err != nil {
-				if !time.Now().Before(id.ExpiresAt) {
-					return rpcError(store.ErrCredential)
-				}
-				return rpcError(err)
+			if err := cs.checkLiveness(); err != nil {
+				return err
 			}
 		case item := <-c.queue:
-			err := s.write(c, stream, item)
-			c.bytes.Add(-int64(proto.Size(item.message)))
-			c.messages.Add(-1)
-			if item.receipt != nil {
-				item.receipt <- err
-			}
-			if err != nil {
-				return rpcError(err)
+			if err := cs.writeQueued(item); err != nil {
+				return err
 			}
 		case r := <-incoming:
-			if r.err != nil {
-				if errors.Is(r.err, io.EOF) {
-					return nil
-				}
-				return r.err
-			}
-			now := time.Now()
-			tokens = min(float64(s.Config.ReceiveBurst), tokens+now.Sub(lastRefill).Seconds()*float64(s.Config.ReceiveRate))
-			lastRefill = now
-			if tokens < 1 {
-				return rpcFailure(connect.CodeResourceExhausted, errors.New("receive rate exceeded"))
-			}
-			tokens--
-			if output := r.message.GetOutput(); output != nil && len(output.Data) > s.Config.ChunkBytes {
-				return rpcFailure(connect.CodeResourceExhausted, errors.New("output chunk too large"))
-			}
-			if heartbeat := r.message.GetHeartbeat(); heartbeat != nil {
-				if heartbeat.Sequence <= sequence {
-					return rpcFailure(connect.CodeInvalidArgument, errors.New("heartbeat sequence must increase"))
-				}
-				sequence = heartbeat.Sequence
-				c.lastSeen.Store(&now)
-				if err := s.send(cctx, func() error {
-					return stream.Send(&v1.ConnectResponse{Message: &v1.ConnectResponse_Heartbeat{Heartbeat: &v1.GatewayHeartbeat{Sequence: sequence, ServerTime: timestamppb.Now()}}})
-				}); err != nil {
-					return err
-				}
-				continue
-			}
-			if r.message.GetMessage() == nil || r.message.GetHello() != nil {
-				return rpcFailure(connect.CodeInvalidArgument, errors.New("invalid connection message"))
-			}
-			if load := r.message.GetCatalogLoad(); load != nil {
-				if err := s.catalogReport(c, load); err != nil {
-					return err
-				}
-				if !load.FinalPage {
-					continue
-				}
-				r.message = &v1.ConnectRequest{Message: &v1.ConnectRequest_CatalogLoad{CatalogLoad: s.CatalogReport(id.HostID, load.Catalog.CatalogId)}}
-			}
-			if s.Hooks.OnMessage != nil {
-				if err := s.Hooks.OnMessage(cctx, Event{id.HostID, c.id, r.message}); err != nil {
-					return err
-				}
-			}
-			if completed := r.message.GetTaskCompleted(); completed != nil {
-				if err := s.complete(c, completed); err != nil {
-					return rpcError(err)
-				}
+			if done, err := cs.handle(r); done || err != nil {
+				return err
 			}
 		}
 	}
+}
+
+func (cs *connectSession) contextEnded() error {
+	if !time.Now().Before(cs.c.identity.ExpiresAt) {
+		return rpcError(store.ErrCredential)
+	}
+	return rpcFailure(connect.CodeUnavailable, errors.New("connection replaced or gateway draining"))
+}
+
+func (cs *connectSession) checkLiveness() error {
+	s, c := cs.s, cs.c
+	if time.Since(*c.lastSeen.Load()) > s.Config.HeartbeatTimeout {
+		return rpcFailure(connect.CodeDeadlineExceeded, errors.New("heartbeat timeout"))
+	}
+	if err := s.Store.CheckHostActive(c.ctx, c.identity.HostID); err != nil {
+		if !time.Now().Before(c.identity.ExpiresAt) {
+			return rpcError(store.ErrCredential)
+		}
+		return rpcError(err)
+	}
+	return nil
+}
+
+func (cs *connectSession) writeQueued(item outbound) error {
+	c := cs.c
+	err := cs.s.write(c, cs.stream, item)
+	c.bytes.Add(-int64(proto.Size(item.message)))
+	c.messages.Add(-1)
+	if item.receipt != nil {
+		item.receipt <- err
+	}
+	if err != nil {
+		return rpcError(err)
+	}
+	return nil
+}
+
+// handle processes one received result. done reports that the agent closed the
+// stream cleanly.
+func (cs *connectSession) handle(r received) (done bool, err error) {
+	if r.err != nil {
+		if errors.Is(r.err, io.EOF) {
+			return true, nil
+		}
+		return false, r.err
+	}
+	now := time.Now()
+	if err := cs.admit(r.message, now); err != nil {
+		return false, err
+	}
+	if heartbeat := r.message.GetHeartbeat(); heartbeat != nil {
+		return false, cs.heartbeat(heartbeat, now)
+	}
+	return false, cs.deliver(r.message)
+}
+
+// admit applies the receive rate limit and the output chunk limit.
+func (cs *connectSession) admit(m *v1.ConnectRequest, now time.Time) error {
+	config := cs.s.Config
+	cs.tokens = min(float64(config.ReceiveBurst), cs.tokens+now.Sub(cs.refilled).Seconds()*float64(config.ReceiveRate))
+	cs.refilled = now
+	if cs.tokens < 1 {
+		return rpcFailure(connect.CodeResourceExhausted, errors.New("receive rate exceeded"))
+	}
+	cs.tokens--
+	if output := m.GetOutput(); output != nil && len(output.Data) > config.ChunkBytes {
+		return rpcFailure(connect.CodeResourceExhausted, errors.New("output chunk too large"))
+	}
+	return nil
+}
+
+func (cs *connectSession) heartbeat(h *v1.AgentHeartbeat, now time.Time) error {
+	if h.Sequence <= cs.sequence {
+		return rpcFailure(connect.CodeInvalidArgument, errors.New("heartbeat sequence must increase"))
+	}
+	cs.sequence = h.Sequence
+	cs.c.lastSeen.Store(&now)
+	return cs.s.send(cs.c.ctx, func() error {
+		return cs.stream.Send(&v1.ConnectResponse{Message: &v1.ConnectResponse_Heartbeat{Heartbeat: &v1.GatewayHeartbeat{Sequence: cs.sequence, ServerTime: timestamppb.Now()}}})
+	})
+}
+
+// deliver validates a non-heartbeat message and passes it to the owner's hook.
+func (cs *connectSession) deliver(m *v1.ConnectRequest) error {
+	s, c := cs.s, cs.c
+	if m.GetMessage() == nil || m.GetHello() != nil {
+		return rpcFailure(connect.CodeInvalidArgument, errors.New("invalid connection message"))
+	}
+	if load := m.GetCatalogLoad(); load != nil {
+		if err := s.catalogReport(c, load); err != nil {
+			return err
+		}
+		if !load.FinalPage {
+			return nil
+		}
+		m = &v1.ConnectRequest{Message: &v1.ConnectRequest_CatalogLoad{CatalogLoad: s.CatalogReport(c.identity.HostID, load.Catalog.CatalogId)}}
+	}
+	if s.Hooks.OnMessage != nil {
+		if err := s.Hooks.OnMessage(c.ctx, Event{c.identity.HostID, c.id, m}); err != nil {
+			return err
+		}
+	}
+	if completed := m.GetTaskCompleted(); completed != nil {
+		if err := s.complete(c, completed); err != nil {
+			return rpcError(err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) enqueue(c *connection, item outbound) error {
@@ -637,9 +735,7 @@ func (s *Service) catalogReport(c *connection, r *v1.CatalogLoadReport) error {
 		}
 		// Only complete validated reports become visible; fence replaced connections.
 		// Snapshot persistence must not introduce new connection failures.
-		if _, err := s.Store.Pool.Exec(c.ctx, `INSERT INTO host_catalog_reports(host_id,catalog_id,version,loaded,report)
- SELECT host_id,$2,$3,$4,$5 FROM hosts WHERE host_id=$1 AND connection_id=$6 AND certificate_status='active'
- ON CONFLICT(host_id,catalog_id) DO UPDATE SET version=EXCLUDED.version,loaded=EXCLUDED.loaded,report=EXCLUDED.report`, c.identity.HostID, r.Catalog.CatalogId, int64(r.Catalog.Version), r.Loaded, raw, c.id); err != nil {
+		if err := s.Store.Queries.UpsertHostCatalogReport(c.ctx, db.UpsertHostCatalogReportParams{HostID: c.identity.HostID, CatalogID: r.Catalog.CatalogId, Version: int64(r.Catalog.Version), Loaded: r.Loaded, Report: raw, ConnectionID: pgtype.Text{String: c.id, Valid: true}}); err != nil {
 			logWriteFailure(c.ctx, "host catalog report persistence failed", err, "host_id", c.identity.HostID, "catalog_id", r.Catalog.CatalogId)
 		}
 		c.loaded[r.Catalog.CatalogId] = c.report
@@ -689,7 +785,7 @@ func (s *Service) maintenance() {
 				// One record per tick: a database outage fails every connection.
 				logWriteFailure(s.ctx, "host connection last_seen flush failed", first, "failed", failed, "total", len(conns))
 			}
-			if _, err := s.Store.Pool.Exec(s.ctx, "UPDATE gateway_instances SET last_seen=now() WHERE instance_id=$1", s.InstanceID); err != nil {
+			if err := s.Store.Queries.TouchGatewayInstance(s.ctx, s.InstanceID); err != nil {
 				logWriteFailure(s.ctx, "gateway instance last_seen update failed", err)
 			}
 		case <-cleanup.C:
@@ -720,7 +816,7 @@ func logWriteFailure(ctx context.Context, message string, err error, attrs ...an
 // work. Each host gets a cryptographically random delay within the configured range.
 func (s *Service) Drain(ctx context.Context) error {
 	s.draining.Store(true)
-	if _, err := s.Store.Pool.Exec(ctx, "UPDATE gateway_instances SET draining=true WHERE instance_id=$1", s.InstanceID); err != nil {
+	if err := s.Store.Queries.SetGatewayInstanceDraining(ctx, s.InstanceID); err != nil {
 		logWriteFailure(ctx, "gateway instance draining update failed", err)
 	}
 	if s.Hooks.Drain != nil {
