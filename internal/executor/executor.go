@@ -56,8 +56,8 @@ type Callbacks struct {
 	StepCompleted func(StepResult, error) error
 }
 
-// A13: steps share stdout+stderr budget and use the first failed exit code.
-// Non-step actions preserve P1's independent stdout/stderr budgets.
+// Steps share one stdout+stderr budget and use the first failed exit code (decisions A13).
+// Non-step actions keep independent stdout/stderr budgets.
 func stepBudget(limit int64) *outputBudget { return &outputBudget{remaining: limit} }
 
 type outputBudget struct {
@@ -486,8 +486,9 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 	var exitErr *exec.ExitError
 	if errors.As(waitErr, &exitErr) {
 		result.ExitCode = exitErr.ExitCode()
-		// A50: only the scan cleanup signal is a nominal success. Preserve
-		// an observed natural nonzero exit, other signals and wait failures.
+		// Only the kill sent to stop scanning at the max_scan limit counts as a nominal
+		// success. Preserve an observed natural nonzero exit, other signals and wait
+		// failures (A50).
 		if result.ScanLimitReached && killedForScan {
 			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() && status.Signal() == syscall.SIGKILL {
 				result.ExitCode = 0

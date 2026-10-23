@@ -67,7 +67,7 @@ func run(args []string) error {
 	return runWithAudit(args, nil)
 }
 
-// Tests may inject an auditor; production uses P7's PostgreSQL Appender.
+// Tests may inject an auditor; production uses the audit module's PostgreSQL Appender (design P7).
 func runWithAudit(args []string, auditor api.Auditor) error {
 	if len(args) > 0 && args[0] == "health" {
 		return runHealth(args[1:])
