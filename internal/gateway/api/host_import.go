@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
 type importTarget struct {
@@ -153,7 +154,7 @@ func (s *Service) PreviewHostImport(ctx context.Context, req *connect.Request[v1
 	rawRows, _ := json.Marshal(rows)
 	rawTargets, _ := json.Marshal(targets)
 	digest := hash(string(req.Msg.Csv))
-	if _, err = tx.Exec(ctx, "INSERT INTO host_import_previews(preview_id,actor_id,csv_sha256,rows,targets,invalid_count,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7)", id, actorID(ctx), digest, rawRows, rawTargets, invalid, expires); err != nil {
+	if _, err = tx.Exec(ctx, "INSERT INTO host_import_previews(preview_id,actor_id,csv_sha256,rows,targets,invalid_count,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7)", id, reqctx.ActorID(ctx), digest, rawRows, rawTargets, invalid, expires); err != nil {
 		return nil, dbError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -174,7 +175,7 @@ func (s *Service) preview(ctx context.Context, q querier, id string, lock bool) 
 	if err != nil {
 		return nil, dbError(err)
 	}
-	if actor != actorID(ctx) {
+	if actor != reqctx.ActorID(ctx) {
 		return nil, failure(connect.CodePermissionDenied, "preview belongs to another caller")
 	}
 	if !time.Now().Before(expires) {

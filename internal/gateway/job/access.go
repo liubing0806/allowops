@@ -7,8 +7,8 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
-	"github.com/liubing0806/allowops/internal/gateway/api"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
 // A21: job ownership, metadata access, cancellation and output access share this policy.
@@ -17,11 +17,11 @@ func (s *Service) authorize(ctx context.Context, j *v1.Job, op authz.Operation, 
 		state.JobID = j.JobId
 		state.Version = j.PolicyVersion
 	}
-	id, ok := api.FromContext(ctx)
+	id, ok := reqctx.FromContext(ctx)
 	if !ok {
 		return 0, nil, failure(connect.CodeUnauthenticated, "AUTHENTICATION_REQUIRED")
 	}
-	actor, _ := api.RequestInfo(ctx)
+	actor, _ := reqctx.RequestInfo(ctx)
 	if id.Subject.Kind == "service_account" && j.SubjectId != actor {
 		return 0, nil, failure(connect.CodePermissionDenied, "JOB_OWNER_REQUIRED")
 	}

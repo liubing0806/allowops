@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/hostconn"
 )
 
 func (s *Service) systemHosts(ctx context.Context) ([]*v1.Host, error) {
@@ -133,7 +134,7 @@ func (s *Service) ListGatewayInstances(ctx context.Context, req *connect.Request
 		item.LastSeen = stamp(last)
 		status := v1.HealthStatus_HEALTH_STATUS_HEALTHY
 		reason := ""
-		if time.Since(last) > InstanceLostAfter(s.gatewayConfig()) {
+		if time.Since(last) > hostconn.InstanceLostAfter(s.gatewayConfig()) {
 			status = v1.HealthStatus_HEALTH_STATUS_UNAVAILABLE
 			reason = "instance heartbeat stale"
 		}

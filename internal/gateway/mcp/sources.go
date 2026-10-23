@@ -15,7 +15,7 @@ import (
 )
 
 func (s *Service) currentAction(ctx context.Context, name string) (catalog.Action, error) {
-	current, err := s.identity.Store.Queries.CurrentCatalogs(ctx)
+	current, err := s.identity.Database().Queries.CurrentCatalogs(ctx)
 	if err != nil {
 		return catalog.Action{}, accessError(connect.CodeUnavailable, "catalog unavailable")
 	}
@@ -23,7 +23,7 @@ func (s *Service) currentAction(ctx context.Context, name string) (catalog.Actio
 		if time.Now().After(c.ExpiresAt.Time.Add(catalog.ClockSkew)) {
 			continue
 		}
-		stored, err := s.identity.Store.Queries.GetCatalog(ctx, db.GetCatalogParams{CatalogID: c.CatalogID, Version: c.Version})
+		stored, err := s.identity.Database().Queries.GetCatalog(ctx, db.GetCatalogParams{CatalogID: c.CatalogID, Version: c.Version})
 		if err != nil {
 			return catalog.Action{}, accessError(connect.CodeUnavailable, "catalog unavailable")
 		}

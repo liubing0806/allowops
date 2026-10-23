@@ -17,6 +17,7 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/catalogsvc"
 	"github.com/liubing0806/allowops/internal/gateway/hostconn"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
 type ManagementConfig struct {
@@ -123,7 +124,7 @@ func (s *Service) authorizeWrite(ctx context.Context) error {
 	if t == nil || !t.resource {
 		return failure(connect.CodeUnauthenticated, "authentication required")
 	}
-	if err := s.Audit.Append(ctx, AuditEvent{ActorID: actorID(ctx), Operation: t.procedure, Phase: "authorized", Outcome: "allow", PolicyVersion: t.policyVersion, MatchedRules: t.matchedRules, SourceIP: t.ip}); err != nil {
+	if err := s.Audit.Append(ctx, AuditEvent{ActorID: reqctx.ActorID(ctx), Operation: t.procedure, Phase: "authorized", Outcome: "allow", PolicyVersion: t.policyVersion, MatchedRules: t.matchedRules, SourceIP: t.ip}); err != nil {
 		t.authorizationAuditFailed = true
 		return failure(connect.CodeUnavailable, "authorization audit unavailable; operation not executed")
 	}

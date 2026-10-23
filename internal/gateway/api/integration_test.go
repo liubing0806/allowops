@@ -26,6 +26,7 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/audit"
 	"github.com/liubing0806/allowops/internal/gateway/authn"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
 	"github.com/liubing0806/allowops/internal/testpg"
 	"golang.org/x/oauth2"
@@ -326,7 +327,7 @@ func TestSessionsOwnershipExpiryCookieAndCSRF(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
-	tctx := context.WithValue(ctx, requestKey{}, &requestState{writer: w})
+	tctx := reqctx.With(ctx, &requestState{writer: w})
 	f.service.sessionCookie(tctx, raw, web.ExpiresAt.AsTime())
 	cookie := w.Result().Cookies()[0]
 	if !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/" || cookie.Domain != "" {

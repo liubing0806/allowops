@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
-	"github.com/liubing0806/allowops/internal/gateway/api"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store/db"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -148,7 +148,7 @@ func (s *Service) create(ctx context.Context, subject string, p *catalog.Package
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,418006))", subject); err != nil {
 		return nil, err
 	}
-	identity, _ := api.FromContext(ctx)
+	identity, _ := reqctx.FromContext(ctx)
 	if !denied && identity != nil && identity.Subject.Kind == "service_account" {
 		var n int
 		if err := tx.QueryRow(ctx, "SELECT count(*) FROM jobs WHERE subject_id=$1 AND status IN (1,2)", subject).Scan(&n); err != nil {

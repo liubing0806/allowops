@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/liubing0806/allowops/internal/catalog"
-	"github.com/liubing0806/allowops/internal/gateway/api"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store/db"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -27,7 +27,7 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	current, err := s.identity.Store.Queries.CurrentCatalogs(ctx)
+	current, err := s.identity.Database().Queries.CurrentCatalogs(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -47,11 +47,11 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 	}
 	sum := sha256.Sum256(data)
 	versions := hex.EncodeToString(sum[:])
-	id, ok := api.FromContext(ctx)
+	id, ok := reqctx.FromContext(ctx)
 	if !ok {
 		return nil, errors.New("authentication required")
 	}
-	actor := api.RequestAuditInfo(ctx).ActorID
+	actor := reqctx.RequestAuditInfo(ctx).ActorID
 	data, err = json.Marshal(struct {
 		Actor    string
 		Subject  authz.Subject
@@ -78,7 +78,7 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 		if c.EnvelopeSizeBytes > int64(s.catalogs.MaxEnvelopeBytes) {
 			return nil, errors.New("catalog exceeds envelope limit")
 		}
-		stored, err := s.identity.Store.Queries.GetCatalog(ctx, db.GetCatalogParams{CatalogID: c.CatalogID, Version: c.Version})
+		stored, err := s.identity.Database().Queries.GetCatalog(ctx, db.GetCatalogParams{CatalogID: c.CatalogID, Version: c.Version})
 		if err != nil {
 			return nil, err
 		}
@@ -147,7 +147,7 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 		definitions = append(definitions, *tool)
 		available[name] = true
 	}
-	server := sdk.NewServer(&sdk.Implementation{Name: "allowops", Version: "1"}, &sdk.ServerOptions{Instructions: toolInstructions, PageSize: s.identity.Config.PageSize, Capabilities: &sdk.ServerCapabilities{Tools: &sdk.ToolCapabilities{}}, SetCacheable: func(_ context.Context, _ sdk.Request, c *sdk.Cacheable) { c.TTLMs = 0; c.CacheScope = "private" }})
+	server := sdk.NewServer(&sdk.Implementation{Name: "allowops", Version: "1"}, &sdk.ServerOptions{Instructions: toolInstructions, PageSize: s.identity.PageSize(), Capabilities: &sdk.ServerCapabilities{Tools: &sdk.ToolCapabilities{}}, SetCacheable: func(_ context.Context, _ sdk.Request, c *sdk.Cacheable) { c.TTLMs = 0; c.CacheScope = "private" }})
 	for _, definition := range definitions {
 		tool := &sdk.Tool{Name: definition.Name, Description: definition.Description, InputSchema: definition.InputSchema, Annotations: &sdk.ToolAnnotations{ReadOnlyHint: definition.Annotations.ReadOnlyHint, DestructiveHint: definition.Annotations.DestructiveHint, IdempotentHint: definition.Annotations.IdempotentHint}}
 		server.AddTool(tool, func(ctx context.Context, r *sdk.CallToolRequest) (*sdk.CallToolResult, error) {
@@ -164,7 +164,7 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 			if writer, ok := ctx.Value(heartbeatContextKey{}).(*sseWriter); ok {
 				writer.Flush()
 			}
-			ctx = api.ForkRequestContext(ctx)
+			ctx = reqctx.ForkRequestContext(ctx)
 			call, ok := r.(*sdk.CallToolRequest)
 			if !ok {
 				return nil, errors.New("invalid tool request")

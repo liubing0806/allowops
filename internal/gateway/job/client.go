@@ -7,7 +7,7 @@ import (
 )
 
 // Client is the in-process P6M boundary. The context must come from the shared
-// api.Service authentication middleware. Each operation performs authorization
+// Access.Middleware authentication. Each operation performs authorization
 // and audit itself, including when called without a Connect transport.
 // Callers must not retry RunJob automatically after an indeterminate result.
 type Client interface {

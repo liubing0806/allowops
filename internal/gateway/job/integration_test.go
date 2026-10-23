@@ -290,10 +290,9 @@ func (f *fixture) start(t *testing.T) *gateway {
 		t.Fatal(err)
 	}
 	jobs.Start()
-	srv := server.New(hosts, f.Certificate)
-	srv.Jobs = jobs
 	access.ConfigureJobDependencies(jobs, f.Storage.Storage.(api.ObjectStorageHealth))
-	srv.UseIdentity(access)
+	srv := server.New(hosts, f.Certificate, server.WithIdentity(access))
+	srv.Jobs = jobs
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(listener) }()
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: f.Roots, MinVersion: tls.VersionTLS13}}, Timeout: 20 * time.Second}
@@ -722,12 +721,12 @@ func TestTwoGatewaysRealAgentsAndSeaweedFS(t *testing.T) {
 		}
 		objects := f.Storage.Storage.(*output.S3)
 		bad := &output.S3{Client: objects.Client, Bucket: "missing-fixture-bucket"}
-		f.A.Job.Access.ConfigureJobDependencies(f.A.Job, bad)
+		f.A.Job.Access.(*api.Service).ConfigureJobDependencies(f.A.Job, bad)
 		r, err = client.GetSystemStatus(ctx, connect.NewRequest(&v1.GetSystemStatusRequest{}))
 		if err != nil || r.Msg.Status != v1.HealthStatus_HEALTH_STATUS_DEGRADED || r.Msg.Dependencies[2].Status != v1.HealthStatus_HEALTH_STATUS_UNAVAILABLE {
 			t.Fatalf("storage failure health=%v error=%v", r, err)
 		}
-		f.A.Job.Access.ConfigureJobDependencies(f.A.Job, objects)
+		f.A.Job.Access.(*api.Service).ConfigureJobDependencies(f.A.Job, objects)
 	})
 }
 

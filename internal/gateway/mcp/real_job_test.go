@@ -112,11 +112,9 @@ func TestSDKRealJobBackendAgentsAndSeaweedFS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gateway := server.New(hosts, certificate)
+	gateway := server.New(hosts, certificate, server.WithIdentity(f.identity), server.WithMCP(mcpService.Handler()))
 	gateway.Jobs = jobs
 	gateway.Catalogs = f.catalogs
-	gateway.UseIdentity(f.identity)
-	gateway.MCP = mcpService.Handler()
 	f.identity.ConfigureJobDependencies(jobs, objects)
 	done := make(chan error, 1)
 	go func() { done <- gateway.Serve(listener) }()
