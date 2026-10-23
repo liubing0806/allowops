@@ -29,9 +29,13 @@ jobs list, and fixes from two external code reviews.
 
 ### New
 
-- Host agents can be upgraded online through a signed catalog action that
-  installs the package with yum or apt and restarts the agent about 5 seconds
-  after the task result is sent.
+- Host agents can be upgraded online with the `agent_upgrade` example action
+  (`risk: dangerous`, `run_as: root`). It installs the selected
+  `allowops-agent` version from the host's configured apt or yum repository and
+  restarts the agent from a transient systemd timer about 5 seconds after the
+  task result is sent. A host already at the requested version is not changed;
+  a version mismatch after install fails without a restart; downgrades are
+  refused. The example catalog now has 52 actions.
 - The gateway logs agent version rejections with host ID, hostname and both
   versions; the agent logs the rejection to its journal.
 - The console shows the gateway version under the sidebar brand.
