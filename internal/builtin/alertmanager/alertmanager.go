@@ -178,6 +178,9 @@ func slicesNonNil(alerts []*alert) []*alert {
 	return kept
 }
 
+// labelsField is the index of the label set in a row.
+const labelsField = 4
+
 func writeAlert(out *strings.Builder, a *alert, mask func(string) string) {
 	startsAt := a.StartsAt
 	if !a.started.IsZero() {
@@ -194,7 +197,7 @@ func writeAlert(out *strings.Builder, a *alert, mask func(string) string) {
 		a.Status.State,
 		a.Labels["alertname"],
 		a.Labels["severity"],
-		labelSet(rest),
+		labelSet(rest, mask),
 		a.Annotations["summary"],
 		a.Annotations["description"],
 		strings.Join(a.Status.SilencedBy, ","),
@@ -205,13 +208,18 @@ func writeAlert(out *strings.Builder, a *alert, mask func(string) string) {
 		if i > 0 {
 			out.WriteByte('\t')
 		}
-		out.WriteString(escapeTSV(mask(field)))
+		if i != labelsField {
+			field = mask(field) // The label set is masked label by label.
+		}
+		out.WriteString(escapeTSV(field))
 	}
 	out.WriteByte('\n')
 }
 
-// labelSet writes labels in Prometheus notation with names in byte order.
-func labelSet(labels map[string]string) string {
+// labelSet writes labels in Prometheus notation with names in byte order. Each
+// name="value" pair is masked on its own: a rule that matches to the end of the
+// line would otherwise swallow the labels after the one it redacts.
+func labelSet(labels map[string]string, mask func(string) string) string {
 	names := make([]string, 0, len(labels))
 	for name := range labels {
 		names = append(names, name)
@@ -223,13 +231,11 @@ func labelSet(labels map[string]string) string {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		if validLabelName(name) {
-			b.WriteString(name)
-		} else {
-			b.WriteString(quote(name))
+		pair := name
+		if !validLabelName(name) {
+			pair = quote(name)
 		}
-		b.WriteByte('=')
-		b.WriteString(quote(labels[name]))
+		b.WriteString(mask(pair + "=" + quote(labels[name])))
 	}
 	b.WriteByte('}')
 	return b.String()
