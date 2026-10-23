@@ -29,6 +29,10 @@ type compiledRule struct {
 	valid func(string) bool
 	// keep reports that a matched text is known not to be a secret and must stay.
 	keep func(string) bool
+	// skip returns the length of a leading part of a matched text that is
+	// known not to be a secret. That part stays and the text after it is
+	// scanned again, so a credential later on the same line is still found.
+	skip func(string) int
 	// needs lists lower-case substrings; one of them must occur in the line,
 	// otherwise the expression cannot match and is not run. It is a speed-up
 	// only and must be a necessary condition of the expression.
@@ -86,6 +90,7 @@ type secretRule struct {
 	regex  string
 	needs  []string
 	keep   func(string) bool
+	skip   func(string) int
 	group  int
 	anchor string
 }
@@ -137,17 +142,19 @@ var secretRules = []secretRule{
 	// NAME: value, such as the Environment section of kubectl describe pod and
 	// YAML. The key is not quoted here, so a quoted name followed by a colon
 	// in prose ("volume "db-secret" : secret ... not found") is not a key.
-	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: `(?i)` + keyPrefix + `(?:` + credentialWords + `|pwd)\s*:\s*` + lineValue, keep: keepColonMatch},
-	// "name": value in JSON and quoted YAML. The key starts a line or follows
-	// '{', '[' or ',', so it is a key and not a quoted word inside a sentence.
-	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, group: 1, regex: `(?i)(?:^|[{\[,])\s*((?:"` + keyPrefix + `(?:` + credentialWords + `|pwd)"|'` + keyPrefix + `(?:` + credentialWords + `|pwd)'|\\"` + keyPrefix + `(?:` + credentialWords + `|pwd)\\")\s*:\s*` + lineValue + `)`},
+	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: `(?i)` + keyPrefix + `(?:` + credentialWords + `|pwd)\s*:\s*` + lineValue, keep: describeSecretReference, skip: skipOpenSSLMessage},
+	// "name": value in JSON and quoted YAML. The key starts a line (also after
+	// the "- " of a YAML list item), follows '{', '[' or ',', or follows the word
+	// volume, so it is a key and not a quoted word inside a sentence. The
+	// kubelet event "failed for volume "x" : reason" is kept by skipVolumeEvent.
+	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, group: 1, skip: skipVolumeEvent, regex: `(?i)(?:^(?:\s*-)*|[{\[,]|(?:failed\s+for\s+)?\bvolume\s)\s*((?:"` + keyPrefix + `(?:` + credentialWords + `|pwd)"|'` + keyPrefix + `(?:` + credentialWords + `|pwd)'|\\"` + keyPrefix + `(?:` + credentialWords + `|pwd)\\")\s*:\s*` + lineValue + `)`},
 	// Command lines. Options that are also used with other meanings (-u, -a,
 	// -p) are only recognised after the command that gives them a password.
 	{name: "cli_password", needs: []string{"--"}, regex: `(?i)(?:^|\s)--` + optionWords + `(?:\s+|=)` + optionValue, keep: negatedOption, group: 1},
 	// The same options as elements of a JSON array: ["--requirepass","value"].
 	{name: "cli_password", needs: []string{`"--`}, regex: `(?i)"--` + optionWords + `"\s*,\s*"((?:[^"\\]|\\.)*)"`, keep: negatedOption, group: 1},
 	// curl -u user:password, also attached (-uuser:password) and repeated.
-	{name: "cli_password", needs: []string{"curl"}, anchor: `(?i)\bcurl\b`, regex: `(?i)\s-(?:(?:-user|-proxy-user)(?:\s+|=)|[A-Za-z]*?[uU](?:\s*|=))("[^"\r\n]*:[^"\r\n]*"|'[^'\r\n]*:[^'\r\n]*'|[^\s:"']+:\S*)`, group: 1},
+	{name: "cli_password", needs: []string{"curl"}, anchor: `(?i)\bcurl\b`, regex: `(?i)\s-(?:(?:-user|-proxy-user)(?:\s+|=)|[A-Za-z]*?[uU](?:\s*|=))("[^"\r\n]*:[^"\r\n]*"|'[^'\r\n]*:[^'\r\n]*'|[^\s:"']*:\S*)`, group: 1},
 	{name: "cli_password", needs: []string{"redis-cli", "valkey-cli"}, regex: `(?i)\b(?:redis|valkey)-cli\b[^\r\n]*?\s-a\s*("[^"\r\n]*"|'[^'\r\n]*'|\S+)`, group: 1},
 	{name: "cli_password", needs: []string{"sshpass"}, regex: `(?i)\bsshpass\b[^\r\n]*?\s-p\s+("[^"\r\n]*"|'[^'\r\n]*'|\S+)`, group: 1},
 	// Keep the boundary out of the replacement; -p without a value stays unchanged.
@@ -162,10 +169,27 @@ func describeSecretReference(match string) bool { return describeReference.Match
 
 // OpenSSL names the function that failed before the reason, as in
 // "x509 certificate routines:X509_check_private_key:key values mismatch". The
-// function name ends in private_key but it is not a key name.
-func keepColonMatch(match string) bool {
-	return describeSecretReference(match) || strings.HasPrefix(strings.ToLower(match), "x509_check_private_key:")
+// function name ends in private_key but it is not a key name. Only this
+// message text is kept; the rest of the line is scanned again.
+const openSSLMismatch = "x509_check_private_key:key values mismatch"
+
+func skipOpenSSLMessage(match string) int {
+	n := len(openSSLMismatch)
+	if len(match) < n || !strings.EqualFold(match[:n], openSSLMismatch) {
+		return 0
+	}
+	if len(match) > n && (digit(match[n]) || letter(match[n])) {
+		return 0
+	}
+	return n
 }
+
+// The kubelet reports a failed mount as: failed for volume "name" : reason.
+// The volume name may hold secret or token, and the reason is text. The part
+// up to the colon stays; the reason is scanned again.
+var volumeEvent = regexp.MustCompile(`(?i)^failed\s+for\s+volume\s+[^:]*:\s*`)
+
+func skipVolumeEvent(match string) int { return len(volumeEvent.FindString(match)) }
 
 var negatedOptionName = regexp.MustCompile(`(?i)^\s*"?--(?:no|ask|skip|disable|without)-`)
 
@@ -186,7 +210,7 @@ func New(config *Config) (*Redactor, error) {
 	if slices.Contains(builtins, "secrets") {
 		r.secrets = true
 		for _, rule := range secretRules {
-			r.rules = append(r.rules, compiledRule{name: rule.name, re: regexp.MustCompile(rule.regex), keep: rule.keep, needs: rule.needs, group: rule.group, anchor: anchorRegexp(rule.anchor)})
+			r.rules = append(r.rules, compiledRule{name: rule.name, re: regexp.MustCompile(rule.regex), keep: rule.keep, skip: rule.skip, needs: rule.needs, group: rule.group, anchor: anchorRegexp(rule.anchor)})
 		}
 	}
 	if slices.Contains(builtins, "pii") {
@@ -224,6 +248,7 @@ func anchorRegexp(expr string) *regexp.Regexp {
 
 func replacement(name string) string { return "[REDACTED:" + name + "]" }
 func digit(b byte) bool              { return b >= '0' && b <= '9' }
+func letter(b byte) bool             { return b|0x20 >= 'a' && b|0x20 <= 'z' }
 
 func applyRule(line string, rule compiledRule) string {
 	base := 0
@@ -255,6 +280,13 @@ func applyRule(line string, rule compiledRule) string {
 		}
 		if rule.keep != nil && rule.keep(line[m[0]:m[1]]) {
 			continue
+		}
+		if rule.skip != nil {
+			if n := rule.skip(line[m[0]:m[1]]); n > 0 {
+				out.WriteString(line[cursor : m[0]+n])
+				out.WriteString(applyRule(line[m[0]+n:], rule))
+				return out.String()
+			}
 		}
 		if rule.valid != nil {
 			if (start > 0 && digit(line[start-1])) || (end < len(line) && digit(line[end])) || !rule.valid(line[start:end]) {
