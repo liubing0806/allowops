@@ -8,7 +8,7 @@ import (
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 )
 
-// A33: omitted step stays nil so P6 decides whether the action requires it.
+// An omitted step stays nil so the job module decides whether the action requires it (design A33).
 // MCP adds reading guidance to that parameter error and never joins outputs.
 func outputStepSchema() map[string]any {
 	return map[string]any{"type": "integer", "description": "Required zero-based step for composite action output; read one step at a time. Only with host. P6 validates the step. Omit for a single-step action.", "minimum": 0, "maximum": uint64(^uint32(0))}

@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-// JobStatistics applies the same authorization as job queries (G48/A21).
+// JobStatistics applies the same authorization as job queries (design G48, A21).
 type JobStatistics interface {
 	Statistics(context.Context) (running, failed uint64, err error)
 }

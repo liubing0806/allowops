@@ -37,7 +37,7 @@ func (s *Service) AppendResultAudit(ctx context.Context, e AuditEvent) error {
 	return nil
 }
 
-// NewAuditor adapts P7's real Append without changing its payload or storage.
+// NewAuditor adapts the audit module's real Append without changing its payload or storage (design P7).
 // A missing implementation remains nil so New refuses startup.
 func NewAuditor(appender audit.Appender) Auditor {
 	if appender == nil {
@@ -54,7 +54,7 @@ func (a auditAdapter) Append(ctx context.Context, e AuditEvent) error {
 	return err
 }
 
-// Authorize implements P7 Access. The shared middleware and interceptor supply
+// Authorize implements the audit module's Access. The shared middleware and interceptor supply
 // authentication, per-RPC auditing and CSRF before AuditService invokes it.
 func (s *Service) Authorize(ctx context.Context, _ http.Header, operation string) (string, error) {
 	if operation != string(authz.ViewAudit) {

@@ -118,7 +118,7 @@ func (s *Service) mountManagement(mux *http.ServeMux) {
 }
 
 // authorizeWrite is called after every target's authorization and revision check,
-// with target row locks held, and before the first mutation (G28).
+// with target row locks held, and before the first mutation; writes are audited in two phases, authorized then result (design G28).
 func (s *Service) authorizeWrite(ctx context.Context) error {
 	t := transport(ctx)
 	if t == nil || !t.resource {

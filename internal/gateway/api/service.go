@@ -30,7 +30,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// DefaultConsoleTTL is the configurable seven-day console lifetime (A20).
+// DefaultConsoleTTL is the configurable seven-day console lifetime (design A20).
 const DefaultConsoleTTL = 7 * 24 * time.Hour
 const PolicyChannel = "allowops_policy"
 
@@ -208,7 +208,7 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// Require is the reusable ABAC boundary for P4B and MCP. Host/action attributes
+// Require is the reusable ABAC boundary for the management API (design P4B) and MCP. Host/action attributes
 // must come from the gateway store, never from caller-supplied roles or labels.
 func (s *Service) Require(ctx context.Context, op authz.Operation, action authz.Action, host authz.Host) (authz.Result, error) {
 	id, ok := reqctx.FromContext(ctx)

@@ -55,7 +55,7 @@ type Input struct {
 }
 
 // Hours is a half-open interval in an IANA timezone. Empty timezone retains
-// Asia/Shanghai for existing P5A callers. Overnight intervals are not supported.
+// Asia/Shanghai for callers written before timezones were added (authn/authz module, design P5A). Overnight intervals are not supported.
 type Hours struct {
 	From     int    `json:"from"`
 	To       int    `json:"to"`

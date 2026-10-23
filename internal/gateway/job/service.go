@@ -143,7 +143,7 @@ func (s *Service) audit(ctx context.Context, op, phase, outcome, jobID string, v
 	return nil
 }
 
-// operation covers Connect and direct P6M calls with the same G28 phases.
+// operation covers Connect and direct MCP-service calls with the same two audit phases, authorized then result (design P6M, G28).
 func (s *Service) operation(ctx context.Context, op string, write bool, fn func(context.Context) (proto.Message, error)) (result proto.Message, err error) {
 	state := &operationState{}
 	ctx = context.WithValue(ctx, operationKey{}, state)

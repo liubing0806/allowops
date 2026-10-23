@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// PreviewSource is A23's replaceable cross-instance preview boundary.
+// PreviewSource is the replaceable boundary for reading output previews stored by other instances (design A23).
 // Implementations must return only redacted, filtered, bounded previews.
 type PreviewSource interface {
 	Load(context.Context, string) ([]Preview, error)

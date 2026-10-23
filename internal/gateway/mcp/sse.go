@@ -11,7 +11,7 @@ import (
 )
 
 // go-sdk writes each SSE event as one ResponseWriter.Write. Serialize those
-// writes with comments so the keepalive never splits an SDK event (G50).
+// writes with comments so the keepalive never splits an SDK event (design G50).
 type sseWriter struct {
 	w            http.ResponseWriter
 	mu           sync.Mutex

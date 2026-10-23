@@ -158,14 +158,14 @@ func (s *Service) setTerminal(ctx context.Context, jobID, taskID string, result 
 	return nil
 }
 
-// Running jobs are counted across all instances. P4B may call CountJobs without
+// Running jobs are counted across all instances. The management API (design P4B) may call CountJobs without
 // relying on the current instance's in-memory scheduler.
 func (s *Service) CountJobs(ctx context.Context) (uint64, error) {
 	running, _, err := s.Statistics(ctx)
 	return running, err
 }
 
-// Statistics counts only jobs visible through the same A21 authorization used
+// Statistics counts only jobs visible through the same job-visibility authorization (design A21) used
 // by GetJob/ListJobs. Failed includes failed/partially_failed completed in 24h.
 func (s *Service) Statistics(ctx context.Context) (running, failed uint64, err error) {
 	if err := s.Access.CheckRequest(ctx, false); err != nil {

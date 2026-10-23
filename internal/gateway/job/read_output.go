@@ -76,7 +76,7 @@ func (s *Service) GetJobOutput(ctx context.Context, r *v1.GetJobOutputRequest) (
 		var data []byte
 		eof := false
 		available := false
-		// A23: complete output is served only through object storage.
+		// Complete output is served only through object storage (design A23).
 		if stored && meta != nil {
 			data, err = s.Storage.Get(ctx, output.Key(at, r.JobId, hostID, r.StepIndex, name), int64(meta.SizeBytes))
 			if err != nil {

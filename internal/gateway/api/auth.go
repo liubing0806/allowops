@@ -135,7 +135,8 @@ func (s *Service) BeginOidcLogin(ctx context.Context, r *connect.Request[v1.Begi
 	default:
 		return nil, failure(connect.CodeInvalidArgument, "login client required")
 	}
-	// A47: serialize admission across providers and gateway instances. Read
+	// Serialize OIDC login-transaction admission (shared cap of 10000 live transactions) across
+	// providers and gateway instances (design A47). Read
 	// Committed takes a fresh count snapshot after waiting for this shared lock.
 	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {

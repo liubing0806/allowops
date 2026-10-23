@@ -19,7 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Access is supplied by P5. It authenticates the request and authorizes
+// Access is supplied by the identity module (design P5). It authenticates the request and authorizes
 // view_audit on EVERY call, returning the stable subject bound to API cursors.
 // A nil implementation denies access. Middleware may also add context values.
 type Access interface {

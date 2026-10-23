@@ -18,7 +18,7 @@ type Identity struct {
 }
 
 // AuditEvent is an allowlist: request bodies, credentials and provider errors
-// must never be added. NewAuditor maps this boundary to P7 Append.
+// must never be added. NewAuditor maps this boundary to the audit module's Append (design P7).
 type AuditEvent struct {
 	JobID         string
 	Resource      string

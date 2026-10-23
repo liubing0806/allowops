@@ -143,8 +143,8 @@ func (s *Service) loadActions(ctx context.Context, live []db.CurrentCatalogsRow)
 }
 
 // projectRules drops conditions that discovery cannot evaluate.
-// G40: discovery ignores host, time and source IP. A deny with any of
-// these conditions cannot prove that every possible call is denied.
+// Discovery ignores host, time and source IP. A deny with any of
+// these conditions cannot prove that every possible call is denied (design G40).
 func projectRules(rules []authz.Rule) ruleSnapshot {
 	projected := ruleSnapshot{}
 	for _, rule := range rules {
@@ -210,7 +210,7 @@ func (s *Service) newServer(definitions []ToolDefinition, available, unsupported
 				return next(ctx, method, r)
 			}
 			// The SDK has validated the POST and set SSE headers before publishing
-			// the request. Commit them now so G50 comments can keep a waiting call alive.
+			// the request. Commit them now so SSE keepalive comments can keep a waiting call alive (design G50).
 			if writer, ok := ctx.Value(heartbeatContextKey{}).(*sseWriter); ok {
 				writer.Flush()
 			}

@@ -68,7 +68,7 @@ type Event struct {
 }
 
 // Hooks execute on the connection owner. Output is delivered only to OnMessage,
-// never through gateway_messages. P6 must persist it before returning.
+// never through gateway_messages. The job module must persist it before returning.
 type Hooks struct {
 	OnMessage    func(context.Context, Event) error
 	OnDisconnect func(Event)
@@ -812,7 +812,7 @@ func logWriteFailure(ctx context.Context, message string, err error, attrs ...an
 	slog.WarnContext(ctx, message, append(attrs, "sqlstate", state, "error_type", fmt.Sprintf("%T", err))...)
 }
 
-// Drain rejects new dispatch immediately. P6's optional hook waits for running
+// Drain rejects new dispatch immediately. The job module's optional hook waits for running
 // work. Each host gets a cryptographically random delay within the configured range.
 func (s *Service) Drain(ctx context.Context) error {
 	s.draining.Store(true)

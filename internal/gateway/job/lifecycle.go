@@ -35,7 +35,7 @@ func (s *Service) Start() {
 }
 
 // Drain stops admission and later batches, then waits for this instance's jobs
-// and the tasks on its current host connections. P4 owns deadline disconnects.
+// and the tasks on its current host connections. The host connection layer owns deadline disconnects (design P4).
 func (s *Service) Drain(ctx context.Context) error {
 	s.submitMu.Lock()
 	s.draining.Store(true)
@@ -58,7 +58,7 @@ func (s *Service) Drain(ctx context.Context) error {
 	}
 }
 
-// RecoverLostInstances implements G52. SKIP LOCKED elects one survivor per job;
+// RecoverLostInstances finishes jobs whose origin instance missed heartbeats (design G52). SKIP LOCKED elects one survivor per job;
 // task conditions retain any terminal state that won a completion race.
 func (s *Service) RecoverLostInstances(ctx context.Context) error {
 	for {

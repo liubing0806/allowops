@@ -43,8 +43,8 @@ func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, available ma
 	if err != nil {
 		event.Outcome = "deny"
 	}
-	// P6 owns the pre-write G28 audit. This result covers early parameter
-	// failures and unknown/denied tools without duplicating authorized (G49).
+	// The job module owns the audit written before a write (design P6, G28). This result covers early parameter
+	// failures and unknown/denied tools without duplicating the authorized event (design G49).
 	if auditErr := s.identity.AppendResultAudit(ctx, event); auditErr != nil {
 		message := "result audit unavailable"
 		if state.jobID != "" && (r.Params.Name == "jobs_cancel" || !strings.HasPrefix(r.Params.Name, "jobs_") && r.Params.Name != "hosts_search") {
@@ -112,7 +112,7 @@ func toolError(err error, state *callState) *sdk.CallToolResult {
 		data["details_truncated"] = true
 		delete(data, "violations")
 		if denied, ok := data["denied_hosts"].([]*v1.HostDenial); ok {
-			// G54: retain the largest complete prefix that fits, including rules.
+			// Retain the largest complete prefix that fits, including rules (design G54).
 			low, high := 0, len(denied)
 			for low < high {
 				mid := low + (high-low+1)/2
