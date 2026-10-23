@@ -79,6 +79,7 @@ Known limits of the wrapped-command check:
 | `mysql_query` | One SELECT/SHOW/DESC/EXPLAIN statement, read-only transaction, bounded rows, result bytes and timeout. Host credentials stay in root-owned mode-0600 files. |
 | `redis_command` | Read-only allowlist: GET, MGET, HGET, HLEN, TTL, TYPE, EXISTS, STRLEN, LLEN, SCARD, ZCARD, SCAN and INFO. |
 | `http_get` | GET within signed URL prefixes; no redirects; bounded response. |
+| `prometheus_query` | Read-only Prometheus HTTP API v1 query. `builtin_config.api` fixes one of query, query_range, series, labels, label_values, alerts, rules and targets; GET only, no redirects; bounded time range, step, points, series and response size; TSV output. A host credential (bearer token or basic auth) requires `run_as: root`. |
 
 Use `builtin_config` to narrow the handler's defined limits and resource
 allowlists. Database handlers use the privileged helper to read host-local

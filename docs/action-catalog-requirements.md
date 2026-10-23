@@ -4,7 +4,7 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 91 个 action：90 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 97 个 action：96 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90；2026-10-24 新增第 6 节 `prometheus_query` 的 6 个 action，90 + 6 = 96 个 risk: read）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
@@ -12,7 +12,7 @@ allowops 只执行运维人员预先定义、评审并签名的 action。本节�
 
 内置处理器的正式参数和配置 schema（字段结构及校验规则）由 `internal/catalog/builtin.go` 和 `builtin_adapters.go` 定义。P12D 已实现 G30 的 Redis/MySQL 收紧配置，语义见 `builtin-config.md`（含 G31、G34）；四个示例已恢复命令、键前缀、分区和库范围限制。内置参数默认值的剩余缺口见第 4 节。目录校验不检查目标主机的工具、凭据文件或外部服务，不据此宣称这些环境可执行全部 action。
 
-第 6 节记录尚未实现的 `prometheus_query`、`alertmanager_alerts` 内置处理器需求。这些需求不计入上述 90 个 action，`examples/catalog/actions/` 中没有对应 YAML，`make examples-check` 不覆盖。
+第 6 节记录 `prometheus_query`、`alertmanager_alerts` 内置处理器需求。`prometheus_query` 已实现，其 6 个 action 计入上述 97 个；`alertmanager_alerts` 尚未实现，`examples/catalog/actions/` 中没有对应 YAML，`make examples-check` 不覆盖。
 
 ## 2. 目录与通用规则
 
@@ -2990,7 +2990,7 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 
 ## 5. 本地示例检查
 
-`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 91 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 97 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
 
 配置脱敏冒烟在同一临时目录中把 app_config_view、app_config_keys 的 allowed_roots 改为临时配置目录，写入 properties、JSON、XML 形式的凭据和 PEM 私钥：断言 app_config_view 输出不含凭据值、match 过滤命中与否都以退出码 0 返回，app_config_keys 只输出键名且不输出 PEM 内容。该检查依赖本机 grep 支持 -P 和 head。
 
@@ -3011,7 +3011,7 @@ make test lint
 
 ## 6. 待实现的内置处理器：Prometheus 与 Alertmanager
 
-状态：2026-10-23 需求已确认，尚未实现。本节不对应 `examples/catalog/actions/` 中的 YAML，不计入第 1 节的 90 个 action。
+状态：2026-10-23 需求已确认。`prometheus_query`（6.2）已于 2026-10-24 实现：处理器提交 `2db933a`，目录接入提交 `4056086`，示例 YAML 为 `examples/catalog/actions/prometheus_*.yaml` 共 6 个，计入第 1 节的 97 个 action；实现中确定的细节见 6.5。`alertmanager_alerts`（6.3）尚未实现，不对应 YAML，不计入 action 数量。
 
 ### 6.1 范围与决定
 
@@ -3073,7 +3073,7 @@ make test lint
 | `max_series` | 50 / 1000 | 返回的序列数、标签数或规则数上限，超出部分丢弃并标记截断 |
 | `max_response_bytes` | 4MB / 16MB | Prometheus 原始响应体上限，超出时停止读取并返回错误 |
 
-- series、labels、label_values 请求附带 `limit=max_series+1`，减少服务端返回量。该参数要求的最低 Prometheus 版本未核实；服务端不支持时由处理器在本地截断。
+- series、labels、label_values 请求附带 `limit=max_series+1`，减少服务端返回量。该参数要求的最低 Prometheus 版本未核实，已在 v3.14.0 上验证有效；服务端不支持时由处理器在本地截断。
 
 输出（转为 TSV，降低 AI 的 token 消耗；先脱敏，再按 filters 过滤）：
 
@@ -3122,7 +3122,7 @@ action 需求：
 | `prometheus_alerts` | alerts | 单个 Prometheus 的当前告警 |
 | `prometheus_rules` | rules | 规则健康状态和最近错误 |
 
-示例（实现后再加入 `examples/catalog/actions/`）：
+示例（`examples/catalog/actions/prometheus_query_range.yaml` 与此一致，另有一行用法注释）：
 
 ```yaml
 name: prometheus_query_range
@@ -3186,9 +3186,26 @@ redact:
 
 ### 6.4 待确认项
 
-1. **PromQL 内部的时间范围（待确认）**：`max_range`、`max_points` 只约束请求参数。PromQL 中的范围选择器（`[30d]`）、子查询（`[30d:1m]`）和 `offset` 可以读取更长时间的数据，只受 `timeout` 和 Prometheus 服务端的 `--query.max-samples` 限制。建议第一版不解析 PromQL，依赖超时和服务端限制。是否引入 PromQL 解析器检查这些写法，参照 `builtin-mysql.md` 比较依赖体积后决定。
+1. **PromQL 内部的时间范围（待确认）**：`max_range`、`max_points` 只约束请求参数。PromQL 中的范围选择器（`[30d]`）、子查询（`[30d:1m]`）和 `offset` 可以读取更长时间的数据，只受 `timeout` 和 Prometheus 服务端的 `--query.max-samples` 限制。第一版已实现为不解析 PromQL，依赖 `timeout`（同时作为 Prometheus 的 `timeout` 参数发送）和服务端限制；在 v3.14.0 上，覆盖全部序列的 `[1h:1ms]` 子查询在 1 秒超时内以 `errorType=timeout` 或客户端超时失败。是否引入 PromQL 解析器检查这些写法，参照 `builtin-mysql.md` 比较依赖体积后决定。
 2. **按主机限制查询范围（第一阶段不做）**：需要解析 PromQL，并在每个序列选择器上强制注入标签匹配器，把查询限制在策略允许的主机上。有客户提出需求时再评估。
 3. **兼容性与多租户请求头（未验证）**：Thanos Query、VictoriaMetrics、Grafana Mimir 的 API 兼容程度未验证。Mimir 需要 `X-Scope-OrgID` 请求头；第一版不提供自定义请求头。
-4. **原生直方图（待确认）**：输出格式待定，第一版只输出 count 和 sum。
-5. **DNS 解析后的地址检查**：与第 4 节第 3 项 `http_get` 的待确认项相同，按同一结论处理。
-6. **实现时的验收**：增加示例 YAML 并更新第 1 节和第 5 节的 action 数量；参照 `builtin-mysql.md`，在本机 Docker 可用时用 testcontainers 启动 Prometheus 和 Alertmanager 验证查询、超时、截断和错误返回，Docker 不可用时明确跳过。
+4. **原生直方图（第一版结论）**：每个直方图样本一行，值列写 `count=<count> sum=<sum>`，不输出桶；完整输出格式仍待确认。使用 httptest 响应验证，未在含原生直方图的 Prometheus 上验证。
+5. **DNS 解析后的地址检查**：与第 4 节第 3 项 `http_get` 的待确认项相同，按同一结论处理。`apiclient` 与 `http_get` 同样只对地址文本做 `NormalizeURL` 检查，不检查解析后的 IP。
+6. **实现时的验收**：增加示例 YAML 并更新第 1 节和第 5 节的 action 数量；参照 `builtin-mysql.md`，在本机 Docker 可用时用 testcontainers 启动 Prometheus 和 Alertmanager 验证查询、超时、截断和错误返回，Docker 不可用时明确跳过。`prometheus_query` 部分已完成（见 6.5），Alertmanager 部分待 `alertmanager_alerts` 实现。
+
+### 6.5 `prometheus_query` 实现说明
+
+以下是实现中对 6.2 未规定或有歧义之处的取舍。
+
+- 首行：`query` 写 `# api=query time=<UTC>`；`query_range` 写 `start`、`end`、`step`（如 `step=60s`）；`series`、`labels`、`label_values` 写 `start`、`end`；`alerts`、`rules`、`targets` 只写 `api`。首行不经过脱敏。
+- 请求参数：`query`、`query_range` 发送 `timeout`（秒，如 `10`、`2.5`）；`series`、`labels`、`label_values` 发送 `limit=max_series+1`，不发送 `timeout`；`rules` 发送 `exclude_alerts=true`，有 `rule_type` 时发送 `type=alert|record`；`targets` 发送 `state=active`，只输出 `activeTargets`。时间以 UTC RFC 3339 发送。
+- 时间：`now` 取整到秒；`now-<n><s|m|h|d>` 的 n 为 1 到 6 位整数且偏移不超过 100 年；绝对时间只接受 `YYYY-MM-DDTHH:MM:SSZ`，拒绝时区偏移和小数秒。
+- 默认起点：`start` 省略时为 `end` 之前 `min(1h, max_range)`。`max_range` 小于 1 小时时，规格的 `now-1h` 会使省略 `start` 的请求必然超出 `max_range`。
+- `step` 省略时为 `ceil(范围秒数 / (max_points - 1))` 秒，不小于 `min_step`；点数按 `floor(范围 / step) + 1` 与 `max_points` 比较。`max_points` 不得小于 2，`min_step` 只能不小于 15s。`step` 参数的上限为 168h。
+- `max_series` 同样限制 `alerts`、`rules`、`targets` 的输出行数。`series`、`labels`、`label_values` 在服务端已应用 `limit` 时总数未知，stderr 写 `returned N of at least M results (max_series)`；其他 api 写确切总数。
+- `alerts` 的标签集列输出完整标签集（含 `alertname`）；`value` 保留 Prometheus 返回的字符串（如 `1e+00`）；`active_at`、`last_scrape` 转换为 UTC 秒级时间。`targets` 的 `job` 缺失时用 `scrapePool`。
+- `summary=true`：`min`、`avg`、`max` 不含 NaN 样本，`last` 保留最后一个样本的原始字符串；全部为 NaN 时四列均为 `NaN`；仅有原生直方图样本时前三列为空。
+- 脱敏：每个单元格先经过 executor 的脱敏函数，再做 TSV 转义；多个单元格组成的整行不再做第二遍脱敏（`mysql_query` 会做）。
+- 错误：Prometheus 返回 `status: error`、非 2xx 或非 JSON 响应时，退出码 1，stderr 写 `error: HTTP <状态码> errorType=<类型> error=<信息>`，不复制非 JSON 响应体。重定向、响应体超过 `max_response_bytes` 和网络错误作为处理器错误返回，退出码 1。`warnings` 每条写一行 `warning: ...`，不改变退出码，也不输出 `infos`。
+- run_as：配置 `credential` 时目录校验要求 `run_as` 恰为 `root`（目录校验通过 `ActionBuiltinValidator` 接口，由处理器实现）。未配置 `credential` 时 `run_as` 可省略，此时 action 由 agent 用户直接执行，与 `http_get` 相同；与 `mysql_query`、`redis_command` 不同，后者即使省略 `run_as` 也经 allowops-exec 以 root 执行。
+- 集成测试：`internal/builtin/prometheus/integration_test.go` 用 testcontainers 启动 `prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0`，抓取自身并加载一条告警规则和一条记录规则。容器使用 host 网络并只监听 127.0.0.1，不发布端口，并通过 `TESTCONTAINERS_RYUK_DISABLED` 关闭 Ryuk 容器（Ryuk 和默认 bridge 网络在 docker0 不存在的主机上无法创建容器）。测试结束时由测试自己终止容器；测试进程被强制终止时容器不会被回收。
