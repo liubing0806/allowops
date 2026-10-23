@@ -133,6 +133,7 @@ redact:                                # 可选，覆盖全局脱敏规则
 | 候选路径 | `exec_fallbacks: [...]` | exec[0] 不存在时依次尝试，均须为绝对路径 |
 | 签名脚本 | `script: {file, interpreter}`、`args` | 脚本随目录签名，摘要计入 action 摘要；写入私有临时目录执行后删除；Python 加 `-I`；只在主机上执行 |
 | 日志检索 | `builtin: log_search` | Go 实现，支持 `.gz`、路径通配（限 allowed_roots）、固定串或正则、排除、上下文、最大匹配数 |
+| 日志源检索 | `builtin: log_query` | Go 实现，按 catalog 声明的日志源和时间范围检索，多行记录、分页 JSON 与游标、固定错误代码；设计见 `log-search-design.md` |
 | MySQL 只读查询 | `builtin: mysql_query` | 凭据在主机 `/etc/allowops/credentials/`（root，0600）；只允许单条 SELECT/SHOW/DESC/EXPLAIN；只读事务；行数和超时限制 |
 | Redis 只读命令 | `builtin: redis_command` | 只允许 GET、MGET、HGET、HLEN、TTL、TYPE、EXISTS、STRLEN、LLEN、SCARD、ZCARD、SCAN、INFO |
 | HTTP 探测 | `builtin: http_get`，参数类型 `url`（`allowed_prefixes` 必填） | 只发 GET，不跟随跳转，响应大小上限 |

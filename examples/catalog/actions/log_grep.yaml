@@ -1,5 +1,5 @@
-name: log_search
-description: Search allowed plain or gzip logs with bounded scan and match limits.
+name: log_grep
+description: Search allowed plain or gzip logs by path glob with bounded scan and match limits (grep-style text output).
 risk: read
 run_as: root
 params:
