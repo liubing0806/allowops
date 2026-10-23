@@ -1,0 +1,1232 @@
+{
+ "bad_batch": [
+  {
+   "Error": "arguments allowed: JSON object"
+  },
+  {
+   "Error": "arguments allowed: JSON object"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format match exclude tail head count]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format match exclude tail head count]"
+  },
+  {
+   "Error": "reason required"
+  },
+  {
+   "Error": "reason has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "reason has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "reason required; allowed: non-whitespace string"
+  },
+  {
+   "Error": "targets required; allowed: hosts or selector"
+  },
+  {
+   "Error": "targets required; allowed: hosts or selector"
+  },
+  {
+   "Error": "targets requires exactly one of hosts or selector"
+  },
+  {
+   "Error": "targets requires exactly one of hosts or selector"
+  },
+  {
+   "Error": "targets allowed: hosts or selector"
+  },
+  {
+   "Error": "targets.hosts required; allowed: nonempty hostname array"
+  },
+  {
+   "Error": "targets.hosts required; allowed: nonempty hostname array"
+  },
+  {
+   "Error": "targets.hosts allowed: nonempty hostnames without CR/LF/NUL"
+  },
+  {
+   "Error": "targets.hosts allowed: nonempty hostnames without CR/LF/NUL"
+  },
+  {
+   "Error": "targets.hosts allowed: unique hostnames"
+  },
+  {
+   "Error": "selector has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "selector allowed: comma-separated key=value conjunctions"
+  },
+  {
+   "Error": "selector has conflicting conditions; allowed: one value per key"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "expected_count required with selector; allowed: nonnegative integer"
+  },
+  {
+   "Error": "expected_count has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "expected_count has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "expected_count has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  },
+  {
+   "Error": "batch_size and max_failures allowed: nonnegative protobuf uint32 values"
+  }
+ ],
+ "default": [
+  {
+   "Error": "arguments allowed: JSON object"
+  },
+  {
+   "Error": "arguments allowed: JSON object"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format match exclude tail head count]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format match exclude tail head count]"
+  },
+  {
+   "Error": "reason required"
+  },
+  {
+   "Error": "reason has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "reason has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "reason required; allowed: non-whitespace string"
+  },
+  {
+   "Error": "targets required; allowed: hosts or selector"
+  },
+  {
+   "Error": "targets required; allowed: hosts or selector"
+  },
+  {
+   "Error": "targets requires exactly one of hosts or selector"
+  },
+  {
+   "Error": "targets requires exactly one of hosts or selector"
+  },
+  {
+   "Error": "targets allowed: hosts or selector"
+  },
+  {
+   "Error": "targets.hosts required; allowed: nonempty hostname array"
+  },
+  {
+   "Error": "targets.hosts required; allowed: nonempty hostname array"
+  },
+  {
+   "Error": "targets.hosts allowed: nonempty hostnames without CR/LF/NUL"
+  },
+  {
+   "Error": "targets.hosts allowed: nonempty hostnames without CR/LF/NUL"
+  },
+  {
+   "Error": "targets.hosts allowed: unique hostnames"
+  },
+  {
+   "Error": "selector has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "selector allowed: comma-separated key=value conjunctions"
+  },
+  {
+   "Error": "selector has conflicting conditions; allowed: one value per key"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Selector": "a=b,a=b"
+     }
+    },
+    "expected_count": 1,
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "expected_count required with selector; allowed: nonnegative integer"
+  },
+  {
+   "Error": "expected_count has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "expected_count has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Selector": "a=b"
+     }
+    },
+    "expected_count": 3,
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "expected_count has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "expected_count": 2,
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "wait_seconds allowed: integer in [0,120]"
+  },
+  {
+   "Error": "wait_seconds has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "wait_seconds has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "batch_size allowed: integer in [1,20]"
+  },
+  {
+   "Error": "batch_size allowed: integer in [1,20]"
+  },
+  {
+   "Error": "max_failures allowed: integer in [0,5]"
+  },
+  {
+   "Error": "max_failures has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 0,
+    "batch_size": 1,
+    "max_failures": 0,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "response_format has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "response_format allowed: concise, detailed"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {}
+   },
+   "Format": "detailed"
+  },
+  {
+   "Error": "params allowed: JSON object"
+  },
+  {
+   "Error": "params allowed: JSON object"
+  },
+  {
+   "Error": "parameter mode: not an enum value; allowed: enum [\"recent\" \"all\"]"
+  },
+  {
+   "Error": "unknown parameter \"nope\"; allowed names: [lines mode reason]"
+  },
+  {
+   "Error": "parameter lines: above max; allowed: integer min=1 max=100"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6NSwibW9kZSI6ImFsbCIsInJlYXNvbiI6ImFiYyJ9"
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "parameter reason: does not match regex; allowed: string without leading '-' or CR/LF/NUL, max_len=0 (0=unbounded), regex=\"^[a-z]+$\""
+  },
+  {
+   "Error": "filter tail must not be null"
+  },
+  {
+   "Error": "tail allowed: integer in [1,4294967295]"
+  },
+  {
+   "Error": "filter head must not be null"
+  },
+  {
+   "Error": "head allowed: integer in [1,4294967295]"
+  },
+  {
+   "Error": "match allowed: RE2 string"
+  },
+  {
+   "Error": "match allowed: RE2 string"
+  },
+  {
+   "Error": "exclude allowed: RE2 string"
+  },
+  {
+   "Error": "count allowed: boolean"
+  },
+  {
+   "Error": "tail, head and count are mutually exclusive; allowed: match/exclude with at most one of tail, head, count"
+  },
+  {
+   "Error": "tail, head and count are mutually exclusive; allowed: match/exclude with at most one of tail, head, count"
+  },
+  {
+   "Error": "filter match: error parsing regexp: missing closing ]: `[`"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {
+     "match": "a",
+     "exclude": "b",
+     "tail": 4294967295
+    }
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "head allowed: integer in [1,4294967295]"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "b",
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJyZWNlbnQiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {
+     "count": true
+    }
+   },
+   "Format": "concise"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Selector": " a = b "
+     }
+    },
+    "expected_count": 0,
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJyZWNlbnQiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 120,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {}
+   },
+   "Format": "detailed"
+  }
+ ],
+ "limited": [
+  {
+   "Error": "arguments allowed: JSON object"
+  },
+  {
+   "Error": "arguments allowed: JSON object"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format match exclude tail head count]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format match exclude tail head count]"
+  },
+  {
+   "Error": "reason required"
+  },
+  {
+   "Error": "reason has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "reason has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "reason required; allowed: non-whitespace string"
+  },
+  {
+   "Error": "targets required; allowed: hosts or selector"
+  },
+  {
+   "Error": "targets required; allowed: hosts or selector"
+  },
+  {
+   "Error": "targets requires exactly one of hosts or selector"
+  },
+  {
+   "Error": "targets requires exactly one of hosts or selector"
+  },
+  {
+   "Error": "targets allowed: hosts or selector"
+  },
+  {
+   "Error": "targets.hosts required; allowed: nonempty hostname array"
+  },
+  {
+   "Error": "targets.hosts required; allowed: nonempty hostname array"
+  },
+  {
+   "Error": "targets.hosts allowed: nonempty hostnames without CR/LF/NUL"
+  },
+  {
+   "Error": "targets.hosts allowed: nonempty hostnames without CR/LF/NUL"
+  },
+  {
+   "Error": "targets.hosts allowed: unique hostnames"
+  },
+  {
+   "Error": "selector has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "selector allowed: comma-separated key=value conjunctions"
+  },
+  {
+   "Error": "selector has conflicting conditions; allowed: one value per key"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Selector": "a=b,a=b"
+     }
+    },
+    "expected_count": 1,
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 3,
+    "max_failures": 0,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "expected_count required with selector; allowed: nonnegative integer"
+  },
+  {
+   "Error": "expected_count has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "expected_count has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Selector": "a=b"
+     }
+    },
+    "expected_count": 3,
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 3,
+    "max_failures": 0,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "expected_count has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "expected_count": 2,
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 3,
+    "max_failures": 0,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "wait_seconds allowed: integer in [0,120]"
+  },
+  {
+   "Error": "wait_seconds has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "wait_seconds has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "batch_size allowed: integer in [1,3]"
+  },
+  {
+   "Error": "batch_size allowed: integer in [1,3]"
+  },
+  {
+   "Error": "max_failures allowed: integer in [0,0]"
+  },
+  {
+   "Error": "max_failures has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 0,
+    "batch_size": 1,
+    "max_failures": 0,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "response_format has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "response_format allowed: concise, detailed"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 3,
+    "max_failures": 0,
+    "filters": {}
+   },
+   "Format": "detailed"
+  },
+  {
+   "Error": "params allowed: JSON object"
+  },
+  {
+   "Error": "params allowed: JSON object"
+  },
+  {
+   "Error": "parameter mode: not an enum value; allowed: enum [\"recent\" \"all\"]"
+  },
+  {
+   "Error": "unknown parameter \"nope\"; allowed names: [lines mode reason]"
+  },
+  {
+   "Error": "parameter lines: above max; allowed: integer min=1 max=100"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6NSwibW9kZSI6ImFsbCIsInJlYXNvbiI6ImFiYyJ9"
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 3,
+    "max_failures": 0,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "parameter reason: does not match regex; allowed: string without leading '-' or CR/LF/NUL, max_len=0 (0=unbounded), regex=\"^[a-z]+$\""
+  },
+  {
+   "Error": "filter tail must not be null"
+  },
+  {
+   "Error": "tail allowed: integer in [1,4294967295]"
+  },
+  {
+   "Error": "filter head must not be null"
+  },
+  {
+   "Error": "head allowed: integer in [1,4294967295]"
+  },
+  {
+   "Error": "match allowed: RE2 string"
+  },
+  {
+   "Error": "match allowed: RE2 string"
+  },
+  {
+   "Error": "exclude allowed: RE2 string"
+  },
+  {
+   "Error": "count allowed: boolean"
+  },
+  {
+   "Error": "tail, head and count are mutually exclusive; allowed: match/exclude with at most one of tail, head, count"
+  },
+  {
+   "Error": "tail, head and count are mutually exclusive; allowed: match/exclude with at most one of tail, head, count"
+  },
+  {
+   "Error": "filter match: error parsing regexp: missing closing ]: `[`"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 3,
+    "max_failures": 0,
+    "filters": {
+     "match": "a",
+     "exclude": "b",
+     "tail": 4294967295
+    }
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "head allowed: integer in [1,4294967295]"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "b",
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJyZWNlbnQiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 3,
+    "max_failures": 0,
+    "filters": {
+     "count": true
+    }
+   },
+   "Format": "concise"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Selector": " a = b "
+     }
+    },
+    "expected_count": 0,
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJyZWNlbnQiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 120,
+    "batch_size": 3,
+    "max_failures": 0,
+    "filters": {}
+   },
+   "Format": "detailed"
+  }
+ ],
+ "no_filters": [
+  {
+   "Error": "arguments allowed: JSON object"
+  },
+  {
+   "Error": "arguments allowed: JSON object"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "reason required"
+  },
+  {
+   "Error": "reason has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "reason has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "reason required; allowed: non-whitespace string"
+  },
+  {
+   "Error": "targets required; allowed: hosts or selector"
+  },
+  {
+   "Error": "targets required; allowed: hosts or selector"
+  },
+  {
+   "Error": "targets requires exactly one of hosts or selector"
+  },
+  {
+   "Error": "targets requires exactly one of hosts or selector"
+  },
+  {
+   "Error": "targets allowed: hosts or selector"
+  },
+  {
+   "Error": "targets.hosts required; allowed: nonempty hostname array"
+  },
+  {
+   "Error": "targets.hosts required; allowed: nonempty hostname array"
+  },
+  {
+   "Error": "targets.hosts allowed: nonempty hostnames without CR/LF/NUL"
+  },
+  {
+   "Error": "targets.hosts allowed: nonempty hostnames without CR/LF/NUL"
+  },
+  {
+   "Error": "targets.hosts allowed: unique hostnames"
+  },
+  {
+   "Error": "selector has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "selector allowed: comma-separated key=value conjunctions"
+  },
+  {
+   "Error": "selector has conflicting conditions; allowed: one value per key"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Selector": "a=b,a=b"
+     }
+    },
+    "expected_count": 1,
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "expected_count required with selector; allowed: nonnegative integer"
+  },
+  {
+   "Error": "expected_count has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "expected_count has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Selector": "a=b"
+     }
+    },
+    "expected_count": 3,
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "expected_count has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "expected_count": 2,
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "wait_seconds allowed: integer in [0,120]"
+  },
+  {
+   "Error": "wait_seconds has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "wait_seconds has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "batch_size allowed: integer in [1,20]"
+  },
+  {
+   "Error": "batch_size allowed: integer in [1,20]"
+  },
+  {
+   "Error": "max_failures allowed: integer in [0,5]"
+  },
+  {
+   "Error": "max_failures has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 0,
+    "batch_size": 1,
+    "max_failures": 0,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "response_format has invalid type; allowed: declared inputSchema type, without null"
+  },
+  {
+   "Error": "response_format allowed: concise, detailed"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJhbGwiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {}
+   },
+   "Format": "detailed"
+  },
+  {
+   "Error": "params allowed: JSON object"
+  },
+  {
+   "Error": "params allowed: JSON object"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown parameter \"nope\"; allowed names: [lines mode reason]"
+  },
+  {
+   "Error": "parameter lines: above max; allowed: integer min=1 max=100"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Hosts": {
+       "names": [
+        "a"
+       ]
+      }
+     }
+    },
+    "params": {
+     "json": "eyJsaW5lcyI6NSwibW9kZSI6ImFsbCIsInJlYXNvbiI6ImFiYyJ9"
+    },
+    "reason": "x",
+    "wait_seconds": 30,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {}
+   },
+   "Format": "concise"
+  },
+  {
+   "Error": "parameter reason: does not match regex; allowed: string without leading '-' or CR/LF/NUL, max_len=0 (0=unbounded), regex=\"^[a-z]+$\""
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+  },
+  {
+   "Request": {
+    "action": "logs_read",
+    "targets": {
+     "Selection": {
+      "Selector": " a = b "
+     }
+    },
+    "expected_count": 0,
+    "params": {
+     "json": "eyJsaW5lcyI6MTAsIm1vZGUiOiJyZWNlbnQiLCJyZWFzb24iOiJhcHAifQ=="
+    },
+    "reason": "x",
+    "wait_seconds": 120,
+    "batch_size": 20,
+    "max_failures": 5,
+    "filters": {}
+   },
+   "Format": "detailed"
+  }
+ ]
+}
