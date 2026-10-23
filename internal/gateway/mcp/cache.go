@@ -22,7 +22,52 @@ type ruleSnapshot []authz.Rule
 
 func (r ruleSnapshot) LoadRules(context.Context) ([]authz.Rule, error) { return r, nil }
 
+// serverSnapshot is what serverFor derives from the request before it takes the
+// cache lock: the policy rules, the unexpired catalogs, and the cache keys.
+type serverSnapshot struct {
+	rules    []authz.Rule
+	live     []db.CurrentCatalogsRow
+	id       *reqctx.Identity
+	versions string
+	key      string
+}
+
 func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
+	snap, err := s.snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if snap.versions != s.versions {
+		s.entries = map[string]*list.Element{}
+		s.lru.Init()
+		s.versions = snap.versions
+	}
+	if element := s.entries[snap.key]; element != nil {
+		s.lru.MoveToFront(element)
+		return element.Value.(*cacheEntry).server, nil
+	}
+	actions, err := s.loadActions(ctx, snap.live)
+	if err != nil {
+		return nil, err
+	}
+	engine, err := authz.New(ctx, projectRules(snap.rules), nil)
+	if err != nil {
+		return nil, err
+	}
+	definitions, available, unsupported, err := visibleTools(ctx, engine, snap.id, actions)
+	if err != nil {
+		return nil, err
+	}
+	server := s.newServer(definitions, available, unsupported)
+	s.storeServer(snap.key, server)
+	return server, nil
+}
+
+// snapshot reads the policy and catalog versions and hashes them, with the
+// caller identity, into the cache keys.
+func (s *Service) snapshot(ctx context.Context) (*serverSnapshot, error) {
 	version, rules, err := s.identity.PolicySnapshot(ctx)
 	if err != nil {
 		return nil, err
@@ -61,18 +106,12 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 		return nil, err
 	}
 	sum = sha256.Sum256(data)
-	key := hex.EncodeToString(sum[:])
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if versions != s.versions {
-		s.entries = map[string]*list.Element{}
-		s.lru.Init()
-		s.versions = versions
-	}
-	if element := s.entries[key]; element != nil {
-		s.lru.MoveToFront(element)
-		return element.Value.(*cacheEntry).server, nil
-	}
+	return &serverSnapshot{rules: rules, live: live, id: id, versions: versions, key: hex.EncodeToString(sum[:])}, nil
+}
+
+// loadActions verifies each live catalog against its stored digest and merges
+// the actions. It runs under the cache lock.
+func (s *Service) loadActions(ctx context.Context, live []db.CurrentCatalogsRow) (map[string]catalog.Action, error) {
 	actions := map[string]catalog.Action{}
 	for _, c := range live {
 		if c.EnvelopeSizeBytes > int64(s.catalogs.MaxEnvelopeBytes) {
@@ -100,8 +139,13 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 			actions[name] = a
 		}
 	}
-	// G40: discovery ignores host, time and source IP. A deny with any of
-	// these conditions cannot prove that every possible call is denied.
+	return actions, nil
+}
+
+// projectRules drops conditions that discovery cannot evaluate.
+// G40: discovery ignores host, time and source IP. A deny with any of
+// these conditions cannot prove that every possible call is denied.
+func projectRules(rules []authz.Rule) ruleSnapshot {
 	projected := ruleSnapshot{}
 	for _, rule := range rules {
 		if rule.Effect == "deny" && (len(rule.HostLabels) > 0 || rule.Hours != nil || len(rule.SourceCIDRs) > 0) {
@@ -112,10 +156,12 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 		rule.SourceCIDRs = nil
 		projected = append(projected, rule)
 	}
-	engine, err := authz.New(ctx, projected, nil)
-	if err != nil {
-		return nil, err
-	}
+	return projected
+}
+
+// visibleTools returns the tool definitions to register, plus the set of
+// callable names and the subset whose schema the SDK cannot register.
+func visibleTools(ctx context.Context, engine *authz.Engine, id *reqctx.Identity, actions map[string]catalog.Action) ([]ToolDefinition, map[string]bool, map[string]bool, error) {
 	definitions := fixedTools()
 	names := slices.Collect(maps.Keys(actions))
 	slices.Sort(names)
@@ -128,7 +174,7 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 		a := actions[name]
 		result, err := engine.Evaluate(ctx, authz.Input{Subject: id.Subject, Operation: authz.ExecuteAction, Action: authz.Action{Name: name, Risk: a.Risk}})
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, err
 		}
 		if result.Decision != "allow" {
 			continue
@@ -142,11 +188,15 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 			continue
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, err
 		}
 		definitions = append(definitions, *tool)
 		available[name] = true
 	}
+	return definitions, available, unsupported, nil
+}
+
+func (s *Service) newServer(definitions []ToolDefinition, available, unsupported map[string]bool) *sdk.Server {
 	server := sdk.NewServer(&sdk.Implementation{Name: "allowops", Version: "1"}, &sdk.ServerOptions{Instructions: toolInstructions, PageSize: s.identity.PageSize(), Capabilities: &sdk.ServerCapabilities{Tools: &sdk.ToolCapabilities{}}, SetCacheable: func(_ context.Context, _ sdk.Request, c *sdk.Cacheable) { c.TTLMs = 0; c.CacheScope = "private" }})
 	for _, definition := range definitions {
 		tool := &sdk.Tool{Name: definition.Name, Description: definition.Description, InputSchema: definition.InputSchema, Annotations: &sdk.ToolAnnotations{ReadOnlyHint: definition.Annotations.ReadOnlyHint, DestructiveHint: definition.Annotations.DestructiveHint, IdempotentHint: definition.Annotations.IdempotentHint}}
@@ -175,6 +225,12 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 			return next(ctx, method, r)
 		}
 	})
+	return server
+}
+
+// storeServer adds a server to the LRU and evicts the oldest entry over the
+// limit. The caller holds s.mu.
+func (s *Service) storeServer(key string, server *sdk.Server) {
 	element := s.lru.PushFront(&cacheEntry{key: key, server: server})
 	s.entries[key] = element
 	if s.lru.Len() > s.config.CacheEntries {
@@ -182,5 +238,4 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 		delete(s.entries, old.Value.(*cacheEntry).key)
 		s.lru.Remove(old)
 	}
-	return server, nil
 }
