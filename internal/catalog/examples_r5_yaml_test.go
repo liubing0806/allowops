@@ -36,9 +36,10 @@ var sqlTokenizerCases = []redactionCase{
 	{"SELECT 1 -- it's done\nFROM u WHERE pw='cmtsecret3'", "cmtsecret3"},
 	{`SELECT 'esc\'aped1 tail', "dq""inner2", 'sq''inner3', 'back\\', 'second4'`, "second4"},
 	{"SELECT 0xDEADBEEF8, x'41424344'", "41424344"},
-	// Identifiers without a character that can start a token stay readable.
-	{"SELECT `id`, `name` FROM `users` WHERE `id` = 5 ORDER BY `name`", ""},
-	{"SELECT * FROM `my-db`.`a/b` WHERE `c-d` > 1", ""},
+	// A plain identifier before a literal that holds a backtick: the closing
+	// backtick of the identifier must not pair with the backtick in the literal.
+	{"SELECT `my-db`.`t` FROM x WHERE a = '*/\n`btsecret9' AND b = 1", "btsecret9"},
+	{"SELECT 1 FROM `a/b` '*/\n`btsecret10'", "btsecret10"},
 }
 
 // "#" starts a comment in a SHOW PROCESSLIST statement. Slow log headers start
@@ -65,14 +66,16 @@ func TestExampleMySQLStatementTextRedactsOnLeftmostToken(t *testing.T) {
 	}
 }
 
-func TestExampleMySQLSlowLogKeepsHashHeaderLines(t *testing.T) {
-	r := exampleRedactor(t, loadExamples(t), "mysql_slow_log")
-	checkRedactionCases(t, "mysql_slow_log", r, []redactionCase{
-		{"# Time: 2026-10-22T10:00:00.000000Z", ""},
-		{"# User@Host: app[app] @ localhost []  Id:    12", ""},
-		{"# Query_time: 1.200000  Lock_time: 0.000100 Rows_sent: 1  Rows_examined: 5", ""},
-		{"use app;", ""},
-	})
+func TestExampleMySQLLogActionsKeepHashHeaderLines(t *testing.T) {
+	c := loadExamples(t)
+	for _, name := range []string{"mysql_slow_log", "mysql_error_log"} {
+		checkRedactionCases(t, name, exampleRedactor(t, c, name), []redactionCase{
+			{"# Time: 2026-10-22T10:00:00.000000Z", ""},
+			{"# User@Host: app[app] @ localhost []  Id:    12", ""},
+			{"# Query_time: 1.200000  Lock_time: 0.000100 Rows_sent: 1  Rows_examined: 5", ""},
+			{"use app;", ""},
+		})
+	}
 }
 
 type sqlGen struct {
@@ -118,7 +121,7 @@ func (g *sqlGen) backtick() string {
 	if g.rnd.Intn(3) == 0 {
 		return "`" + g.pick("id", "name", "my-db", "a/b", "t1") + "`"
 	}
-	body := g.pick("it's", `say "hi"`, "x#y", "a -- b", "/*c", "d*/", "a b", "``", "o'brien", "q'", "'q") + g.newline()
+	body := g.pick("it's", `say "hi"`, "x#y", "a -- b", "/*c", "d*/", "a b", "``", "o'brien", "q'", "'q", "t ", "x,", "(y)", ".z") + g.newline()
 	return "`" + body + "`"
 }
 
