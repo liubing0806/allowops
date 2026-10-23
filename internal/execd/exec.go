@@ -159,6 +159,8 @@ func ExecutionReason(err error) string {
 		return "CANCELLED"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "TIMEOUT"
+	case errors.Is(err, params.ErrPathNotTrusted):
+		return "PATH_NOT_TRUSTED"
 	default:
 		return "EXECUTION_FAILED"
 	}

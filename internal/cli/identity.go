@@ -236,9 +236,31 @@ func readPassword(c *cobra.Command, stdin bool) (string, error) {
 		fmt.Fprint(c.ErrOrStderr(), "LDAP password: ")
 		defer fmt.Fprintln(c.ErrOrStderr())
 	}
-	line, err := bufio.NewReader(io.LimitReader(input, 4097)).ReadString('\n')
-	if err != nil && err != io.EOF {
-		return "", err
+	// main cancels the command context on SIGINT instead of exiting, so the
+	// prompt waits on it too; the deferred restore then turns echo back on.
+	// A cancelled read is abandoned; the process exits after the command.
+	ctx := c.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	type result struct {
+		line string
+		err  error
+	}
+	read := make(chan result, 1)
+	go func() {
+		line, err := bufio.NewReader(io.LimitReader(input, 4097)).ReadString('\n')
+		read <- result{line, err}
+	}()
+	var line string
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case r := <-read:
+		if r.err != nil && r.err != io.EOF {
+			return "", r.err
+		}
+		line = r.line
 	}
 	if len(line) > 4096 {
 		return "", errors.New("password exceeds input limit")

@@ -42,10 +42,17 @@ case "$endpoint" in
 esac
 python3 verify-config.py
 python3 verify-local.py
-fresh=0
 if [ ! -e .local ]; then
-    fresh=1
     ./prepare.sh
+fi
+# Bootstrap (catalog publication and join tokens) is gated on its own marker,
+# not on whether .local was just created: a run interrupted after prepare.sh and
+# before bootstrap finished must bootstrap on the next run. Environments that
+# completed bootstrap before the marker existed hold join token files, which
+# only bootstrap writes; record them instead of running bootstrap again, since
+# it creates the demo-publisher account and would conflict.
+if [ ! -e .local/bootstrap.done ] && [ -n "$(find .local/joins -name '*.token' -size +0c 2>/dev/null)" ]; then
+    : > .local/bootstrap.done
 fi
 origin_changed=$(python3 local-origin.py "$console_host" "$ALLOWOPS_LOCAL_PORT")
 if [ "$console_host" != localhost ] && ! grep -qx "subjectAltName=.*,IP:$console_host" .local/secrets/tls.ext; then
@@ -72,9 +79,10 @@ if [ "$origin_changed" = changed ]; then
     docker compose -f compose.yaml -f local.yaml up -d --force-recreate prepare-volumes gateway
 fi
 docker compose -f compose.yaml -f local.yaml wait ready
-if [ "$fresh" = 1 ]; then
+if [ ! -e .local/bootstrap.done ]; then
     docker compose -f compose.yaml -f local.yaml run --rm --no-deps \
         -e ALLOWOPS_DEMO_HOSTS="$ALLOWOPS_DEMO_HOSTS" admin-tool
+    : > .local/bootstrap.done
 fi
 docker compose -f compose.yaml -f local.yaml --profile demo up -d --wait demo-1 demo-2 demo-3
 if [ ! -s .local/mcp-token ]; then

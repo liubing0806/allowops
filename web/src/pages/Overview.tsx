@@ -68,6 +68,16 @@ export default function Overview() {
                   count: status.expiringServiceAccountTokens,
                 })}
               </Link>
+              {status.gatewayUpdate && (
+                <Link
+                  to="/system"
+                  className="rounded-lg bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:no-underline"
+                >
+                  {t('overview.updateAlert', {
+                    version: status.gatewayUpdate.latestVersion,
+                  })}
+                </Link>
+              )}
             </div>
           </Panel>
         </>

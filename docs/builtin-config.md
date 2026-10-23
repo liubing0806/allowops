@@ -76,6 +76,7 @@ SLOWLOG GET 最多 128 条；每条只含上述 6 个字段，128 条在本机 V
 
 | 字段 | 合法配置与省略时的行为 |
 | --- | --- |
+| `max_response_bytes` | 脱敏和转义后的 TSV（含表头）字节上限；整数字节或 B/KB/MB/GB 字符串，默认 64KB，目录只能收紧（超过 64KB、负数或无法解析的值被拒绝）；省略或 0 为默认值。超限时丢弃放不下的整行并停止读取，返回已有行、退出码 0 并标记 `truncated`，与 `max_rows` 超限相同 |
 | `databases` | 非空数据库名列表，每项匹配 `^[a-zA-Z0-9_]{1,64}$`；参数 database 和 SQL AST 中所有显式库名均须在列表内；省略时仅检查原有数据库名格式 |
 | `statement_types` | SELECT、SHOW、DESCRIBE、EXPLAIN 的非空子集；省略时允许原有全部只读语句类型 |
 | `show_types` | TABLES、DATABASES、PROCESSLIST、VARIABLES、STATUS、CREATE TABLE、COLUMNS 的非空子集；省略时不增加种类限制，但配置 databases 后仍受 G34 的库范围和服务器级 SHOW 规则约束 |

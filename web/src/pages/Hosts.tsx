@@ -9,6 +9,7 @@ import { Trash2Icon } from 'lucide-react'
 import {
   api,
   formatLabels,
+  labelsRepresentable,
   parseLabels,
   toBase64,
   type Host,
@@ -36,19 +37,24 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { commaList, labelsText, requiredText } from '@/lib/forms'
+import {
+  commaList,
+  labelsText,
+  requiredText,
+  selectorText,
+} from '@/lib/forms'
 import { useHostsFilterStore } from '@/lib/hosts-filter-store'
 import { useCommand, useNotify } from '@/lib/notifications'
 
 const filterSchema = z.object({
-  selector: labelsText,
+  selector: selectorText,
   hostname: z.string(),
   online: z.string(),
   agentVersion: z.string(),
 })
 const labelSchema = z.object({ labels: labelsText, remove: z.string() })
 const bulkSchema = labelSchema.extend({
-  selector: requiredText.pipe(labelsText),
+  selector: requiredText.pipe(selectorText),
 })
 const csvSchema = z.object({ csv: requiredText })
 
@@ -224,7 +230,7 @@ export default function Hosts() {
                 id: 'labels',
                 header: t('host.labels'),
                 cell: ({ row }) => (
-                  <span className="font-mono text-xs text-muted-foreground">
+                  <span className="font-mono text-xs whitespace-pre-line text-muted-foreground">
                     {formatLabels(row.original.authorizationLabels) ||
                       t('common.none')}
                   </span>
@@ -340,7 +346,11 @@ function BulkLabels() {
           label={t('host.labels')}
           error={form.formState.errors.labels?.message}
         >
-          <Input placeholder="env=prod" {...form.register('labels')} />
+          <Textarea
+            rows={3}
+            placeholder={t('host.labelsPlaceholder')}
+            {...form.register('labels')}
+          />
         </Field>
         <Field label={t('host.removeKeys')}>
           <Input {...form.register('remove')} />
@@ -473,12 +483,20 @@ function ImportLabels() {
               {
                 id: 'before',
                 header: t('host.before'),
-                cell: ({ row }) => formatLabels(row.original.before),
+                cell: ({ row }) => (
+                  <span className="whitespace-pre-line">
+                    {formatLabels(row.original.before)}
+                  </span>
+                ),
               },
               {
                 id: 'after',
                 header: t('host.after'),
-                cell: ({ row }) => formatLabels(row.original.after),
+                cell: ({ row }) => (
+                  <span className="whitespace-pre-line">
+                    {formatLabels(row.original.after)}
+                  </span>
+                ),
               },
               {
                 id: 'errors',
@@ -534,6 +552,7 @@ function HostEditor({ host }: { host: Host }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [deleting, setDeleting] = useState(false)
+  const representable = labelsRepresentable(host.authorizationLabels)
   const form = useForm<z.infer<typeof labelSchema>>({
     resolver: zodResolver(labelSchema),
     defaultValues: {
@@ -577,15 +596,25 @@ function HostEditor({ host }: { host: Host }) {
         >
           <Field
             label={t('host.labels')}
-            error={form.formState.errors.labels?.message}
+            error={
+              representable
+                ? form.formState.errors.labels?.message
+                : 'error.labelsUnrepresentable'
+            }
           >
-            <Input {...form.register('labels')} />
+            <Textarea
+              rows={3}
+              placeholder={t('host.labelsPlaceholder')}
+              {...form.register('labels')}
+            />
           </Field>
           <Field label={t('host.removeKeys')}>
             <Input {...form.register('remove')} />
           </Field>
           <div>
-            <Button disabled={saving.isPending}>{t('host.saveLabels')}</Button>
+            <Button disabled={saving.isPending || !representable}>
+              {t('host.saveLabels')}
+            </Button>
           </div>
         </form>
       </Panel>
@@ -602,7 +631,7 @@ function HostEditor({ host }: { host: Host }) {
             </Badge>
           </dd>
           <dt className="text-muted-foreground">{t('host.reportedLabels')}</dt>
-          <dd className="min-w-0 font-mono text-xs break-all">
+          <dd className="min-w-0 font-mono text-xs break-all whitespace-pre-line">
             {formatLabels(host.reportedLabels)}
           </dd>
           <dt className="text-muted-foreground">{t('host.catalogVersion')}</dt>

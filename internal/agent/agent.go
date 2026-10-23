@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/execd"
@@ -166,12 +168,20 @@ func (a *Agent) Run(parent context.Context) error {
 		}
 	}()
 	defer func() { cancel(); <-renewDone }()
+	var rejection string
 	for attempt := uint(0); ctx.Err() == nil; attempt++ {
 		started := time.Now()
-		delay, _ := a.session(ctx, client)
+		delay, err := a.session(ctx, client)
 		transport.CloseIdleConnections()
 		if ctx.Err() != nil {
 			break
+		}
+		// Log a rejection once until the next different outcome; retries repeat it every few seconds.
+		if message, ok := rejectedVersion(err); !ok {
+			rejection = ""
+		} else if message != rejection {
+			rejection = message
+			slog.Warn("gateway rejected agent version", "agent_version", a.options.Version, "reason", "AGENT_VERSION_UNSUPPORTED", "error", message)
 		}
 		if time.Since(started) >= 45*time.Second {
 			attempt = 0
@@ -189,4 +199,20 @@ func (a *Agent) Run(parent context.Context) error {
 	default:
 		return parent.Err()
 	}
+}
+
+// rejectedVersion reports the gateway's message when it refused this agent version.
+func rejectedVersion(err error) (string, bool) {
+	var e *connect.Error
+	if !errors.As(err, &e) || e.Code() != connect.CodeUnimplemented {
+		return "", false
+	}
+	for _, d := range e.Details() {
+		if v, err := d.Value(); err == nil {
+			if detail, ok := v.(*v1.ErrorDetail); ok && detail.Reason == "AGENT_VERSION_UNSUPPORTED" {
+				return e.Message(), true
+			}
+		}
+	}
+	return "", false
 }

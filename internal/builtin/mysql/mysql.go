@@ -20,6 +20,8 @@ import (
 	"time"
 
 	driver "github.com/go-sql-driver/mysql"
+
+	"github.com/liubing0806/allowops/internal/builtin"
 )
 
 const (
@@ -39,6 +41,10 @@ type Config struct {
 	Databases      []string      `yaml:"databases" json:"databases"`
 	StatementTypes []string      `yaml:"statement_types" json:"statement_types"`
 	ShowTypes      []string      `yaml:"show_types" json:"show_types"`
+
+	// MaxResponseBytes limits the redacted, escaped TSV (header included); zero
+	// selects the default. A row that would exceed it is dropped whole.
+	MaxResponseBytes int64 `yaml:"max_response_bytes" json:"max_response_bytes"`
 }
 
 type Params struct {
@@ -59,6 +65,9 @@ func (c Config) Validate() error {
 	}
 	if c.MaxRows < 0 || c.MaxRows > DefaultMaxRows {
 		return errors.New("max_rows must be between 0 and 500")
+	}
+	if c.MaxResponseBytes < 0 || c.MaxResponseBytes > 16<<20 {
+		return errors.New("max_response_bytes must be between 0 and 16777216 bytes")
 	}
 	if c.Timeout < 0 || c.Timeout > DefaultTimeout || (c.Timeout > 0 && c.Timeout < time.Millisecond) {
 		return errors.New("timeout must be zero or between 1ms and 10s")
@@ -173,6 +182,9 @@ func RunRedacted(ctx context.Context, cfg Config, p Params, mask func(string) st
 	if cfg.MaxRows == 0 {
 		cfg.MaxRows = DefaultMaxRows
 	}
+	if cfg.MaxResponseBytes == 0 {
+		cfg.MaxResponseBytes = builtin.DefaultMySQLMaxResponseBytes
+	}
 	if cfg.Timeout == 0 {
 		cfg.Timeout = DefaultTimeout
 	}
@@ -229,7 +241,7 @@ func runQueryRedacted(ctx context.Context, cfg Config, p Params, cred credential
 		return result, queryError(ctx, "query", err)
 	}
 	defer rows.Close()
-	result, err = readRowsRedacted(rows, cfg.MaxRows, mask)
+	result, err = readRowsRedacted(rows, cfg.MaxRows, cfg.MaxResponseBytes, mask)
 	if err != nil {
 		return Result{}, queryError(ctx, "read result", err)
 	}
@@ -271,10 +283,10 @@ func queryError(ctx context.Context, stage string, err error) error {
 }
 
 func readRows(rows *sql.Rows, maxRows int) (Result, error) {
-	return readRowsRedacted(rows, maxRows, nil)
+	return readRowsRedacted(rows, maxRows, builtin.DefaultMySQLMaxResponseBytes, nil)
 }
 
-func readRowsRedacted(rows *sql.Rows, maxRows int, mask func(string) string) (Result, error) {
+func readRowsRedacted(rows *sql.Rows, maxRows int, maxBytes int64, mask func(string) string) (Result, error) {
 	if mask == nil {
 		mask = func(s string) string { return s }
 	}
@@ -293,6 +305,7 @@ func readRowsRedacted(rows *sql.Rows, maxRows int, mask func(string) string) (Re
 	for i := range values {
 		dest[i] = &values[i]
 	}
+	var line strings.Builder
 	for rows.Next() {
 		if result.Rows == maxRows {
 			result.Truncated = true
@@ -301,13 +314,22 @@ func readRowsRedacted(rows *sql.Rows, maxRows int, mask func(string) string) (Re
 		if err := rows.Scan(dest...); err != nil {
 			return Result{}, err
 		}
+		line.Reset()
 		for i, field := range maskRow(values, mask) {
 			if i > 0 {
-				out.WriteByte('\t')
+				line.WriteByte('\t')
 			}
-			out.WriteString(field)
+			line.WriteString(field)
 		}
-		out.WriteByte('\n')
+		line.WriteByte('\n')
+		// The limit applies to the final encoded row; the driver has already
+		// allocated this row, so one oversized row costs at most
+		// max_allowed_packet before it is dropped.
+		if int64(out.Len()+line.Len()) > maxBytes {
+			result.Truncated = true
+			break
+		}
+		out.WriteString(line.String())
 		result.Rows++
 	}
 	if err := rows.Err(); err != nil {

@@ -45,47 +45,66 @@ func storedPackage(raw []byte) (*catalog.Package, error) {
 	}
 	return catalog.ParsePackage(payload)
 }
-func (s *Service) storedCatalogs(ctx context.Context, id string, current bool) ([]storedCatalog, error) {
-	sql := `SELECT c.dsse,c.published_at,c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id) FROM catalog_versions c WHERE ($1='' OR c.catalog_id=$1)`
-	if current {
+
+// catalogQuery selects catalog rows in SQL so only the rows a caller returns are
+// decoded: one corrupt historical envelope must not fail reads of other
+// versions. version 0 matches every version; limit 0 means no limit.
+type catalogQuery struct {
+	id      string
+	version int64
+	current bool
+	offset  int
+	limit   int
+}
+
+// storedCatalogs decodes at most q.limit rows. The row after them is never
+// decoded; it only reports whether more rows follow.
+func (s *Service) storedCatalogs(ctx context.Context, q catalogQuery) ([]storedCatalog, bool, error) {
+	sql := `SELECT c.dsse,c.published_at,c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id) FROM catalog_versions c WHERE ($1='' OR c.catalog_id=$1) AND ($2::bigint=0 OR c.version=$2::bigint)`
+	if q.current {
 		sql += ` AND c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id)`
 	}
-	sql += " ORDER BY c.catalog_id,c.version DESC"
-	rows, err := s.Store.Pool.Query(ctx, sql, id)
+	sql += " ORDER BY c.catalog_id,c.version DESC OFFSET $3::bigint LIMIT $4::bigint"
+	var limit *int
+	if q.limit > 0 {
+		limit = new(q.limit + 1)
+	}
+	rows, err := s.Store.Pool.Query(ctx, sql, q.id, q.version, q.offset, limit)
 	if err != nil {
-		return nil, dbError(err)
+		return nil, false, dbError(err)
 	}
 	defer rows.Close()
 	out := []storedCatalog{}
 	for rows.Next() {
+		if q.limit > 0 && len(out) == q.limit {
+			return out, true, nil
+		}
 		var raw []byte
 		var published pgtype.Timestamptz
 		var isCurrent bool
 		if err = rows.Scan(&raw, &published, &isCurrent); err != nil {
-			return nil, dbError(err)
+			return nil, false, dbError(err)
 		}
 		p, err := storedPackage(raw)
 		if err != nil {
-			return nil, failure(connect.CodeInternal, "stored catalog invalid")
+			return nil, false, failure(connect.CodeInternal, "stored catalog invalid")
 		}
 		out = append(out, storedCatalog{catalogMeta(p, raw, published.Time, isCurrent), p, raw})
 	}
-	return out, dbError(rows.Err())
+	return out, false, dbError(rows.Err())
 }
 func (s *Service) getCatalog(ctx context.Context, ref *v1.CatalogRef) (storedCatalog, error) {
 	if ref == nil || ref.CatalogId == "" || ref.Version > 1<<63-1 {
 		return storedCatalog{}, failure(connect.CodeInvalidArgument, "catalog reference required")
 	}
-	all, err := s.storedCatalogs(ctx, ref.CatalogId, ref.Version == 0)
+	all, _, err := s.storedCatalogs(ctx, catalogQuery{id: ref.CatalogId, version: int64(ref.Version), current: ref.Version == 0, limit: 1})
 	if err != nil {
 		return storedCatalog{}, err
 	}
-	for _, c := range all {
-		if ref.Version == 0 || c.meta.Catalog.Version == ref.Version {
-			return c, nil
-		}
+	if len(all) == 0 {
+		return storedCatalog{}, failure(connect.CodeNotFound, "catalog not found")
 	}
-	return storedCatalog{}, failure(connect.CodeNotFound, "catalog not found")
+	return all[0], nil
 }
 func (s *Service) BeginCatalogUpload(ctx context.Context, req *connect.Request[v1.BeginCatalogUploadRequest]) (*connect.Response[v1.BeginCatalogUploadResponse], error) {
 	cfg := s.gatewayConfig()
@@ -247,15 +266,28 @@ func (s *Service) PublishCatalog(ctx context.Context, req *connect.Request[v1.Pu
 	return connect.NewResponse(&v1.PublishCatalogResponse{Catalog: meta}), nil
 }
 func (s *Service) ListCatalogs(ctx context.Context, req *connect.Request[v1.ListCatalogsRequest]) (*connect.Response[v1.ListCatalogsResponse], error) {
-	all, err := s.storedCatalogs(ctx, req.Msg.CatalogId, false)
+	size, offset, binding, err := pageCursor(ctx, s.Config, "catalogs:"+req.Msg.CatalogId, req.Msg.Page)
 	if err != nil {
 		return nil, err
+	}
+	all, more, err := s.storedCatalogs(ctx, catalogQuery{id: req.Msg.CatalogId, offset: offset, limit: size})
+	if err != nil {
+		return nil, err
+	}
+	if len(all) == 0 && offset > 0 {
+		var total int
+		if err = s.Store.Pool.QueryRow(ctx, "SELECT count(*) FROM catalog_versions WHERE ($1='' OR catalog_id=$1)", req.Msg.CatalogId).Scan(&total); err != nil {
+			return nil, dbError(err)
+		}
+		if offset > total {
+			return nil, failure(connect.CodeInvalidArgument, "invalid page cursor")
+		}
 	}
 	items := []*v1.CatalogVersion{}
 	for _, c := range all {
 		items = append(items, c.meta)
 	}
-	items, cursor, err := page(ctx, s.Config, "catalogs:"+req.Msg.CatalogId, req.Msg.Page, items)
+	items, cursor, err := pageWindow(s.Config, binding, offset, size, items, more)
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +316,8 @@ func actionSummary(a catalog.Action, digest string) *v1.ActionSummary {
 }
 func (s *Service) actionCatalogs(ctx context.Context, ref *v1.CatalogRef) ([]storedCatalog, error) {
 	if ref == nil {
-		return s.storedCatalogs(ctx, "", true)
+		all, _, err := s.storedCatalogs(ctx, catalogQuery{current: true})
+		return all, err
 	}
 	c, err := s.getCatalog(ctx, ref)
 	if err != nil {

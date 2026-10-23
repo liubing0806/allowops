@@ -367,6 +367,11 @@ export interface GatewayInstance {
   lastSeen: string
   dependencies: DependencyHealth[]
 }
+export interface GatewayUpdate {
+  latestVersion: string
+  publishedAt?: string
+  checkedAt?: string
+}
 export interface SystemStatus {
   observedAt: string
   status: HealthStatus
@@ -387,6 +392,12 @@ export interface SystemStatus {
     maxCatalogBytes: string
     maxCsvBytes: number
   }
+  updateCheckEnabled: boolean
+  gatewayVersion: string
+  gatewayUpdate?: GatewayUpdate
+  updateCheckedAt?: string
+  updateCheckError: string
+  hostsBelowGatewayVersion: string
 }
 // Direct RPC-shaped methods. This is the single replacement point for Connect.
 export interface ConsoleApi {
@@ -395,6 +406,8 @@ export interface ConsoleApi {
     client: 'LOGIN_CLIENT_CONSOLE'
     expiresAt: string
     csrfToken: string
+    gatewayVersion: string
+    gatewayUpdate?: GatewayUpdate
   }>
   getLoginMethods(): Promise<{
     methods: { providerId: string; displayName: string; kind: string }[]

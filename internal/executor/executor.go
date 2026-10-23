@@ -23,6 +23,11 @@ import (
 
 const DefaultMaxScan int64 = 256 * 1024 * 1024
 
+// pipeDrainDelay bounds how long Wait reads output after the process exits.
+// At exit at most one pipe buffer is unread; a longer wait means a descendant
+// that left the process group still holds the pipes.
+const pipeDrainDelay = 5 * time.Second
+
 var errScanLimit = errors.New("stdout scan limit reached")
 
 type Result struct {
@@ -89,6 +94,16 @@ func (w *limitedOutput) Write(p []byte) (int, error) {
 		w.truncated = true
 	}
 	return len(p), nil
+}
+
+// room reports how many more bytes the output accepts before truncating.
+func (w *limitedOutput) room() int64 {
+	if w.budget != nil {
+		w.budget.mu.Lock()
+		defer w.budget.mu.Unlock()
+		return w.budget.remaining
+	}
+	return w.limit - int64(w.buffer.Len())
 }
 
 type scanReader struct {
@@ -207,7 +222,13 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 		}
 		return nil
 	}
+	// Immediately before execution, in the process that will exec as the
+	// target uid: nobody else may be able to swap a component of a path.
+	trustPaths := func() error { return params.CheckPathsTrusted(defs, values, os.Geteuid()) }
 	if a.Builtin != "" {
+		if err := trustPaths(); err != nil {
+			return result, err
+		}
 		if err := onStart(); err != nil {
 			return result, err
 		}
@@ -241,6 +262,9 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 			return result, err
 		}
 		defer cleanup()
+		if err := trustPaths(); err != nil {
+			return result, err
+		}
 		return runCommand(ctx, argv, redactor, filters, limit, scan, nil, onStart)
 	}
 	if a.Steps == nil {
@@ -248,7 +272,13 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 		if err != nil {
 			return result, err
 		}
+		if err := trustPaths(); err != nil {
+			return result, err
+		}
 		return runCommand(ctx, argv, redactor, filters, limit, scan, nil, onStart)
+	}
+	if err := trustPaths(); err != nil {
+		return result, err
 	}
 	budget := stepBudget(limit)
 	result.ExitCode = 0
@@ -266,6 +296,10 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 		}
 		argv, err := renderCommand(step.Exec, nil, a.AllowInterpreter, defs, values)
 		r := Result{ExitCode: -1}
+		if err == nil {
+			// A later step starts after earlier steps ran for a while.
+			err = trustPaths()
+		}
 		if err == nil {
 			r, err = runCommand(ctx, argv, redactor, filters, limit, scan, budget, onStart)
 		}
@@ -345,6 +379,7 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 	command := exec.Command(argv[0], argv[1:]...)
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8", "PAGER=cat", "SYSTEMD_PAGER="}
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	command.WaitDelay = pipeDrainDelay
 	stdoutReader, stdoutWriter := io.Pipe()
 	stderrReader, stderrWriter := io.Pipe()
 	defer stdoutReader.Close()
@@ -423,6 +458,14 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 	}
 	if parent.Err() != nil {
 		return result, parent.Err()
+	}
+	if errors.Is(waitErr, exec.ErrWaitDelay) {
+		// Wait returns ErrWaitDelay only after a successful exit: a descendant
+		// outside the process group, such as a started daemon, still held the
+		// output pipes. The command succeeded; output after pipeDrainDelay is lost.
+		result.ExitCode = 0
+		result.Truncated = true
+		return result, nil
 	}
 	if waitErr == nil {
 		result.ExitCode = 0

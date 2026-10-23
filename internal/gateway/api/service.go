@@ -64,6 +64,11 @@ type Config struct {
 	MaxPageSize        int                 `yaml:"max_page_size"`
 	MessageBytes       int                 `yaml:"message_bytes"`
 	RoleMappings       []RoleMappingConfig `yaml:"role_mappings"`
+	// Version is the gateway build version shown in the console; set by the
+	// binary, not by YAML. Empty means a development build.
+	Version string `yaml:"-"`
+	// UpdateCheckEnabled mirrors update_check.enabled; set by the binary.
+	UpdateCheckEnabled bool `yaml:"-"`
 }
 type RoleMappingConfig struct {
 	ProviderID string   `yaml:"provider_id"`
@@ -214,6 +219,20 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 	})
 }
 
+type pinnedPolicyKey struct{}
+
+// pinPolicy refreshes the policy once and returns a context whose Require calls
+// evaluate against that snapshot without touching the database. Handlers call
+// it before opening a transaction, so authorization inside the transaction
+// needs no second pooled connection and each request still sees the policy that
+// was current when it started.
+func (s *Service) pinPolicy(ctx context.Context) (context.Context, error) {
+	if err := s.refresh(ctx); err != nil {
+		return ctx, failure(connect.CodeUnavailable, "policy unavailable")
+	}
+	return context.WithValue(ctx, pinnedPolicyKey{}, s.state.Load()), nil
+}
+
 // Require is the reusable ABAC boundary for P4B and MCP. Host/action attributes
 // must come from the gateway store, never from caller-supplied roles or labels.
 func (s *Service) Require(ctx context.Context, op authz.Operation, action authz.Action, host authz.Host) (authz.Result, error) {
@@ -221,8 +240,14 @@ func (s *Service) Require(ctx context.Context, op authz.Operation, action authz.
 	if !ok {
 		return authz.Result{Decision: "deny"}, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
 	}
-	if err := s.refresh(ctx); err != nil {
-		return authz.Result{Decision: "deny"}, failure(connect.CodeUnavailable, "policy unavailable")
+	// A pinned snapshot (see pinPolicy) is used as is: the caller holds a
+	// database transaction and authorization must not take another connection.
+	current, pinned := ctx.Value(pinnedPolicyKey{}).(*policyState)
+	if !pinned {
+		if err := s.refresh(ctx); err != nil {
+			return authz.Result{Decision: "deny"}, failure(connect.CodeUnavailable, "policy unavailable")
+		}
+		current = s.state.Load()
 	}
 	r := transport(ctx)
 	if !r.transportChecked && id.Client == v1.LoginClient_LOGIN_CLIENT_CONSOLE {
@@ -230,7 +255,6 @@ func (s *Service) Require(ctx context.Context, op authz.Operation, action authz.
 			return authz.Result{Decision: "deny"}, err
 		}
 	}
-	current := s.state.Load()
 	result, reason, err := evaluate(ctx, current.engine, authz.Input{Subject: id.Subject, Operation: op, Action: action, Host: host, Env: authz.Environment{TimeNS: time.Now().UnixNano(), SourceIP: r.ip}})
 	r.policyVersion = current.version
 	if r.resource {

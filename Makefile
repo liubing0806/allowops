@@ -20,6 +20,7 @@ $(BINARIES):
 
 examples-check: allowops
 	python3 test/examples/check_examples.py ./bin/allowops examples/catalog
+	python3 test/examples/check_agent_upgrade.py
 
 test: examples-check
 	go test -race -timeout=20m ./...
@@ -54,6 +55,7 @@ fuzz:
 script-checks:
 	python3 deploy/packaging/test-postinstall-nosudo.py
 	python3 test/ci-dist-check.py
+	python3 deploy/compose/test-local-up-bootstrap.py
 
 lint: script-checks
 	go vet ./...

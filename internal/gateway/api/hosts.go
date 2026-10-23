@@ -54,11 +54,18 @@ func scanHost(row pgx.Row) (*v1.Host, error) {
 	return h, nil
 }
 func (s *Service) hosts(ctx context.Context, q querier, lock bool) ([]*v1.Host, error) {
-	sql := "SELECT " + hostColumns + " FROM hosts h WHERE certificate_status='active' ORDER BY host_id"
+	return s.hostsWhere(ctx, q, "", lock)
+}
+
+// hostsWhere reads active hosts in host_id order. where is an extra condition
+// over h whose placeholders start at $2 ($1 is the heartbeat window). With lock,
+// only the selected rows are locked, in that order.
+func (s *Service) hostsWhere(ctx context.Context, q querier, where string, lock bool, args ...any) ([]*v1.Host, error) {
+	sql := "SELECT " + hostColumns + " FROM hosts h WHERE certificate_status='active'" + where + " ORDER BY host_id"
 	if lock {
 		sql += " FOR UPDATE OF h"
 	}
-	rows, err := q.Query(ctx, sql, max(2*s.gatewayConfig().FlushInterval, s.gatewayConfig().HeartbeatTimeout).String())
+	rows, err := q.Query(ctx, sql, append([]any{max(2*s.gatewayConfig().FlushInterval, s.gatewayConfig().HeartbeatTimeout).String()}, args...)...)
 	if err != nil {
 		return nil, dbError(err)
 	}
@@ -124,7 +131,13 @@ func matches(h *v1.Host, conditions []labelCondition) bool {
 	}
 	return true
 }
-func filterTargets(hosts []*v1.Host, targets *v1.HostTargets) ([]*v1.Host, error) {
+
+// lockTargets resolves the request's targets and locks only those host rows, in
+// host_id order, so a write does not block routing reads of unrelated hosts.
+// Selector targets are chosen first, then locked and matched again against the
+// locked rows; a host that changed in between is the same aborted outcome as a
+// changed target count.
+func (s *Service) lockTargets(ctx context.Context, tx pgx.Tx, targets *v1.HostTargets) ([]*v1.Host, error) {
 	if targets == nil {
 		return nil, failure(connect.CodeInvalidArgument, "targets required")
 	}
@@ -134,13 +147,37 @@ func filterTargets(hosts []*v1.Host, targets *v1.HostTargets) ([]*v1.Host, error
 		if err != nil {
 			return nil, err
 		}
-		out := []*v1.Host{}
-		for _, h := range hosts {
-			if matches(h, c) {
-				out = append(out, h)
+		authorization, reported := map[string]string{}, map[string]string{}
+		for _, condition := range c {
+			if condition.reported {
+				reported[condition.key] = condition.value
+			} else {
+				authorization[condition.key] = condition.value
 			}
 		}
-		return out, nil
+		a, _ := json.Marshal(authorization)
+		r, _ := json.Marshal(reported)
+		rows, err := tx.Query(ctx, "SELECT host_id FROM hosts WHERE certificate_status='active' AND authorization_labels @> $1::jsonb AND reported_labels @> $2::jsonb ORDER BY host_id", a, r)
+		if err != nil {
+			return nil, dbError(err)
+		}
+		ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return nil, dbError(err)
+		}
+		locked, err := s.hostsWhere(ctx, tx, " AND h.host_id = ANY($2)", true, ids)
+		if err != nil {
+			return nil, err
+		}
+		if len(locked) != len(ids) {
+			return nil, failure(connect.CodeAborted, "target hosts changed")
+		}
+		for _, h := range locked {
+			if !matches(h, c) {
+				return nil, failure(connect.CodeAborted, "target hosts changed")
+			}
+		}
+		return locked, nil
 	case *v1.HostTargets_Hosts:
 		if t.Hosts == nil || len(t.Hosts.Names) == 0 {
 			return nil, failure(connect.CodeInvalidArgument, "hostnames required")
@@ -152,11 +189,9 @@ func filterTargets(hosts []*v1.Host, targets *v1.HostTargets) ([]*v1.Host, error
 			}
 			names[name] = true
 		}
-		out := []*v1.Host{}
-		for _, h := range hosts {
-			if names[h.Hostname] {
-				out = append(out, h)
-			}
+		out, err := s.hostsWhere(ctx, tx, " AND h.hostname = ANY($2)", true, t.Hosts.Names)
+		if err != nil {
+			return nil, err
 		}
 		if len(out) != len(names) {
 			return nil, failure(connect.CodeNotFound, "target host not found")
@@ -297,16 +332,16 @@ func (s *Service) changedLabels(before map[string]string, changes *v1.LabelChang
 	return out, nil
 }
 func (s *Service) SetHostLabels(ctx context.Context, req *connect.Request[v1.SetHostLabelsRequest]) (*connect.Response[v1.SetHostLabelsResponse], error) {
+	ctx, err := s.pinPolicy(ctx)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return nil, dbError(err)
 	}
 	defer tx.Rollback(ctx)
-	all, err := s.hosts(ctx, tx, true)
-	if err != nil {
-		return nil, err
-	}
-	targets, err := filterTargets(all, req.Msg.Targets)
+	targets, err := s.lockTargets(ctx, tx, req.Msg.Targets)
 	if err != nil {
 		return nil, err
 	}
@@ -355,6 +390,10 @@ func (s *Service) SetHostLabels(ctx context.Context, req *connect.Request[v1.Set
 func (s *Service) DeleteHost(ctx context.Context, req *connect.Request[v1.DeleteHostRequest]) (*connect.Response[v1.DeleteHostResponse], error) {
 	if req.Msg.HostId == "" || req.Msg.ExpectedRevision == "" {
 		return nil, failure(connect.CodeInvalidArgument, "host ID and revision required")
+	}
+	ctx, err := s.pinPolicy(ctx)
+	if err != nil {
+		return nil, err
 	}
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {

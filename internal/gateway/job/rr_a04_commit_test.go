@@ -5,6 +5,7 @@ import (
 	"context"
 	"net"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,6 +32,14 @@ type commitLossProxy struct {
 	// withhold makes the proxy drop the armed COMMIT instead of forwarding it:
 	// the server never receives it and rolls the transaction back on disconnect.
 	withhold atomic.Bool
+	// outage, when set before the proxy fires, also ends every other proxied
+	// connection when the COMMIT reply is dropped and refuses new connections
+	// for that long: the database is briefly unreachable, so a follow-up read
+	// that checks whether the COMMIT landed fails as well.
+	outage      time.Duration
+	refuseUntil atomic.Int64
+	mu          sync.Mutex
+	conns       map[net.Conn]bool
 }
 
 var simpleCommit = []byte("Q\x00\x00\x00\x0bcommit\x00")
@@ -42,13 +51,17 @@ func newCommitLossProxy(t *testing.T, db *store.Store, armStatement string) *com
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := &commitLossProxy{listener: listener, upstream: net.JoinHostPort(cfg.Host, strconv.Itoa(int(cfg.Port))), arm: []byte(armStatement)}
+	p := &commitLossProxy{listener: listener, upstream: net.JoinHostPort(cfg.Host, strconv.Itoa(int(cfg.Port))), arm: []byte(armStatement), conns: map[net.Conn]bool{}}
 	t.Cleanup(func() { listener.Close() })
 	go func() {
 		for {
 			client, err := listener.Accept()
 			if err != nil {
 				return
+			}
+			if time.Now().UnixNano() < p.refuseUntil.Load() {
+				client.Close()
+				continue
 			}
 			go p.handle(client)
 		}
@@ -62,6 +75,14 @@ func (p *commitLossProxy) handle(client net.Conn) {
 		client.Close()
 		return
 	}
+	p.mu.Lock()
+	p.conns[client] = true
+	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		delete(p.conns, client)
+		p.mu.Unlock()
+	}()
 	var drop atomic.Bool
 	go func() {
 		defer client.Close()
@@ -101,6 +122,16 @@ func (p *commitLossProxy) handle(client net.Conn) {
 					return
 				}
 				drop.Store(true)
+				if p.outage > 0 {
+					p.refuseUntil.Store(time.Now().Add(p.outage).UnixNano())
+					p.mu.Lock()
+					for c := range p.conns {
+						if c != client {
+							c.Close()
+						}
+					}
+					p.mu.Unlock()
+				}
 			}
 			if _, werr := server.Write(buf[:n]); werr != nil {
 				return
@@ -192,8 +223,9 @@ func TestRRA04CommitErrorAfterServerCommit(t *testing.T) {
 
 // RR-a-04 reverse case: when the COMMIT never reaches the server, the transaction
 // is rolled back. The COMMIT error must then stay an error: terminal handling must
-// not start output persistence, and job creation must return the error with no
-// job row. A check that always reports "committed" fails this test.
+// not start output persistence for the rolled-back attempt, and job creation must
+// return the error with no job row. A check that always reports "committed" fails
+// this test.
 func TestRRA04CommitNeverReachesServer(t *testing.T) {
 	for _, mode := range []string{"terminal_result_commit", "job_create_commit"} {
 		t.Run(mode, func(t *testing.T) {
@@ -254,31 +286,96 @@ func TestRRA04CommitNeverReachesServer(t *testing.T) {
 			if !proxy.fired.Load() {
 				t.Fatal("fixture did not withhold the terminal COMMIT")
 			}
-			// The rolled-back terminal write leaves no agent result. The host
-			// connection closes on the rejected event and the task becomes OFFLINE
-			// with output_state unavailable. Persistence, when wrongly started,
-			// writes output_state and a store_output audit event within moments of
-			// the terminal result, so observe the row for a window after the drop.
-			until := time.Now().Add(3 * time.Second)
-			for time.Now().Before(until) {
-				var taskStatus int16
-				var state string
-				var preview []byte
-				if err := f.DB.Pool.QueryRow(ctx, "SELECT status,output_state,stdout_preview FROM tasks WHERE job_id=$1", id).Scan(&taskStatus, &state, &preview); err != nil {
+			// The withheld COMMIT rolled the first attempt back, and the gateway
+			// must not treat it as committed: output is never stored while the
+			// task row is still running. The event transaction is then retried on
+			// a new connection, which commits the agent result and persists the
+			// output exactly once. The host connection stays open.
+			var taskStatus int16
+			var state string
+			until := time.Now().Add(10 * time.Second)
+			for {
+				if err := f.DB.Pool.QueryRow(context.Background(), "SELECT status,output_state FROM tasks WHERE job_id=$1", id).Scan(&taskStatus, &state); err != nil {
 					t.Fatal(err)
 				}
-				if state == "stored" || taskStatus == int16(v1.TaskStatus_TASK_STATUS_SUCCEEDED) || len(preview) > 0 {
-					t.Fatalf("task=%d output_state=%s stdout_preview=%q after the terminal COMMIT never reached the server; want the agent result discarded and output_state not stored", taskStatus, state, preview)
+				if state == "stored" && taskStatus <= 2 {
+					t.Fatalf("output_state=stored while task status=%d; the rolled-back terminal write was treated as committed", taskStatus)
 				}
-				var stored int
-				if err := f.DB.Pool.QueryRow(ctx, "SELECT count(*) FROM audit_events WHERE operation='store_output'").Scan(&stored); err != nil {
+				if (taskStatus > 2 && state != "pending") || time.Now().After(until) {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if taskStatus != int16(v1.TaskStatus_TASK_STATUS_SUCCEEDED) || state != "stored" {
+				t.Fatalf("task=%d output_state=%s after the retried terminal write; want SUCCEEDED(3), stored", taskStatus, state)
+			}
+			// persist appends the store_output audit event after the output_state
+			// write: wait for the first event, then watch briefly for a second one.
+			count := func() (n int) {
+				if err := f.DB.Pool.QueryRow(context.Background(), "SELECT count(*) FROM audit_events WHERE operation='store_output'").Scan(&n); err != nil {
 					t.Fatal(err)
 				}
-				if stored != 0 {
-					t.Fatalf("store_output audit events=%d; want 0 because persistence must not start", stored)
-				}
-				time.Sleep(50 * time.Millisecond)
+				return n
+			}
+			stored := count()
+			for until := time.Now().Add(5 * time.Second); stored == 0 && time.Now().Before(until); stored = count() {
+				time.Sleep(10 * time.Millisecond)
+			}
+			for until := time.Now().Add(500 * time.Millisecond); stored == 1 && time.Now().Before(until); stored = count() {
+				time.Sleep(10 * time.Millisecond)
+			}
+			if stored != 1 {
+				t.Fatalf("store_output audit events=%d; want 1 from the retried terminal write", stored)
 			}
 		})
+	}
+}
+
+// The terminal COMMIT lands but its reply is lost, and the database stays
+// unreachable long enough that the follow-up check of the task row fails too.
+// The event is then retried as a replay that finds the task already terminal
+// with this very result. That replay must start output persistence: the
+// receiving instance is alive, so lost-instance recovery never ends the
+// pending output.
+func TestTerminalReplayAfterLostCommitAndFailedCheck(t *testing.T) {
+	var proxy *commitLossProxy
+	f := setup(t, func(f *fixture) {
+		proxy = newCommitLossProxy(t, f.DB, "finished_at=now(),stdout_preview=")
+		proxy.outage = 500 * time.Millisecond
+		proxied := proxiedJobStore(t, f.DB, proxy)
+		f.BeforeStart = func(_ *hostconn.Service, jobs *job.Service) {
+			if f.A == nil {
+				jobs.Store = proxied
+			}
+		}
+	})
+	t.Cleanup(func() { awaitFixtureOutputs(t, f) })
+	r := request("stable")
+	r.Reason = "terminal-replay-lost-commit"
+	r.Targets = &v1.HostTargets{Selection: &v1.HostTargets_Hosts{Hosts: &v1.HostNames{Names: []string{"a-host"}}}}
+	r.ExpectedCount = nil
+	r.WaitSeconds = proto.Uint32(0)
+	response, err := f.B.Client.RunJob(context.Background(), connect.NewRequest(r))
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	id := response.Msg.Job.JobId
+	var taskStatus int16
+	var state string
+	end := time.Now().Add(15 * time.Second)
+	for {
+		if err := f.DB.Pool.QueryRow(context.Background(), "SELECT status,output_state FROM tasks WHERE job_id=$1", id).Scan(&taskStatus, &state); err != nil {
+			t.Fatal(err)
+		}
+		if (taskStatus > 2 && state != "pending") || time.Now().After(end) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !proxy.fired.Load() {
+		t.Fatal("fixture did not lose the terminal COMMIT reply")
+	}
+	if taskStatus != int16(v1.TaskStatus_TASK_STATUS_SUCCEEDED) || state != "stored" {
+		t.Fatalf("task=%d output_state=%s after a replayed terminal result; want SUCCEEDED(3), stored", taskStatus, state)
 	}
 }

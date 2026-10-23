@@ -5,15 +5,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liubing0806/allowops/internal/gateway/job"
 	"github.com/liubing0806/allowops/internal/params"
 )
 
 func TestActionDefaultsAndNamespace(t *testing.T) {
-	r, format, err := actionRequest(testAction(), json.RawMessage(`{"targets":{"hosts":["web-01"]},"params":{"mode":"recent","reason":"app"},"reason":"investigation"}`))
+	r, format, err := actionRequest(testAction(), json.RawMessage(`{"targets":{"hosts":["web-01"]},"params":{"mode":"recent","reason":"app"},"reason":"investigation"}`), job.DefaultConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.GetWaitSeconds() != 30 || r.GetBatchSize() != 20 || r.GetMaxFailures() != 5 || format != "concise" || r.Reason != "investigation" {
+	// The job layer applies the gateway defaults to options the caller omitted.
+	if r.WaitSeconds != nil || r.BatchSize != nil || r.MaxFailures != nil || format != "concise" || r.Reason != "investigation" {
 		t.Fatalf("request=%+v format=%s", r, format)
 	}
 	var values map[string]any
@@ -35,13 +37,13 @@ func TestNullDuplicateAndFilterValidation(t *testing.T) {
 		`{"targets":{"hosts":["web-01"]},"params":{"mode":"all"},"reason":"x","tail":0}`,
 		`{"targets":{"hosts":["web-01"]},"params":{"mode":"all"},"reason":"x","match":"["}`,
 	} {
-		if _, _, err := actionRequest(testAction(), json.RawMessage(input)); err == nil {
+		if _, _, err := actionRequest(testAction(), json.RawMessage(input), job.DefaultConfig()); err == nil {
 			t.Fatalf("accepted %s", input)
 		}
 	}
 	a := testAction()
 	a.Filters = nil
-	if _, _, err := actionRequest(a, json.RawMessage(`{"targets":{"hosts":["web-01"]},"params":{"mode":"all"},"reason":"x","tail":1}`)); err == nil {
+	if _, _, err := actionRequest(a, json.RawMessage(`{"targets":{"hosts":["web-01"]},"params":{"mode":"all"},"reason":"x","tail":1}`), job.DefaultConfig()); err == nil {
 		t.Fatal("accepted undeclared filter")
 	}
 }
@@ -54,7 +56,7 @@ func TestGatewayPathValidationDoesNotUseLocalFilesystem(t *testing.T) {
 		valid bool
 	}{{"/var/log/nonexistent", true}, {"/var/log-other/file", false}, {"/var/log/../../etc/passwd", false}, {"relative", false}} {
 		data, _ := json.Marshal(map[string]any{"targets": map[string]any{"hosts": []string{"web-01"}}, "params": map[string]any{"path": tc.path}, "reason": "inspect"})
-		_, _, err := actionRequest(a, data)
+		_, _, err := actionRequest(a, data, job.DefaultConfig())
 		if (err == nil) != tc.valid {
 			t.Fatalf("path=%s error=%v want valid=%v", tc.path, err, tc.valid)
 		}
@@ -66,7 +68,7 @@ func TestBuiltinRegexIsAddedToSchemaAndValidated(t *testing.T) {
 	a.Exec = nil
 	a.Builtin = "mysql_query"
 	a.Params = map[string]params.Definition{"database": {Type: params.String, Description: "Application database", Regex: "^app$"}}
-	tool, err := actionTool(a)
+	tool, err := actionTool(a, job.DefaultConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +76,7 @@ func TestBuiltinRegexIsAddedToSchemaAndValidated(t *testing.T) {
 	if !strings.Contains(string(b), "^app$") {
 		t.Fatalf("missing signed override: %s", b)
 	}
-	_, _, err = actionRequest(a, json.RawMessage(`{"targets":{"hosts":["web-01"]},"params":{"database":"other","sql":"SELECT 1"},"reason":"inspect"}`))
+	_, _, err = actionRequest(a, json.RawMessage(`{"targets":{"hosts":["web-01"]},"params":{"database":"other","sql":"SELECT 1"},"reason":"inspect"}`), job.DefaultConfig())
 	if err == nil {
 		t.Fatal("accepted value outside signed regex")
 	}
@@ -86,7 +88,7 @@ func TestBuiltinArrayRegexAndBatchOverflow(t *testing.T) {
 	a.Builtin = "redis_command"
 	a.BuiltinConfig = map[string]any{"credential": "/etc/allowops/redis", "address": "127.0.0.1:6379"}
 	a.Params = map[string]params.Definition{"args": {Type: params.StringArray, Description: "Allowed arguments", Regex: "^app$"}}
-	tool, err := actionTool(a)
+	tool, err := actionTool(a, job.DefaultConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,13 +96,13 @@ func TestBuiltinArrayRegexAndBatchOverflow(t *testing.T) {
 	if !strings.Contains(string(data), "^app$") {
 		t.Fatal("array item regex missing")
 	}
-	_, _, err = actionRequest(a, json.RawMessage(`{"targets":{"hosts":["web-01"]},"params":{"command":"GET","args":["other"]},"reason":"inspect"}`))
+	_, _, err = actionRequest(a, json.RawMessage(`{"targets":{"hosts":["web-01"]},"params":{"command":"GET","args":["other"]},"reason":"inspect"}`), job.DefaultConfig())
 	if err == nil {
 		t.Fatal("accepted array outside signed override regex")
 	}
 	a = testAction()
 	a.BatchSize = int(uint64(1) << 32)
-	if _, err := actionTool(a); err == nil {
+	if _, err := actionTool(a, job.DefaultConfig()); err == nil {
 		t.Fatal("accepted batch_size overflowing protobuf uint32")
 	}
 }

@@ -55,6 +55,10 @@ func (s *Service) PreviewHostImport(ctx context.Context, req *connect.Request[v1
 		}
 		keys[key] = true
 	}
+	ctx, err = s.pinPolicy(ctx)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 	if err != nil {
 		return nil, dbError(err)
@@ -188,7 +192,11 @@ func (s *Service) preview(ctx context.Context, q querier, id string, lock bool) 
 	return p, nil
 }
 func (s *Service) previewTargets(ctx context.Context, q querier, p *storedPreview, lock, checkRevision bool) ([]*v1.Host, error) {
-	all, err := s.hosts(ctx, q, lock)
+	ids := make([]string, 0, len(p.targets))
+	for _, target := range p.targets {
+		ids = append(ids, target.HostID)
+	}
+	all, err := s.hostsWhere(ctx, q, " AND h.host_id = ANY($2)", lock, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -234,6 +242,10 @@ func (s *Service) GetHostImportPreview(ctx context.Context, req *connect.Request
 	return connect.NewResponse(&v1.GetHostImportPreviewResponse{Preview: p.meta, Rows: rows, Page: cursor}), nil
 }
 func (s *Service) ExecuteHostImport(ctx context.Context, req *connect.Request[v1.ExecuteHostImportRequest]) (*connect.Response[v1.ExecuteHostImportResponse], error) {
+	ctx, err := s.pinPolicy(ctx)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
 	if err != nil {
 		return nil, dbError(err)

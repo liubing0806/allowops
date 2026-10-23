@@ -281,8 +281,31 @@ result := {"decision": decision, "rules": [rule.name | some rule in matched]}
 
 ## 8. 发布与部署
 
-- 主机端升级由运维人员负责，allowops 不做托管升级。控制台显示主机端版本分布。
+- 主机端在线升级（2026-10-22 决定）：升级做成签名目录中的一个 action，网关按普通 job 下发，替代原来“allowops 不做托管升级”的决定。控制台显示主机端版本分布，用于确认升级进度。
+  - action 声明 `run_as: root`、`risk: dangerous`，用 yum/apt 从内网软件源安装指定版本的 allowops-agent 包，再用 `systemd-run --on-active=5 --timer-property=AccuracySec=1s` 创建临时定时器重启 `allowops-agent.service`，使 task 结果先回传。重启任务运行在临时单元自己的 cgroup 中，agent 停止时不会被结束。不设 `AccuracySec` 时 systemd 默认精度为 1 分钟，实测重启延迟 20～48 秒。
+  - 版本参数用 enum，只列出不高于当前网关的版本。每次网关升级后再发布含新版本的目录。
+  - 校验分工：action 由目录签名密钥签名；安装包由 rpm/deb GPG 签名校验；OPA 策略控制谁能执行；审计记录执行。软件源和包签名密钥仍由运维人员维护。
+  - 灰度：用 job 的主机选择器按授权标签分批执行。
+  - 示例 action（2026-10-23）：`examples/catalog/actions/agent_upgrade.yaml` 与脚本 `scripts/agent_upgrade.sh`。已是目标版本时不安装、不重启；deb 先 `apt-get update` 再安装 `allowops-agent=<版本>`，rpm 先 `yum clean expire-cache` 再 `yum upgrade allowops-agent-<版本>`；安装后版本与请求不一致时返回失败且不重启。不支持降级：apt 拒绝降级，dnf 的 `install` 会降级而 `upgrade` 不会，因此 rpm 用 `upgrade`。batch_size、max_failures 为 1。验证：容器内用本地软件源在 Ubuntu 20.04、Rocky 9、CentOS 7 上执行 0.0.0 快照包到 0.1.0 的升级、重复执行、请求旧版本和不存在的版本，systemd-run 用替身；未经网关和真实重启端到端验证，重启部分沿用下面 `TestOnlineUpgrade` 的结果。
+  - 限制：比网关新的主机端会被拒绝连接，之后无法再通过网关下发降级。恢复方式是运维人员在主机上降级，或把网关升级到不低于该主机端的版本（后者按版本检查规则推断，未实测）。
+  - 版本拒绝日志：网关按主机和版本各记一次 Warn（host_id、hostname、agent 与网关版本），主机以新的受支持版本连接后重新计数；拒绝消息包含两个版本号。agent 在 journal 中输出拒绝原因，同一原因只输出一次，下次结果不同后重新计数。控制台仍只显示主机离线。
+  - 限制：systemd 219 上临时定时器触发后保持 `elapsed` 状态，每次升级留下一个 `run-*.timer`，重启主机后消失。
+  - 验证（2026-10-22，`test/vm` 的 `TestOnlineUpgrade`）：CentOS 7（systemd 219）、Ubuntu 20.04（systemd 245）、Rocky 9（systemd 252）上，0.1.0 经 action 升级到 0.2.0 后 task 返回 SUCCEEDED，约 5 秒后 agent 重启并以新版本重连，可继续执行 action；升级到比网关（0.2.0）新的 0.3.0 后主机保持离线，数据库版本仍为 0.2.0，后续 job 为 FAILED。测试用本地包文件代替软件源。
+  - 被否决：网关直接推送二进制。网关被攻破时等于获得所有主机 root，破坏“网关被攻破也只能执行已签名 action”的保证。
+  - 被否决：agent 内置自更新（网关分发二进制，主机用单独的发布公钥验证，allowops-exec 替换文件）。需要新的信任锚和分发、回滚代码；直接替换文件使 rpm/dpkg 包数据库与实际文件不一致。
 - 版本兼容：网关支持当前和上一主版本的主机端；主机端版本比网关新时拒绝连接。升级顺序为先网关后主机端。
+- 网关新版本提醒（2026-10-22 决定）：网关定时读取发布清单，发现新版本后在控制台提醒。网关只提醒，不下载、不安装；网关升级仍由运维人员用包管理器执行。
+  - 版本号显示：`GetCurrentSession` 响应增加 `gateway_version`，所有登录用户可见；控制台侧栏在产品名下方显示 `v<版本>`，开发构建显示 `dev`。不放在 `GetSystemStatus`，因为它需要 `view_system` 权限。
+  - 发布清单：发布流水线从 Git tag 生成静态 JSON（只含 `version` 和 `published_at`，不含链接），发布到 VitePress 文档站（GitHub Pages）。内网环境可把同一文件放到内部地址，用配置指向它。发布说明链接由控制台按版本号拼成 `https://github.com/liubing0806/allowops/releases/tag/v<版本>`，不由清单提供。
+  - 默认关闭：配置项 `update_check.enabled`（默认 `false`）和 `update_check.url`（默认文档站清单地址）。allowops 多部署在内网，默认不向外网发请求。
+  - 检查方式：开启后每 24 小时检查一次，加随机延迟。请求只带 `User-Agent: allowops-gateway/<版本>`，不带实例 ID、主机数或其他部署信息。
+  - 多实例：用 PostgreSQL advisory lock（建议锁）保证同一时刻只有一个实例请求；结果写入单行表（最新版本、发布时间、检查时间、最近错误），所有实例读同一行，控制台显示一致。
+  - 校验：返回的版本号必须是严格 SemVer，否则丢弃并记录“invalid manifest”。清单不含链接，因此没有链接主机名校验。清单只用于显示，不触发任何下载或执行。
+  - 提醒位置：侧栏版本号旁显示“有新版本”标记，点击打开发布说明；概览“需要处理”增加一项；系统页显示网关实例版本不一致，以及主机端版本低于网关的主机数，后者对应上面的主机端升级 action。
+  - 控制台实现（2026-10-23）：概览中的提醒项链接到系统页。系统页“网关版本”区块显示当前版本、更新检查是否开启、上次检查时间、最新版本（链接发布说明）、最近一次检查错误和低于网关版本的主机数；“网关实例”区块在列出的实例版本不止一个时显示版本不一致提示。
+  - 被否决：默认开启。Gitea、Grafana 默认开启，但 allowops 是访问控制产品，默认外连需要在安全说明中解释，内网部署大多也无法访问外网。
+  - 被否决：直接查询 GitHub Releases API。未认证请求有频率限制（每 IP 每小时 60 次），内网环境无法改指向内部地址。
+  - 被否决：网关自动升级自身。需要网关进程有写自身二进制和重启服务的权限，并带来回滚和多实例滚动升级的问题。
 - 三个二进制使用同一 SemVer 版本号，从同一 Git tag 发布。
 
 ### 主机端发布包
@@ -542,7 +565,7 @@ redact:
 | 页面 | 内容 |
 |---|---|
 | 登录 | OIDC、LDAP |
-| 概览 | 在线和离线主机数、最近 job 和失败数、目录过期提醒、即将到期的 token |
+| 概览 | 在线和离线主机数、最近 job 和失败数、目录过期提醒、即将到期的 token、网关新版本提醒（开启更新检查时） |
 | 主机 | 按标签、在线状态、版本筛选；详情显示授权标签（可编辑）、上报标签（只读）、目录版本、最后在线时间；按 selector 批量设置标签；CSV 导入标签（导入前显示变更预览）；删除主机 |
 | join token | 创建、列出、吊销；创建后显示安装命令 |
 | 目录 | 当前版本和过期倒计时、action 列表和详情（参数、命令、风险、脱敏规则）、历史版本、各主机目录版本分布 |
@@ -551,7 +574,7 @@ redact:
 | job | 列表和筛选；详情显示每台主机的状态和输出；取消 |
 | 审计 | 按时间、主体、主机、action 查询；哈希链校验 |
 | 用户与角色 | 用户列表、角色分配、组到角色的映射 |
-| 系统 | 网关实例、PostgreSQL 和对象存储健康状态、主机端版本分布 |
+| 系统 | 网关实例、PostgreSQL 和对象存储健康状态、主机端版本分布、网关实例版本不一致提示、低于网关版本的主机数 |
 
 - 不在 MVP：图表仪表盘、CMDB 同步、审批。
 
@@ -867,6 +890,23 @@ params:
 ### D9 脱敏规则补充
 
 - `secrets` 规则增加：命令行 `-p<密码>` 形式（mysql 客户端）、`MYSQL_PWD=`、`REDISCLI_AUTH=`。
+
+### D10 执行命令的程序与程序文本（安全修正）
+
+2026-10-22 确认。威胁：agent 只能传参数值，但模板若把参数送到会把参数当命令或代码执行的位置，参数值就成了任意命令。
+
+- 会执行命令的程序按解释器处理，未声明 `allow_interpreter` 时拒绝；`catalog validate` 按命令名检查，主机端再按解析软链接后的路径检查。
+  - 整个程序：`watch`、`script`、`busybox`、`expect`、`tclsh`、`wish`、`fish`、`parallel`、`time`、`ssh`、`scp`、`rsh`、`sshpass`、`su`、`runuser`、`pkexec`、`doas`、`sg`、`setsid`、`setpriv`、`flock`、`nohup`、`chrt`、`taskset`、`numactl`、`unshare`、`prlimit`、`runcon`、`capsh`、`cgexec`、`chpst`、`systemd-run`、`machinectl`、`start-stop-daemon`、`strace`、`ltrace`、`gdb`、`git`、`psql`、`mysql`、`mariadb`、`sqlite3`。
+  - 出现特定选项时：`find` 的 `-exec`/`-execdir`/`-ok`/`-okdir`；`tar` 的 `--to-command`、`--use-compress-program`/`-I`、`--info-script`/`-F`、`--new-volume-script`、`--checkpoint-action`、`--rsh-command`、`--rmt-command`（长选项含可被接受的前缀）；`rsync` 的 `-e`/`--rsh`、`--rsync-path`、`-M`/`--remote-option`；`ip` 的 `netns exec`、`-batch`。
+  - 解释器列表补充 `ksh`、`mksh`、`rbash`、`csh`、`tcsh`。
+  - `busybox` 只按命令名检查：主机上普通命令可能是指向 busybox 的软链接。
+- 声明 `allow_interpreter` 时，程序文本仍由签名固定。对包装命令展开后的解释器命令：
+  - 占位符不能出现在解释器选项、选项值或程序文本位置（如 `bash -c {x}`、`bash {x}`、`python3 -c {x}`、`python3 -m {x}`、`perl -e {x}`、`awk {x}`、`sed -e {x}`）。
+  - 程序文本之后的占位符不能紧跟以 `-` 开头的选项，参数类型也不能渲染出以 `-` 开头的值（enum 含 `-` 开头的值、int 未设 `min >= 0` 时拒绝）。
+  - 有占位符时，程序文本之前出现未知选项一律拒绝，因为未知选项可能取下一个词作值。
+  - 允许的写法：`["/bin/bash", "-c", "固定脚本", "_", "{x}"]`、`["/usr/bin/python3", "-c", "固定代码", "{x}"]`、`["/usr/bin/perl", "-e", "固定代码", "--", "{x}"]`。
+  - 上述会执行命令的程序在 `allow_interpreter` 下也不能带占位符。
+- 不覆盖：签名脚本内部的 `eval "$1"` 等写法、名单以外的程序、`docker run`/`kubectl run`。这些依赖目录评审。
 
 ### 内置处理器的执行位置
 

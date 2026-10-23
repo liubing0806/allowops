@@ -10,7 +10,7 @@ import (
 // A following word is the command to run, as with -l.
 func TestHostXargsMaxLinesOptionalArgument(t *testing.T) {
 	dir := t.TempDir()
-	script := filepath.Join(dir, "script")
+	script := filepath.Join(dir, "fixture")
 	if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
 		t.Fatal(err)
 	}

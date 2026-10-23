@@ -34,7 +34,10 @@ providers:
     client_secret_env: ALLOWOPS_OIDC_CLIENT_SECRET
 ```
 
-Deliver the provider secret through the process environment. The gateway checks
+Deliver the provider secret through the process environment. With the Helm
+chart, list each variable in `gateway.providerSecretEnv` (`name`, `secretName`,
+`key`); the chart injects it from a Kubernetes Secret and keeps the value out of
+the ConfigMap. The gateway checks
 issuer, audience, nonce, state and the bound browser transaction. OIDC CLI login
 uses a loopback callback and Proof Key for Code Exchange (PKCE); the gateway
 exchanges the provider's authorization code. The CLI receives a short-lived,
@@ -55,7 +58,8 @@ startup mappings does not overwrite the database.
 
 Only LDAPS or LDAP with StartTLS is accepted. Configure certificate verification,
 a bind identity, user/group bases and the directory's attribute names. Bind
-passwords come from a named environment variable; user passwords are not stored.
+passwords come from a named environment variable (on Kubernetes, supply it with
+`gateway.providerSecretEnv`); user passwords are not stored.
 
 ```yaml
 providers:

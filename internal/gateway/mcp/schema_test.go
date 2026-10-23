@@ -8,6 +8,7 @@ import (
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/liubing0806/allowops/internal/catalog"
+	"github.com/liubing0806/allowops/internal/gateway/job"
 	"github.com/liubing0806/allowops/internal/params"
 )
 
@@ -22,7 +23,7 @@ func testAction() catalog.Action {
 }
 
 func TestActionSchemaAndAnnotations(t *testing.T) {
-	tool, err := actionTool(testAction())
+	tool, err := actionTool(testAction(), job.DefaultConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +69,7 @@ func TestActionValidation(t *testing.T) {
 		{"unknown argument", strings.Replace(valid, `"wait_seconds":0`, `"extra":1`, 1), "allowed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, _, err := actionRequest(testAction(), json.RawMessage(tc.input))
+			_, _, err := actionRequest(testAction(), json.RawMessage(tc.input), job.DefaultConfig())
 			if tc.want == "" && err != nil {
 				t.Fatal(err)
 			}
@@ -80,7 +81,7 @@ func TestActionValidation(t *testing.T) {
 }
 
 func TestFixedToolSchemas(t *testing.T) {
-	tools := fixedTools()
+	tools := fixedTools(job.DefaultConfig())
 	if len(tools) != 4 {
 		t.Fatalf("tools=%d want=4", len(tools))
 	}
@@ -108,11 +109,11 @@ func TestFixedToolSchemas(t *testing.T) {
 }
 
 func TestGeneratedSchemaValidatesInputs(t *testing.T) {
-	tool, err := actionTool(testAction())
+	tool, err := actionTool(testAction(), job.DefaultConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
-	tools := append(fixedTools(), *tool)
+	tools := append(fixedTools(job.DefaultConfig()), *tool)
 	for _, tool := range tools {
 		data := mustJSON(t, tool.InputSchema)
 		var schema jsonschema.Schema
@@ -129,9 +130,10 @@ func TestGeneratedSchemaValidatesInputs(t *testing.T) {
 				valid bool
 			}{
 				{`{"targets":{"hosts":["web-01"]},"params":{"mode":"recent"},"reason":"inspect"}`, true},
-				{`{"targets":{"selector":"env=test"},"params":{"mode":"recent"},"reason":"inspect"}`, false},
 				{`{"targets":{"hosts":["web-01"]},"reason":"inspect"}`, false},
-				{`{"targets":{"hosts":["web-01"]},"params":{"mode":"recent"},"reason":"inspect","count":false,"tail":1}`, false},
+				// Cross-field rules are left to actionRequest (TestActionValidation).
+				{`{"targets":{"selector":"env=test"},"params":{"mode":"recent"},"reason":"inspect"}`, true},
+				{`{"targets":{"hosts":["web-01"]},"params":{"mode":"recent"},"reason":"inspect","count":false,"tail":1}`, true},
 			} {
 				var input any
 				if err := json.Unmarshal([]byte(tc.input), &input); err != nil {
@@ -142,5 +144,24 @@ func TestGeneratedSchemaValidatesInputs(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// Anthropic API tool schemas reject root-level combinators; Claude Code 2.1.296
+// skips such MCP tools. Cross-field rules belong to argument validation.
+func TestToolSchemasHaveNoRootCombinators(t *testing.T) {
+	tool, err := actionTool(testAction(), job.DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range append(fixedTools(job.DefaultConfig()), *tool) {
+		for _, keyword := range []string{"allOf", "anyOf", "oneOf", "not", "if", "then", "else"} {
+			if _, present := tool.InputSchema[keyword]; present {
+				t.Errorf("%s inputSchema has root-level %s", tool.Name, keyword)
+			}
+		}
+	}
+	if err := validateHostSearchSelection("web-01", "env=test"); err == nil || !strings.Contains(err.Error(), "not both") {
+		t.Fatalf("hostname with selector error=%v", err)
 	}
 }

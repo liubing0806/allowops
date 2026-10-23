@@ -5,8 +5,9 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
+import { api } from '@/api'
 import i18n from '@/i18n'
 import en from '@/locales/en.json'
 import zhCN from '@/locales/zh-CN.json'
@@ -22,6 +23,25 @@ async function open(path: string) {
   await screen.findByRole('heading', { level: 1 }, { timeout: 5000 })
   return view
 }
+
+describe('gateway version', () => {
+  it.each([
+    ['0.4.0', 'v0.4.0'],
+    ['dev', 'dev'],
+  ])('shows %s in the sidebar as %s', async (gatewayVersion, shown) => {
+    const current = await api.getCurrentSession()
+    const spy = vi
+      .spyOn(api, 'getCurrentSession')
+      .mockResolvedValue({ ...current, gatewayVersion })
+    try {
+      await open('/')
+      const nav = screen.getByRole('complementary')
+      expect(within(nav).getByText(shown)).toBeInTheDocument()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
 
 describe('console pages', () => {
   it('logs in with the local LDAP form', async () => {
@@ -76,7 +96,7 @@ describe('console pages', () => {
       await screen.findByRole('heading', { name: 'web-01', level: 1 }),
     ).toBeInTheDocument()
     fireEvent.change(await screen.findByLabelText('授权标签'), {
-      target: { value: 'env=prod,tier=edge' },
+      target: { value: 'env=prod\ntier=edge' },
     })
     fireEvent.click(screen.getByRole('button', { name: '保存标签' }))
     expect(await screen.findByRole('status')).toHaveTextContent('标签已保存')

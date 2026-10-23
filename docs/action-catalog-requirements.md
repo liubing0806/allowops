@@ -4,7 +4,7 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 90 个 action，均为 risk: read；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 91 个 action：90 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
@@ -17,7 +17,9 @@ allowops 只执行运维人员预先定义、评审并签名的 action。本节�
 ```text
 examples/catalog/catalog.yaml
 examples/catalog/actions/<name>.yaml
+examples/catalog/scripts/agent_upgrade.sh
 examples/catalog/scripts/nginx_access_stats.py
+test/examples/check_agent_upgrade.py
 test/examples/check_examples.py
 ```
 
@@ -38,7 +40,7 @@ test/examples/check_examples.py
 - name 匹配 `^[a-z][a-z0-9_]{0,63}$`，文件名与 name 一致。保留工具名不得用于 action。action 和每个参数的 description 必填；示例 YAML 的 description 使用英文。
 - 执行方式恰好为 exec、steps、script、builtin 之一。exec 的首项及 exec_fallbacks 均为绝对路径；exec 不含提权命令，提权仅通过 run_as。省略 run_as 时使用 allowops 用户。
 - 参数只替换完整 argv 元素 `{param}`。可选项使用子列表，缺失时省略整组；Go 格式模板按字面值传递。不执行 shell，不拼接选项或路径。
-- string、path 拒绝以连字符开头的值。未知参数、缺失必填值或类型错误一律拒绝。path 必须存在，解析符号链接后按路径分量检查 allowed_roots；它不单独拒绝所有 `..` 写法。内置 log_search 额外拒绝 `..` 分量；依据：`internal/params/params.go` 的 `ResolvePath`、`internal/builtin/logsearch/logsearch.go` 的 `files`。
+- string、path 拒绝以连字符开头的值。未知参数、缺失必填值或类型错误一律拒绝。path 必须存在，解析符号链接后按路径分量检查 allowed_roots；它不单独拒绝所有 `..` 写法。内置 log_search 额外拒绝 `..` 分量；依据：`internal/params/params.go` 的 `ResolvePath`、`internal/builtin/logsearch/logsearch.go` 的 `files`。执行前还要通过属主与写权限检查，见第 4 节第 8 项。
 - 包装命令后真正执行的命令也必须通过解释器检查。Docker 示例不分配 TTY（终端）；不启用解释器覆盖。签名脚本是 D6 明确允许的例外，主机端须使用 Python -I。
 - 每次执行清空环境，仅保留设计指定的变量；应用总超时并结束整个进程组。不要增加 journal 或 Docker 用户组。
 - 文件读取的需求只授权普通文件或目录，不授权 FIFO、设备、socket 等特殊文件。通用 path schema 不能表达文件种类，外部文件命令仍有检查与打开之间的竞争风险，见第 4 节第 8 项。容器目录使用枚举，避免把主机 path 校验误用于容器。
@@ -93,6 +95,37 @@ Authorization 头：识别条件是（1）头名位于行首（可缩进）或�
 Kubernetes 示例固定读取 `/etc/kubernetes/allowops-readonly.conf`。此文件由运维人员配置，只授予所需的读取权限；禁止可执行认证插件。JVM 示例选择 Docker 容器作为一种明确执行环境，不在同一个 action 中引入未定义的 Docker/Pod 条件分支。
 
 ## 3. action 需求
+
+### `agent_upgrade`
+
+从主机已配置的软件源安装指定版本的 allowops-agent，再用临时 systemd 定时器重启 agent。
+
+| 项 | 需求 |
+|---|---|
+| risk | dangerous |
+| run_as | root |
+| 执行方式 | script |
+| filters | [] |
+| redact | secrets |
+| 扩展能力 | D6 |
+| 执行限制 | timeout=10m；max_output=64KB |
+| CentOS 7 | 使用 yum 3 和 systemd 219；`yum upgrade` 和 `systemd-run --on-active --timer-property` 均可用。systemd 219 上每次升级留下一个处于 `elapsed` 状态的 `run-*.timer`，主机重启后消失。 |
+| 安全说明 | risk 为 dangerous，示例策略 `read-only.yaml`、`maintenance.yaml` 都拒绝执行。版本只能从签名的 enum 中选择，只列出不高于当前网关的版本；每次网关升级后再发布含新版本的目录。安装包签名由 apt/yum 按软件源配置校验，软件源和包签名密钥由运维人员维护。已是目标版本时不安装、不重启。安装后版本与请求不一致时返回失败且不重启：apt 拒绝降级，`yum upgrade` 不降级。降级由运维人员在主机上处理。每批最多一个目标，失败一台即停止。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `version` | enum | `values: ['0.1.0']`；必填 | 软件包版本，只列出不高于网关的版本 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+script:
+  file: scripts/agent_upgrade.sh
+  interpreter: /bin/sh
+args: ['{version}']
+```
 
 ### `app_config_keys`
 
@@ -2934,7 +2967,7 @@ exec: [/usr/bin/systemctl, status, '{service}', --no-pager]
 
 7. **D2 缺失步骤（已确定）**：`CheckHost` 在执行任何步骤之前检查全部步骤的可执行文件，任一步缺失即整个 action 为 unsupported。`on_error: continue` 仅用于通过检查后步骤执行失败的情况。host_snapshot 的 Docker 或其他程序缺失时不会执行其余步骤。依据：`internal/catalog/host.go` 的 `CheckHost`，`internal/executor/executor.go` 的 `RunWithFilters`。
 
-8. **参数间约束和文件种类（部分确定）**：`internal/params/params.go` 的 `Definition` 没有跨参数约束，也没有普通文件/目录类型字段。sar 同日 start/end 顺序和 docker_logs 的 since/until 年龄关系不能由 schema 检查；nginx 脚本已检查实际日历小时。内置 log_search 在 `files` 和打开后检查普通文件，并使用 os.Root 限定打开路径；签名 nginx 脚本使用 O_NOFOLLOW、fstat 和打开后的路径检查。外部 head/tail/grep/du 只接受通过 path 解析的字符串，通用 path 检查没有保证打开时的文件种类，也没有消除随后路径替换的竞争。依据：`internal/params/params.go` 的 `ResolvePath`，`internal/builtin/logsearch/logsearch.go` 的 `files`、`search`，`examples/catalog/scripts/nginx_access_stats.py` 的 `main`。**待确认**：上述时间组合是否由调用方拒绝，以及外部文件命令的种类与竞争防护策略。建议先通过目录评审限制允许路径的可写主体，要求调用方检查时间顺序；需要执行器保证的部分另立节点。
+8. **参数间约束和文件种类（部分确定）**：`internal/params/params.go` 的 `Definition` 没有跨参数约束，也没有普通文件/目录类型字段。sar 同日 start/end 顺序和 docker_logs 的 since/until 年龄关系不能由 schema 检查；nginx 脚本已检查实际日历小时。内置 log_search 在 `files` 和打开后检查普通文件，并使用 os.Root 限定打开路径；签名 nginx 脚本使用 O_NOFOLLOW、fstat 和打开后的路径检查。外部 head/tail/grep/du 只接受通过 path 解析的字符串，通用 path 检查没有保证打开时的文件种类。`ResolvePath` 检查与目标程序重新打开路径之间的竞争（允许根目录内有写权限的用户把某个分量换成指向目录外的符号链接，已复现：`tail` 读取了目录外文件）按属主检查处理：执行前，在将执行命令的进程中（使用 run_as 时为降权后的 allowops-exec，否则为代理进程自身），对每个 path 类型参数值从 `/` 到末项用 Lstat 逐分量检查，不跟随链接。每个分量必须属于 root 或命令运行的 uid、不是符号链接、且组和其他用户无写权限；带 sticky 位的目录可以组或其他可写（如 /tmp），其子项仍逐项检查。不满足时以固定错误码 `PATH_NOT_TRUSTED` 拒绝，错误信息不含路径值，命令不启动，步骤型 action 在第一步之前即拒绝。依据：`internal/params/path_trust.go` 的 `CheckPathTrusted`，`internal/executor/executor.go` 的 `RunWithCallbacks`，`internal/execd/exec.go` 的 `ExecutionReason`。**行为后果**：应用可写的日志目录（属主为服务账号且组或其他可写，或末项文件为 0666/0664）会被拒绝；需要使这些路径只由 root 或 run_as 账号可写，或把 allowed_roots 改到满足规则的目录。残余范围：属主为 root 或 run_as 账号的主体仍可替换分量（同权限，不视为越权）；不检查 ACL、挂载选项和文件种类（FIFO、设备文件仍可通过）；检查与 exec 之间仍有极短窗口，但窗口内只有受信主体能替换。agent 层目前把该错误记为通用的 `EXECUTION_FAILED`，网关侧尚未区分 `PATH_NOT_TRUSTED`；helper 事件的原因字段已为 `PATH_NOT_TRUSTED`。**待确认**：上述时间组合是否由调用方拒绝，以及外部文件命令的文件种类防护策略。建议要求调用方检查时间顺序；需要执行器保证文件种类的部分另立节点。
 
 9. **目标工具能力检测（待确认）**：当前 `internal/catalog/host.go` 的 `CheckHost`/`ResolveExecutable` 检查文件存在、权限、解释器和 shebang，不检测工具版本、命令选项、容器内程序或远端服务能力。journal_grep 的 -g、Docker --until、kubectl 与集群版本、JDK 工具权限、sysstat 文件版本仍需目标环境证据。本节点没有连接这些环境。建议维护最低版本与所需选项清单，在部署前运行固定、只读的能力探测；由独立节点确定“加载时 unsupported”或“执行时失败”的状态契约。
 
@@ -2955,11 +2988,11 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 
 ## 5. 本地示例检查
 
-`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 90 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 91 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
 
 配置脱敏冒烟在同一临时目录中把 app_config_view、app_config_keys 的 allowed_roots 改为临时配置目录，写入 properties、JSON、XML 形式的凭据和 PEM 私钥：断言 app_config_view 输出不含凭据值、match 过滤命中与否都以退出码 0 返回，app_config_keys 只输出键名且不输出 PEM 内容。该检查依赖本机 grep 支持 -P 和 head。
 
-日志冒烟在自动删除的临时目录复制目录，仅替换 log_search 的 builtin_config.allowed_roots。它创建普通与 gzip 测试日志，并通过 catalog try 验证逐行结果、count=3、无匹配退出码 0、max_matches=1 的 truncated/resource_limit_reached。原始示例路径和文件不被修改；try 始终以当前用户执行，run_as 不在此检查中验证。检查不运行 Redis、MySQL、HTTP、Docker、Kubernetes、DNS 或任何写 action。
+日志冒烟在自动删除的临时目录复制目录，仅替换 log_search 的 builtin_config.allowed_roots。它创建普通与 gzip 测试日志，并通过 catalog try 验证逐行结果、count=3、无匹配退出码 0、max_matches=1 的 truncated/resource_limit_reached。原始示例路径和文件不被修改；try 始终以当前用户执行，run_as 不在此检查中验证。检查不运行 Redis、MySQL、HTTP、Docker、Kubernetes、DNS 或任何写 action。check_agent_upgrade.py 用只记录调用的替身 dpkg-query、apt-get、rpm、yum、systemd-run 执行 agent_upgrade 脚本，检查升级、已是目标版本、拒绝降级和安装后版本不符四种情况的命令序列与退出码，不安装任何软件包。
 
 选择把 examples-check 作为 `make test` 的依赖。现有 `.github/workflows/ci.yml` 已执行 make test，因此无需改动工作流即可在本机和 CI 使用同一检查；检查失败会阻止 Go 测试目标继续。脚本 action 的签名风险警告属于预期输出，不表示校验失败。
 

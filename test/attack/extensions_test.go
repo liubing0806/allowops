@@ -180,3 +180,14 @@ func TestFilterRegexLengthAttack(t *testing.T) {
 		t.Fatalf("long regex: %#v %v", r, err)
 	}
 }
+func TestInterpreterProgramTextAttack(t *testing.T) {
+	for _, argv := range [][]any{{"/bin/sh", "-c", "{cmd}"}, {"/usr/bin/env", "watch", "-n1", "{cmd}"}} {
+		a := attackAction(argv)
+		a.AllowInterpreter = true
+		a.Params = map[string]params.Definition{"cmd": {Type: params.String, Description: "cmd", MaxLen: 64}}
+		r, err := executor.Run(context.Background(), a, map[string]any{"cmd": "echo injected"}, nil)
+		if err == nil || strings.Contains(r.Stdout, "injected") {
+			t.Errorf("%q ran caller program text: %#v %v", argv, r, err)
+		}
+	}
+}

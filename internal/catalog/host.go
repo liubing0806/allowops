@@ -87,6 +87,10 @@ func inspectLocalCommand(argv []string, cwd, searchPath string, allow, wrapped b
 	if err := inspectExecutable(program, real, allow, wrapped); err != nil {
 		return err
 	}
+	// busybox also provides ordinary commands; CheckCommand checks it by name.
+	if base := filepath.Base(real); !allow && base != "busybox" && runsCommands(append([]string{real}, argv[1:]...)) {
+		return fmt.Errorf("exec[0] resolves to %s, which runs commands from its arguments; allow_interpreter required", base)
+	}
 	name := strings.ToLower(filepath.Base(real))
 	switch name {
 	case "env", "timeout", "nice", "ionice", "stdbuf", "xargs", "nsenter", "chroot":

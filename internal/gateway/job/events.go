@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/audit"
@@ -69,6 +70,24 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 	default:
 		return nil
 	}
+	// A database failure is not a protocol violation. Closing the stream would
+	// end every running task on the host, so retry the whole transaction while
+	// the connection lives. In-memory task state changes only after COMMIT.
+	// A failed attempt may still have committed, so later attempts are replays
+	// that accept the state an earlier attempt wrote for this same event.
+	replay := false
+	return retrySQL(ctx, jobID, func(ctx context.Context) error {
+		err := s.taskEvent(ctx, e, jobID, taskID, replay)
+		replay = true
+		return err
+	})
+}
+
+// commitTaskEvent commits a non-terminal task event. Tests replace it to report
+// a lost COMMIT acknowledgement after the server committed.
+var commitTaskEvent = func(ctx context.Context, tx pgx.Tx) error { return tx.Commit(ctx) }
+
+func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID string, replay bool) error {
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -80,15 +99,51 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 	var hostID, hostname, connection, actor string
 	var dispatched bool
 	var version uint64
-	err = tx.QueryRow(ctx, "SELECT j.action_definition,t.status,t.created_at,t.host_id,t.hostname,COALESCE(t.connection_id,''),t.dispatched,j.subject_id,j.policy_version FROM tasks t JOIN jobs j ON j.job_id=t.job_id WHERE t.job_id=$1 AND t.task_id=$2 FOR UPDATE OF t", jobID, taskID).Scan(&definition, &state, &created, &hostID, &hostname, &connection, &dispatched, &actor, &version)
-	if err != nil {
+	var stored []byte
+	var outputState string
+	err = tx.QueryRow(ctx, "SELECT j.action_definition,t.status,t.created_at,t.host_id,t.hostname,COALESCE(t.connection_id,''),t.dispatched,j.subject_id,j.policy_version,t.result,t.output_state FROM tasks t JOIN jobs j ON j.job_id=t.job_id WHERE t.job_id=$1 AND t.task_id=$2 FOR UPDATE OF t", jobID, taskID).Scan(&definition, &state, &created, &hostID, &hostname, &connection, &dispatched, &actor, &version, &stored, &outputState)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return errors.New("UNKNOWN_TASK_EVENT")
+	}
+	if err != nil {
+		return err
 	}
 	if hostID != e.HostID || connection != e.ConnectionID || !dispatched {
 		return errors.New("TASK_CONNECTION_MISMATCH")
 	}
 	if state > 2 {
 		tx.Rollback(ctx)
+		if completed := e.Message.GetTaskCompleted(); replay && completed != nil && completed.Result != nil && outputState == "pending" {
+			// An earlier attempt of this event may have committed this result
+			// while both its COMMIT reply and the terminalCommitted check were
+			// lost. That attempt did not start persistence; start it now, or the
+			// output stays pending while this instance is alive.
+			raw, err := proto.Marshal(completed.Result)
+			if err == nil && state == int16(completed.Result.Status) && bytes.Equal(raw, stored) {
+				var a catalog.Action
+				if err := json.Unmarshal(definition, &a); err != nil {
+					return err
+				}
+				s.mu.Lock()
+				if err := s.ctx.Err(); err != nil {
+					s.mu.Unlock()
+					return err
+				}
+				out := s.outputs[outputID(jobID, taskID)]
+				if out == nil {
+					out = &taskOutput{Streams: map[streamKey]*streamOutput{}}
+				}
+				s.activePersists.Add(1)
+				s.wg.Add(1)
+				s.mu.Unlock()
+				go func() {
+					defer s.wg.Done()
+					defer s.activePersists.Add(-1)
+					s.persist(jobID, taskID, hostID, hostname, actor, a.Name, created, version, out)
+				}()
+				return nil
+			}
+		}
 		s.clearTasks(jobID, taskID)
 		if e.Message.GetTaskStarted() != nil && s.Router != nil {
 			reason := "CANCELLED"
@@ -127,6 +182,11 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 		return err
 	}
 	if started := e.Message.GetTaskStarted(); started != nil {
+		if state == 2 && replay {
+			// The host stream is serial, so only this event's earlier attempt
+			// can have started the task.
+			return nil
+		}
 		if state != 1 {
 			return errors.New("DUPLICATE_TASK_START")
 		}
@@ -136,7 +196,7 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 		// Output events publish their buffer while holding the task row lock.
 		// Do not create an empty entry after COMMIT releases that lock: a
 		// terminal writer may already have committed and cleared the task.
-		return tx.Commit(ctx)
+		return commitTaskEvent(ctx, tx)
 	}
 	if chunk := e.Message.GetOutput(); chunk != nil {
 		if state != 2 || (chunk.Stream != v1.OutputStream_OUTPUT_STREAM_STDOUT && chunk.Stream != v1.OutputStream_OUTPUT_STREAM_STDERR) || (len(chunk.Data) == 0 && !chunk.Eof) {
@@ -185,7 +245,7 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 		if eof || chunk.Offset != size || out.Bytes+int64(len(chunk.Data)) > int64(a.MaxOutput) {
 			return errors.New("OUTPUT_OFFSET_OR_BUDGET")
 		}
-		if err := tx.Commit(ctx); err != nil {
+		if err := commitTaskEvent(ctx, tx); err != nil {
 			return err
 		}
 		if stream == nil {
@@ -218,10 +278,16 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, "INSERT INTO task_steps(job_id,task_id,created_at,step_index,name,result) VALUES ($1,$2,$3,$4,$5,$6)", jobID, taskID, created, step.StepIndex, step.StepName, raw); err != nil {
+		insert := "INSERT INTO task_steps(job_id,task_id,created_at,step_index,name,result) VALUES ($1,$2,$3,$4,$5,$6)"
+		if replay {
+			// out.Steps changes only after COMMIT, so an existing row for this
+			// index was written by this event's earlier attempt.
+			insert += " ON CONFLICT DO NOTHING"
+		}
+		if _, err := tx.Exec(ctx, insert, jobID, taskID, created, step.StepIndex, step.StepName, raw); err != nil {
 			return err
 		}
-		if err := tx.Commit(ctx); err != nil {
+		if err := commitTaskEvent(ctx, tx); err != nil {
 			return err
 		}
 		out.Steps = append(out.Steps, &v1.TaskStep{Index: step.StepIndex, Name: step.StepName, Result: proto.Clone(step.Result).(*v1.ExecutionResult)})
@@ -308,9 +374,12 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, "UPDATE tasks SET status=$3,result=$4,finished_at=now(),stdout_preview=$5,stderr_preview=$6,stdout_sha256=$7,stderr_sha256=$8,step_count=$9,stdout_size=$10,stderr_size=$11 WHERE job_id=$1 AND task_id=$2 AND status IN (1,2)", jobID, taskID, int16(completed.Result.Status), raw, stdout[:min(len(stdout), GroupBytes)], stderr[:min(len(stderr), GroupBytes)], stdoutHash[:], stderrHash[:], len(out.Steps), len(stdout), len(stderr)); err != nil {
+		if _, err := tx.Exec(ctx, "UPDATE tasks SET status=$3,result=$4,finished_at=now(),stdout_preview=$5,stderr_preview=$6,stdout_sha256=$7,stderr_sha256=$8,step_count=$9,stdout_size=$10,stderr_size=$11,output_instance=$12 WHERE job_id=$1 AND task_id=$2 AND status IN (1,2)", jobID, taskID, int16(completed.Result.Status), raw, stdout[:min(len(stdout), GroupBytes)], stderr[:min(len(stderr), GroupBytes)], stdoutHash[:], stderrHash[:], len(out.Steps), len(stdout), len(stderr), s.instanceID); err != nil {
 			return err
 		}
+		// output_instance names the process whose persist goroutine moves
+		// output_state on; it can differ from jobs.origin_instance. If that
+		// process dies first, RecoverLostInstances marks the output unavailable.
 		// Register accepted persistence before terminal COMMIT is visible to
 		// Drain, and serialize worker admission against Close's cancellation.
 		s.mu.Lock()

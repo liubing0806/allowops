@@ -442,6 +442,10 @@ func RunRedacted(ctx context.Context, cfg Config, p Params, mask func(string) st
 	}
 	client := redisclient.NewClient(opts)
 	defer client.Close()
+	if args[0] == "HGET" {
+		// HGET has no ranged form; bound its reply on the wire instead.
+		client.AddHook(bulkLimitHook{limit: cfg.MaxResponseBytes})
+	}
 	value, truncated, err := readConfiguredResponse(ctx, client, args, cfg)
 	r.Truncated = truncated
 	if errors.Is(err, redisclient.Nil) {
@@ -595,8 +599,16 @@ func readResponse(ctx context.Context, client *redisclient.Client, args []any, l
 		}
 		// GETRANGE bounds allocation even when the key grows after STRLEN.
 		// These reads do not provide an atomic snapshot of a changing key.
-		value, err := client.GetRange(ctx, key, 0, limit-1).Result()
-		return value, int64(len(value)) == limit && length < limit, err
+		// Reading one byte past the limit is the only evidence of growth:
+		// a prefix of exactly limit bytes is complete only if nothing follows.
+		value, err := client.GetRange(ctx, key, 0, limit).Result()
+		if err != nil {
+			return value, false, err
+		}
+		if int64(len(value)) > limit {
+			return value[:limit], true, nil
+		}
+		return value, false, nil
 	case "HGET":
 		length, err := client.HStrLen(ctx, args[1].(string), args[2].(string)).Result()
 		if err != nil {
@@ -618,35 +630,148 @@ func readResponse(ctx context.Context, client *redisclient.Client, args []any, l
 			}
 			size += length
 		}
+		return readBoundedMGet(ctx, client, args[1:], limit)
 	}
 	if size > limit {
 		return nil, true, fmt.Errorf("%w: value exceeds %d bytes", ErrResponseLimit, limit)
 	}
-	// G13: HGET/MGET preflight is not atomic. Concurrent writes between the
-	// length check and read may enlarge a value beyond this memory limit.
+	// G13: the HGET preflight is not atomic. A value enlarged since then is
+	// refused by bulkLimitHook before it is allocated; this check covers
+	// callers that did not install the hook.
 	value, err := client.Do(ctx, args...).Result()
+	if errors.Is(err, ErrResponseLimit) {
+		return nil, true, err
+	}
 	if err == nil && name == "SLOWLOG" && len(args) > 1 && args[1] == "GET" {
 		return summarizeSlowlog(value)
 	}
 	if err == nil {
-		switch value := value.(type) {
-		case string:
-			if name == "HGET" && int64(len(value)) > limit {
-				return nil, true, fmt.Errorf("%w: value changed after size check", ErrResponseLimit)
-			}
-		case []any:
-			if name == "MGET" {
-				var total int64
-				for _, item := range value {
-					if text, ok := item.(string); ok {
-						total += int64(len(text))
-					}
-				}
-				if total > limit {
-					return nil, true, fmt.Errorf("%w: values changed after size check", ErrResponseLimit)
-				}
-			}
+		if text, ok := value.(string); ok && name == "HGET" && int64(len(text)) > limit {
+			return nil, true, fmt.Errorf("%w: value changed after size check", ErrResponseLimit)
 		}
 	}
 	return value, false, err
+}
+
+// readBoundedMGet answers MGET with one bounded GETRANGE per key, so a key that
+// grew after the STRLEN precheck cannot make the client allocate its full size.
+// Each read is capped at the unused budget plus one byte; the extra byte shows
+// growth past the limit. The reads are not an atomic snapshot.
+func readBoundedMGet(ctx context.Context, client *redisclient.Client, keys []any, limit int64) (any, bool, error) {
+	values := make([]any, len(keys))
+	var total int64
+	for i, key := range keys {
+		remaining := limit - total
+		text, err := client.GetRange(ctx, key.(string), 0, remaining).Result()
+		// MGET returns null for non-string keys. Preserve that behavior.
+		if err != nil && strings.HasPrefix(err.Error(), "WRONGTYPE") {
+			continue
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		if int64(len(text)) > remaining {
+			return nil, true, fmt.Errorf("%w: values changed after size check", ErrResponseLimit)
+		}
+		if text == "" {
+			// GETRANGE answers "" for a missing key as well as an empty string.
+			exists, err := client.Exists(ctx, key.(string)).Result()
+			if err != nil {
+				return nil, false, err
+			}
+			if exists == 0 {
+				continue
+			}
+		}
+		values[i] = text
+		total += int64(len(text))
+	}
+	return values, false, nil
+}
+
+// bulkLimitHook fails a connection when the server announces a bulk string
+// longer than limit, before go-redis allocates the announced size (up to
+// 512 MiB) for it. It makes the non-atomic HSTRLEN precheck safe for HGET.
+type bulkLimitHook struct{ limit int64 }
+
+func (h bulkLimitHook) DialHook(next redisclient.DialHook) redisclient.DialHook {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := next(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		return &bulkLimitConn{Conn: conn, limit: h.limit}, nil
+	}
+}
+
+func (bulkLimitHook) ProcessHook(next redisclient.ProcessHook) redisclient.ProcessHook { return next }
+
+func (bulkLimitHook) ProcessPipelineHook(next redisclient.ProcessPipelineHook) redisclient.ProcessPipelineHook {
+	return next
+}
+
+const (
+	replyStart  = iota // next byte is the type byte of a reply line
+	replyLine          // inside a line that carries no bulk body
+	replyLength        // inside the length of a "$<n>" bulk header
+	replyBody          // skipping the body and CRLF of an accepted bulk string
+)
+
+// bulkLimitConn tracks RESP framing in the bytes the client is about to read.
+// Withholding the first digit that pushes an announced length over the limit
+// leaves the client with an unfinished header, and the next Read fails with
+// ErrResponseLimit.
+type bulkLimitConn struct {
+	net.Conn
+	limit, length, skip int64
+	state               int
+	null                bool
+	err                 error
+}
+
+func (c *bulkLimitConn) Read(p []byte) (int, error) {
+	if c.err != nil {
+		return 0, c.err
+	}
+	n, err := c.Conn.Read(p)
+	for i := 0; i < n; i++ {
+		switch c.state {
+		case replyStart:
+			c.state = replyLine
+			if p[i] == '$' {
+				c.state, c.length, c.null = replyLength, 0, false
+			}
+		case replyLine:
+			if p[i] == '\n' {
+				c.state = replyStart
+			}
+		case replyLength:
+			switch ch := p[i]; {
+			case ch >= '0' && ch <= '9':
+				c.length = c.length*10 + int64(ch-'0')
+				if c.length > c.limit {
+					c.err = fmt.Errorf("%w: value exceeds %d bytes", ErrResponseLimit, c.limit)
+					if i == 0 {
+						return 0, c.err
+					}
+					return i, nil
+				}
+			case ch == '-':
+				c.null = true
+			case ch == '\n':
+				c.state = replyStart
+				if !c.null {
+					c.state, c.skip = replyBody, c.length+2
+				}
+			}
+		case replyBody:
+			take := min(c.skip, int64(n-i))
+			c.skip -= take
+			i += int(take) - 1
+			if c.skip == 0 {
+				c.state = replyStart
+			}
+		}
+	}
+	return n, err
 }

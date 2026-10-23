@@ -71,7 +71,7 @@ func (s *Service) RecoverLostInstances(ctx context.Context) error {
 		err = tx.QueryRow(ctx, "SELECT j.job_id,j.origin_instance,j.policy_version FROM jobs j JOIN gateway_instances i ON i.instance_id=j.origin_instance WHERE j.status IN (1,2) AND i.last_seen<now()-$1*interval '1 second' ORDER BY j.job_id FOR UPDATE OF j SKIP LOCKED LIMIT 1", s.lostAfter.Seconds()).Scan(&id, &origin, &version)
 		if errors.Is(err, pgx.ErrNoRows) {
 			tx.Rollback(ctx)
-			return nil
+			return s.recoverLostOutputs(ctx)
 		}
 		if err != nil {
 			tx.Rollback(ctx)
@@ -123,6 +123,45 @@ func (s *Service) RecoverLostInstances(ctx context.Context) error {
 		event.Reason = "result"
 		if _, err := s.Audit.Append(ctx, event); err != nil {
 			slog.Error("lost gateway recovery result audit failed", "job_id", id)
+			return err
+		}
+	}
+}
+
+// recoverLostOutputs ends the pending output of terminal tasks whose receiving
+// gateway process is lost by the same last_seen rule as job recovery. That
+// process persisted the output from memory and no other process can; without
+// this, GetJobOutput would answer OUTPUT_PENDING forever. The audit event is
+// the one persist writes for a failed upload. A task whose output_instance is
+// NULL (written before the column existed) is not touched.
+func (s *Service) recoverLostOutputs(ctx context.Context) error {
+	for {
+		tx, err := s.Store.Pool.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		var jobID, taskID, hostID, hostname, actor, action string
+		var version uint64
+		err = tx.QueryRow(ctx, "SELECT t.job_id,t.task_id,t.host_id,t.hostname,j.subject_id,j.action,j.policy_version FROM tasks t JOIN jobs j ON j.job_id=t.job_id JOIN gateway_instances i ON i.instance_id=t.output_instance WHERE t.output_state='pending' AND t.status>2 AND i.last_seen<now()-$1*interval '1 second' ORDER BY t.job_id,t.task_id FOR UPDATE OF t SKIP LOCKED LIMIT 1", s.lostAfter.Seconds()).Scan(&jobID, &taskID, &hostID, &hostname, &actor, &action, &version)
+		if errors.Is(err, pgx.ErrNoRows) {
+			tx.Rollback(ctx)
+			return nil
+		}
+		if err != nil {
+			tx.Rollback(ctx)
+			return err
+		}
+		if _, err := tx.Exec(ctx, "UPDATE tasks SET output_state='unavailable' WHERE job_id=$1 AND task_id=$2", jobID, taskID); err != nil {
+			tx.Rollback(ctx)
+			return err
+		}
+		// Audit before COMMIT: a failed append leaves the task pending for the
+		// next pass instead of an unavailable output without a record.
+		if _, err := s.Audit.Append(ctx, audit.Payload{SubjectID: actor, Operation: "store_output", Resource: hostID, Hostname: hostname, Decision: "deny", Reason: "OUTPUT_INSTANCE_LOST", JobID: jobID, TaskID: taskID, Action: action, PolicyVersion: version, Outputs: []audit.Output{}}); err != nil {
+			tx.Rollback(ctx)
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
 			return err
 		}
 	}

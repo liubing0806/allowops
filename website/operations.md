@@ -28,6 +28,19 @@ release. A gateway supports its own and previous major host versions (only major
 zero for a major-zero gateway), but rejects a host with a newer full SemVer.
 Do not introduce a new host version before the gateway supports it.
 
+Hosts can be upgraded online with the `agent_upgrade` example action
+(`risk: dangerous`, `run_as: root`). It installs the selected `allowops-agent`
+version from the host's configured apt or yum repository, then restarts the
+agent from a transient systemd timer about 5 seconds later so the task result
+reaches the gateway first. List only versions not newer than the gateway in the
+`version` enum and publish a new catalog after each gateway upgrade. The action
+does nothing on a host already at the requested version and fails without
+restarting when the installed version does not match afterwards; it does not
+downgrade. Package signatures are checked by apt/yum according to the
+repository configuration. Roll out in batches with host selectors, and grant
+the action through a dedicated policy rule. A host upgraded beyond the gateway
+is refused and must be downgraded on the host.
+
 Run the release migration with the maintenance database role. Helm uses a
 pre-install/pre-upgrade migration hook; deployments that manage binaries run
 `allowops-gateway migrate` separately. Preserve the runtime role's restricted
@@ -104,3 +117,35 @@ If publication or management returns an audit-result error after a possible
 commit, read the resource before retrying. If an execution response is lost,
 inspect jobs before submitting again. There is no general exactly-once side-effect
 guarantee. A gateway-instance loss can require task reconciliation without replay.
+
+## New release notice
+
+The gateway can tell console users when a newer release exists. It is off by
+default, so the gateway makes no outbound request unless you enable it:
+
+```yaml
+update_check:
+  enabled: true
+  url: https://liubing0806.github.io/allowops/version.json
+  interval: 24h
+```
+
+`url` must be HTTPS without credentials and `interval` must be at least `1h`.
+Point `url` at an internal copy of the manifest when the gateway has no internet
+access. The manifest is a JSON object with `version` (strict SemVer) and an
+optional `published_at` (RFC 3339). The documentation build generates the
+published manifest from the first release heading of `CHANGELOG.md`.
+
+Each check sends one GET request with `User-Agent: allowops-gateway/<version>`
+and nothing else. It uses the proxy from the environment, follows at most three
+HTTPS redirects and reads at most 64 KiB. Gateway instances share one result in
+PostgreSQL, so a cluster fetches about once per interval. The gateway only
+informs; it never downloads or installs anything. Development builds report
+`dev` and never show a notice.
+
+When a newer release exists, the sidebar shows an **Update** mark next to the
+gateway version that opens the GitHub release notes, and the overview lists the
+release under **Needs attention**. The system page shows whether the check is
+enabled, when it last ran, the last error, the number of hosts whose agent is
+older than the gateway, and a warning when gateway instances run different
+versions.

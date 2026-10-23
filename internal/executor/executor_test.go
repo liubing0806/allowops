@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -36,6 +37,23 @@ func TestProcessHelper(t *testing.T) {
 					os.Exit(2)
 				}
 				fmt.Printf("%d\n", child.Process.Pid)
+				time.Sleep(time.Hour)
+			case "escape", "detach":
+				child := exec.Command(os.Args[0], "-test.run=TestProcessHelper", "--", "child")
+				child.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+				child.Stdout = os.Stdout
+				child.Stderr = os.Stderr
+				if err := child.Start(); err != nil {
+					os.Exit(2)
+				}
+				if err := os.WriteFile(os.Args[i+2], []byte(strconv.Itoa(child.Process.Pid)), 0600); err != nil {
+					os.Exit(2)
+				}
+				if os.Args[i+1] == "detach" {
+					// Like a daemon started without closing inherited output.
+					fmt.Print("started\n")
+					os.Exit(0)
+				}
 				time.Sleep(time.Hour)
 			case "child":
 				time.Sleep(time.Hour)
@@ -87,6 +105,71 @@ func TestSecurity6ProcessGroupTimeout(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("child %d remained alive", pid)
+}
+
+// A descendant that leaves the process group survives the deadline kill and
+// keeps the output pipes open; the run must still end shortly after the kill.
+func TestEscapedDescendantDoesNotHoldRunOpen(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	t.Cleanup(func() {
+		if data, err := os.ReadFile(pidFile); err == nil {
+			if pid, err := strconv.Atoi(string(data)); err == nil {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	})
+	a := helperAction("escape")
+	a.Exec = append(a.Exec, pidFile)
+	a.Timeout = "2s"
+	done := make(chan error, 1)
+	go func() {
+		_, err := Run(context.Background(), a, nil, nil)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("run with a killed parent reported success")
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("run still waits for output pipes held by an escaped descendant")
+	}
+}
+
+// A command that exits 0 after starting a descendant outside its process group
+// that keeps the output pipes open succeeded; only its output may be incomplete.
+func TestDetachedDescendantKeepsSuccessfulExit(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	t.Cleanup(func() {
+		if data, err := os.ReadFile(pidFile); err == nil {
+			if pid, err := strconv.Atoi(string(data)); err == nil {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	})
+	a := helperAction("detach")
+	a.Exec = append(a.Exec, pidFile)
+	a.Timeout = "60s"
+	type outcome struct {
+		r   Result
+		err error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		r, err := Run(context.Background(), a, nil, nil)
+		done <- outcome{r, err}
+	}()
+	select {
+	case o := <-done:
+		if o.err != nil || o.r.ExitCode != 0 {
+			t.Fatalf("exit_code=%d error=%v; want 0 and no error", o.r.ExitCode, o.err)
+		}
+		if o.r.Stdout != "started\n" || !o.r.Truncated {
+			t.Fatalf("stdout=%q truncated=%v; want the output written before exit, marked truncated", o.r.Stdout, o.r.Truncated)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("run still waits for output pipes held by a detached descendant")
+	}
 }
 
 // Security 7: independently cap stdout and stderr after complete-line redaction.

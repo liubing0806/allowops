@@ -11,12 +11,16 @@ import (
 
 	"github.com/liubing0806/allowops/internal/gateway/api"
 	"github.com/liubing0806/allowops/internal/gateway/catalogsvc"
+	"github.com/liubing0806/allowops/internal/gateway/job"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type Config struct {
 	CacheEntries     int
 	ProgressInterval time.Duration
+	// Jobs is the gateway job configuration. Tool schemas and argument checks use
+	// the same limits as job validation; the zero value means job.DefaultConfig.
+	Jobs job.Config
 }
 type Service struct {
 	identity *api.Service
@@ -45,7 +49,10 @@ func New(identity *api.Service, catalogs *catalogsvc.Service, jobs JobService, c
 	if cfg.ProgressInterval == 0 {
 		cfg.ProgressInterval = 10 * time.Second
 	}
-	if cfg.CacheEntries < 1 || cfg.ProgressInterval <= 0 {
+	if cfg.Jobs == (job.Config{}) {
+		cfg.Jobs = job.DefaultConfig()
+	}
+	if cfg.CacheEntries < 1 || cfg.ProgressInterval <= 0 || cfg.Jobs.MaxWaitSeconds == 0 || cfg.Jobs.WaitSeconds > cfg.Jobs.MaxWaitSeconds || cfg.Jobs.BatchSize == 0 {
 		return nil, errors.New("invalid MCP limits")
 	}
 	return &Service{identity: identity, catalogs: catalogs, jobs: jobs, config: cfg, entries: map[string]*list.Element{}, lru: list.New()}, nil
