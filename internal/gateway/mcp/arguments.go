@@ -19,6 +19,9 @@ import (
 	"github.com/liubing0806/allowops/internal/params"
 )
 
+// actionRequest validates in a fixed order, which decides which error a caller
+// sees first: argument object and names, reason, targets, expected_count,
+// run limits, response_format, params, then output filters.
 func actionRequest(a catalog.Action, raw json.RawMessage) (*v1.RunJobRequest, string, error) {
 	args, err := argumentObject(raw)
 	if err != nil {
@@ -38,55 +41,98 @@ func actionRequest(a catalog.Action, raw json.RawMessage) (*v1.RunJobRequest, st
 	if strings.TrimSpace(req.Reason) == "" {
 		return nil, "", errors.New("reason required; allowed: non-whitespace string")
 	}
+	if err := parseTargets(args, req); err != nil {
+		return nil, "", err
+	}
+	if err := parseExpectedCount(args, req); err != nil {
+		return nil, "", err
+	}
+	if err := parseRunLimits(a, args, req); err != nil {
+		return nil, "", err
+	}
+	format, err := parseResponseFormat(args)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := parseActionParams(a, args, req); err != nil {
+		return nil, "", err
+	}
+	if err := parseOutputFilters(a, args, req); err != nil {
+		return nil, "", err
+	}
+	return req, format, nil
+}
+
+// parseTargets selects hosts or selector. A selector also requires expected_count.
+func parseTargets(args map[string]json.RawMessage, req *v1.RunJobRequest) error {
 	targets, err := argumentObject(args["targets"])
 	if err != nil {
-		return nil, "", errors.New("targets required; allowed: hosts or selector")
+		return errors.New("targets required; allowed: hosts or selector")
 	}
 	if len(targets) != 1 {
-		return nil, "", errors.New("targets requires exactly one of hosts or selector")
+		return errors.New("targets requires exactly one of hosts or selector")
 	}
 	switch {
 	case targets["hosts"] != nil:
-		var names []string
-		if err := decodeField(targets, "hosts", &names, true); err != nil || len(names) == 0 {
-			return nil, "", errors.New("targets.hosts required; allowed: nonempty hostname array")
-		}
-		for _, name := range names {
-			if strings.TrimSpace(name) == "" || strings.ContainsAny(name, "\x00\r\n") {
-				return nil, "", errors.New("targets.hosts allowed: nonempty hostnames without CR/LF/NUL")
-			}
-		}
-		sorted := slices.Clone(names)
-		slices.Sort(sorted)
-		if len(slices.Compact(sorted)) != len(names) {
-			return nil, "", errors.New("targets.hosts allowed: unique hostnames")
+		names, err := parseHostNames(targets)
+		if err != nil {
+			return err
 		}
 		req.Targets = &v1.HostTargets{Selection: &v1.HostTargets_Hosts{Hosts: &v1.HostNames{Names: names}}}
 	case targets["selector"] != nil:
 		var selector string
 		if err := decodeField(targets, "selector", &selector, true); err != nil {
-			return nil, "", err
+			return err
 		}
 		if err := validateSelector(selector); err != nil {
-			return nil, "", err
+			return err
 		}
 		req.Targets = &v1.HostTargets{Selection: &v1.HostTargets_Selector{Selector: selector}}
 		if args["expected_count"] == nil {
-			return nil, "", errors.New("expected_count required with selector; allowed: nonnegative integer")
+			return errors.New("expected_count required with selector; allowed: nonnegative integer")
 		}
 	default:
-		return nil, "", errors.New("targets allowed: hosts or selector")
+		return errors.New("targets allowed: hosts or selector")
 	}
-	if args["expected_count"] != nil {
-		var n uint64
-		if err := decodeField(args, "expected_count", &n, false); err != nil {
-			return nil, "", err
+	return nil
+}
+
+func parseHostNames(targets map[string]json.RawMessage) ([]string, error) {
+	var names []string
+	if err := decodeField(targets, "hosts", &names, true); err != nil || len(names) == 0 {
+		return nil, errors.New("targets.hosts required; allowed: nonempty hostname array")
+	}
+	for _, name := range names {
+		if strings.TrimSpace(name) == "" || strings.ContainsAny(name, "\x00\r\n") {
+			return nil, errors.New("targets.hosts allowed: nonempty hostnames without CR/LF/NUL")
 		}
-		req.ExpectedCount = &n
 	}
+	sorted := slices.Clone(names)
+	slices.Sort(sorted)
+	if len(slices.Compact(sorted)) != len(names) {
+		return nil, errors.New("targets.hosts allowed: unique hostnames")
+	}
+	return names, nil
+}
+
+func parseExpectedCount(args map[string]json.RawMessage, req *v1.RunJobRequest) error {
+	if args["expected_count"] == nil {
+		return nil
+	}
+	var n uint64
+	if err := decodeField(args, "expected_count", &n, false); err != nil {
+		return err
+	}
+	req.ExpectedCount = &n
+	return nil
+}
+
+// parseRunLimits fills wait_seconds, batch_size and max_failures. The caller
+// may lower batch_size and max_failures from the catalog limits but not raise them.
+func parseRunLimits(a catalog.Action, args map[string]json.RawMessage, req *v1.RunJobRequest) error {
 	batch, failures, err := batchLimits(a)
 	if err != nil {
-		return nil, "", err
+		return err
 	}
 	wait := uint32(defaultWaitSeconds)
 	for _, field := range []struct {
@@ -95,44 +141,58 @@ func actionRequest(a catalog.Action, raw json.RawMessage) (*v1.RunJobRequest, st
 		min, max uint32
 	}{{"wait_seconds", &wait, 0, maxWaitSeconds}, {"batch_size", &batch, 1, batch}, {"max_failures", &failures, 0, failures}} {
 		if err := decodeField(args, field.name, field.value, false); err != nil {
-			return nil, "", err
+			return err
 		}
 		if *field.value < field.min || *field.value > field.max {
-			return nil, "", fmt.Errorf("%s allowed: integer in [%d,%d]", field.name, field.min, field.max)
+			return fmt.Errorf("%s allowed: integer in [%d,%d]", field.name, field.min, field.max)
 		}
 	}
 	req.WaitSeconds, req.BatchSize, req.MaxFailures = &wait, &batch, &failures
+	return nil
+}
+
+func parseResponseFormat(args map[string]json.RawMessage) (string, error) {
 	format := "concise"
 	if err := decodeField(args, "response_format", &format, false); err != nil {
-		return nil, "", err
+		return "", err
 	}
 	if format != "concise" && format != "detailed" {
-		return nil, "", errors.New("response_format allowed: concise, detailed")
+		return "", errors.New("response_format allowed: concise, detailed")
 	}
+	return format, nil
+}
+
+func parseActionParams(a catalog.Action, args map[string]json.RawMessage, req *v1.RunJobRequest) error {
 	defs, err := catalog.ParameterDefinitions(a)
 	if err != nil {
-		return nil, "", err
+		return err
 	}
 	values := map[string]any{}
 	if data := args["params"]; data != nil {
 		if _, err := argumentObject(data); err != nil {
-			return nil, "", errors.New("params allowed: JSON object")
+			return errors.New("params allowed: JSON object")
 		}
 		decoder := json.NewDecoder(bytes.NewReader(data))
 		decoder.UseNumber()
 		if err := decoder.Decode(&values); err != nil {
-			return nil, "", errors.New("params allowed: JSON object")
+			return errors.New("params allowed: JSON object")
 		}
 	}
 	values, err = gatewayParams(a, defs, values)
 	if err != nil {
-		return nil, "", err
+		return err
 	}
 	data, err := json.Marshal(values)
 	if err != nil {
-		return nil, "", err
+		return err
 	}
 	req.Params = &v1.Parameters{Json: data}
+	return nil
+}
+
+// parseOutputFilters decodes the filters the action declares, then lets the
+// executor validate the combination.
+func parseOutputFilters(a catalog.Action, args map[string]json.RawMessage, req *v1.RunJobRequest) error {
 	filters := map[string]any{}
 	req.Filters = &v1.OutputFilters{}
 	selected := 0
@@ -145,51 +205,58 @@ func actionRequest(a catalog.Action, raw json.RawMessage) (*v1.RunJobRequest, st
 			selected++
 		}
 		if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-			return nil, "", fmt.Errorf("filter %s must not be null", name)
+			return fmt.Errorf("filter %s must not be null", name)
 		}
 		decoder := json.NewDecoder(bytes.NewReader(data))
 		decoder.UseNumber()
 		var value any
 		if err := decoder.Decode(&value); err != nil {
-			return nil, "", fmt.Errorf("filter %s has invalid type", name)
+			return fmt.Errorf("filter %s has invalid type", name)
 		}
 		filters[name] = value
-		switch name {
-		case "match", "exclude":
-			var s string
-			if err := json.Unmarshal(data, &s); err != nil {
-				return nil, "", fmt.Errorf("%s allowed: RE2 string", name)
-			}
-			if name == "match" {
-				req.Filters.Match = &s
-			} else {
-				req.Filters.Exclude = &s
-			}
-		case "tail", "head":
-			var n uint32
-			if err := json.Unmarshal(data, &n); err != nil {
-				return nil, "", fmt.Errorf("%s allowed: integer in [1,%d]", name, uint64(^uint32(0)))
-			}
-			if name == "tail" {
-				req.Filters.Tail = &n
-			} else {
-				req.Filters.Head = &n
-			}
-		case "count":
-			var b bool
-			if err := json.Unmarshal(data, &b); err != nil {
-				return nil, "", errors.New("count allowed: boolean")
-			}
-			req.Filters.Count = &b
+		if err := setOutputFilter(req.Filters, name, data); err != nil {
+			return err
 		}
 	}
 	if selected > 1 {
-		return nil, "", errors.New("tail, head and count are mutually exclusive; allowed: match/exclude with at most one of tail, head, count")
+		return errors.New("tail, head and count are mutually exclusive; allowed: match/exclude with at most one of tail, head, count")
 	}
 	if _, err := executor.ParseFilters(a.Filters, filters); err != nil {
-		return nil, "", err
+		return err
 	}
-	return req, format, nil
+	return nil
+}
+
+func setOutputFilter(filters *v1.OutputFilters, name string, data json.RawMessage) error {
+	switch name {
+	case "match", "exclude":
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return fmt.Errorf("%s allowed: RE2 string", name)
+		}
+		if name == "match" {
+			filters.Match = &s
+		} else {
+			filters.Exclude = &s
+		}
+	case "tail", "head":
+		var n uint32
+		if err := json.Unmarshal(data, &n); err != nil {
+			return fmt.Errorf("%s allowed: integer in [1,%d]", name, uint64(^uint32(0)))
+		}
+		if name == "tail" {
+			filters.Tail = &n
+		} else {
+			filters.Head = &n
+		}
+	case "count":
+		var b bool
+		if err := json.Unmarshal(data, &b); err != nil {
+			return errors.New("count allowed: boolean")
+		}
+		filters.Count = &b
+	}
+	return nil
 }
 
 func decodeField(args map[string]json.RawMessage, name string, out any, required bool) error {
