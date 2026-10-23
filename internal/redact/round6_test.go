@@ -94,3 +94,19 @@ func TestOptionWordsPwdAndPassphrase(t *testing.T) {
 		{`app ["--passphrase","Hunter2"]`, "Hunter2"},
 	})
 }
+
+// N8: the words inside a marker such as [REDACTED:url_credentials] must not
+// start the credential rules again; a credential after a replaced text is
+// still found because the filter uses the text before the replacement.
+func TestCredentialAfterReplacedTextIsRedacted(t *testing.T) {
+	r := builtinOnly(t)
+	checkSecretCases(t, r, []secretCase{
+		{"dsn: root:pw1@tcp(h:3306)/db password=LEAKN80", "LEAKN80"},
+		{"url: a://b:pw2@d token: LEAKN81", "LEAKN81"},
+		{"Server a://b:pw3@d; secret_key: LEAKN82", "LEAKN82"},
+	})
+	got := r.Line("a:b@tcp( a:b@tcp( a://b:c@d x_token=LEAKN83")
+	if got != "[REDACTED:url_credentials]tcp( [REDACTED:url_credentials]tcp( [REDACTED:url_credentials]d [REDACTED:credential]" {
+		t.Errorf("got %q", got)
+	}
+}

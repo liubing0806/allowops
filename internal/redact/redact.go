@@ -327,7 +327,15 @@ func (r *Redactor) applyRules(line string) string {
 			}
 		}
 		if next := applyRule(line, rule); next != line {
-			line, lowered, ascii = next, false, isASCII(next)
+			line = next
+			// A replacement only adds a marker such as [REDACTED:credential].
+			// No rule matches inside a marker, so the lower-case text of an
+			// ASCII line stays a valid filter and is not computed again; the
+			// words in the markers would otherwise wake rules for every
+			// replacement on a long line.
+			if !ascii {
+				lowered, ascii = false, isASCII(next)
+			}
 		}
 	}
 	return line
