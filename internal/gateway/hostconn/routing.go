@@ -47,6 +47,26 @@ func (s *Service) SendToConnection(ctx context.Context, host, connectionID strin
 }
 
 func (s *Service) sendToConnection(ctx context.Context, host, expectedConnection string, message *v1.ConnectResponse) (*v1.TaskCompleted, error) {
+	raw, err := s.encodeOutgoing(message)
+	if err != nil {
+		return nil, err
+	}
+	id, connectionID, expires, err := s.reserveMailbox(ctx, host, expectedConnection, message, raw)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.Store.Queries.DeleteGatewayMessage(cleanup, id)
+		s.forgetPending(host, connectionID, taskID(message), id)
+	}()
+	return s.awaitMailboxResult(ctx, id, expires)
+}
+
+// encodeOutgoing rejects drained, malformed and oversized messages before any
+// database work.
+func (s *Service) encodeOutgoing(message *v1.ConnectResponse) ([]byte, error) {
 	if s.draining.Load() && message.GetCancel() == nil {
 		return nil, store.ErrOffline
 	}
@@ -60,39 +80,45 @@ func (s *Service) sendToConnection(ctx context.Context, host, expectedConnection
 	if len(raw) > s.Config.MessageBytes {
 		return nil, store.ErrCapacity
 	}
+	return raw, nil
+}
+
+// reserveMailbox runs the capacity checks, the online-connection check, the
+// mailbox insert and NOTIFY in one transaction, and commits it.
+func (s *Service) reserveMailbox(ctx context.Context, host, expectedConnection string, message *v1.ConnectResponse, raw []byte) (id, connectionID string, expires time.Time, err error) {
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return "", "", time.Time{}, err
 	}
 	defer tx.Rollback(ctx)
 	q := s.Store.Queries.WithTx(tx)
 	// One global capacity lock also reserves space for a maximum-sized response.
 	if err := q.LockMailboxCapacity(ctx); err != nil {
-		return nil, err
+		return "", "", time.Time{}, err
 	}
 	if err := q.DeleteExpiredMessages(ctx); err != nil {
-		return nil, err
+		return "", "", time.Time{}, err
 	}
 	usage, err := q.GetMailboxUsage(ctx)
 	if err != nil {
-		return nil, err
+		return "", "", time.Time{}, err
 	}
 	if usage.Count >= s.Config.MailboxRows || usage.Column2+int64(len(raw))+(1<<20) > s.Config.MailboxBytes {
-		return nil, store.ErrCapacity
+		return "", "", time.Time{}, store.ErrCapacity
 	}
 	current, err := q.GetOnlineHostConnectionForShare(ctx, host)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, store.ErrOffline
+		return "", "", time.Time{}, store.ErrOffline
 	}
 	if err != nil {
-		return nil, err
+		return "", "", time.Time{}, err
 	}
-	connectionID := current.String
+	connectionID = current.String
 	if expectedConnection != "" && connectionID != expectedConnection {
-		return nil, store.ErrOffline
+		return "", "", time.Time{}, store.ErrOffline
 	}
-	id := rand.Text()
-	expires := time.Now().Add(s.Config.MailboxTTL)
+	id = rand.Text()
+	expires = time.Now().Add(s.Config.MailboxTTL)
 	if deadline, ok := ctx.Deadline(); ok && deadline.Before(expires) {
 		expires = deadline
 	}
@@ -104,22 +130,21 @@ func (s *Service) sendToConnection(ctx context.Context, host, expectedConnection
 		}
 	}
 	if err := insertMessage(ctx, tx, id, s.InstanceID, host, connectionID, raw, expires); err != nil {
-		return nil, err
+		return "", "", time.Time{}, err
 	}
 	if err := store.Notify(ctx, tx, "message:"+id); err != nil {
-		return nil, err
+		return "", "", time.Time{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return nil, err
+		return "", "", time.Time{}, err
 	}
-	defer func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = s.Store.Queries.DeleteGatewayMessage(cleanup, id)
-		s.forgetPending(host, connectionID, taskID(message), id)
-	}()
-	// NOTIFY wakes the owner. The origin reads the small final metadata using a
-	// bounded poll, so a missed completion notification cannot lose a result.
+	return id, connectionID, expires, nil
+}
+
+// awaitMailboxResult waits for the owner's completion. NOTIFY wakes the owner.
+// The origin reads the small final metadata using a bounded poll, so a missed
+// completion notification cannot lose a result.
+func (s *Service) awaitMailboxResult(ctx context.Context, id string, expires time.Time) (*v1.TaskCompleted, error) {
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -140,28 +165,38 @@ func (s *Service) sendToConnection(ctx context.Context, host, expectedConnection
 				}
 				return nil, store.ErrOffline
 			}
-			result, err := s.Store.Queries.GetGatewayMessageResult(ctx, id)
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, store.ErrOffline
-			}
-			if err != nil {
-				return nil, err
-			}
-			if result.Failure != "" {
-				if result.Failure == "capacity" {
-					return nil, store.ErrCapacity
-				}
-				return nil, store.ErrOffline
-			}
-			if result.Response != nil {
-				completed := new(v1.TaskCompleted)
-				if err := proto.Unmarshal(result.Response, completed); err != nil {
-					return nil, err
-				}
-				return completed, nil
+			completed, done, err := s.pollMailboxResult(ctx, id)
+			if done || err != nil {
+				return completed, err
 			}
 		}
 	}
+}
+
+// pollMailboxResult reads the mailbox row once. done is false while the owner
+// has not yet recorded a response or failure.
+func (s *Service) pollMailboxResult(ctx context.Context, id string) (completed *v1.TaskCompleted, done bool, err error) {
+	result, err := s.Store.Queries.GetGatewayMessageResult(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, true, store.ErrOffline
+	}
+	if err != nil {
+		return nil, true, err
+	}
+	if result.Failure != "" {
+		if result.Failure == "capacity" {
+			return nil, true, store.ErrCapacity
+		}
+		return nil, true, store.ErrOffline
+	}
+	if result.Response == nil {
+		return nil, false, nil
+	}
+	completed = new(v1.TaskCompleted)
+	if err := proto.Unmarshal(result.Response, completed); err != nil {
+		return nil, true, err
+	}
+	return completed, true, nil
 }
 
 // forgetPending drops a deleted mailbox row from the local connection's in-flight
@@ -253,51 +288,66 @@ func (s *Service) write(c *connection, stream *connect.BidiStream[v1.ConnectRequ
 		return nil
 	}
 	if task := item.message.GetTask(); task != nil {
-		// Cancel/recovery can commit on another instance after reservation or
-		// enqueue. Order the actual stream write against those transactions,
-		// taking the job lock before the task lock just as they do.
-		job, err := q.GetJobDispatchStateForShare(c.ctx, task.JobId)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		live, err := taskStillDispatchable(c, q, task)
+		if err != nil {
 			return err
 		}
-		// Standalone P4 routing predates persisted jobs. Only an explicit
-		// missing job preserves that path; all other SQL errors fail closed.
-		if !errors.Is(err, pgx.ErrNoRows) {
-			live = job.Status <= 2 && !job.CancelRequested
-			if live {
-				var state db.GetTaskDispatchStateForShareRow
-				state, err = q.GetTaskDispatchStateForShare(c.ctx, db.GetTaskDispatchStateForShareParams{JobID: task.JobId, TaskID: task.TaskId})
-				if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-					return err
-				}
-				live = err == nil && state.Status <= 2 && state.Dispatched && state.HostID == c.identity.HostID && state.ConnectionID == c.id
+		if !live {
+			if err := q.FailGatewayMessageOffline(c.ctx, item.mailbox); err != nil {
+				return err
 			}
-			if !live {
-				if err := q.FailGatewayMessageOffline(c.ctx, item.mailbox); err != nil {
-					return err
-				}
-				return tx.Commit(c.ctx)
-			}
+			return tx.Commit(c.ctx)
 		}
 	}
-
-	id := taskID(item.message)
-	c.mu.Lock()
-	existing := c.pending[id]
-	if (len(existing) > 0 && item.message.GetCancel() == nil) || (len(existing) == 0 && len(c.pending) >= c.maxInflight) || len(existing) >= 2 {
-		c.mu.Unlock()
+	if !reservePending(c, item) {
 		err := failMessageCapacity(c.ctx, tx, item.mailbox)
 		if err != nil {
 			return err
 		}
 		return tx.Commit(c.ctx)
 	}
-	c.pending[id] = append(existing, item.mailbox)
-	c.mu.Unlock()
 	if err := s.send(c.ctx, func() error { return stream.Send(item.message) }); err != nil {
 		return err
 	}
 	return tx.Commit(c.ctx)
+}
+
+// taskStillDispatchable orders the stream write against cancel/recovery, which
+// can commit on another instance after reservation or enqueue. It takes the job
+// lock before the task lock just as they do, and keeps both until the caller's
+// transaction ends.
+func taskStillDispatchable(c *connection, q *db.Queries, task *v1.TaskAssignment) (bool, error) {
+	job, err := q.GetJobDispatchStateForShare(c.ctx, task.JobId)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return false, err
+	}
+	// Standalone P4 routing predates persisted jobs. Only an explicit
+	// missing job preserves that path; all other SQL errors fail closed.
+	if errors.Is(err, pgx.ErrNoRows) {
+		return true, nil
+	}
+	if job.Status > 2 || job.CancelRequested {
+		return false, nil
+	}
+	state, err := q.GetTaskDispatchStateForShare(c.ctx, db.GetTaskDispatchStateForShareParams{JobID: task.JobId, TaskID: task.TaskId})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return false, err
+	}
+	return err == nil && state.Status <= 2 && state.Dispatched && state.HostID == c.identity.HostID && state.ConnectionID == c.id, nil
+}
+
+// reservePending records the mailbox row as in flight on c. It returns false,
+// leaving c unchanged, when the per-task or per-connection limit is reached.
+func reservePending(c *connection, item outbound) bool {
+	id := taskID(item.message)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	existing := c.pending[id]
+	if (len(existing) > 0 && item.message.GetCancel() == nil) || (len(existing) == 0 && len(c.pending) >= c.maxInflight) || len(existing) >= 2 {
+		return false
+	}
+	c.pending[id] = append(existing, item.mailbox)
+	return true
 }
 
 func (s *Service) complete(c *connection, result *v1.TaskCompleted) error {
