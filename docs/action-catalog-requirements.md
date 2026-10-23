@@ -4,7 +4,7 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 51 个 action。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 52 个 action。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
@@ -17,7 +17,9 @@ allowops 只执行运维人员预先定义、评审并签名的 action。本节�
 ```text
 examples/catalog/catalog.yaml
 examples/catalog/actions/<name>.yaml
+examples/catalog/scripts/agent_upgrade.sh
 examples/catalog/scripts/nginx_access_stats.py
+test/examples/check_agent_upgrade.py
 test/examples/check_examples.py
 ```
 
@@ -59,6 +61,37 @@ filters 是允许 agent 传入的过滤参数集合，`[]` 表示不允许过滤
 Kubernetes 示例固定读取 `/etc/kubernetes/allowops-readonly.conf`。此文件由运维人员配置，只授予所需的读取权限；禁止可执行认证插件。JVM 示例选择 Docker 容器作为一种明确执行环境，不在同一个 action 中引入未定义的 Docker/Pod 条件分支。
 
 ## 3. action 需求
+
+### `agent_upgrade`
+
+从主机已配置的软件源安装指定版本的 allowops-agent，再用临时 systemd 定时器重启 agent。
+
+| 项 | 需求 |
+|---|---|
+| risk | dangerous |
+| run_as | root |
+| 执行方式 | script |
+| filters | [] |
+| redact | secrets |
+| 扩展能力 | D6 |
+| 执行限制 | timeout=10m；max_output=64KB |
+| CentOS 7 | 使用 yum 3 和 systemd 219；`yum upgrade` 和 `systemd-run --on-active --timer-property` 均可用。systemd 219 上每次升级留下一个处于 `elapsed` 状态的 `run-*.timer`，主机重启后消失。 |
+| 安全说明 | risk 为 dangerous，示例策略 `read-only.yaml`、`maintenance.yaml` 都拒绝执行。版本只能从签名的 enum 中选择，只列出不高于当前网关的版本；每次网关升级后再发布含新版本的目录。安装包签名由 apt/yum 按软件源配置校验，软件源和包签名密钥由运维人员维护。已是目标版本时不安装、不重启。安装后版本与请求不一致时返回失败且不重启：apt 拒绝降级，`yum upgrade` 不降级。降级由运维人员在主机上处理。每批最多一个目标，失败一台即停止。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `version` | enum | `values: ['0.1.0']`；必填 | 软件包版本，只列出不高于网关的版本 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+script:
+  file: scripts/agent_upgrade.sh
+  interpreter: /bin/sh
+args: ['{version}']
+```
 
 ### `connections_by_port`
 
@@ -1608,9 +1641,9 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 
 ## 5. 本地示例检查
 
-`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 51 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 52 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
 
-日志冒烟在自动删除的临时目录复制目录，仅替换 log_search 的 builtin_config.allowed_roots。它创建普通与 gzip 测试日志，并通过 catalog try 验证逐行结果、count=3、无匹配退出码 0、max_matches=1 的 truncated/resource_limit_reached。原始示例路径和文件不被修改；try 始终以当前用户执行，run_as 不在此检查中验证。检查不运行 Redis、MySQL、HTTP、Docker、Kubernetes、DNS 或任何写 action。
+日志冒烟在自动删除的临时目录复制目录，仅替换 log_search 的 builtin_config.allowed_roots。它创建普通与 gzip 测试日志，并通过 catalog try 验证逐行结果、count=3、无匹配退出码 0、max_matches=1 的 truncated/resource_limit_reached。原始示例路径和文件不被修改；try 始终以当前用户执行，run_as 不在此检查中验证。检查不运行 Redis、MySQL、HTTP、Docker、Kubernetes、DNS 或任何写 action。check_agent_upgrade.py 用只记录调用的替身 dpkg-query、apt-get、rpm、yum、systemd-run 执行 agent_upgrade 脚本，检查升级、已是目标版本、拒绝降级和安装后版本不符四种情况的命令序列与退出码，不安装任何软件包。
 
 选择把 examples-check 作为 `make test` 的依赖。现有 `.github/workflows/ci.yml` 已执行 make test，因此无需改动工作流即可在本机和 CI 使用同一检查；检查失败会阻止 Go 测试目标继续。脚本 action 的签名风险警告属于预期输出，不表示校验失败。
 
