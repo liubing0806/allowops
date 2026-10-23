@@ -1,6 +1,7 @@
 package prometheus
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,8 @@ import (
 // and times that Prometheus guarantees or the formatter generates are not text:
 // masking them would turn an 11-digit value into a phone number.
 type formatter struct {
+	ctx       context.Context
+	maxOut    int // formatted output limit in bytes; see newFormatter
 	api       string
 	label     string // label_values: the label whose values are listed
 	maxSeries int
@@ -26,6 +29,19 @@ type formatter struct {
 	out       strings.Builder
 	truncated bool
 	note      string
+	full      bool  // the output limit was reached; no further rows are written
+	err       error // the context ended while formatting
+}
+
+// done reports whether formatting must stop, either because the output limit
+// was reached or because the context ended. Loops over results check it before
+// each item, so a large response does not keep the handler busy past its
+// timeout.
+func (f *formatter) done() bool {
+	if f.err == nil {
+		f.err = f.ctx.Err()
+	}
+	return f.full || f.err != nil
 }
 
 var tsvEscaper = strings.NewReplacer("\\", "\\\\", "\t", `\t`, "\n", `\n`, "\r", `\r`, "\x00", `\0`)
@@ -51,14 +67,26 @@ func (f *formatter) num(s string) string {
 
 var numberText = regexp.MustCompile(`^([+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?|[+-]?Inf|NaN)$`)
 
+// row writes one escaped line unless the output limit would be exceeded, in
+// which case it records the truncation and writes nothing more.
 func (f *formatter) row(cells ...string) {
+	if f.done() {
+		return
+	}
+	var line strings.Builder
 	for i, cell := range cells {
 		if i > 0 {
-			f.out.WriteByte('\t')
+			line.WriteByte('\t')
 		}
-		f.out.WriteString(tsvEscaper.Replace(cell))
+		line.WriteString(tsvEscaper.Replace(cell))
 	}
-	f.out.WriteByte('\n')
+	line.WriteByte('\n')
+	if f.out.Len()+line.Len() > f.maxOut {
+		f.full, f.truncated = true, true
+		f.note += fmt.Sprintf("truncated: output reached max_response_bytes (%d)\n", f.maxOut)
+		return
+	}
+	f.out.WriteString(line.String())
 }
 
 // limit returns how many of total results are written and records the
@@ -72,7 +100,7 @@ func (f *formatter) limit(total int, exact bool) int {
 		of = "at least " + of
 	}
 	f.truncated = true
-	f.note = fmt.Sprintf("truncated: returned %d of %s results (max_series)\n", f.maxSeries, of)
+	f.note += fmt.Sprintf("truncated: returned %d of %s results (max_series)\n", f.maxSeries, of)
 	return f.maxSeries
 }
 
@@ -86,6 +114,9 @@ func (f *formatter) format(data json.RawMessage, summary bool) error {
 			return err
 		}
 		for _, labels := range series[:f.limit(len(series), false)] {
+			if f.done() {
+				break
+			}
 			f.row(f.labelSet(labels))
 		}
 	case APILabels, APILabelValues:
@@ -94,6 +125,9 @@ func (f *formatter) format(data json.RawMessage, summary bool) error {
 			return err
 		}
 		for _, value := range values[:f.limit(len(values), false)] {
+			if f.done() {
+				break
+			}
 			f.row(f.listed(value))
 		}
 	case APIAlerts:
@@ -302,6 +336,9 @@ func (f *formatter) formatQuery(data json.RawMessage, summary bool) error {
 			return err
 		}
 		for _, s := range samples[:f.limit(len(samples), true)] {
+			if f.done() {
+				break
+			}
 			pts, err := s.points()
 			if err != nil {
 				return err
@@ -330,6 +367,9 @@ func (f *formatter) writeSeries(labels string, pts []point, summary bool) error 
 		return nil
 	}
 	for _, p := range pts {
+		if f.done() {
+			return nil
+		}
 		when, err := formatSeconds(p.ts)
 		if err != nil {
 			return err
@@ -402,6 +442,9 @@ func (f *formatter) formatAlerts(data json.RawMessage) error {
 		return err
 	}
 	for _, a := range d.Alerts[:f.limit(len(d.Alerts), true)] {
+		if f.done() {
+			break
+		}
 		f.row(f.m(a.Labels["alertname"]), f.m(a.State), f.utcTime(a.ActiveAt), f.num(string(a.Value)), f.labelSet(a.Labels), f.m(a.Annotations["summary"]))
 	}
 	return nil
@@ -431,7 +474,7 @@ func (f *formatter) formatRules(data json.RawMessage) error {
 	remaining := f.limit(total, true)
 	for _, g := range d.Groups {
 		for _, r := range g.Rules {
-			if remaining == 0 {
+			if remaining == 0 || f.done() {
 				return nil
 			}
 			remaining--
@@ -456,6 +499,9 @@ func (f *formatter) formatTargets(data json.RawMessage) error {
 		return err
 	}
 	for _, t := range d.ActiveTargets[:f.limit(len(d.ActiveTargets), true)] {
+		if f.done() {
+			break
+		}
 		job := t.Labels["job"]
 		if job == "" {
 			job = t.ScrapePool

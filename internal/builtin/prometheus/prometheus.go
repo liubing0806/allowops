@@ -69,11 +69,17 @@ func RunRedacted(ctx context.Context, cfg Config, p Params, mask func(string) st
 		result.Stderr += failureLine(resp.StatusCode, env, jsonErr)
 		return result, nil
 	}
-	f := formatter{api: cfg.API, label: p.Label, maxSeries: cfg.MaxSeries, mask: mask}
+	// Formatting expands a bounded response (a matrix repeats the label set on
+	// every row), so the output is bounded by max_response_bytes too. http_get
+	// and redis_command also treat that limit as a resource limit: the result is
+	// flagged and the rest is dropped.
+	f := formatter{ctx: ctx, maxOut: int(cfg.MaxResponseBytes), api: cfg.API, label: p.Label, maxSeries: cfg.MaxSeries, mask: mask}
 	f.header(req.header)
 	if err := f.format(env.Data, p.Summary); err != nil {
-		result.Stderr = ""
 		return failed, fmt.Errorf("unexpected Prometheus response: %w", err)
+	}
+	if f.err != nil {
+		return failed, f.err
 	}
 	result.Stdout, result.ExitCode, result.Truncated = f.out.String(), builtin.ExitSuccess, f.truncated
 	result.Stderr += f.note
