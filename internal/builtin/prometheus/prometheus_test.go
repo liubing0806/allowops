@@ -375,7 +375,8 @@ func TestQueryRangeDefaultStepFromMaxPoints(t *testing.T) {
 		maxPoints  int
 		wantSecond string
 	}{
-		{"now-1h", 0, "13"},
+		{"now-1h", 0, "15"}, // 3600/299 = 12.04 is raised to min_step
+		{"now-12h", 0, "145"},
 		{"now-5m", 0, "15"},
 		{"now-24h", 0, "289"},
 		{"now-1h", 61, "60"},
@@ -792,8 +793,8 @@ func TestRejectsUnexpectedDataShapes(t *testing.T) {
 		}
 	}
 	f := serve(t, 200, `not json`)
-	if _, err := Run(context.Background(), config("labels", f), Params{}); err == nil {
-		t.Error("non-JSON 200 response accepted")
+	if r, err := Run(context.Background(), config("labels", f), Params{}); err != nil || r.ExitCode != 1 || r.Stdout != "" || !strings.Contains(r.Stderr, "200") {
+		t.Errorf("non-JSON 200 response: %+v %v", r, err)
 	}
 }
 
