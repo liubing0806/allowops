@@ -24,28 +24,16 @@ func (s *Service) CreateServiceAccount(ctx context.Context, r *connect.Request[v
 	if strings.TrimSpace(m.Name) == "" || m.OwnerUserId == "" {
 		return nil, failure(connect.CodeInvalidArgument, "name and owner required")
 	}
-	a, err := scanAccount(s.Store.Pool.QueryRow(ctx, "INSERT INTO service_accounts(account_id,name,owner_user_id,description,roles,teams) VALUES ($1,$2,$3,$4,$5,$6) RETURNING "+accountColumns, secret("svc_"), m.Name, m.OwnerUserId, m.Description, nonNil(m.Roles), nonNil(m.Teams)))
+	a, err := insertAccount(ctx, s.Store.Pool, secret("svc_"), m.Name, m.OwnerUserId, m.Description, nonNil(m.Roles), nonNil(m.Teams))
 	return connect.NewResponse(&v1.CreateServiceAccountResponse{Account: a}), dbError(err)
 }
 func (s *Service) GetServiceAccount(ctx context.Context, r *connect.Request[v1.GetServiceAccountRequest]) (*connect.Response[v1.GetServiceAccountResponse], error) {
-	a, err := scanAccount(s.Store.Pool.QueryRow(ctx, "SELECT "+accountColumns+" FROM service_accounts WHERE account_id=$1", r.Msg.AccountId))
+	a, err := getAccount(ctx, s.Store.Pool, r.Msg.AccountId)
 	return connect.NewResponse(&v1.GetServiceAccountResponse{Account: a}), dbError(err)
 }
 func (s *Service) ListServiceAccounts(ctx context.Context, r *connect.Request[v1.ListServiceAccountsRequest]) (*connect.Response[v1.ListServiceAccountsResponse], error) {
-	rows, err := s.Store.Pool.Query(ctx, "SELECT "+accountColumns+" FROM service_accounts ORDER BY account_id")
+	items, err := listAccounts(ctx, s.Store.Pool)
 	if err != nil {
-		return nil, dbError(err)
-	}
-	defer rows.Close()
-	items := []*v1.ServiceAccount{}
-	for rows.Next() {
-		a, err := scanAccount(rows)
-		if err != nil {
-			return nil, dbError(err)
-		}
-		items = append(items, a)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, dbError(err)
 	}
 	items, p, err := page(ctx, s.Config, "accounts", r.Msg.Page, items)
@@ -57,7 +45,7 @@ func (s *Service) UpdateServiceAccount(ctx context.Context, r *connect.Request[v
 	if err != nil {
 		return nil, err
 	}
-	a, err := scanAccount(s.Store.Pool.QueryRow(ctx, "UPDATE service_accounts SET owner_user_id=$3,description=$4,roles=$5,teams=$6,revision=revision+1 WHERE account_id=$1 AND revision=$2 RETURNING "+accountColumns, m.AccountId, rev, m.OwnerUserId, m.Description, nonNil(m.Roles), nonNil(m.Teams)))
+	a, err := updateAccount(ctx, s.Store.Pool, m.AccountId, rev, m.OwnerUserId, m.Description, nonNil(m.Roles), nonNil(m.Teams))
 	if err == pgx.ErrNoRows {
 		return nil, failure(connect.CodeAborted, "account revision changed")
 	}
@@ -75,55 +63,29 @@ func (s *Service) CreateServiceAccountToken(ctx context.Context, r *connect.Requ
 	if err != nil {
 		return nil, failure(connect.CodeInternal, "token generation failed")
 	}
-	t, err := scanToken(s.Store.Pool.QueryRow(ctx, "INSERT INTO service_account_tokens(token_id,account_id,token_hash,description,expires_at) VALUES ($1,$2,$3,$4,$5) RETURNING "+tokenColumns, secret("tok_"), r.Msg.AccountId, record.Hash[:], r.Msg.Description, record.ExpiresAt))
+	t, err := insertAccountToken(ctx, s.Store.Pool, secret("tok_"), r.Msg.AccountId, record.Hash[:], r.Msg.Description, record.ExpiresAt)
 	if err != nil {
 		return nil, dbError(err)
 	}
 	return connect.NewResponse(&v1.CreateServiceAccountTokenResponse{Token: t, Secret: raw}), nil
 }
 func (s *Service) ListServiceAccountTokens(ctx context.Context, r *connect.Request[v1.ListServiceAccountTokensRequest]) (*connect.Response[v1.ListServiceAccountTokensResponse], error) {
-	rows, err := s.Store.Pool.Query(ctx, "SELECT "+tokenColumns+" FROM service_account_tokens WHERE account_id=$1 ORDER BY token_id", r.Msg.AccountId)
+	items, err := listAccountTokens(ctx, s.Store.Pool, r.Msg.AccountId)
 	if err != nil {
-		return nil, dbError(err)
-	}
-	defer rows.Close()
-	items := []*v1.ServiceAccountToken{}
-	for rows.Next() {
-		t, err := scanToken(rows)
-		if err != nil {
-			return nil, dbError(err)
-		}
-		items = append(items, t)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, dbError(err)
 	}
 	items, p, err := page(ctx, s.Config, "tokens:"+r.Msg.AccountId, r.Msg.Page, items)
 	return connect.NewResponse(&v1.ListServiceAccountTokensResponse{Tokens: items, Page: p}), err
 }
 func (s *Service) RevokeServiceAccountToken(ctx context.Context, r *connect.Request[v1.RevokeServiceAccountTokenRequest]) (*connect.Response[v1.RevokeServiceAccountTokenResponse], error) {
-	tag, err := s.Store.Pool.Exec(ctx, "UPDATE service_account_tokens SET revoked_at=COALESCE(revoked_at,now()) WHERE account_id=$1 AND token_id=$2", r.Msg.AccountId, r.Msg.TokenId)
-	if err == nil && tag.RowsAffected() == 0 {
+	rows, err := revokeAccountToken(ctx, s.Store.Pool, r.Msg.AccountId, r.Msg.TokenId)
+	if err == nil && rows == 0 {
 		return nil, failure(connect.CodeNotFound, "token not found")
 	}
 	return connect.NewResponse(&v1.RevokeServiceAccountTokenResponse{}), dbError(err)
 }
 func allUsers(ctx context.Context, q querier, query string) ([]storedUser, error) {
-	rows, err := q.Query(ctx, "SELECT "+userColumns+" FROM console_users WHERE $1='' OR position(lower($1) in lower(username||' '||email||' '||display_name))>0 ORDER BY user_id", query)
-	if err != nil {
-		return nil, err
-	}
-	items := []storedUser{}
-	for rows.Next() {
-		u, err := scanUser(rows)
-		if err != nil {
-			rows.Close()
-			return nil, err
-		}
-		items = append(items, u)
-	}
-	err = rows.Err()
-	rows.Close()
+	items, err := searchUsers(ctx, q, query)
 	if err != nil {
 		return nil, err
 	}
@@ -155,11 +117,11 @@ func (s *Service) SetUserRoles(ctx context.Context, r *connect.Request[v1.SetUse
 	if err != nil {
 		return nil, err
 	}
-	tag, err := s.Store.Pool.Exec(ctx, "UPDATE console_users SET manual_roles=$3,revision=revision+1 WHERE user_id=$1 AND revision=$2", r.Msg.UserId, rev, nonNil(r.Msg.ManualRoles))
+	changed, err := setUserRoles(ctx, s.Store.Pool, r.Msg.UserId, rev, nonNil(r.Msg.ManualRoles))
 	if err != nil {
 		return nil, dbError(err)
 	}
-	if tag.RowsAffected() == 0 {
+	if changed == 0 {
 		return nil, failure(connect.CodeAborted, "user revision changed")
 	}
 	recordAuditTarget(ctx, "user", r.Msg.UserId)
@@ -172,24 +134,12 @@ func (s *Service) GetRoleMappings(ctx context.Context, _ *connect.Request[v1.Get
 		return nil, dbError(err)
 	}
 	defer tx.Rollback(ctx)
-	var rev int64
-	if err := tx.QueryRow(ctx, "SELECT revision FROM role_mapping_state").Scan(&rev); err != nil {
-		return nil, dbError(err)
-	}
-	rows, err := tx.Query(ctx, "SELECT provider_id,group_name,roles FROM role_mappings ORDER BY provider_id,group_name")
+	rev, err := mappingRevision(ctx, tx)
 	if err != nil {
 		return nil, dbError(err)
 	}
-	defer rows.Close()
-	items := []*v1.RoleMapping{}
-	for rows.Next() {
-		m := &v1.RoleMapping{}
-		if err := rows.Scan(&m.ProviderId, &m.Group, &m.Roles); err != nil {
-			return nil, dbError(err)
-		}
-		items = append(items, m)
-	}
-	if err := rows.Err(); err != nil {
+	items, err := listRoleMappings(ctx, tx)
+	if err != nil {
 		return nil, dbError(err)
 	}
 	return connect.NewResponse(&v1.GetRoleMappingsResponse{Mappings: items, Revision: strconv.FormatInt(rev, 10)}), nil
@@ -204,21 +154,21 @@ func (s *Service) SaveRoleMappings(ctx context.Context, r *connect.Request[v1.Sa
 		return nil, dbError(err)
 	}
 	defer tx.Rollback(ctx)
-	tag, err := tx.Exec(ctx, "UPDATE role_mapping_state SET revision=revision+1 WHERE revision=$1", rev)
+	changed, err := bumpMappingRevision(ctx, tx, rev)
 	if err != nil {
 		return nil, dbError(err)
 	}
-	if tag.RowsAffected() == 0 {
+	if changed == 0 {
 		return nil, failure(connect.CodeAborted, "mapping revision changed")
 	}
-	if _, err := tx.Exec(ctx, "DELETE FROM role_mappings"); err != nil {
+	if err := deleteRoleMappings(ctx, tx); err != nil {
 		return nil, dbError(err)
 	}
 	for _, m := range r.Msg.Mappings {
 		if m.ProviderId == "" || m.Group == "" || len(m.Roles) == 0 {
 			return nil, failure(connect.CodeInvalidArgument, "provider, group and roles required")
 		}
-		if _, err := tx.Exec(ctx, "INSERT INTO role_mappings(provider_id,group_name,roles) VALUES ($1,$2,$3)", m.ProviderId, m.Group, nonNil(m.Roles)); err != nil {
+		if err := insertRoleMapping(ctx, tx, m.ProviderId, m.Group, nonNil(m.Roles)); err != nil {
 			return nil, dbError(err)
 		}
 	}
@@ -228,23 +178,8 @@ func (s *Service) SaveRoleMappings(ctx context.Context, r *connect.Request[v1.Sa
 	return connect.NewResponse(&v1.SaveRoleMappingsResponse{Revision: strconv.FormatInt(rev+1, 10)}), nil
 }
 func (s *Service) ListRoles(ctx context.Context, r *connect.Request[v1.ListRolesRequest]) (*connect.Response[v1.ListRolesResponse], error) {
-	rows, err := s.Store.Pool.Query(ctx, `SELECT DISTINCT name FROM (
-      SELECT name FROM roles UNION SELECT unnest(manual_roles) FROM console_users UNION SELECT unnest(roles) FROM service_accounts UNION SELECT unnest(roles) FROM role_mappings
-      UNION SELECT jsonb_array_elements_text(rule->'roles') FROM policy_versions p CROSS JOIN LATERAL jsonb_array_elements(p.rules->'rules') rule WHERE p.version=(SELECT max(version) FROM policy_versions)
-    ) names WHERE name <> '*' ORDER BY name`)
+	items, err := listRoleNames(ctx, s.Store.Pool)
 	if err != nil {
-		return nil, dbError(err)
-	}
-	defer rows.Close()
-	items := []*v1.Role{}
-	for rows.Next() {
-		item := &v1.Role{}
-		if err := rows.Scan(&item.Name); err != nil {
-			return nil, dbError(err)
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, dbError(err)
 	}
 	items, p, err := page(ctx, s.Config, "roles", r.Msg.Page, items)

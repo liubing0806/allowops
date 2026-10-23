@@ -142,14 +142,14 @@ func (s *Service) BeginOidcLogin(ctx context.Context, r *connect.Request[v1.Begi
 		return nil, dbError(err)
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(418010)"); err != nil {
+	if err = lockOidcAdmission(ctx, tx); err != nil {
 		return nil, dbError(err)
 	}
-	if _, err = tx.Exec(ctx, "DELETE FROM oidc_transactions WHERE expires_at<=clock_timestamp()"); err != nil {
+	if err = purgeOidcTransactions(ctx, tx); err != nil {
 		return nil, dbError(err)
 	}
-	var live int
-	if err = tx.QueryRow(ctx, "SELECT count(*) FROM oidc_transactions WHERE expires_at>clock_timestamp()").Scan(&live); err != nil {
+	live, err := countOidcTransactions(ctx, tx)
+	if err != nil {
 		return nil, dbError(err)
 	}
 	if live >= 10000 {
@@ -160,7 +160,7 @@ func (s *Service) BeginOidcLogin(ctx context.Context, r *connect.Request[v1.Begi
 		return nil, failure(connect.CodeResourceExhausted, "OIDC login transaction capacity exhausted")
 	}
 	state := secret("")
-	_, err = tx.Exec(ctx, "INSERT INTO oidc_transactions(state_hash,provider_id,client,nonce,provider_verifier,loopback_uri,cli_state,cli_challenge,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", hash(state), m.ProviderId, client, secret(""), oauth2.GenerateVerifier(), m.CliLoopbackUri, m.CliState, m.CliCodeChallenge, time.Now().Add(s.Config.LoginTTL))
+	err = insertOidcTransaction(ctx, tx, oidcTransaction{provider: m.ProviderId, client: client, nonce: secret(""), verifier: oauth2.GenerateVerifier(), loopback: m.CliLoopbackUri, cliState: m.CliState, challenge: m.CliCodeChallenge}, hash(state), time.Now().Add(s.Config.LoginTTL))
 	if err != nil {
 		return nil, dbError(err)
 	}
@@ -191,9 +191,8 @@ func (s *Service) oidcStart(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie("__Host-allowops-login"); err == nil && len(c.Value) == 43 {
 		binding = c.Value
 	}
-	var provider, nonce, pv string
 	state := r.URL.Query().Get("state")
-	err := s.Store.Pool.QueryRow(r.Context(), "UPDATE oidc_transactions SET binding_hash=$2 WHERE state_hash=$1 AND expires_at>now() AND binding_hash IS NULL RETURNING provider_id,nonce,provider_verifier", hash(state), hash(binding)).Scan(&provider, &nonce, &pv)
+	provider, nonce, pv, err := bindOidcTransaction(r.Context(), s.Store.Pool, hash(state), hash(binding))
 	if err == nil && s.oidc[provider] != nil {
 		event.Outcome = "allow"
 	}
@@ -243,8 +242,8 @@ func (s *Service) CompleteOidcLogin(ctx context.Context, r *connect.Request[v1.C
 	if err != nil || c.Value == "" {
 		return nil, failure(connect.CodeUnauthenticated, "login browser binding required")
 	}
-	var provider, client, nonce, pv, loop, state, pkce string
-	err = s.Store.Pool.QueryRow(ctx, "DELETE FROM oidc_transactions WHERE state_hash=$1 AND binding_hash=$2 AND expires_at>now() RETURNING provider_id,client,nonce,provider_verifier,loopback_uri,cli_state,cli_challenge", hash(r.Msg.State), hash(c.Value)).Scan(&provider, &client, &nonce, &pv, &loop, &state, &pkce)
+	tr, err := takeOidcTransaction(ctx, s.Store.Pool, hash(r.Msg.State), hash(c.Value))
+	provider, client, nonce, pv, loop, state, pkce := tr.provider, tr.client, tr.nonce, tr.verifier, tr.loopback, tr.cliState, tr.challenge
 	if err != nil || s.oidc[provider] == nil {
 		return nil, failure(connect.CodeUnauthenticated, "invalid login state or browser binding")
 	}
@@ -268,7 +267,7 @@ func (s *Service) CompleteOidcLogin(ctx context.Context, r *connect.Request[v1.C
 	t.auditActor = u.UserId
 	if client == "cli" {
 		code := secret("")
-		if _, err := s.Store.Pool.Exec(ctx, "INSERT INTO cli_login_codes(code_hash,user_id,challenge,expires_at) VALUES ($1,$2,$3,$4)", hash(code), u.UserId, pkce, time.Now().Add(s.Config.CodeTTL)); err != nil {
+		if err := insertCliLoginCode(ctx, s.Store.Pool, hash(code), u.UserId, pkce, time.Now().Add(s.Config.CodeTTL)); err != nil {
 			return nil, dbError(err)
 		}
 		dest, _ := url.Parse(loop)
@@ -291,15 +290,15 @@ func (s *Service) ExchangeCliSession(ctx context.Context, r *connect.Request[v1.
 		return nil, dbError(err)
 	}
 	defer tx.Rollback(ctx)
-	var userID, pkce string
-	if err := tx.QueryRow(ctx, "SELECT user_id,challenge FROM cli_login_codes WHERE code_hash=$1 AND expires_at>clock_timestamp() FOR UPDATE", hash(r.Msg.Code)).Scan(&userID, &pkce); err != nil {
+	userID, pkce, err := lockCliLoginCode(ctx, tx, hash(r.Msg.Code))
+	if err != nil {
 		return nil, failure(connect.CodeUnauthenticated, "invalid or consumed login code")
 	}
 	got := base64.RawURLEncoding.EncodeToString(hash(r.Msg.CodeVerifier))
 	if subtle.ConstantTimeCompare([]byte(got), []byte(pkce)) != 1 {
 		return nil, failure(connect.CodeUnauthenticated, "PKCE mismatch")
 	}
-	if _, err := tx.Exec(ctx, "DELETE FROM cli_login_codes WHERE code_hash=$1", hash(r.Msg.Code)); err != nil {
+	if err := deleteCliLoginCode(ctx, tx, hash(r.Msg.Code)); err != nil {
 		return nil, dbError(err)
 	}
 	sess, token, err := s.issueSession(ctx, tx, userID, v1.LoginClient_LOGIN_CLIENT_CLI)
@@ -367,7 +366,7 @@ func (s *Service) Logout(ctx context.Context, _ *connect.Request[v1.LogoutReques
 	if !ok || id.Session == nil {
 		return nil, failure(connect.CodeFailedPrecondition, "user session required")
 	}
-	if _, err := s.Store.Pool.Exec(ctx, "UPDATE identity_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE session_id=$1", id.Session.SessionId); err != nil {
+	if err := revokeSession(ctx, s.Store.Pool, id.Session.SessionId); err != nil {
 		return nil, dbError(err)
 	}
 	if id.Client == v1.LoginClient_LOGIN_CLIENT_CONSOLE {
@@ -402,20 +401,8 @@ func (s *Service) ListCliSessions(ctx context.Context, r *connect.Request[v1.Lis
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.Store.Pool.Query(ctx, "SELECT "+sessionColumns+" FROM identity_sessions WHERE user_id=$1 AND client='cli' ORDER BY session_id", uid)
+	items, err := listCliSessions(ctx, s.Store.Pool, uid)
 	if err != nil {
-		return nil, dbError(err)
-	}
-	defer rows.Close()
-	items := []*v1.CliSession{}
-	for rows.Next() {
-		t, err := scanSession(rows)
-		if err != nil {
-			return nil, dbError(err)
-		}
-		items = append(items, t)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, dbError(err)
 	}
 	items, p, err := page(ctx, s.Config, "cli_sessions:"+uid, r.Msg.Page, items)
@@ -426,8 +413,8 @@ func (s *Service) RevokeCliSession(ctx context.Context, r *connect.Request[v1.Re
 	if err != nil {
 		return nil, err
 	}
-	tag, err := s.Store.Pool.Exec(ctx, "UPDATE identity_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE session_id=$1 AND user_id=$2 AND client='cli'", r.Msg.SessionId, uid)
-	if err == nil && tag.RowsAffected() == 0 {
+	revoked, err := revokeCliSession(ctx, s.Store.Pool, r.Msg.SessionId, uid)
+	if err == nil && revoked == 0 {
 		return nil, failure(connect.CodeNotFound, "session not found for user")
 	}
 	return connect.NewResponse(&v1.RevokeCliSessionResponse{}), dbError(err)

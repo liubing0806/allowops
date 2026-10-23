@@ -49,44 +49,17 @@ func dbError(err error) error {
 	return failure(connect.CodeUnavailable, "identity database unavailable")
 }
 
-const userColumns = "user_id,provider_id,provider_subject,kind,username,email,display_name,groups,manual_roles,teams,revision"
-
-type storedUser struct {
-	user          *v1.User
-	kind, subject string
-}
-
-func scanUser(row pgx.Row) (storedUser, error) {
-	u := &v1.User{}
-	var kind, sub string
-	var rev int64
-	err := row.Scan(&u.UserId, &u.ProviderId, &sub, &kind, &u.Username, &u.Email, &u.DisplayName, &u.Groups, &u.ManualRoles, &u.Teams, &rev)
-	u.Revision = strconv.FormatInt(rev, 10)
-	return storedUser{u, kind, sub}, err
-}
 func mapped(ctx context.Context, q querier, u *v1.User) error {
-	rows, err := q.Query(ctx, "SELECT roles FROM role_mappings WHERE provider_id=$1 AND group_name=ANY($2) ORDER BY group_name", u.ProviderId, u.Groups)
+	roles, err := mappedRoles(ctx, q, u.ProviderId, u.Groups)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-	u.MappedRoles = []string{}
-	for rows.Next() {
-		var roles []string
-		if err := rows.Scan(&roles); err != nil {
-			return err
-		}
-		u.MappedRoles = append(u.MappedRoles, roles...)
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	u.MappedRoles = unique(u.MappedRoles)
+	u.MappedRoles = unique(roles)
 	u.EffectiveRoles = unique(append(append([]string{}, u.ManualRoles...), u.MappedRoles...))
 	return nil
 }
 func loadUser(ctx context.Context, q querier, id string) (storedUser, error) {
-	u, err := scanUser(q.QueryRow(ctx, "SELECT "+userColumns+" FROM console_users WHERE user_id=$1", id))
+	u, err := getUser(ctx, q, id)
 	if err == nil {
 		err = mapped(ctx, q, u.user)
 	}
@@ -97,13 +70,11 @@ func subject(u storedUser) authz.Subject {
 }
 
 func (s *Service) syncUser(ctx context.Context, provider string, id authn.Identity) (*v1.User, error) {
-	var uid string
-	_, err := s.Store.Pool.Exec(ctx, `INSERT INTO console_users(user_id,provider_id,provider_subject,kind,username,email,groups) VALUES ($1,$2,$3,$4,$3,$5,$6)
-      ON CONFLICT(provider_id,provider_subject) DO UPDATE SET email=EXCLUDED.email,groups=EXCLUDED.groups,revision=console_users.revision+1`, secret("usr_"), provider, id.ID, id.Kind, id.Email, nonNil(id.Groups))
-	if err != nil {
+	if err := upsertUser(ctx, s.Store.Pool, secret("usr_"), provider, id.ID, id.Kind, id.Email, nonNil(id.Groups)); err != nil {
 		return nil, dbError(err)
 	}
-	if err := s.Store.Pool.QueryRow(ctx, "SELECT user_id FROM console_users WHERE provider_id=$1 AND provider_subject=$2", provider, id.ID).Scan(&uid); err != nil {
+	uid, err := userIDBySubject(ctx, s.Store.Pool, provider, id.ID)
+	if err != nil {
 		return nil, dbError(err)
 	}
 	u, err := loadUser(ctx, s.Store.Pool, uid)
@@ -120,40 +91,6 @@ func nullable(t pgtype.Timestamptz) *timestamppb.Timestamp {
 		return nil
 	}
 	return stamp(t.Time)
-}
-
-const accountColumns = "account_id,name,owner_user_id,description,roles,teams,revision,created_at"
-
-func scanAccount(row pgx.Row) (*v1.ServiceAccount, error) {
-	a := &v1.ServiceAccount{}
-	var rev int64
-	var created time.Time
-	err := row.Scan(&a.AccountId, &a.Name, &a.OwnerUserId, &a.Description, &a.Roles, &a.Teams, &rev, &created)
-	a.Revision = strconv.FormatInt(rev, 10)
-	a.CreatedAt = stamp(created)
-	return a, err
-}
-
-const tokenColumns = "token_id,account_id,description,created_at,expires_at,last_used_at,revoked_at"
-
-func scanToken(row pgx.Row) (*v1.ServiceAccountToken, error) {
-	t := &v1.ServiceAccountToken{}
-	var created, expires time.Time
-	var used, revoked pgtype.Timestamptz
-	err := row.Scan(&t.TokenId, &t.AccountId, &t.Description, &created, &expires, &used, &revoked)
-	t.CreatedAt, t.ExpiresAt, t.LastUsedAt, t.RevokedAt = stamp(created), stamp(expires), nullable(used), nullable(revoked)
-	return t, err
-}
-
-const sessionColumns = "session_id,user_id,created_at,expires_at,last_used_at,revoked_at"
-
-func scanSession(row pgx.Row) (*v1.CliSession, error) {
-	t := &v1.CliSession{}
-	var created, expires time.Time
-	var used, revoked pgtype.Timestamptz
-	err := row.Scan(&t.SessionId, &t.UserId, &created, &expires, &used, &revoked)
-	t.CreatedAt, t.ExpiresAt, t.LastUsedAt, t.RevokedAt = stamp(created), stamp(expires), nullable(used), nullable(revoked)
-	return t, err
 }
 
 // authLookupError separates an unknown credential from a failed lookup: only a
@@ -173,11 +110,11 @@ func (s *Service) authenticate(ctx context.Context, token string, cookie bool) (
 		if !authn.VerifyServiceToken(token, authn.TokenRecord{Hash: h, ExpiresAt: time.Now().Add(time.Hour)}, time.Now()) {
 			return nil, authn.ErrInvalidCredentials
 		}
-		var accountID string
-		if err := s.Store.Pool.QueryRow(ctx, "UPDATE service_account_tokens SET last_used_at=now() WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>now() RETURNING account_id", hash(token)).Scan(&accountID); err != nil {
+		accountID, err := touchAccountToken(ctx, s.Store.Pool, hash(token))
+		if err != nil {
 			return nil, authLookupError(err)
 		}
-		a, err := scanAccount(s.Store.Pool.QueryRow(ctx, "SELECT "+accountColumns+" FROM service_accounts WHERE account_id=$1", accountID))
+		a, err := getAccount(ctx, s.Store.Pool, accountID)
 		if err != nil {
 			return nil, authLookupError(err)
 		}
@@ -196,11 +133,11 @@ func (s *Service) authenticate(ctx context.Context, token string, cookie bool) (
 	if err != nil || len(b) != 32 {
 		return nil, authn.ErrInvalidCredentials
 	}
-	var sessionID, csrf string
-	if err := s.Store.Pool.QueryRow(ctx, "UPDATE identity_sessions SET last_used_at=now() WHERE token_hash=$1 AND client=$2 AND revoked_at IS NULL AND expires_at>now() RETURNING session_id,csrf_token", hash(token), client).Scan(&sessionID, &csrf); err != nil {
+	sessionID, csrf, err := touchSession(ctx, s.Store.Pool, hash(token), client)
+	if err != nil {
 		return nil, authLookupError(err)
 	}
-	sess, err := scanSession(s.Store.Pool.QueryRow(ctx, "SELECT "+sessionColumns+" FROM identity_sessions WHERE session_id=$1", sessionID))
+	sess, err := getSession(ctx, s.Store.Pool, sessionID)
 	if err != nil {
 		return nil, authLookupError(err)
 	}
@@ -222,7 +159,7 @@ func (s *Service) issueSession(ctx context.Context, q querier, userID string, cl
 		return nil, "", failure(connect.CodeInvalidArgument, "login client required")
 	}
 	token := secret(prefix)
-	sess, err := scanSession(q.QueryRow(ctx, "INSERT INTO identity_sessions(session_id,user_id,token_hash,client,csrf_token,expires_at) VALUES ($1,$2,$3,$4,$5,$6) RETURNING "+sessionColumns, secret("ses_"), userID, hash(token), kind, csrf, time.Now().Add(ttl)))
+	sess, err := insertSession(ctx, q, secret("ses_"), userID, hash(token), kind, csrf, time.Now().Add(ttl))
 	return sess, token, dbError(err)
 }
 

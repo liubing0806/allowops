@@ -15,7 +15,6 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
@@ -71,18 +70,18 @@ func (s *Service) initialize(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(418005)"); err != nil {
+	if err := lockPolicyWrites(ctx, tx); err != nil {
 		return err
 	}
 	b, err := encode(defaultRules())
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, "INSERT INTO policy_versions(version,rules,created_by,reason) VALUES (1,$1,'system','initial defaults') ON CONFLICT DO NOTHING", b); err != nil {
+	if err := insertInitialPolicy(ctx, tx, b); err != nil {
 		return err
 	}
-	var initialized bool
-	if err := tx.QueryRow(ctx, "SELECT initialized FROM role_mapping_state FOR UPDATE").Scan(&initialized); err != nil {
+	initialized, err := lockMappingState(ctx, tx)
+	if err != nil {
 		return err
 	}
 	if !initialized {
@@ -90,32 +89,28 @@ func (s *Service) initialize(ctx context.Context) error {
 			if m.ProviderID == "" || m.Group == "" || len(m.Roles) == 0 {
 				return failure(connect.CodeInvalidArgument, "initial provider, group and roles required")
 			}
-			if _, err := tx.Exec(ctx, "INSERT INTO role_mappings(provider_id,group_name,roles) VALUES ($1,$2,$3)", m.ProviderID, m.Group, nonNil(m.Roles)); err != nil {
+			if err := insertRoleMapping(ctx, tx, m.ProviderID, m.Group, nonNil(m.Roles)); err != nil {
 				return err
 			}
 		}
-		if _, err := tx.Exec(ctx, "UPDATE role_mapping_state SET initialized=true"); err != nil {
+		if err := markMappingsInitialized(ctx, tx); err != nil {
 			return err
 		}
 	}
 	return tx.Commit(ctx)
 }
 func loadPolicy(ctx context.Context, q querier, version uint64) (*v1.PolicyVersion, error) {
-	p := &v1.PolicyVersion{}
-	var rules []byte
-	var n int64
-	var created time.Time
-	var from pgtype.Int8
-	err := q.QueryRow(ctx, "SELECT version,rules,created_at,created_by,reason,rolled_back_from FROM policy_versions WHERE version=COALESCE(NULLIF($1,0),(SELECT max(version) FROM policy_versions))", version).Scan(&n, &rules, &created, &p.CreatedBy, &p.Reason, &from)
+	row, err := getPolicyVersion(ctx, q, version)
 	if err != nil {
 		return nil, err
 	}
-	p.Version, p.CreatedAt, p.Rules = uint64(n), stamp(created), &v1.PolicyRules{}
-	if from.Valid {
-		value := uint64(from.Int64)
+	p := &v1.PolicyVersion{CreatedBy: row.CreatedBy, Reason: row.Reason}
+	p.Version, p.CreatedAt, p.Rules = uint64(row.Version), stamp(row.CreatedAt.Time), &v1.PolicyRules{}
+	if row.RolledBackFrom.Valid {
+		value := uint64(row.RolledBackFrom.Int64)
 		p.RolledBackFrom = &value
 	}
-	return p, decode(rules, p.Rules)
+	return p, decode(row.Rules, p.Rules)
 }
 func (s *Service) refresh(ctx context.Context) error {
 	s.refreshMu.Lock()
@@ -149,7 +144,7 @@ func (s *Service) Start(ctx context.Context) error {
 		cancel()
 		return err
 	}
-	if _, err := conn.Exec(run, "LISTEN "+PolicyChannel); err != nil {
+	if err := listenPolicy(run, conn); err != nil {
 		conn.Close(run)
 		cancel()
 		return err
@@ -175,7 +170,7 @@ func (s *Service) Start(ctx context.Context) error {
 				var err error
 				conn, err = pgx.ConnectConfig(run, s.Store.Pool.Config().ConnConfig.Copy())
 				if err == nil {
-					_, err = conn.Exec(run, "LISTEN "+PolicyChannel)
+					err = listenPolicy(run, conn)
 				}
 				if err != nil {
 					if conn != nil {
@@ -241,85 +236,66 @@ func (s *Service) snapshot(ctx context.Context, q querier) (*policySnapshot, err
 		snap.Subjects = append(snap.Subjects, policySubject{u.user.UserId, subject(u)})
 		snap.Revisions = append(snap.Revisions, u.user.UserId+":"+u.user.Revision)
 	}
-	rows, err := q.Query(ctx, "SELECT "+accountColumns+" FROM service_accounts ORDER BY account_id")
+	accounts, err := listAccounts(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	for rows.Next() {
-		a, err := scanAccount(rows)
-		if err != nil {
-			rows.Close()
-			return nil, err
-		}
+	for _, a := range accounts {
 		snap.Subjects = append(snap.Subjects, policySubject{a.AccountId, authz.Subject{ID: a.AccountId, Kind: "service_account", Owner: a.OwnerUserId, Roles: a.Roles, Teams: a.Teams}})
 		snap.Revisions = append(snap.Revisions, a.AccountId+":"+a.Revision)
 	}
-	err = rows.Err()
-	rows.Close()
+	if snap.MappingRevision, err = mappingRevision(ctx, q); err != nil {
+		return nil, err
+	}
+	if err = snapshotHosts(ctx, q, snap); err != nil {
+		return nil, err
+	}
+	return snap, snapshotActions(ctx, q, snap)
+}
+
+// snapshotHosts adds the active hosts with their authorization and reported labels.
+func snapshotHosts(ctx context.Context, q querier, snap *policySnapshot) error {
+	rows, err := activeHostLabels(ctx, q)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if err := q.QueryRow(ctx, "SELECT revision FROM role_mapping_state").Scan(&snap.MappingRevision); err != nil {
-		return nil, err
-	}
-	rows, err = q.Query(ctx, "SELECT host_id,hostname,authorization_labels,reported_labels FROM hosts WHERE certificate_status='active' ORDER BY hostname")
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		h := authz.Host{}
-		var b []byte
-		var reported []byte
-		var id string
-		if err := rows.Scan(&id, &h.ID, &b, &reported); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		if err := json.Unmarshal(b, &h.Labels); err != nil {
-			rows.Close()
-			return nil, err
+	for _, r := range rows {
+		h := authz.Host{ID: r.Hostname}
+		if err := json.Unmarshal(r.AuthorizationLabels, &h.Labels); err != nil {
+			return err
 		}
 		var labels map[string]string
-		if err := json.Unmarshal(reported, &labels); err != nil {
-			rows.Close()
-			return nil, err
+		if err := json.Unmarshal(r.ReportedLabels, &labels); err != nil {
+			return err
 		}
 		snap.ReportedLabels[h.ID] = labels
 		snap.Hosts = append(snap.Hosts, h)
-		snap.HostIDs = append(snap.HostIDs, id)
+		snap.HostIDs = append(snap.HostIDs, r.HostID)
 	}
-	err = rows.Err()
-	rows.Close()
+	return nil
+}
+
+// snapshotActions adds the digests and actions of the unexpired current catalogs.
+func snapshotActions(ctx context.Context, q querier, snap *policySnapshot) error {
+	envelopes, err := currentCatalogEnvelopes(ctx, q)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	rows, err = q.Query(ctx, "SELECT dsse FROM (SELECT DISTINCT ON(catalog_id) catalog_id,dsse,expires_at FROM catalog_versions ORDER BY catalog_id,version DESC) current WHERE expires_at>now() ORDER BY catalog_id")
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var raw []byte
-		if err := rows.Scan(&raw); err != nil {
-			rows.Close()
-			return nil, err
-		}
+	for _, raw := range envelopes {
 		snap.CatalogDigests = append(snap.CatalogDigests, base64.RawURLEncoding.EncodeToString(hash(string(raw))))
 		e, err := catalog.ParseEnvelope(raw)
 		if err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 		b, err := base64.StdEncoding.DecodeString(e.Payload)
 		if err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 		var p struct {
 			Actions map[string]catalog.Action `json:"actions"`
 		}
 		if err := json.Unmarshal(b, &p); err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 		names := []string{}
 		for name := range p.Actions {
@@ -330,9 +306,7 @@ func (s *Service) snapshot(ctx context.Context, q querier) (*policySnapshot, err
 			snap.Actions = append(snap.Actions, authz.Action{Name: name, Risk: a.Risk})
 		}
 	}
-	err = rows.Err()
-	rows.Close()
-	return snap, err
+	return nil
 }
 
 var actionViewOperations = []authz.Operation{authz.ViewCatalog, authz.ViewJobs, authz.ViewOutput}
@@ -617,7 +591,7 @@ func (s *Service) TestPolicy(ctx context.Context, r *connect.Request[v1.TestPoli
 	tb, _ := encode(test)
 	cb, _ := json.Marshal(changes)
 	eb, _ := json.Marshal(testEnvironment{Environment: env, Cases: r.Msg.Cases})
-	_, err = tx.Exec(ctx, "INSERT INTO policy_tests(test_id,actor_id,base_version,candidate,candidate_hash,snapshot_hash,environment,test,changes,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", test.TestId, reqctx.ActorID(ctx), current.Version, b, test.CandidateSha256, sh, eb, tb, cb, test.ExpiresAt.AsTime())
+	err = insertPolicyTest(ctx, tx, policyTest{id: test.TestId, actor: reqctx.ActorID(ctx), baseVersion: current.Version, candidate: b, candidateHash: test.CandidateSha256, snapshotHash: sh, environment: eb, test: tb, changes: cb, expires: test.ExpiresAt.AsTime()})
 	if err != nil {
 		return nil, dbError(err)
 	}
@@ -627,8 +601,8 @@ func (s *Service) TestPolicy(ctx context.Context, r *connect.Request[v1.TestPoli
 	return connect.NewResponse(&v1.TestPolicyResponse{Test: test}), nil
 }
 func (s *Service) GetPolicyTestChanges(ctx context.Context, r *connect.Request[v1.GetPolicyTestChangesRequest]) (*connect.Response[v1.GetPolicyTestChangesResponse], error) {
-	var b []byte
-	if err := s.Store.Pool.QueryRow(ctx, "SELECT changes FROM policy_tests WHERE test_id=$1 AND actor_id=$2 AND expires_at>now()", r.Msg.TestId, reqctx.ActorID(ctx)).Scan(&b); err != nil {
+	b, err := policyTestChanges(ctx, s.Store.Pool, r.Msg.TestId, reqctx.ActorID(ctx))
+	if err != nil {
 		return nil, dbError(err)
 	}
 	var changes []*v1.PolicyChange
@@ -644,11 +618,11 @@ func (s *Service) persistPolicy(ctx context.Context, base uint64, candidate *v1.
 		return nil, dbError(err)
 	}
 	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(418005)"); err != nil {
+	if err := lockPolicyWrites(ctx, tx); err != nil {
 		return nil, dbError(err)
 	}
 	// Keep the checked attributes stable through commit without changing P4 writes.
-	if _, err := tx.Exec(ctx, "LOCK TABLE console_users,service_accounts,role_mapping_state,role_mappings,hosts,catalog_versions IN SHARE MODE"); err != nil {
+	if err := lockPolicyInputs(ctx, tx); err != nil {
 		return nil, dbError(err)
 	}
 	current, err := loadPolicy(ctx, tx, 0)
@@ -673,8 +647,8 @@ func (s *Service) persistPolicy(ctx context.Context, base uint64, candidate *v1.
 	if err != nil {
 		return nil, failure(connect.CodeInvalidArgument, "invalid policy rules")
 	}
-	var candidateHash, storedSnapshot, environment []byte
-	if err := tx.QueryRow(ctx, "SELECT candidate_hash,snapshot_hash,environment FROM policy_tests WHERE test_id=$1 AND actor_id=$2 AND base_version=$3 AND expires_at>clock_timestamp() AND NOT consumed FOR UPDATE", testID, reqctx.ActorID(ctx), base).Scan(&candidateHash, &storedSnapshot, &environment); err != nil {
+	candidateHash, storedSnapshot, environment, err := lockPolicyTest(ctx, tx, testID, reqctx.ActorID(ctx), base)
+	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, failure(connect.CodeAborted, "policy test expired or changed")
 		}
@@ -742,13 +716,13 @@ func (s *Service) persistPolicy(ctx context.Context, base uint64, candidate *v1.
 	if target > 0 {
 		rolled = target
 	}
-	if _, err := tx.Exec(ctx, "INSERT INTO policy_versions(version,rules,created_by,reason,rolled_back_from) VALUES ($1,$2,$3,$4,$5)", base+1, b, reqctx.ActorID(ctx), reason, rolled); err != nil {
+	if err := insertPolicyVersion(ctx, tx, base+1, b, reqctx.ActorID(ctx), reason, rolled); err != nil {
 		return nil, dbError(err)
 	}
-	if _, err := tx.Exec(ctx, "UPDATE policy_tests SET consumed=true WHERE test_id=$1", testID); err != nil {
+	if err := consumePolicyTest(ctx, tx, testID); err != nil {
 		return nil, dbError(err)
 	}
-	if _, err := tx.Exec(ctx, "SELECT pg_notify($1,$2)", PolicyChannel, strconv.FormatUint(base+1, 10)); err != nil {
+	if err := notifyPolicy(ctx, tx, strconv.FormatUint(base+1, 10)); err != nil {
 		return nil, dbError(err)
 	}
 	p, err := loadPolicy(ctx, tx, base+1)
@@ -776,21 +750,7 @@ func (s *Service) RollbackPolicy(ctx context.Context, r *connect.Request[v1.Roll
 	return connect.NewResponse(&v1.RollbackPolicyResponse{Policy: p}), err
 }
 func (s *Service) ListPolicyHistory(ctx context.Context, r *connect.Request[v1.ListPolicyHistoryRequest]) (*connect.Response[v1.ListPolicyHistoryResponse], error) {
-	rows, err := s.Store.Pool.Query(ctx, "SELECT version FROM policy_versions ORDER BY version DESC")
-	if err != nil {
-		return nil, dbError(err)
-	}
-	versions := []uint64{}
-	for rows.Next() {
-		var n uint64
-		if err := rows.Scan(&n); err != nil {
-			rows.Close()
-			return nil, dbError(err)
-		}
-		versions = append(versions, n)
-	}
-	err = rows.Err()
-	rows.Close()
+	versions, err := listPolicyVersions(ctx, s.Store.Pool)
 	if err != nil {
 		return nil, dbError(err)
 	}
