@@ -10,6 +10,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"io"
+	"log"
 	"math/big"
 	"net"
 	"net/http"
@@ -95,6 +97,7 @@ func (ca testCA) serve(t *testing.T, h http.Handler) *httptest.Server {
 		t.Fatal(err)
 	}
 	srv := httptest.NewUnstartedServer(h)
+	srv.Config.ErrorLog = log.New(io.Discard, "", 0)
 	srv.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}}
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
@@ -275,10 +278,6 @@ func TestResponseBodyLimit(t *testing.T) {
 	}
 }
 
-func itoa(n int) string {
-	return strings.TrimSpace(strings.Join([]string{string(rune('0' + n/1000%10)), string(rune('0' + n/100%10)), string(rune('0' + n/10%10)), string(rune('0' + n%10))}, ""))
-}
-
 func TestResponseHeaderLimit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Big", strings.Repeat("a", 70<<10))
@@ -388,7 +387,7 @@ func TestAddressValidation(t *testing.T) {
 }
 
 func TestConfigValidation(t *testing.T) {
-	good := Config{Address: "http://127.0.0.1:9090", Credential: "/etc/allowops/credentials/p.json", CAFile: "/etc/allowops/ca.pem", Timeout: time.Second, MaxResponseBytes: 1}
+	good := Config{Address: "https://127.0.0.1:9090", Credential: "/etc/allowops/credentials/p.json", CAFile: "/etc/allowops/ca.pem", Timeout: time.Second, MaxResponseBytes: 1}
 	if err := good.Validate(); err != nil {
 		t.Fatal(err)
 	}
