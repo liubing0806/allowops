@@ -2,6 +2,7 @@ package prometheus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -817,5 +818,63 @@ func TestQueryRangeGivenZeroStepIsBelowMinStep(t *testing.T) {
 	}
 	if f.count() != 0 {
 		t.Error("request sent for step=0s")
+	}
+}
+
+// The formatted output of a bounded response is bounded as well: a matrix
+// repeats the label set on every row.
+func TestFormattedOutputIsBoundedByMaxResponseBytes(t *testing.T) {
+	useFixedClock(t)
+	var points []string
+	for i := 0; i < 1000; i++ {
+		points = append(points, fmt.Sprintf(`[%d,"%d"]`, fixedUnix-i, i))
+	}
+	label := strings.Repeat("x", 200)
+	body := success(`{"resultType":"matrix","result":[{"metric":{"__name__":"m","l":"` + label + `"},"values":[` + strings.Join(points, ",") + `]}]}`)
+	f := serve(t, 200, body)
+	cfg := config("query", f)
+	cfg.MaxResponseBytes = 64 << 10
+	if len(body) >= 64<<10 {
+		t.Fatalf("fixture response %d bytes must fit the limit", len(body))
+	}
+	r := mustRun(t, cfg, Params{Query: "m[1000s]"})
+	if len(r.Stdout) > 64<<10 || !strings.HasSuffix(r.Stdout, "\n") {
+		t.Errorf("stdout is %d bytes, ends %q", len(r.Stdout), r.Stdout[len(r.Stdout)-10:])
+	}
+	if !r.Truncated || !strings.Contains(r.Stderr, "max_response_bytes") || r.ExitCode != 0 {
+		t.Errorf("result flags = %+v", Result{Stderr: r.Stderr, Truncated: r.Truncated, ExitCode: r.ExitCode})
+	}
+	for _, row := range lines(r.Stdout)[1:] {
+		if strings.Count(row, "\t") != 2 {
+			t.Fatalf("partial row %q", row)
+		}
+	}
+	if small := mustRun(t, config("labels", serve(t, 200, success(`["a"]`))), Params{}); small.Truncated {
+		t.Errorf("small output truncated: %+v", small)
+	}
+}
+
+func TestFormattingStopsWhenTheContextEnds(t *testing.T) {
+	useFixedClock(t)
+	var results []string
+	for i := 0; i < 100; i++ {
+		results = append(results, fmt.Sprintf(`{"metric":{"__name__":"m","i":"%d"},"value":[%d,"1"]}`, i, fixedUnix))
+	}
+	f := serve(t, 200, vector(results...))
+	cfg := config("query", f)
+	cfg.MaxSeries = 100
+	ctx, cancel := context.WithCancel(context.Background())
+	calls := 0
+	mask := func(s string) string {
+		calls++
+		cancel()
+		return s
+	}
+	r, err := RunRedacted(ctx, cfg, Params{Query: "m"}, mask)
+	if !errors.Is(err, context.Canceled) || r.ExitCode != 1 {
+		t.Errorf("result = %+v err=%v", r, err)
+	}
+	if calls > 3 {
+		t.Errorf("mask called %d times after the context ended", calls)
 	}
 }
