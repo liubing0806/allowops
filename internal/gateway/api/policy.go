@@ -666,7 +666,7 @@ func (s *Service) persistPolicy(ctx context.Context, base uint64, candidate *v1.
 	if err := lockPolicyWrites(ctx, tx); err != nil {
 		return nil, dbError(err)
 	}
-	// Keep the checked attributes stable through commit without changing P4 writes.
+	// Keep the checked attributes stable through commit without changing the gateway foundation's host-registry writes (design P4).
 	if err := lockPolicyInputs(ctx, tx); err != nil {
 		return nil, dbError(err)
 	}

@@ -104,7 +104,7 @@ func authLookupError(err error) error {
 }
 func (s *Service) authenticate(ctx context.Context, token string, cookie bool) (*Identity, error) {
 	if !cookie && strings.HasPrefix(token, "aops_") && len(token) == len("aops_")+43 {
-		// Validate the canonical P5A token format before lookup.
+		// Validate the canonical authn token format (aops_ prefix) before lookup (design P5A).
 		var h [32]byte
 		copy(h[:], hash(token))
 		if !authn.VerifyServiceToken(token, authn.TokenRecord{Hash: h, ExpiresAt: time.Now().Add(time.Hour)}, time.Now()) {

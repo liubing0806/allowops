@@ -118,7 +118,7 @@ func (s *Store) ExportPage(ctx context.Context, next, last uint64, limit int) (E
 	return p, nil
 }
 
-// ExportStorage is the A18 seam. Commit must make complete records durable
+// ExportStorage is the seam for the single export instance's persistent directory (design A18). Commit must make complete records durable
 // before Exporter advances the DB cursor. Each call may be replayed after crash.
 type ExportStorage interface {
 	Commit(context.Context, []Event) error

@@ -415,7 +415,7 @@ func validateStepsAggregate(result *v1.ExecutionResult, out *taskOutput) error {
 	}
 	expected := v1.TaskStatus_TASK_STATUS_SUCCEEDED
 	// errors.Join preserves cancellation and timeout from any step.
-	// Exit code still comes from the first failing step (A13).
+	// Exit code still comes from the first failing step (design A13).
 	for _, step := range out.Steps {
 		switch step.Result.Status {
 		case v1.TaskStatus_TASK_STATUS_CANCELLED:

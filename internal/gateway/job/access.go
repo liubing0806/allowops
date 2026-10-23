@@ -11,7 +11,7 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
-// A21: job ownership, metadata access, cancellation and output access share this policy.
+// Job ownership, metadata access, cancellation and output access share this policy (design A21).
 func (s *Service) authorize(ctx context.Context, j *v1.Job, op authz.Operation, cancel bool, selectedHost string) (uint64, []string, error) {
 	if state := operationInfo(ctx); state != nil {
 		state.JobID = j.JobId

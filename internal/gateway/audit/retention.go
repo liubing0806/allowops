@@ -16,7 +16,7 @@ type Anchor struct {
 
 type RetentionOptions struct {
 	Months                    int     // zero means the design default of 12 calendar months.
-	RequireExternalCheckpoint bool    // A19 defaults to false; true requires an external checkpoint.
+	RequireExternalCheckpoint bool    // Defaults to false; true requires an external checkpoint before old partitions are deleted (design A19).
 	ExternalCheckpoint        *Anchor // supplied by a separately trusted external system.
 }
 

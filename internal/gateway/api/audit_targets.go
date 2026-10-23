@@ -88,7 +88,7 @@ func targetResource(target auditTarget) string {
 	return string(raw)
 }
 
-// batchResource stays within the existing P7 Resource field. Each part carries
+// batchResource stays within the audit event's existing Resource field (design P7). Each part carries
 // a durable batch identifier and completeness metadata, independent of previews.
 type batchResource struct {
 	BatchID string        `json:"batch_id"`
@@ -99,7 +99,7 @@ type batchResource struct {
 }
 
 func resultResources(targets []auditTarget) ([]string, error) {
-	const limit = 8 << 10 // Leaves room for JSON escaping and P7's other metadata.
+	const limit = 8 << 10 // Leaves room for JSON escaping and the audit event's other metadata.
 	if len(targets) == 1 {
 		resource := targetResource(targets[0])
 		if len(resource) > limit {

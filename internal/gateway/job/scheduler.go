@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// A22: this bit set is the only definition of max_failures accounting.
+// This bit set is the only definition of max_failures accounting: failed, timeout and unsupported count, offline does not (design A22).
 const failureStatuses uint32 = 1<<v1.TaskStatus_TASK_STATUS_FAILED |
 	1<<v1.TaskStatus_TASK_STATUS_TIMEOUT | 1<<v1.TaskStatus_TASK_STATUS_UNSUPPORTED
 

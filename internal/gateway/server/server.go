@@ -38,7 +38,7 @@ type options struct {
 	mcp      http.Handler
 }
 
-// WithIdentity mounts P5B without changing host ALPN or catalog synchronization.
+// WithIdentity mounts the identity API (design P5B) without changing host ALPN or catalog synchronization.
 // Future MCP handlers use the same context and api.Service.Require for ABAC.
 // The service must be fully configured (for example ConfigureManagement)
 // before New, because its API handler is built there.

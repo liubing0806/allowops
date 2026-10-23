@@ -138,7 +138,7 @@ func (s *Service) Handler() http.Handler {
 		}
 		parts := strings.Fields(r.Header.Get("Authorization"))
 		if len(r.Header.Values("Authorization")) != 1 || len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			// Still use P5B to collect authenticated audit context, while preventing
+			// Still use the identity middleware (design P5B) to collect authenticated audit context, while preventing
 			// its console-cookie fallback from authenticating the MCP request.
 			copy := r.Clone(r.Context())
 			copy.Header.Del("Cookie")

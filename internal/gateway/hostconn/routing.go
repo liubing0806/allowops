@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Router is P6's dispatch boundary. Send waits for TaskCompleted metadata only.
+// Router is the job module's dispatch boundary (design P6). Send waits for TaskCompleted metadata only.
 // Streaming output/events and disconnect events belong to the owner's Hooks.
 // No request survives its connection generation or gets replayed after reconnect.
 type Router interface {
@@ -37,7 +37,7 @@ func (s *Service) Send(ctx context.Context, host string, message *v1.ConnectResp
 	return s.sendToConnection(ctx, host, "", message)
 }
 
-// SendToConnection binds dispatch/cancellation to the generation reserved by P6.
+// SendToConnection binds dispatch/cancellation to the generation reserved by the job module.
 // A replacement connection is offline for that task and must not execute it.
 func (s *Service) SendToConnection(ctx context.Context, host, connectionID string, message *v1.ConnectResponse) (*v1.TaskCompleted, error) {
 	if connectionID == "" {
@@ -122,7 +122,7 @@ func (s *Service) reserveMailbox(ctx context.Context, host, expectedConnection s
 	if deadline, ok := ctx.Deadline(); ok && deadline.Before(expires) {
 		expires = deadline
 	}
-	// G46 applies only to generation-bound task messages. The original Send and
+	// Task messages bound to a connection generation wait until the task deadline (design G46). The original Send and
 	// cancellation messages retain the configured transient mailbox lifetime.
 	if expectedConnection != "" && message.GetTask() != nil {
 		if deadline, ok := ctx.Deadline(); ok {
@@ -321,7 +321,7 @@ func taskStillDispatchable(c *connection, q *db.Queries, task *v1.TaskAssignment
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return false, err
 	}
-	// Standalone P4 routing predates persisted jobs. Only an explicit
+	// Standalone host routing predates persisted jobs (design P4). Only an explicit
 	// missing job preserves that path; all other SQL errors fail closed.
 	if errors.Is(err, pgx.ErrNoRows) {
 		return true, nil
@@ -357,7 +357,7 @@ func (s *Service) complete(c *connection, result *v1.TaskCompleted) error {
 	c.mu.Unlock()
 	if len(ids) == 0 {
 		return nil
-	} // Unsolicited results are handled by P6's callback.
+	} // Unsolicited results are handled by the job module's callback.
 	raw, err := proto.Marshal(result)
 	if err != nil {
 		return err

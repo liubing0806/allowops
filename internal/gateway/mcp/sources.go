@@ -100,8 +100,8 @@ func (s *Service) searchHosts(ctx context.Context, raw []byte) (*ToolResult, err
 	if len(hosts) != 1 {
 		return nil, errors.New("host metadata exceeds 32KB result limit")
 	}
-	// G55: a single host can exceed the budget by itself. Keep its identity and
-	// online state, and fit a stable prefix of labels with an explicit marker.
+	// A single host can exceed the budget by itself. Keep its identity and
+	// online state, and fit a stable prefix of labels with an explicit marker (design G55).
 	host := hosts[0]
 	host["labels_truncated"] = true
 	type labelEntry struct{ field, key, value string }
