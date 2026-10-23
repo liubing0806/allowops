@@ -229,3 +229,30 @@ func TestPrometheusHandlerReportsPrometheusError(t *testing.T) {
 		t.Errorf("invalid config run = %+v, %v", r, err)
 	}
 }
+
+func TestPrometheusExplicitZeroStepIsRejected(t *testing.T) {
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		fmt.Fprint(w, `{"status":"success","data":{"resultType":"matrix","result":[]}}`)
+	}))
+	defer server.Close()
+	a := prometheusAction("query_range", map[string]any{"address": server.URL})
+	defs, err := ParameterDefinitions(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err := params.Parse(defs, map[string]any{"query": "up", "start": "now-1h", "step": "0s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := Builtins["prometheus_query"].Run(context.Background(), a.BuiltinConfig, values)
+	if err == nil || r.ExitCode != 1 || requests != 0 {
+		t.Errorf("step=0s accepted: %+v err=%v requests=%d", r, err, requests)
+	}
+	// Omitting step still selects the derived step.
+	values, _ = params.Parse(defs, map[string]any{"query": "up", "start": "now-1h"})
+	if _, err := Builtins["prometheus_query"].Run(context.Background(), a.BuiltinConfig, values); err != nil || requests != 1 {
+		t.Errorf("omitted step: err=%v requests=%d", err, requests)
+	}
+}
