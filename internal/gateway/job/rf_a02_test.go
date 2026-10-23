@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
-	"github.com/liubing0806/allowops/internal/gateway/api"
 	"github.com/liubing0806/allowops/internal/gateway/hostconn"
 	"github.com/liubing0806/allowops/internal/gateway/job"
 	"google.golang.org/protobuf/proto"
@@ -23,6 +22,7 @@ import (
 
 type rfA02Request struct{}
 type rfA02Commit struct{}
+
 type rfA02Tracer struct {
 	admin           *pgxpool.Pool
 	cancel          context.CancelFunc
@@ -55,6 +55,7 @@ func (p *rfA02Tracer) TraceQueryStart(ctx context.Context, c *pgx.Conn, d pgx.Tr
 	}
 	return ctx
 }
+
 func (p *rfA02Tracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, d pgx.TraceQueryEndData) {
 	if ctx.Value(rfA02Commit{}) == true && d.Err == nil {
 		p.committed.Store(true)
@@ -63,6 +64,7 @@ func (p *rfA02Tracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, d pgx.Trac
 		}
 	}
 }
+
 func TestRFA02CommittedJobRetainsScheduler(t *testing.T) {
 	for _, mode := range []string{"request_cancelled_after_commit", "postcommit_get_connection_failure", "commit_rejected"} {
 		t.Run(mode, func(t *testing.T) {
@@ -131,7 +133,7 @@ func TestRFA02CommittedJobRetainsScheduler(t *testing.T) {
 				return status > 2
 			})
 			var healthy bool
-			if err := f.DB.Pool.QueryRow(context.Background(), "SELECT last_seen>now()-$2*interval '1 second' FROM gateway_instances WHERE instance_id=$1", f.A.Host.InstanceID, api.InstanceLostAfter(f.A.Host.Config).Seconds()).Scan(&healthy); err != nil {
+			if err := f.DB.Pool.QueryRow(context.Background(), "SELECT last_seen>now()-$2*interval '1 second' FROM gateway_instances WHERE instance_id=$1", f.A.Host.InstanceID, hostconn.InstanceLostAfter(f.A.Host.Config).Seconds()).Scan(&healthy); err != nil {
 				t.Fatal(err)
 			}
 			if status != int16(v1.JobStatus_JOB_STATUS_SUCCEEDED) || !healthy {

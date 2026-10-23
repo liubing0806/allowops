@@ -3,7 +3,8 @@ package builtin
 
 import "time"
 
-// Defaults remain provisional until A15/A16 are resolved.
+// Defaults remain provisional until the builtin handler default limits and exit
+// code rules are finalized (decisions A15, A16).
 const (
 	DefaultTimeout                     = 10 * time.Second
 	DefaultLogMaxFiles                 = 50

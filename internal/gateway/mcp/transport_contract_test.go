@@ -32,10 +32,12 @@ func (j *boundaryJobs) GetJob(_ context.Context, r *v1.GetJobRequest) (*v1.GetJo
 	}
 	return nil, errors.New("backend internal failure")
 }
+
 func (j *boundaryJobs) CancelJob(_ context.Context, r *v1.CancelJobRequest) (*v1.CancelJobResponse, error) {
 	j.cancelCalls++
 	return &v1.CancelJobResponse{Job: &v1.Job{JobId: r.JobId, Status: v1.JobStatus_JOB_STATUS_CANCELLED}}, nil
 }
+
 func (j *boundaryJobs) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobResponse, error) {
 	if j.runErr != nil {
 		return nil, j.runErr
@@ -95,6 +97,7 @@ func (j *boundaryJobs) ListTasks(ctx context.Context, r *v1.ListTasksRequest) (*
 	}
 	return j.JobService.ListTasks(ctx, r)
 }
+
 func TestSDKUsesNativeSummaryWithoutAdditionalReads(t *testing.T) {
 	f := newTransportFixture(t)
 	backend := &boundaryJobs{JobService: f.jobs, tasksErr: errors.New("extra task reads forbidden"), summary: &v1.JobSummary{OutputTrust: v1.OutputTrust_OUTPUT_TRUST_UNTRUSTED, Truncated: true, OfflineHosts: []string{"offline-host"}, Groups: []*v1.OutputGroup{{HostCount: 2, Hosts: []string{"web-01", "web-02"}, Stdout: "native backend summary", ExitCode: proto.Int32(0), Truncated: true}}}}

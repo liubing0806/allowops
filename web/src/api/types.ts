@@ -1,6 +1,13 @@
-// Handwritten ProtoJSON DTOs for the P2 draft at main 199d5c6.
+import type { JobStatusJson, TaskStatusJson } from '@/gen/allowops/v1/common_pb'
+import type { PolicyEffectJson } from '@/gen/allowops/v1/policy_pb'
+import type { HealthStatusJson } from '@/gen/allowops/v1/system_pb'
+
+// Console models for the ProtoJSON that connect.ts reads from the generated
+// Connect client (protobuf-es toJson with alwaysEmitImplicit).
 // uint64 = decimal string; bytes = Base64; Timestamp/Duration = JSON strings.
-// Only messages used by this console are represented; no client is generated here.
+// Only fields used by this console are represented. Enum types come from the
+// generated *Json types. wire.check.ts verifies at compile time that every
+// other field exists in the generated request and response types.
 export const jobStatuses = [
   'JOB_STATUS_QUEUED',
   'JOB_STATUS_RUNNING',
@@ -28,19 +35,10 @@ export const defaultRoles = [
   'viewer',
   'publisher',
 ] as const
-export type JobStatus = (typeof jobStatuses)[number] | 'JOB_STATUS_UNSPECIFIED'
-export type TaskStatus =
-  | (typeof taskStatuses)[number]
-  | 'TASK_STATUS_UNSPECIFIED'
-export type PolicyEffect =
-  | 'POLICY_EFFECT_UNSPECIFIED'
-  | 'POLICY_EFFECT_ALLOW'
-  | 'POLICY_EFFECT_DENY'
-export type HealthStatus =
-  | 'HEALTH_STATUS_UNSPECIFIED'
-  | 'HEALTH_STATUS_HEALTHY'
-  | 'HEALTH_STATUS_DEGRADED'
-  | 'HEALTH_STATUS_UNAVAILABLE'
+export type JobStatus = JobStatusJson
+export type TaskStatus = TaskStatusJson
+export type PolicyEffect = PolicyEffectJson
+export type HealthStatus = HealthStatusJson
 export type Labels = Record<string, string>
 export interface PageResponse {
   nextPageToken: string

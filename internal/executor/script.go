@@ -27,6 +27,7 @@ func writeScript(dir string, content []byte) (string, error) {
 	}
 	return path, nil
 }
+
 func prepareScript(s catalog.Script, args []string) ([]string, func(), error) {
 	dir, err := os.MkdirTemp("", "allowops-script-")
 	if err != nil {

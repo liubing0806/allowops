@@ -52,6 +52,7 @@ type compiledRule struct {
 	// an option is only recognised after the command that gives it a password.
 	anchor *regexp.Regexp
 }
+
 type Redactor struct {
 	rules   []compiledRule
 	secrets bool

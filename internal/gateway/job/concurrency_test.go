@@ -124,6 +124,7 @@ type reservationRouter struct{ sent chan string }
 func (r reservationRouter) Send(context.Context, string, *v1.ConnectResponse) (*v1.TaskCompleted, error) {
 	return nil, errors.New("unbound dispatch")
 }
+
 func (r reservationRouter) SendToConnection(_ context.Context, host, connection string, _ *v1.ConnectResponse) (*v1.TaskCompleted, error) {
 	if connection != "connection" {
 		return nil, errors.New("unexpected connection generation")

@@ -23,6 +23,7 @@ func (f *remoteFlags) flags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&f.ca, "ca-file", "", "Additional trusted CA certificate")
 	cmd.PersistentFlags().StringVar(&f.tokenEnv, "token-env", "", "Environment variable containing a service account token")
 }
+
 func (f *remoteFlags) client() (*http.Client, credentials, error) {
 	var cfg credentials
 	var err error
@@ -48,6 +49,7 @@ func (f *remoteFlags) client() (*http.Client, credentials, error) {
 	client, err := gatewayClient(cfg.Gateway, cfg.CAFile)
 	return client, cfg, err
 }
+
 func NewHostsCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "hosts", Short: "List, label and delete registered hosts", SilenceUsage: true}
 	var asJSON bool
@@ -189,6 +191,7 @@ func NewHostsCmd() *cobra.Command {
 	cmd.AddCommand(del)
 	return cmd
 }
+
 func NewJoinTokenCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "jointoken", Short: "Create a bounded host registration token", SilenceUsage: true}
 	remote := &remoteFlags{}

@@ -21,8 +21,9 @@ type BuiltinResult struct {
 	StatusCode      int
 }
 
-// BuiltinHandler is the registration boundary for P12B. Size fields in catalog
-// adapters must use Size/ParseSize before passing byte limits to handlers.
+// BuiltinHandler is the registration boundary for builtin handlers (design
+// P12B). Size fields in catalog adapters must use Size/ParseSize before passing
+// byte limits to handlers.
 type BuiltinHandler interface {
 	Parameters(map[string]any) (map[string]params.Definition, error)
 	ValidateConfig(map[string]any) error
@@ -112,10 +113,12 @@ func MySQLConfig(config map[string]any) (mysql.Config, error) {
 	}
 	return c, c.Validate()
 }
+
 func (mysqlHandler) ValidateConfig(config map[string]any) error {
 	_, err := MySQLConfig(config)
 	return err
 }
+
 func (mysqlHandler) Run(ctx context.Context, config map[string]any, values map[string]any) (BuiltinResult, error) {
 	return (mysqlHandler{}).RunRedacted(ctx, config, values, nil)
 }
@@ -126,7 +129,7 @@ func (mysqlHandler) RunRedacted(ctx context.Context, config map[string]any, valu
 		return BuiltinResult{ExitCode: 1}, err
 	}
 	r, err := mysql.RunRedacted(ctx, c, mysql.Params{Database: values["database"].(string), SQL: values["sql"].(string)}, mask)
-	// A16: execution errors use exit code 1; handler defaults remain unchanged.
+	// Execution errors use exit code 1; handler defaults remain unchanged (decisions A16).
 	if err != nil {
 		return BuiltinResult{ExitCode: 1}, err
 	}

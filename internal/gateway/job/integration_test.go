@@ -65,6 +65,7 @@ type gateway struct {
 	Client  rpc.JobServiceClient
 	HTTP    *http.Client
 }
+
 type fixture struct {
 	DB                  *store.Store
 	DSN, RootDir        string
@@ -290,10 +291,9 @@ func (f *fixture) start(t *testing.T) *gateway {
 		t.Fatal(err)
 	}
 	jobs.Start()
-	srv := server.New(hosts, f.Certificate)
-	srv.Jobs = jobs
 	access.ConfigureJobDependencies(jobs, f.Storage.Storage.(api.ObjectStorageHealth))
-	srv.UseIdentity(access)
+	srv := server.New(hosts, f.Certificate, server.WithIdentity(access))
+	srv.Jobs = jobs
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(listener) }()
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: f.Roots, MinVersion: tls.VersionTLS13}}, Timeout: 20 * time.Second}
@@ -325,6 +325,7 @@ func eventually(t *testing.T, condition func() bool) {
 	}
 	t.Fatal("condition not satisfied within 10 seconds")
 }
+
 func (f *fixture) addAgent(t *testing.T, g *gateway, name string) {
 	t.Helper()
 	ctx := context.Background()
@@ -370,6 +371,7 @@ func (f *fixture) addAgent(t *testing.T, g *gateway, name string) {
 func request(action string) *v1.RunJobRequest {
 	return &v1.RunJobRequest{Action: action, Reason: "local P6 validation", Targets: &v1.HostTargets{Selection: &v1.HostTargets_Selector{Selector: "env=test"}}, ExpectedCount: proto.Uint64(3), WaitSeconds: proto.Uint32(5)}
 }
+
 func run(t *testing.T, g *gateway, r *v1.RunJobRequest) *v1.RunJobResponse {
 	t.Helper()
 	v, err := g.Client.RunJob(context.Background(), connect.NewRequest(r))
@@ -378,6 +380,7 @@ func run(t *testing.T, g *gateway, r *v1.RunJobRequest) *v1.RunJobResponse {
 	}
 	return v.Msg
 }
+
 func get(t *testing.T, g *gateway, id string) *v1.GetJobResponse {
 	t.Helper()
 	v, err := g.Client.GetJob(context.Background(), connect.NewRequest(&v1.GetJobRequest{JobId: id, WaitSeconds: proto.Uint32(5)}))
@@ -397,6 +400,7 @@ func get(t *testing.T, g *gateway, id string) *v1.GetJobResponse {
 	})
 	return v.Msg
 }
+
 func tasks(t *testing.T, g *gateway, id string) []*v1.Task {
 	t.Helper()
 	v, err := g.Client.ListTasks(context.Background(), connect.NewRequest(&v1.ListTasksRequest{JobId: id}))
@@ -722,12 +726,12 @@ func TestTwoGatewaysRealAgentsAndSeaweedFS(t *testing.T) {
 		}
 		objects := f.Storage.Storage.(*output.S3)
 		bad := &output.S3{Client: objects.Client, Bucket: "missing-fixture-bucket"}
-		f.A.Job.Access.ConfigureJobDependencies(f.A.Job, bad)
+		f.A.Job.Access.(*api.Service).ConfigureJobDependencies(f.A.Job, bad)
 		r, err = client.GetSystemStatus(ctx, connect.NewRequest(&v1.GetSystemStatusRequest{}))
 		if err != nil || r.Msg.Status != v1.HealthStatus_HEALTH_STATUS_DEGRADED || r.Msg.Dependencies[2].Status != v1.HealthStatus_HEALTH_STATUS_UNAVAILABLE {
 			t.Fatalf("storage failure health=%v error=%v", r, err)
 		}
-		f.A.Job.Access.ConfigureJobDependencies(f.A.Job, objects)
+		f.A.Job.Access.(*api.Service).ConfigureJobDependencies(f.A.Job, objects)
 	})
 }
 

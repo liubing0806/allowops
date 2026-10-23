@@ -17,6 +17,7 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/catalogsvc"
 	"github.com/liubing0806/allowops/internal/gateway/hostconn"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
 type ManagementConfig struct {
@@ -31,6 +32,7 @@ type ManagementConfig struct {
 	Upstream          string        `yaml:"upstream"`
 	CAPin             string        `yaml:"ca_pin"`
 }
+
 type management struct {
 	config   ManagementConfig
 	agent    *hostconn.Service
@@ -40,6 +42,7 @@ type management struct {
 func defaultManagement() *management {
 	return &management{config: ManagementConfig{PreviewTTL: 10 * time.Minute, UploadTTL: time.Hour, MaxCSVBytes: 512 << 10, MaxCSVRows: 5000, LabelCount: 128, LabelKeyBytes: 128, LabelValueBytes: 1024, LabelCountBuckets: 200}}
 }
+
 func (s *Service) ConfigureManagement(cfg ManagementConfig, agent *hostconn.Service, catalogs *catalogsvc.Service) error {
 	d := defaultManagement().config
 	if cfg.PreviewTTL == 0 {
@@ -78,12 +81,14 @@ func (s *Service) ConfigureManagement(cfg ManagementConfig, agent *hostconn.Serv
 	s.management = &management{cfg, agent, catalogs}
 	return nil
 }
+
 func (s *Service) gatewayConfig() hostconn.Config {
 	if s.management.agent != nil {
 		return s.management.agent.Config
 	}
 	return hostconn.DefaultConfig()
 }
+
 func (s *Service) mountManagement(mux *http.ServeMux) {
 	p := map[string]RPCPermission{}
 	for _, proc := range []string{rpc.HostServiceListHostsProcedure, rpc.HostServiceGetHostProcedure} {
@@ -117,19 +122,20 @@ func (s *Service) mountManagement(mux *http.ServeMux) {
 }
 
 // authorizeWrite is called after every target's authorization and revision check,
-// with target row locks held, and before the first mutation (G28).
+// with target row locks held, and before the first mutation; writes are audited in two phases, authorized then result (design G28).
 func (s *Service) authorizeWrite(ctx context.Context) error {
 	t := transport(ctx)
 	if t == nil || !t.resource {
 		return failure(connect.CodeUnauthenticated, "authentication required")
 	}
-	if err := s.Audit.Append(ctx, AuditEvent{ActorID: actorID(ctx), Operation: t.procedure, Phase: "authorized", Outcome: "allow", PolicyVersion: t.policyVersion, MatchedRules: t.matchedRules, SourceIP: t.ip}); err != nil {
+	if err := s.Audit.Append(ctx, AuditEvent{ActorID: reqctx.ActorID(ctx), Operation: t.procedure, Phase: "authorized", Outcome: "allow", PolicyVersion: t.policyVersion, MatchedRules: t.matchedRules, SourceIP: t.ip}); err != nil {
 		t.authorizationAuditFailed = true
 		return failure(connect.CodeUnavailable, "authorization audit unavailable; operation not executed")
 	}
 	t.writeAuthorized = true
 	return nil
 }
+
 func (s *Service) can(ctx context.Context, op authz.Operation, action authz.Action, host authz.Host) (bool, error) {
 	previous := slices.Clone(transport(ctx).matchedRules)
 	_, err := s.Require(ctx, op, action, host)

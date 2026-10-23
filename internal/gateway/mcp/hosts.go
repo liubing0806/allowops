@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// A27: empty conditions use the same P5B per-host visibility and pagination.
+// Empty conditions list every host the caller may view, with the same per-host visibility and pagination as other host queries (design A27, P5B).
 func emptyHostSearch() error {
 	return nil
 }

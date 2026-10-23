@@ -21,6 +21,7 @@ type stepErrorJobs struct {
 func (j *stepErrorJobs) GetJob(_ context.Context, r *v1.GetJobRequest) (*v1.GetJobResponse, error) {
 	return &v1.GetJobResponse{Job: &v1.Job{JobId: r.JobId}}, nil
 }
+
 func (j *stepErrorJobs) GetJobOutput(_ context.Context, r *v1.GetJobOutputRequest) (*v1.GetJobOutputResponse, error) {
 	j.step = r.StepIndex
 	return &v1.GetJobOutputResponse{Data: []byte("single"), NextOffset: 6, Eof: true, OutputTrust: v1.OutputTrust_OUTPUT_TRUST_UNTRUSTED}, j.err

@@ -14,38 +14,23 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// PreviewSource is A23's replaceable cross-instance preview boundary.
+// PreviewSource is the replaceable boundary for reading output previews stored by other instances (design A23).
 // Implementations must return only redacted, filtered, bounded previews.
 type PreviewSource interface {
 	Load(context.Context, string) ([]Preview, error)
 }
+
 type Preview struct {
 	Task                   *v1.Task
 	Stdout, Stderr         []byte
 	StdoutHash, StderrHash []byte
 	StdoutSize, StderrSize uint64
 }
+
 type DatabasePreviews struct{ Store *store.Store }
 
 func (p *DatabasePreviews) Load(ctx context.Context, id string) ([]Preview, error) {
-	rows, err := p.Store.Pool.Query(ctx, "SELECT task_id,hostname,result,stdout_preview,stderr_preview,stdout_sha256,stderr_sha256,stdout_size,stderr_size FROM tasks WHERE job_id=$1 ORDER BY position", id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []Preview{}
-	for rows.Next() {
-		v := Preview{Task: &v1.Task{Result: &v1.ExecutionResult{}}}
-		var raw []byte
-		if err := rows.Scan(&v.Task.TaskId, &v.Task.Hostname, &raw, &v.Stdout, &v.Stderr, &v.StdoutHash, &v.StderrHash, &v.StdoutSize, &v.StderrSize); err != nil {
-			return nil, err
-		}
-		if err := proto.Unmarshal(raw, v.Task.Result); err != nil {
-			return nil, err
-		}
-		out = append(out, v)
-	}
-	return out, rows.Err()
+	return listJobTaskPreviews(ctx, p.Store.Pool, id)
 }
 
 func textPrefix(b []byte, n int) string {

@@ -16,12 +16,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
 type importTarget struct {
 	HostID, Revision, Hostname string
 	After                      map[string]string
 }
+
 type storedPreview struct {
 	meta    *v1.HostImportPreview
 	rows    []*v1.HostImportRow
@@ -32,21 +34,23 @@ type storedPreview struct {
 func violation(row *v1.HostImportRow, field, description string) {
 	row.Violations = append(row.Violations, &v1.FieldViolation{Field: field, Description: description})
 }
-func (s *Service) PreviewHostImport(ctx context.Context, req *connect.Request[v1.PreviewHostImportRequest]) (*connect.Response[v1.PreviewHostImportResponse], error) {
-	cfg := s.management.config
-	if len(req.Msg.Csv) > cfg.MaxCSVBytes {
-		return nil, failure(connect.CodeResourceExhausted, "CSV byte limit exceeded")
+
+// importHeader reads and validates the CSV header. headerErrors holds one
+// message per invalid, duplicate or conflicting column.
+func importHeader(csvBytes []byte, cfg ManagementConfig) (reader *csv.Reader, header, headerErrors []string, err error) {
+	if len(csvBytes) > cfg.MaxCSVBytes {
+		return nil, nil, nil, failure(connect.CodeResourceExhausted, "CSV byte limit exceeded")
 	}
-	if !utf8.Valid(req.Msg.Csv) {
-		return nil, failure(connect.CodeInvalidArgument, "CSV must be UTF-8")
+	if !utf8.Valid(csvBytes) {
+		return nil, nil, nil, failure(connect.CodeInvalidArgument, "CSV must be UTF-8")
 	}
-	reader := csv.NewReader(bytes.NewReader(req.Msg.Csv))
+	reader = csv.NewReader(bytes.NewReader(csvBytes))
 	reader.FieldsPerRecord = -1
-	header, err := reader.Read()
+	header, err = reader.Read()
 	if err != nil || len(header) < 2 || header[0] != "hostname" {
-		return nil, failure(connect.CodeInvalidArgument, "CSV header must start with hostname")
+		return nil, nil, nil, failure(connect.CodeInvalidArgument, "CSV header must start with hostname")
 	}
-	headerErrors := []string{}
+	headerErrors = []string{}
 	keys := map[string]bool{}
 	for _, column := range header[1:] {
 		verb, key, ok := strings.Cut(column, ":")
@@ -55,19 +59,64 @@ func (s *Service) PreviewHostImport(ctx context.Context, req *connect.Request[v1
 		}
 		keys[key] = true
 	}
-	ctx, err = s.pinPolicy(ctx)
-	if err != nil {
-		return nil, err
+	return reader, header, headerErrors, nil
+}
+
+// importRowLabels applies the label columns of one record to row.After and
+// records a violation for each rejected value.
+func (s *Service) importRowLabels(row *v1.HostImportRow, header, record []string) {
+	changes := &v1.LabelChanges{Set: map[string]string{}}
+	for i, column := range header[1:] {
+		verb, key, _ := strings.Cut(column, ":")
+		value := record[i+1]
+		if verb == "set" {
+			changes.Set[key] = value
+		} else if value == "true" {
+			changes.Remove = append(changes.Remove, key)
+		} else if value != "" {
+			violation(row, column, "remove value must be true or empty")
+		}
 	}
-	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
-	if err != nil {
-		return nil, dbError(err)
+	if len(changes.Set)+len(changes.Remove) > 0 {
+		after, e := s.changedLabels(row.Before, changes)
+		if e != nil {
+			violation(row, "labels", "invalid label changes")
+		} else {
+			row.After = after
+		}
 	}
-	defer tx.Rollback(ctx)
-	hosts, err := s.hosts(ctx, tx, false)
-	if err != nil {
-		return nil, err
+}
+
+// importRow validates one CSV record against the host it names.
+func (s *Service) importRow(ctx context.Context, header, headerErrors, record []string, line int, h *v1.Host, seen map[string]bool) (*v1.HostImportRow, error) {
+	row := &v1.HostImportRow{Line: uint32(line), Hostname: record[0]}
+	for _, e := range headerErrors {
+		violation(row, "header", e)
 	}
+	if h == nil {
+		violation(row, "hostname", "host not found")
+	} else {
+		if _, err := s.Require(ctx, authz.ManageHosts, authz.Action{}, hostAttributes(h)); err != nil {
+			return nil, err
+		}
+		row.Before = maps.Clone(h.AuthorizationLabels)
+		row.After = maps.Clone(row.Before)
+	}
+	if seen[row.Hostname] {
+		violation(row, "hostname", "duplicate hostname")
+	}
+	seen[row.Hostname] = true
+	if len(record) != len(header) {
+		violation(row, "row", "column count does not match header")
+	} else {
+		s.importRowLabels(row, header, record)
+	}
+	return row, nil
+}
+
+// importRows reads every remaining CSV record and returns the preview rows,
+// the targets of the rows naming an existing host and the invalid row count.
+func (s *Service) importRows(ctx context.Context, reader *csv.Reader, header, headerErrors []string, hosts []*v1.Host) ([]*v1.HostImportRow, []importTarget, uint64, error) {
 	byName := map[string]*v1.Host{}
 	for _, h := range hosts {
 		byName[h.Hostname] = h
@@ -82,53 +131,16 @@ func (s *Service) PreviewHostImport(ctx context.Context, req *connect.Request[v1
 			break
 		}
 		if err != nil {
-			return nil, failure(connect.CodeInvalidArgument, "malformed RFC 4180 CSV")
+			return nil, nil, 0, failure(connect.CodeInvalidArgument, "malformed RFC 4180 CSV")
 		}
-		if len(rows) >= cfg.MaxCSVRows {
-			return nil, failure(connect.CodeResourceExhausted, "CSV row limit exceeded")
+		if len(rows) >= s.management.config.MaxCSVRows {
+			return nil, nil, 0, failure(connect.CodeResourceExhausted, "CSV row limit exceeded")
 		}
 		line, _ := reader.FieldPos(0)
-		row := &v1.HostImportRow{Line: uint32(line), Hostname: record[0]}
-		for _, e := range headerErrors {
-			violation(row, "header", e)
-		}
-		h := byName[row.Hostname]
-		if h == nil {
-			violation(row, "hostname", "host not found")
-		} else {
-			if _, err = s.Require(ctx, authz.ManageHosts, authz.Action{}, hostAttributes(h)); err != nil {
-				return nil, err
-			}
-			row.Before = maps.Clone(h.AuthorizationLabels)
-			row.After = maps.Clone(row.Before)
-		}
-		if seen[row.Hostname] {
-			violation(row, "hostname", "duplicate hostname")
-		}
-		seen[row.Hostname] = true
-		if len(record) != len(header) {
-			violation(row, "row", "column count does not match header")
-		} else {
-			changes := &v1.LabelChanges{Set: map[string]string{}}
-			for i, column := range header[1:] {
-				verb, key, _ := strings.Cut(column, ":")
-				value := record[i+1]
-				if verb == "set" {
-					changes.Set[key] = value
-				} else if value == "true" {
-					changes.Remove = append(changes.Remove, key)
-				} else if value != "" {
-					violation(row, column, "remove value must be true or empty")
-				}
-			}
-			if len(changes.Set)+len(changes.Remove) > 0 {
-				after, e := s.changedLabels(row.Before, changes)
-				if e != nil {
-					violation(row, "labels", "invalid label changes")
-				} else {
-					row.After = after
-				}
-			}
+		h := byName[record[0]]
+		row, err := s.importRow(ctx, header, headerErrors, record, line, h, seen)
+		if err != nil {
+			return nil, nil, 0, err
 		}
 		if len(row.Violations) > 0 {
 			invalid++
@@ -137,6 +149,32 @@ func (s *Service) PreviewHostImport(ctx context.Context, req *connect.Request[v1
 			targets = append(targets, importTarget{h.HostId, h.Revision, h.Hostname, row.After})
 		}
 		rows = append(rows, row)
+	}
+	return rows, targets, invalid, nil
+}
+
+func (s *Service) PreviewHostImport(ctx context.Context, req *connect.Request[v1.PreviewHostImportRequest]) (*connect.Response[v1.PreviewHostImportResponse], error) {
+	cfg := s.management.config
+	reader, header, headerErrors, err := importHeader(req.Msg.Csv, cfg)
+	if err != nil {
+		return nil, err
+	}
+	ctx, err = s.pinPolicy(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+	if err != nil {
+		return nil, dbError(err)
+	}
+	defer tx.Rollback(ctx)
+	hosts, err := s.hosts(ctx, tx, false)
+	if err != nil {
+		return nil, err
+	}
+	rows, targets, invalid, err := s.importRows(ctx, reader, header, headerErrors, hosts)
+	if err != nil {
+		return nil, err
 	}
 	if len(rows) == 0 {
 		return nil, failure(connect.CodeInvalidArgument, "CSV rows required")
@@ -149,7 +187,7 @@ func (s *Service) PreviewHostImport(ctx context.Context, req *connect.Request[v1
 	if err = s.authorizeWrite(ctx); err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(ctx, "DELETE FROM host_import_previews WHERE expires_at<=now()"); err != nil {
+	if err = purgeImportPreviews(ctx, tx); err != nil {
 		return nil, dbError(err)
 	}
 	expires := time.Now().Add(cfg.PreviewTTL)
@@ -157,7 +195,7 @@ func (s *Service) PreviewHostImport(ctx context.Context, req *connect.Request[v1
 	rawRows, _ := json.Marshal(rows)
 	rawTargets, _ := json.Marshal(targets)
 	digest := hash(string(req.Msg.Csv))
-	if _, err = tx.Exec(ctx, "INSERT INTO host_import_previews(preview_id,actor_id,csv_sha256,rows,targets,invalid_count,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7)", id, actorID(ctx), digest, rawRows, rawTargets, invalid, expires); err != nil {
+	if err = insertImportPreview(ctx, tx, id, reqctx.ActorID(ctx), digest, rawRows, rawTargets, invalid, expires); err != nil {
 		return nil, dbError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -165,20 +203,16 @@ func (s *Service) PreviewHostImport(ctx context.Context, req *connect.Request[v1
 	}
 	return connect.NewResponse(&v1.PreviewHostImportResponse{Preview: &v1.HostImportPreview{PreviewId: id, CsvSha256: digest, RowCount: uint64(len(rows)), InvalidRowCount: invalid, ExpiresAt: stamp(expires)}}), nil
 }
+
 func (s *Service) preview(ctx context.Context, q querier, id string, lock bool) (*storedPreview, error) {
-	sql := "SELECT actor_id,csv_sha256,rows,targets,invalid_count,expires_at,updated_count FROM host_import_previews WHERE preview_id=$1"
-	if lock {
-		sql += " FOR UPDATE"
-	}
 	p := &storedPreview{meta: &v1.HostImportPreview{PreviewId: id}}
-	var actor string
-	var rows, targets []byte
-	var expires time.Time
-	err := q.QueryRow(ctx, sql, id).Scan(&actor, &p.meta.CsvSha256, &rows, &targets, &p.meta.InvalidRowCount, &expires, &p.updated)
+	r, err := importPreview(ctx, q, id, lock)
 	if err != nil {
 		return nil, dbError(err)
 	}
-	if actor != actorID(ctx) {
+	p.meta.CsvSha256, p.meta.InvalidRowCount, p.updated = r.digest, uint64(r.invalid), r.updated
+	rows, targets, expires := r.rows, r.targets, r.expires
+	if r.actor != reqctx.ActorID(ctx) {
 		return nil, failure(connect.CodePermissionDenied, "preview belongs to another caller")
 	}
 	if !time.Now().Before(expires) {
@@ -191,6 +225,7 @@ func (s *Service) preview(ctx context.Context, q querier, id string, lock bool) 
 	p.meta.ExpiresAt = stamp(expires)
 	return p, nil
 }
+
 func (s *Service) previewTargets(ctx context.Context, q querier, p *storedPreview, lock, checkRevision bool) ([]*v1.Host, error) {
 	ids := make([]string, 0, len(p.targets))
 	for _, target := range p.targets {
@@ -225,6 +260,7 @@ func (s *Service) previewTargets(ctx context.Context, q querier, p *storedPrevie
 	}
 	return out, nil
 }
+
 func (s *Service) GetHostImportPreview(ctx context.Context, req *connect.Request[v1.GetHostImportPreviewRequest]) (*connect.Response[v1.GetHostImportPreviewResponse], error) {
 	p, err := s.preview(ctx, s.Store.Pool, req.Msg.PreviewId, false)
 	if err != nil {
@@ -241,6 +277,7 @@ func (s *Service) GetHostImportPreview(ctx context.Context, req *connect.Request
 	}
 	return connect.NewResponse(&v1.GetHostImportPreviewResponse{Preview: p.meta, Rows: rows, Page: cursor}), nil
 }
+
 func (s *Service) ExecuteHostImport(ctx context.Context, req *connect.Request[v1.ExecuteHostImportRequest]) (*connect.Response[v1.ExecuteHostImportResponse], error) {
 	ctx, err := s.pinPolicy(ctx)
 	if err != nil {
@@ -271,12 +308,12 @@ func (s *Service) ExecuteHostImport(ctx context.Context, req *connect.Request[v1
 	}
 	for _, target := range p.targets {
 		b, _ := json.Marshal(target.After)
-		if _, err = tx.Exec(ctx, "UPDATE hosts SET authorization_labels=$2,revision=revision+1 WHERE host_id=$1", target.HostID, b); err != nil {
+		if err = setHostLabels(ctx, tx, target.HostID, b); err != nil {
 			return nil, dbError(err)
 		}
 	}
 	count := len(p.targets)
-	if _, err = tx.Exec(ctx, "UPDATE host_import_previews SET updated_count=$2 WHERE preview_id=$1", p.meta.PreviewId, count); err != nil {
+	if err = setImportPreviewUpdated(ctx, tx, p.meta.PreviewId, count); err != nil {
 		return nil, dbError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {

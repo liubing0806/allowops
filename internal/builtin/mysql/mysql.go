@@ -382,6 +382,7 @@ func maskRow(values []sql.NullString, mask func(string) string) []string {
 var tsvEscaper = strings.NewReplacer("\\", "\\\\", "\t", `\t`, "\n", `\n`, "\r", `\r`, "\x00", `\0`)
 
 func escapeTSV(s string) string { return tsvEscaper.Replace(s) }
+
 func writeTSV(out *strings.Builder, fields []string) {
 	for i, field := range fields {
 		if i > 0 {

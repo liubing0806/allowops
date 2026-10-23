@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/store"
@@ -19,40 +17,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const hostColumns = `h.host_id,h.hostname,h.authorization_labels,h.reported_labels,
- (h.instance_id IS NOT NULL AND EXISTS(SELECT 1 FROM gateway_instances i WHERE i.instance_id=h.instance_id AND i.last_seen>now()-$1::interval)),
- h.agent_version,h.capabilities,h.last_seen,h.registered_at,h.revision,
- COALESCE((SELECT jsonb_agg(jsonb_build_object('catalog_id',r.catalog_id,'version',r.version) ORDER BY r.catalog_id) FROM host_catalog_reports r WHERE r.host_id=h.host_id AND r.loaded),'[]'::jsonb)`
-
-func scanHost(row pgx.Row) (*v1.Host, error) {
-	h := &v1.Host{}
-	var auth, reported, caps, loaded []byte
-	var last, registered pgtype.Timestamptz
-	var revision int64
-	err := row.Scan(&h.HostId, &h.Hostname, &auth, &reported, &h.Online, &h.AgentVersion, &caps, &last, &registered, &revision, &loaded)
-	if err != nil {
-		return nil, err
-	}
-	if err = json.Unmarshal(auth, &h.AuthorizationLabels); err != nil {
-		return nil, err
-	}
-	if err = json.Unmarshal(reported, &h.ReportedLabels); err != nil {
-		return nil, err
-	}
-	if len(caps) > 0 {
-		h.Capabilities = &v1.AgentCapabilities{}
-		if err = proto.Unmarshal(caps, h.Capabilities); err != nil {
-			return nil, err
-		}
-	}
-	if err = json.Unmarshal(loaded, &h.LoadedCatalogs); err != nil {
-		return nil, err
-	}
-	h.LastSeen = nullable(last)
-	h.RegisteredAt = nullable(registered)
-	h.Revision = strconv.FormatInt(revision, 10)
-	return h, nil
+// hostWindow is the heartbeat age within which a connected host counts as online.
+func (s *Service) hostWindow() string {
+	return max(2*s.gatewayConfig().FlushInterval, s.gatewayConfig().HeartbeatTimeout).String()
 }
+
 func (s *Service) hosts(ctx context.Context, q querier, lock bool) ([]*v1.Host, error) {
 	return s.hostsWhere(ctx, q, "", lock)
 }
@@ -61,25 +30,13 @@ func (s *Service) hosts(ctx context.Context, q querier, lock bool) ([]*v1.Host, 
 // over h whose placeholders start at $2 ($1 is the heartbeat window). With lock,
 // only the selected rows are locked, in that order.
 func (s *Service) hostsWhere(ctx context.Context, q querier, where string, lock bool, args ...any) ([]*v1.Host, error) {
-	sql := "SELECT " + hostColumns + " FROM hosts h WHERE certificate_status='active'" + where + " ORDER BY host_id"
-	if lock {
-		sql += " FOR UPDATE OF h"
-	}
-	rows, err := q.Query(ctx, sql, append([]any{max(2*s.gatewayConfig().FlushInterval, s.gatewayConfig().HeartbeatTimeout).String()}, args...)...)
+	out, err := activeHosts(ctx, q, s.hostWindow(), where, lock, args...)
 	if err != nil {
 		return nil, dbError(err)
 	}
-	defer rows.Close()
-	out := []*v1.Host{}
-	for rows.Next() {
-		h, err := scanHost(rows)
-		if err != nil {
-			return nil, dbError(err)
-		}
-		out = append(out, h)
-	}
-	return out, dbError(rows.Err())
+	return out, nil
 }
+
 func hostAttributes(h *v1.Host) authz.Host {
 	return authz.Host{ID: h.HostId, Labels: h.AuthorizationLabels}
 }
@@ -118,6 +75,7 @@ func parseSelector(selector string, empty bool) ([]labelCondition, error) {
 	}
 	return out, nil
 }
+
 func matches(h *v1.Host, conditions []labelCondition) bool {
 	for _, c := range conditions {
 		labels := h.AuthorizationLabels
@@ -157,11 +115,7 @@ func (s *Service) lockTargets(ctx context.Context, tx pgx.Tx, targets *v1.HostTa
 		}
 		a, _ := json.Marshal(authorization)
 		r, _ := json.Marshal(reported)
-		rows, err := tx.Query(ctx, "SELECT host_id FROM hosts WHERE certificate_status='active' AND authorization_labels @> $1::jsonb AND reported_labels @> $2::jsonb ORDER BY host_id", a, r)
-		if err != nil {
-			return nil, dbError(err)
-		}
-		ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		ids, err := activeHostIDsByLabels(ctx, tx, a, r)
 		if err != nil {
 			return nil, dbError(err)
 		}
@@ -200,6 +154,7 @@ func (s *Service) lockTargets(ctx context.Context, tx pgx.Tx, targets *v1.HostTa
 	}
 	return nil, failure(connect.CodeInvalidArgument, "targets required")
 }
+
 func (s *Service) visibleHosts(ctx context.Context, hosts []*v1.Host) ([]*v1.Host, error) {
 	out := []*v1.Host{}
 	for _, h := range hosts {
@@ -218,6 +173,7 @@ func (s *Service) visibleHosts(ctx context.Context, hosts []*v1.Host) ([]*v1.Hos
 	}
 	return out, nil
 }
+
 func (s *Service) ListHosts(ctx context.Context, req *connect.Request[v1.ListHostsRequest]) (*connect.Response[v1.ListHostsResponse], error) {
 	query := req.Msg.GetQuery()
 	conditions, err := parseSelector(query.GetSelector(), true)
@@ -286,8 +242,9 @@ func (s *Service) ListHosts(ctx context.Context, req *connect.Request[v1.ListHos
 	}
 	return connect.NewResponse(&v1.ListHostsResponse{Hosts: paged, Page: cursor, TotalCount: uint64(len(out)), AuthorizationLabelCounts: counts, LabelCountsTruncated: len(counts) < len(buckets)}), nil
 }
+
 func (s *Service) GetHost(ctx context.Context, req *connect.Request[v1.GetHostRequest]) (*connect.Response[v1.GetHostResponse], error) {
-	h, err := scanHost(s.Store.Pool.QueryRow(ctx, "SELECT "+hostColumns+" FROM hosts h WHERE hostname=$2 AND certificate_status='active'", max(2*s.gatewayConfig().FlushInterval, s.gatewayConfig().HeartbeatTimeout).String(), req.Msg.Hostname))
+	h, err := activeHostByName(ctx, s.Store.Pool, s.hostWindow(), req.Msg.Hostname)
 	if err != nil {
 		return nil, dbError(err)
 	}
@@ -296,6 +253,7 @@ func (s *Service) GetHost(ctx context.Context, req *connect.Request[v1.GetHostRe
 	}
 	return connect.NewResponse(&v1.GetHostResponse{Host: h}), nil
 }
+
 func (s *Service) changedLabels(before map[string]string, changes *v1.LabelChanges) (map[string]string, error) {
 	if changes == nil || len(changes.Set)+len(changes.Remove) == 0 {
 		return nil, failure(connect.CodeInvalidArgument, "label changes required")
@@ -331,6 +289,7 @@ func (s *Service) changedLabels(before map[string]string, changes *v1.LabelChang
 	}
 	return out, nil
 }
+
 func (s *Service) SetHostLabels(ctx context.Context, req *connect.Request[v1.SetHostLabelsRequest]) (*connect.Response[v1.SetHostLabelsResponse], error) {
 	ctx, err := s.pinPolicy(ctx)
 	if err != nil {
@@ -378,7 +337,7 @@ func (s *Service) SetHostLabels(ctx context.Context, req *connect.Request[v1.Set
 	}
 	for _, h := range targets {
 		b, _ := json.Marshal(updated[h.HostId])
-		if _, err = tx.Exec(ctx, "UPDATE hosts SET authorization_labels=$2,revision=revision+1 WHERE host_id=$1", h.HostId, b); err != nil {
+		if err = setHostLabels(ctx, tx, h.HostId, b); err != nil {
 			return nil, dbError(err)
 		}
 	}
@@ -387,6 +346,7 @@ func (s *Service) SetHostLabels(ctx context.Context, req *connect.Request[v1.Set
 	}
 	return connect.NewResponse(&v1.SetHostLabelsResponse{UpdatedCount: uint64(len(targets))}), nil
 }
+
 func (s *Service) DeleteHost(ctx context.Context, req *connect.Request[v1.DeleteHostRequest]) (*connect.Response[v1.DeleteHostResponse], error) {
 	if req.Msg.HostId == "" || req.Msg.ExpectedRevision == "" {
 		return nil, failure(connect.CodeInvalidArgument, "host ID and revision required")
@@ -400,7 +360,7 @@ func (s *Service) DeleteHost(ctx context.Context, req *connect.Request[v1.Delete
 		return nil, dbError(err)
 	}
 	defer tx.Rollback(ctx)
-	h, err := scanHost(tx.QueryRow(ctx, "SELECT "+hostColumns+" FROM hosts h WHERE host_id=$2 AND certificate_status='active' FOR UPDATE OF h", max(2*s.gatewayConfig().FlushInterval, s.gatewayConfig().HeartbeatTimeout).String(), req.Msg.HostId))
+	h, err := lockActiveHost(ctx, tx, s.hostWindow(), req.Msg.HostId)
 	if err != nil {
 		return nil, dbError(err)
 	}

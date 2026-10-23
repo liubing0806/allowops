@@ -23,6 +23,7 @@ type ToolResult struct {
 	StructuredContent any            `json:"structuredContent"`
 	IsError           bool           `json:"isError,omitempty"`
 }
+
 type TextContent struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
@@ -37,9 +38,11 @@ func toolResult(value any) (*ToolResult, int, error) {
 	encoded, err := json.Marshal(result)
 	return result, len(encoded), err
 }
+
 func taskStatus(status v1.TaskStatus) string {
 	return strings.ToLower(strings.TrimPrefix(status.String(), "TASK_STATUS_"))
 }
+
 func textPrefix(text string, limit int) string {
 	text = strings.ToValidUTF8(text, "\ufffd")
 	if len(text) <= limit {
@@ -52,7 +55,7 @@ func textPrefix(text string, limit int) string {
 }
 
 // HostOutputPage uses base64 so byte offsets remain lossless even when the
-// backend page boundary divides a multi-byte UTF-8 character (G43).
+// backend page boundary divides a multi-byte UTF-8 character (design G43).
 type HostOutputPage struct {
 	JobID            string  `json:"job_id"`
 	StepIndex        *uint32 `json:"step_index,omitempty"`
@@ -68,7 +71,7 @@ type HostOutputPage struct {
 	OutputTrust      string  `json:"output_trust"`
 }
 
-// Call only after P6 has authorized view_output for this job and hostname.
+// Call only after the job module (design P6) has authorized view_output for this job and hostname.
 // A result-budget cut is a page boundary, not permanent output truncation.
 func outputPageResult(jobID, host string, stream v1.OutputStream, offset uint64, response *v1.GetJobOutputResponse, index *uint32) (*ToolResult, error) {
 	if jobID == "" || host == "" || response == nil {

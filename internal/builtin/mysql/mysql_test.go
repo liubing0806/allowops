@@ -136,6 +136,7 @@ type fixture struct {
 	executed []string
 	failAt   int
 }
+
 type fixtureDriver struct{}
 
 func (fixtureDriver) Open(string) (driver.Conn, error)          { return nil, errors.New("use connector") }
@@ -147,8 +148,10 @@ type fixtureConn struct{ f *fixture }
 func (*fixtureConn) Prepare(string) (driver.Stmt, error) {
 	return nil, errors.New("unexpected prepare")
 }
+
 func (*fixtureConn) Close() error              { return nil }
 func (*fixtureConn) Begin() (driver.Tx, error) { return nil, errors.New("unexpected begin") }
+
 func (c *fixtureConn) ExecContext(_ context.Context, s string, _ []driver.NamedValue) (driver.Result, error) {
 	c.f.executed = append(c.f.executed, s)
 	if c.f.failAt == len(c.f.executed) {
@@ -156,6 +159,7 @@ func (c *fixtureConn) ExecContext(_ context.Context, s string, _ []driver.NamedV
 	}
 	return driver.RowsAffected(0), nil
 }
+
 func (c *fixtureConn) QueryContext(context.Context, string, []driver.NamedValue) (driver.Rows, error) {
 	return &fixtureRows{f: c.f}, nil
 }
@@ -167,6 +171,7 @@ type fixtureRows struct {
 
 func (r *fixtureRows) Columns() []string { return r.f.columns }
 func (*fixtureRows) Close() error        { return nil }
+
 func (r *fixtureRows) Next(dest []driver.Value) error {
 	if r.index == len(r.f.rows) {
 		if r.f.rowErr != nil {

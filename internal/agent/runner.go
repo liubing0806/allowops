@@ -15,7 +15,8 @@ import (
 	"github.com/liubing0806/allowops/internal/executor"
 )
 
-// Runner is the P12 integration boundary;
+// Runner is the integration boundary for the extended execution features
+// (filters, composite actions, builtin handlers; design P12);
 // unsupported signed features must never be ignored by an adapter.
 type Runner interface {
 	Run(context.Context, catalog.Action, map[string]any, map[string]any, string, int64, executor.Callbacks) (executor.Result, error)
@@ -49,7 +50,7 @@ func (LocalRunner) Run(ctx context.Context, action catalog.Action, input, filter
 		select {
 		case <-ctx.Done():
 			// sudo forwards TERM to the helper, whose signal context terminates
-			// the P1 executor's separate process group with its target identity.
+			// the shared executor's separate process group with its target identity (design P1).
 			_ = syscall.Kill(-command.Process.Pid, syscall.SIGTERM)
 		case <-done:
 		}

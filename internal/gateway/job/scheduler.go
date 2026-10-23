@@ -15,7 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// A22: this bit set is the only definition of max_failures accounting.
+// This bit set is the only definition of max_failures accounting: failed, timeout and unsupported count, offline does not (design A22).
 const failureStatuses uint32 = 1<<v1.TaskStatus_TASK_STATUS_FAILED |
 	1<<v1.TaskStatus_TASK_STATUS_TIMEOUT | 1<<v1.TaskStatus_TASK_STATUS_UNSUPPORTED
 
@@ -25,8 +25,7 @@ func failedStatus(status v1.TaskStatus) bool {
 
 func (s *Service) schedule(ctx context.Context, j *v1.Job, a catalog.Action, r *v1.RunJobRequest, batch, limit uint32) error {
 	if err := retrySQL(ctx, j.JobId, func(ctx context.Context) error {
-		_, err := s.Store.Pool.Exec(ctx, "UPDATE jobs SET status=2 WHERE job_id=$1 AND status=1", j.JobId)
-		return err
+		return startQueuedJob(ctx, s.Store.Pool, j.JobId)
 	}); err != nil {
 		return err
 	}
@@ -38,7 +37,9 @@ func (s *Service) schedule(ctx context.Context, j *v1.Job, a catalog.Action, r *
 		var cancel bool
 		var failures int
 		if err := retrySQL(ctx, j.JobId, func(ctx context.Context) error {
-			return s.Store.Pool.QueryRow(ctx, "SELECT cancel_requested FROM jobs WHERE job_id=$1", j.JobId).Scan(&cancel)
+			var err error
+			cancel, err = readCancelRequested(ctx, s.Store.Pool, j.JobId)
+			return err
 		}); err != nil {
 			return err
 		}
@@ -96,9 +97,8 @@ func (s *Service) dispatch(ctx context.Context, j *v1.Job, t *v1.Task, a catalog
 		return
 	}
 	defer tx.Rollback(ctx)
-	var cancel bool
-	var jobStatus int16
-	if err := tx.QueryRow(ctx, "SELECT cancel_requested,status FROM jobs WHERE job_id=$1 FOR SHARE", j.JobId).Scan(&cancel, &jobStatus); err != nil {
+	cancel, jobStatus, err := lockJobForDispatch(ctx, tx, j.JobId)
+	if err != nil {
 		tx.Rollback(ctx)
 		if ctx.Err() != nil {
 			return
@@ -114,13 +114,13 @@ func (s *Service) dispatch(ctx context.Context, j *v1.Job, t *v1.Task, a catalog
 		s.dispatchTerminal(ctx, j.JobId, t.TaskId, &v1.ExecutionResult{Status: v1.TaskStatus_TASK_STATUS_CANCELLED, Reason: "CANCELLED"})
 		return
 	}
-	var connection *string
-	if err := tx.QueryRow(ctx, "SELECT connection_id FROM hosts WHERE host_id=$1 AND certificate_status='active'", t.HostId).Scan(&connection); err != nil || connection == nil {
+	connection, hasConnection, err := activeHostConnection(ctx, tx, t.HostId)
+	if err != nil || !hasConnection {
 		tx.Rollback(ctx)
 		s.dispatchTerminal(ctx, j.JobId, t.TaskId, &v1.ExecutionResult{Status: v1.TaskStatus_TASK_STATUS_OFFLINE, Reason: "OFFLINE"})
 		return
 	}
-	tag, err := tx.Exec(ctx, "UPDATE tasks SET dispatched=true,connection_id=$3 WHERE job_id=$1 AND task_id=$2 AND status=1 AND NOT dispatched", j.JobId, t.TaskId, *connection)
+	reserved, err := reserveTaskDispatch(ctx, tx, j.JobId, t.TaskId, connection)
 	if err != nil {
 		tx.Rollback(ctx)
 		if ctx.Err() != nil {
@@ -129,7 +129,7 @@ func (s *Service) dispatch(ctx context.Context, j *v1.Job, t *v1.Task, a catalog
 		s.dispatchTerminal(ctx, j.JobId, t.TaskId, &v1.ExecutionResult{Status: v1.TaskStatus_TASK_STATUS_OFFLINE, Reason: "OFFLINE"})
 		return
 	}
-	if tag.RowsAffected() == 0 {
+	if reserved == 0 {
 		return
 	}
 	dispatchCtx, done := context.WithTimeout(ctx, timeout(a)+10*time.Second)
@@ -160,7 +160,7 @@ func (s *Service) dispatch(ctx context.Context, j *v1.Job, t *v1.Task, a catalog
 	if bound, ok := s.Router.(interface {
 		SendToConnection(context.Context, string, string, *v1.ConnectResponse) (*v1.TaskCompleted, error)
 	}); ok {
-		result, err = bound.SendToConnection(dispatchCtx, t.HostId, *connection, message)
+		result, err = bound.SendToConnection(dispatchCtx, t.HostId, connection, message)
 	} else {
 		result, err = s.Router.Send(dispatchCtx, t.HostId, message)
 	}
@@ -198,27 +198,21 @@ func (s *Service) finishJob(ctx context.Context, id string) error {
 }
 
 func (s *Service) finishJobTx(ctx context.Context, tx pgx.Tx, id string) error {
-	var cancelled bool
-	var old int16
-	if err := tx.QueryRow(ctx, "SELECT cancel_requested,status FROM jobs WHERE job_id=$1 FOR UPDATE", id).Scan(&cancelled, &old); err != nil {
+	cancelled, old, err := lockJobForFinish(ctx, tx, id)
+	if err != nil {
 		return err
 	}
 	if old > 2 {
 		return nil
 	}
-	rows, err := tx.Query(ctx, "SELECT status,count(*) FROM tasks WHERE job_id=$1 GROUP BY status", id)
+	counts, err := countJobTasksForFinish(ctx, tx, id)
 	if err != nil {
 		return err
 	}
 	var successes, failures, pending, cancels int
-	for rows.Next() {
-		var status int16
-		var n int
-		if err := rows.Scan(&status, &n); err != nil {
-			rows.Close()
-			return err
-		}
-		switch v1.TaskStatus(status) {
+	for _, c := range counts {
+		n := c.n
+		switch v1.TaskStatus(c.status) {
 		case v1.TaskStatus_TASK_STATUS_PENDING, v1.TaskStatus_TASK_STATUS_RUNNING:
 			pending += n
 		case v1.TaskStatus_TASK_STATUS_SUCCEEDED:
@@ -228,11 +222,6 @@ func (s *Service) finishJobTx(ctx context.Context, tx pgx.Tx, id string) error {
 		default:
 			failures += n
 		}
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
 	}
 	if pending > 0 {
 		return nil
@@ -245,11 +234,7 @@ func (s *Service) finishJobTx(ctx context.Context, tx pgx.Tx, id string) error {
 	} else if successes > 0 {
 		status = v1.JobStatus_JOB_STATUS_PARTIALLY_FAILED
 	}
-	_, err = tx.Exec(ctx, "UPDATE jobs SET status=$2,finished_at=now() WHERE job_id=$1 AND status IN (1,2)", id, int16(status))
-	if err != nil {
-		return err
-	}
-	return nil
+	return finishJobRow(ctx, tx, id, int16(status))
 }
 
 func pendingResult(status v1.TaskStatus, reason string) []byte {

@@ -217,7 +217,7 @@ export function JobDetail() {
     setCancel(false)
   }, 'job.cancelled')
   const job = query.data?.job
-  // A34: the gateway evaluates view_output using the current ABAC policy.
+  // Any signed-in user may try to read output; the gateway decides via the view_output ABAC policy (web README A34).
   const canOutput = (status: string) =>
     !!session.data?.user &&
     !['TASK_STATUS_OFFLINE', 'TASK_STATUS_PENDING'].includes(status)

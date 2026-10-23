@@ -9,11 +9,35 @@ import (
 	"sync"
 	"time"
 
-	"github.com/liubing0806/allowops/internal/gateway/api"
+	"connectrpc.com/connect"
+	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
+	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/catalogsvc"
 	"github.com/liubing0806/allowops/internal/gateway/job"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
+	"github.com/liubing0806/allowops/internal/store"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// Identity is the part of the management API the MCP service uses.
+// *api.Service implements it.
+type Identity interface {
+	// Middleware authenticates requests and stores the caller in the context.
+	Middleware(http.Handler) http.Handler
+	// PolicySnapshot returns the current policy rules for display prechecks.
+	PolicySnapshot(ctx context.Context) (uint64, []authz.Rule, error)
+	// AppendResultAudit appends a result audit event for the request.
+	AppendResultAudit(ctx context.Context, e reqctx.AuditEvent) error
+	// ListHosts lists the hosts visible to the caller.
+	ListHosts(ctx context.Context, r *connect.Request[v1.ListHostsRequest]) (*connect.Response[v1.ListHostsResponse], error)
+	// Database returns the gateway store holding the catalogs.
+	Database() *store.Store
+	// AuditConfigured reports whether an audit sink is configured.
+	AuditConfigured() bool
+	Origin() string
+	MessageBytes() int
+	PageSize() int
+}
 
 type Config struct {
 	CacheEntries     int
@@ -22,8 +46,9 @@ type Config struct {
 	// the same limits as job validation; the zero value means job.DefaultConfig.
 	Jobs job.Config
 }
+
 type Service struct {
-	identity *api.Service
+	identity Identity
 	catalogs *catalogsvc.Service
 	jobs     JobService
 	config   Config
@@ -32,15 +57,17 @@ type Service struct {
 	lru      *list.List
 	versions string
 }
+
 type cacheEntry struct {
 	key    string
 	server *sdk.Server
 }
+
 type serverContextKey struct{}
 type heartbeatContextKey struct{}
 
-func New(identity *api.Service, catalogs *catalogsvc.Service, jobs JobService, cfg Config) (*Service, error) {
-	if identity == nil || identity.Store == nil || identity.Audit == nil || catalogs == nil {
+func New(identity Identity, catalogs *catalogsvc.Service, jobs JobService, cfg Config) (*Service, error) {
+	if identity == nil || identity.Database() == nil || !identity.AuditConfigured() || catalogs == nil {
 		return nil, errors.New("MCP identity, catalog verifier and auditor required")
 	}
 	if cfg.CacheEntries == 0 {
@@ -62,9 +89,9 @@ func (s *Service) Handler() http.Handler {
 	stream := sdk.NewStreamableHTTPHandler(func(r *http.Request) *sdk.Server {
 		server, _ := r.Context().Value(serverContextKey{}).(*sdk.Server)
 		return server
-	}, &sdk.StreamableHTTPOptions{Stateless: true, MaxRequestBodyBytes: int64(s.identity.Config.MessageBytes), PropagateRequestCancellation: true})
+	}, &sdk.StreamableHTTPOptions{Stateless: true, MaxRequestBodyBytes: int64(s.identity.MessageBytes()), PropagateRequestCancellation: true})
 	authenticated := s.identity.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id, ok := api.FromContext(r.Context())
+		id, ok := reqctx.FromContext(r.Context())
 		if !ok || id == nil {
 			if s.auditHTTP(r.Context(), "deny") != nil {
 				http.Error(w, "audit unavailable", http.StatusServiceUnavailable)
@@ -74,7 +101,7 @@ func (s *Service) Handler() http.Handler {
 			http.Error(w, "Bearer authentication required", http.StatusUnauthorized)
 			return
 		}
-		if origin := r.Header.Get("Origin"); origin != "" && origin != s.identity.Config.Origin {
+		if origin := r.Header.Get("Origin"); origin != "" && origin != s.identity.Origin() {
 			if s.auditHTTP(r.Context(), "deny") != nil {
 				http.Error(w, "audit unavailable", http.StatusServiceUnavailable)
 				return
@@ -121,7 +148,7 @@ func (s *Service) Handler() http.Handler {
 		}
 		parts := strings.Fields(r.Header.Get("Authorization"))
 		if len(r.Header.Values("Authorization")) != 1 || len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			// Still use P5B to collect authenticated audit context, while preventing
+			// Still use the identity middleware (design P5B) to collect authenticated audit context, while preventing
 			// its console-cookie fallback from authenticating the MCP request.
 			copy := r.Clone(r.Context())
 			copy.Header.Del("Cookie")
@@ -134,8 +161,9 @@ func (s *Service) Handler() http.Handler {
 		authenticated.ServeHTTP(w, copy)
 	})
 }
+
 func (s *Service) auditHTTP(ctx context.Context, outcome string) error {
-	e := api.RequestAuditInfo(ctx)
+	e := reqctx.RequestAuditInfo(ctx)
 	e.Operation = "mcp/authenticate"
 	e.Phase = "result"
 	e.Outcome = outcome

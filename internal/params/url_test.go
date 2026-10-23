@@ -64,6 +64,7 @@ func FuzzURL(f *testing.F) {
 		}
 	})
 }
+
 func mustURL(t *testing.T, value string) *url.URL {
 	t.Helper()
 	u, err := url.Parse(value)

@@ -16,16 +16,19 @@ import (
 
 type committedFaultKey struct{}
 type tracedSQLKey struct{}
+
 type committedFault struct {
 	mode           string
 	cancel         context.CancelFunc
 	policyInserted bool
 }
+
 type committedCancelTracer struct{ observed chan string }
 
 func (tr committedCancelTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
 	return context.WithValue(ctx, tracedSQLKey{}, data.SQL)
 }
+
 func (tr committedCancelTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryEndData) {
 	f, _ := ctx.Value(committedFaultKey{}).(*committedFault)
 	if f == nil || data.Err != nil {
@@ -50,6 +53,7 @@ func (tr committedCancelTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, 
 		tr.observed <- sql
 	}
 }
+
 func committedFaultFixture(t *testing.T) (*fixture, <-chan string) {
 	t.Helper()
 	f := newFixture(t, func(_ *Service, h http.Handler) http.Handler {
@@ -73,6 +77,7 @@ func committedFaultFixture(t *testing.T) (*fixture, <-chan string) {
 	f.service.Audit = NewAuditor(audit.New(pool, audit.Config{}))
 	return f, observed
 }
+
 func TestCommittedUserRolesAuditTargetSurvivesReloadCancellation(t *testing.T) {
 	f, observed := committedFaultFixture(t)
 	ctx := context.Background()
@@ -101,6 +106,7 @@ func TestCommittedUserRolesAuditTargetSurvivesReloadCancellation(t *testing.T) {
 		t.Fatalf("uncommitted revision failure targets=%v; want empty final resource", events)
 	}
 }
+
 func TestCommittedPolicyAuditTargetSurvivesRefreshCancellation(t *testing.T) {
 	f, observed := committedFaultFixture(t)
 	ctx := context.Background()
@@ -134,6 +140,7 @@ func TestCommittedPolicyAuditTargetSurvivesRefreshCancellation(t *testing.T) {
 		t.Fatalf("uncommitted policy failure targets=%v; want empty final resource", events)
 	}
 }
+
 func TestCommittedJoinTokenAuditTargetSurvivesReloadCancellation(t *testing.T) {
 	f, observed := committedFaultFixture(t)
 	ctx := context.Background()

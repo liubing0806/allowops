@@ -11,7 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
-	"github.com/liubing0806/allowops/internal/gateway/api"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -33,7 +33,7 @@ func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, available ma
 			}
 		}
 	}
-	event := api.RequestAuditInfo(ctx)
+	event := reqctx.RequestAuditInfo(ctx)
 	event.Operation = "mcp/unknown_tool"
 	if available[r.Params.Name] {
 		event.Operation = "mcp/" + r.Params.Name
@@ -44,8 +44,8 @@ func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, available ma
 	if err != nil {
 		event.Outcome = "deny"
 	}
-	// P6 owns the pre-write G28 audit. This result covers early parameter
-	// failures and unknown/denied tools without duplicating authorized (G49).
+	// The job module owns the audit written before a write (design P6, G28). This result covers early parameter
+	// failures and unknown/denied tools without duplicating the authorized event (design G49).
 	if auditErr := s.identity.AppendResultAudit(ctx, event); auditErr != nil {
 		message := "result audit unavailable"
 		if state.jobID != "" && (r.Params.Name == "jobs_cancel" || !strings.HasPrefix(r.Params.Name, "jobs_") && r.Params.Name != "hosts_search") {
@@ -59,6 +59,7 @@ func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, available ma
 	}
 	return sdkResult(result), nil
 }
+
 func sdkResult(result *ToolResult) *sdk.CallToolResult {
 	content := make([]sdk.Content, len(result.Content))
 	for i, c := range result.Content {
@@ -66,6 +67,7 @@ func sdkResult(result *ToolResult) *sdk.CallToolResult {
 	}
 	return &sdk.CallToolResult{Meta: sdk.Meta(result.Meta), Content: content, StructuredContent: result.StructuredContent, IsError: result.IsError}
 }
+
 func toolError(err error, state *callState) *sdk.CallToolResult {
 	data := map[string]any{"error": "tool unavailable", "output_trust": "untrusted"}
 	var ce *connect.Error
@@ -113,7 +115,7 @@ func toolError(err error, state *callState) *sdk.CallToolResult {
 		data["details_truncated"] = true
 		delete(data, "violations")
 		if denied, ok := data["denied_hosts"].([]*v1.HostDenial); ok {
-			// G54: retain the largest complete prefix that fits, including rules.
+			// Retain the largest complete prefix that fits, including rules (design G54).
 			low, high := 0, len(denied)
 			for low < high {
 				mid := low + (high-low+1)/2
@@ -201,9 +203,10 @@ func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, available
 		if state.jobID == "" {
 			return nil, accessError(connect.CodeUnavailable, "invalid job response")
 		}
-		return nativeSummaryResult(api.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, "")
+		return nativeSummaryResult(reqctx.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, "")
 	}
 }
+
 func fixedArguments(raw json.RawMessage, allowed ...string) (map[string]json.RawMessage, error) {
 	if len(raw) == 0 {
 		raw = json.RawMessage(`{}`)
@@ -225,6 +228,7 @@ func fixedArguments(raw json.RawMessage, allowed ...string) (map[string]json.Raw
 	}
 	return args, nil
 }
+
 func jobArgument(args map[string]json.RawMessage) (string, error) {
 	var id string
 	if decodeField(args, "job_id", &id, true) != nil || !shortJobID.MatchString(id) {
@@ -232,6 +236,7 @@ func jobArgument(args map[string]json.RawMessage) (string, error) {
 	}
 	return id, nil
 }
+
 func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *callState) (*ToolResult, error) {
 	args, err := fixedArguments(r.Params.Arguments, "job_id", "host", "wait_seconds", "response_format", "next_cursor", "stream", "offset", "step_index")
 	if err != nil {
@@ -293,7 +298,7 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 		return nil, accessError(connect.CodeUnavailable, "job response unavailable")
 	}
 	if host == "" {
-		return nativeSummaryResult(api.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, cursor)
+		return nativeSummaryResult(reqctx.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, cursor)
 	}
 	outputStream := v1.OutputStream_OUTPUT_STREAM_STDOUT
 	if stream == "stderr" {
@@ -305,6 +310,7 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 	}
 	return outputPageResult(id, host, outputStream, offset, output, step)
 }
+
 func (s *Service) listJobs(ctx context.Context, raw json.RawMessage) (*ToolResult, error) {
 	args, err := fixedArguments(raw, "next_cursor")
 	if err != nil {
@@ -314,7 +320,7 @@ func (s *Service) listJobs(ctx context.Context, raw json.RawMessage) (*ToolResul
 	if err = decodeField(args, "next_cursor", &cursor, false); err != nil {
 		return nil, invalidArguments(err)
 	}
-	actor := api.RequestAuditInfo(ctx).ActorID
+	actor := reqctx.RequestAuditInfo(ctx).ActorID
 	// One backend item per page ensures metadata is measured before it reaches
 	// MCP; the backend's opaque cursor retains its scope/snapshot binding.
 	response, err := s.jobs.ListJobs(ctx, &v1.ListJobsRequest{SubjectId: actor, Page: &v1.PageRequest{PageSize: 1, PageToken: cursor}})
@@ -337,6 +343,7 @@ func (s *Service) listJobs(ctx context.Context, raw json.RawMessage) (*ToolResul
 	}
 	return result, err
 }
+
 func jobMetadata(job *v1.Job) map[string]any {
 	counts := map[string]uint64{}
 	for _, c := range job.Counts {
@@ -344,6 +351,7 @@ func jobMetadata(job *v1.Job) map[string]any {
 	}
 	return map[string]any{"counts": counts, "job_id": job.JobId, "action": job.Action, "status": strings.ToLower(strings.TrimPrefix(job.Status.String(), "JOB_STATUS_")), "total": job.TotalTasks, "output_trust": "untrusted"}
 }
+
 func jobMetadataResult(job *v1.Job) (*ToolResult, error) {
 	result, size, err := toolResult(jobMetadata(job))
 	if size > resultByteLimit {
@@ -351,6 +359,7 @@ func jobMetadataResult(job *v1.Job) (*ToolResult, error) {
 	}
 	return result, err
 }
+
 func invalidArguments(err error) error {
 	if err == nil {
 		return nil
