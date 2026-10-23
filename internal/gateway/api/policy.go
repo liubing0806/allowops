@@ -318,124 +318,169 @@ type testEnvironment struct {
 	Cases []*v1.PolicyTestCase `json:"cases,omitempty"`
 }
 
+// inputCollector accumulates policy evaluation inputs up to the configured limit.
+type inputCollector struct {
+	limit   int
+	inputs  []authz.Input
+	indices []uint32
+}
+
+func (c *inputCollector) add(i authz.Input, index uint32) error {
+	if len(c.inputs) >= c.limit {
+		return failure(connect.CodeResourceExhausted, "policy evaluation limit exceeded")
+	}
+	c.inputs = append(c.inputs, i)
+	c.indices = append(c.indices, index)
+	return nil
+}
+
+// addNext adds an input whose case index is its position.
+func (c *inputCollector) addNext(i authz.Input) error { return c.add(i, uint32(len(c.inputs))) }
+
 func (s *Service) inputs(snap *policySnapshot, cases []*v1.PolicyTestCase, env authz.Environment) ([]authz.Input, []uint32, error) {
-	inputs := []authz.Input{}
-	indices := []uint32{}
-	add := func(i authz.Input, index uint32) error {
-		if len(inputs) >= s.Config.MaxTestEvaluations {
-			return failure(connect.CodeResourceExhausted, "policy evaluation limit exceeded")
-		}
-		inputs = append(inputs, i)
-		indices = append(indices, index)
-		return nil
-	}
+	c := &inputCollector{limit: s.Config.MaxTestEvaluations, inputs: []authz.Input{}, indices: []uint32{}}
+	var err error
 	if len(cases) == 0 {
-		// A job without tasks is authorised with (action, empty host).
-		jobHosts := append([]authz.Host{{}}, snap.Hosts...)
-		for _, sub := range snap.Subjects {
-			for _, op := range consoleOperations {
-				if err := add(authz.Input{Subject: sub.Attributes, Operation: op, Env: env}, uint32(len(inputs))); err != nil {
-					return nil, nil, err
-				}
-				// Host listing and import preview also have an empty-target check.
-				// Retain it above, and cover the stored host attributes used by
-				// ListHosts, SetHostLabels and DeleteHost as well.
-				if op == authz.ViewHosts || op == authz.ManageHosts {
-					for _, h := range snap.Hosts {
-						if err := add(authz.Input{Subject: sub.Attributes, Operation: op, Host: h, Env: env}, uint32(len(inputs))); err != nil {
-							return nil, nil, err
-						}
-					}
-				}
-				if op == authz.ViewCatalog || op == authz.ViewJobs || op == authz.ViewOutput {
-					for _, a := range snap.Actions {
-						input := authz.Input{Subject: sub.Attributes, Operation: op, Action: a, Env: env}
-						if op == authz.ViewCatalog {
-							if err := add(input, uint32(len(inputs))); err != nil {
-								return nil, nil, err
-							}
-							continue
-						}
-						for _, h := range jobHosts {
-							input.Host = h
-							if err := add(input, uint32(len(inputs))); err != nil {
-								return nil, nil, err
-							}
-						}
-					}
-				}
-			}
-			for _, a := range snap.Actions {
-				for _, h := range snap.Hosts {
-					if err := add(authz.Input{Subject: sub.Attributes, Operation: authz.ExecuteAction, Action: a, Host: h, Env: env}, uint32(len(inputs))); err != nil {
-						return nil, nil, err
-					}
-				}
-			}
-		}
-		return inputs, indices, nil
+		err = defaultInputs(c, snap, env)
+	} else {
+		err = s.caseInputs(c, snap, cases, env)
 	}
-	for index, c := range cases {
-		var sub *policySubject
-		for i := range snap.Subjects {
-			if snap.Subjects[i].ID == c.SubjectId {
-				sub = &snap.Subjects[i]
-				break
+	if err != nil {
+		return nil, nil, err
+	}
+	return c.inputs, c.indices, nil
+}
+
+// defaultInputs covers every console operation, and execution of every action
+// on every host, for every subject.
+func defaultInputs(c *inputCollector, snap *policySnapshot, env authz.Environment) error {
+	// A job without tasks is authorised with (action, empty host).
+	jobHosts := append([]authz.Host{{}}, snap.Hosts...)
+	for _, sub := range snap.Subjects {
+		for _, op := range consoleOperations {
+			if err := operationInputs(c, snap, sub, op, jobHosts, env); err != nil {
+				return err
 			}
 		}
-		if sub == nil {
-			return nil, nil, failure(connect.CodeInvalidArgument, "test subject not found")
-		}
-		e := env
-		if c.At != nil {
-			if err := c.At.CheckValid(); err != nil {
-				return nil, nil, failure(connect.CodeInvalidArgument, "invalid test time")
-			}
-			e.TimeNS = c.At.AsTime().UnixNano()
-		}
-		if c.SourceIp != "" {
-			e.SourceIP = c.SourceIp
-		}
-		input := authz.Input{Subject: sub.Attributes, Operation: authz.Operation(c.Operation), Env: e}
-		if input.Operation != authz.ExecuteAction && !slices.Contains(consoleOperations, input.Operation) {
-			return nil, nil, failure(connect.CodeInvalidArgument, "unknown test operation")
-		}
-		if _, err := netip.ParseAddr(e.SourceIP); err != nil {
-			return nil, nil, failure(connect.CodeInvalidArgument, "invalid test source IP")
-		}
-		// View operations use the case action when given; without one they stay
-		// a global check. execute_action always requires an action.
-		if input.Operation == authz.ExecuteAction || (c.Action != "" && slices.Contains(actionViewOperations, input.Operation)) {
-			found := false
-			for _, a := range snap.Actions {
-				if a.Name == c.Action {
-					input.Action = a
-					found = true
-					break
+		for _, a := range snap.Actions {
+			for _, h := range snap.Hosts {
+				if err := c.addNext(authz.Input{Subject: sub.Attributes, Operation: authz.ExecuteAction, Action: a, Host: h, Env: env}); err != nil {
+					return err
 				}
 			}
-			if !found {
-				return nil, nil, failure(connect.CodeInvalidArgument, "test action not found")
+		}
+	}
+	return nil
+}
+
+// operationInputs adds the inputs of one console operation for one subject.
+func operationInputs(c *inputCollector, snap *policySnapshot, sub policySubject, op authz.Operation, jobHosts []authz.Host, env authz.Environment) error {
+	if err := c.addNext(authz.Input{Subject: sub.Attributes, Operation: op, Env: env}); err != nil {
+		return err
+	}
+	// Host listing and import preview also have an empty-target check.
+	// Retain it above, and cover the stored host attributes used by
+	// ListHosts, SetHostLabels and DeleteHost as well.
+	if op == authz.ViewHosts || op == authz.ManageHosts {
+		for _, h := range snap.Hosts {
+			if err := c.addNext(authz.Input{Subject: sub.Attributes, Operation: op, Host: h, Env: env}); err != nil {
+				return err
 			}
 		}
-		hosts, err := selectHosts(snap.Hosts, c.Targets, snap.ReportedLabels)
+	}
+	if op == authz.ViewCatalog || op == authz.ViewJobs || op == authz.ViewOutput {
+		for _, a := range snap.Actions {
+			input := authz.Input{Subject: sub.Attributes, Operation: op, Action: a, Env: env}
+			if op == authz.ViewCatalog {
+				if err := c.addNext(input); err != nil {
+					return err
+				}
+				continue
+			}
+			for _, h := range jobHosts {
+				input.Host = h
+				if err := c.addNext(input); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// caseInputs expands each explicit test case into one input per target host.
+func (s *Service) caseInputs(c *inputCollector, snap *policySnapshot, cases []*v1.PolicyTestCase, env authz.Environment) error {
+	for index, tc := range cases {
+		input, hosts, err := caseInput(snap, tc, env)
 		if err != nil {
-			return nil, nil, err
-		}
-		if c.Targets == nil && input.Operation != authz.ExecuteAction {
-			hosts = []authz.Host{{}}
-		}
-		if input.Operation == authz.ExecuteAction && c.Targets == nil {
-			return nil, nil, failure(connect.CodeInvalidArgument, "execution test targets required")
+			return err
 		}
 		for _, h := range hosts {
 			input.Host = h
-			if err := add(input, uint32(index)); err != nil {
-				return nil, nil, err
+			if err := c.add(input, uint32(index)); err != nil {
+				return err
 			}
 		}
 	}
-	return inputs, indices, nil
+	return nil
+}
+
+// caseInput validates one test case and returns its input without a host
+// together with the hosts it targets.
+func caseInput(snap *policySnapshot, c *v1.PolicyTestCase, env authz.Environment) (authz.Input, []authz.Host, error) {
+	var sub *policySubject
+	for i := range snap.Subjects {
+		if snap.Subjects[i].ID == c.SubjectId {
+			sub = &snap.Subjects[i]
+			break
+		}
+	}
+	if sub == nil {
+		return authz.Input{}, nil, failure(connect.CodeInvalidArgument, "test subject not found")
+	}
+	e := env
+	if c.At != nil {
+		if err := c.At.CheckValid(); err != nil {
+			return authz.Input{}, nil, failure(connect.CodeInvalidArgument, "invalid test time")
+		}
+		e.TimeNS = c.At.AsTime().UnixNano()
+	}
+	if c.SourceIp != "" {
+		e.SourceIP = c.SourceIp
+	}
+	input := authz.Input{Subject: sub.Attributes, Operation: authz.Operation(c.Operation), Env: e}
+	if input.Operation != authz.ExecuteAction && !slices.Contains(consoleOperations, input.Operation) {
+		return authz.Input{}, nil, failure(connect.CodeInvalidArgument, "unknown test operation")
+	}
+	if _, err := netip.ParseAddr(e.SourceIP); err != nil {
+		return authz.Input{}, nil, failure(connect.CodeInvalidArgument, "invalid test source IP")
+	}
+	// View operations use the case action when given; without one they stay
+	// a global check. execute_action always requires an action.
+	if input.Operation == authz.ExecuteAction || (c.Action != "" && slices.Contains(actionViewOperations, input.Operation)) {
+		found := false
+		for _, a := range snap.Actions {
+			if a.Name == c.Action {
+				input.Action = a
+				found = true
+				break
+			}
+		}
+		if !found {
+			return authz.Input{}, nil, failure(connect.CodeInvalidArgument, "test action not found")
+		}
+	}
+	hosts, err := selectHosts(snap.Hosts, c.Targets, snap.ReportedLabels)
+	if err != nil {
+		return authz.Input{}, nil, err
+	}
+	if c.Targets == nil && input.Operation != authz.ExecuteAction {
+		hosts = []authz.Host{{}}
+	}
+	if input.Operation == authz.ExecuteAction && c.Targets == nil {
+		return authz.Input{}, nil, failure(connect.CodeInvalidArgument, "execution test targets required")
+	}
+	return input, hosts, nil
 }
 func selectHosts(hosts []authz.Host, t *v1.HostTargets, reported ...map[string]map[string]string) ([]authz.Host, error) {
 	if t == nil {
@@ -647,63 +692,13 @@ func (s *Service) persistPolicy(ctx context.Context, base uint64, candidate *v1.
 	if err != nil {
 		return nil, failure(connect.CodeInvalidArgument, "invalid policy rules")
 	}
-	candidateHash, storedSnapshot, environment, err := lockPolicyTest(ctx, tx, testID, reqctx.ActorID(ctx), base)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, failure(connect.CodeAborted, "policy test expired or changed")
-		}
-		return nil, dbError(err)
-	}
 	b, _ := encode(candidate)
-	if !bytes.Equal(candidateHash, hash(string(b))) {
-		return nil, failure(connect.CodeAborted, "policy candidate changed")
-	}
-	snap, err := s.snapshot(ctx, tx)
-	if err != nil {
-		return nil, dbError(err)
-	}
-	sh, err := snapshotHash(snap)
+	snap, previous, env, err := s.verifyPolicyTest(ctx, tx, testID, base, b)
 	if err != nil {
 		return nil, err
 	}
-	if !bytes.Equal(sh, storedSnapshot) {
-		return nil, failure(connect.CodeAborted, "policy snapshot changed; test again")
-	}
-	env := authz.Environment{TimeNS: time.Now().UnixNano(), SourceIP: transport(ctx).ip}
-	var previous testEnvironment
-	if err := json.Unmarshal(environment, &previous); err != nil {
-		return nil, dbError(err)
-	}
-	if previous.SourceIP != env.SourceIP {
-		return nil, failure(connect.CodeAborted, "policy environment changed")
-	}
-	oldInputs, _, err := s.inputs(snap, previous.Cases, previous.Environment)
-	if err != nil {
+	if err := s.verifyEnvironment(ctx, snap, previous, env, current, nextEngine); err != nil {
 		return nil, err
-	}
-	newInputs, _, err := s.inputs(snap, previous.Cases, env)
-	if err != nil {
-		return nil, err
-	}
-	oldRules, err := rulesFromProto(current.Rules)
-	if err != nil {
-		return nil, err
-	}
-	oldEngine, err := authz.New(ctx, ruleSource(oldRules), s.Config.BootstrapAdmins)
-	if err != nil {
-		return nil, failure(connect.CodeUnavailable, "current policy unavailable")
-	}
-	for i, input := range oldInputs {
-		for _, engine := range []*authz.Engine{oldEngine, nextEngine} {
-			before, beforeReason, err := evaluate(ctx, engine, input)
-			if err != nil {
-				return nil, failure(connect.CodeAborted, "policy environment changed")
-			}
-			after, afterReason, err := evaluate(ctx, engine, newInputs[i])
-			if err != nil || !reflect.DeepEqual(before, after) || beforeReason != afterReason {
-				return nil, failure(connect.CodeAborted, "policy environment changed; test again")
-			}
-		}
 	}
 	subjects := []authz.Subject{}
 	for _, sub := range snap.Subjects {
@@ -712,6 +707,95 @@ func (s *Service) persistPolicy(ctx context.Context, base uint64, candidate *v1.
 	if err := authz.CheckPolicyUpdate(ctx, rules, subjects, env, s.Config.BootstrapAdmins); err != nil {
 		return nil, failure(connect.CodeFailedPrecondition, "policy would lock out administrators")
 	}
+	p, err := writePolicyVersion(ctx, tx, base, b, reason, target, testID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, dbError(err)
+	}
+	recordAuditTarget(ctx, "policy_version", strconv.FormatUint(p.Version, 10))
+	if err := s.refresh(ctx); err != nil {
+		return nil, failure(connect.CodeUnavailable, "saved policy reload failed")
+	}
+	return p, nil
+}
+
+// verifyPolicyTest locks the stored test and checks that the candidate (b, its
+// JSON encoding), the database snapshot and the source address still match it.
+// It returns the current snapshot, the stored test environment and the
+// environment of this request.
+func (s *Service) verifyPolicyTest(ctx context.Context, tx pgx.Tx, testID string, base uint64, b []byte) (*policySnapshot, testEnvironment, authz.Environment, error) {
+	var previous testEnvironment
+	var env authz.Environment
+	candidateHash, storedSnapshot, environment, err := lockPolicyTest(ctx, tx, testID, reqctx.ActorID(ctx), base)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, previous, env, failure(connect.CodeAborted, "policy test expired or changed")
+		}
+		return nil, previous, env, dbError(err)
+	}
+	if !bytes.Equal(candidateHash, hash(string(b))) {
+		return nil, previous, env, failure(connect.CodeAborted, "policy candidate changed")
+	}
+	snap, err := s.snapshot(ctx, tx)
+	if err != nil {
+		return nil, previous, env, dbError(err)
+	}
+	sh, err := snapshotHash(snap)
+	if err != nil {
+		return nil, previous, env, err
+	}
+	if !bytes.Equal(sh, storedSnapshot) {
+		return nil, previous, env, failure(connect.CodeAborted, "policy snapshot changed; test again")
+	}
+	env = authz.Environment{TimeNS: time.Now().UnixNano(), SourceIP: transport(ctx).ip}
+	if err := json.Unmarshal(environment, &previous); err != nil {
+		return nil, previous, env, dbError(err)
+	}
+	if previous.SourceIP != env.SourceIP {
+		return nil, previous, env, failure(connect.CodeAborted, "policy environment changed")
+	}
+	return snap, previous, env, nil
+}
+
+// verifyEnvironment checks that the decisions of the current and the next
+// engine do not depend on the time difference between the stored test and now.
+func (s *Service) verifyEnvironment(ctx context.Context, snap *policySnapshot, previous testEnvironment, env authz.Environment, current *v1.PolicyVersion, nextEngine *authz.Engine) error {
+	oldInputs, _, err := s.inputs(snap, previous.Cases, previous.Environment)
+	if err != nil {
+		return err
+	}
+	newInputs, _, err := s.inputs(snap, previous.Cases, env)
+	if err != nil {
+		return err
+	}
+	oldRules, err := rulesFromProto(current.Rules)
+	if err != nil {
+		return err
+	}
+	oldEngine, err := authz.New(ctx, ruleSource(oldRules), s.Config.BootstrapAdmins)
+	if err != nil {
+		return failure(connect.CodeUnavailable, "current policy unavailable")
+	}
+	for i, input := range oldInputs {
+		for _, engine := range []*authz.Engine{oldEngine, nextEngine} {
+			before, beforeReason, err := evaluate(ctx, engine, input)
+			if err != nil {
+				return failure(connect.CodeAborted, "policy environment changed")
+			}
+			after, afterReason, err := evaluate(ctx, engine, newInputs[i])
+			if err != nil || !reflect.DeepEqual(before, after) || beforeReason != afterReason {
+				return failure(connect.CodeAborted, "policy environment changed; test again")
+			}
+		}
+	}
+	return nil
+}
+
+// writePolicyVersion stores version base+1 (b is its JSON encoded rules),
+// consumes the test, announces the version and reads it back.
+func writePolicyVersion(ctx context.Context, tx pgx.Tx, base uint64, b []byte, reason string, target uint64, testID string) (*v1.PolicyVersion, error) {
 	var rolled any
 	if target > 0 {
 		rolled = target
@@ -728,13 +812,6 @@ func (s *Service) persistPolicy(ctx context.Context, base uint64, candidate *v1.
 	p, err := loadPolicy(ctx, tx, base+1)
 	if err != nil {
 		return nil, dbError(err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, dbError(err)
-	}
-	recordAuditTarget(ctx, "policy_version", strconv.FormatUint(p.Version, 10))
-	if err := s.refresh(ctx); err != nil {
-		return nil, failure(connect.CodeUnavailable, "saved policy reload failed")
 	}
 	return p, nil
 }
