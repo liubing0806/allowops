@@ -3213,11 +3213,11 @@ redact:
 
 - 已实现。处理器经共享客户端 `internal/builtin/apiclient` 请求，凭据、CA、跳转和响应体上限按该包的规则处理。
 - 参数映射：`active`、`silenced`、`inhibited` 总是以 `true`/`false` 发送；`filter` 每项一个 `filter` 查询参数。不发送 `unprocessed`，沿用 Alertmanager 默认值（包含 unprocessed 状态的告警）。
-- 输出每行 10 个字段，顺序同上表，无表头；列顺序写在示例 YAML 的注释中。没有告警时输出为空，退出码 0。字段内容先经脱敏再转义，转义规则同 `mysql_query`（`\`、制表符、换行、回车、NUL）。
-- `starts_at` 转为 UTC 的 RFC 3339 秒级时间，无法解析时保留原文；排序键为 `startsAt`，相同时按 `fingerprint`。
+- 输出每行 10 个字段，顺序同上表，无表头；列顺序写在示例 YAML 的注释中。没有告警时输出为空，退出码 0。字段内容先经脱敏再转义；`labels` 字段逐个 `名称="值"` 脱敏后再拼接，避免一个标签触发行尾规则而吞掉其后的标签；转义规则同 `mysql_query`（`\`、制表符、换行、回车、NUL）。
+- `starts_at` 转为 UTC 的 RFC 3339 秒级时间，无法解析时保留原文。排序键为 `startsAt`，相同时按 `fingerprint`；`startsAt` 无法解析的告警排在所有合法时间之后（超过 `max_alerts` 时最先被丢弃），它们之间按原文排序。
 - `labels` 为去掉 `alertname`、`severity` 的标签集，按名称的字节序排列，值中的 `\`、换行、`"` 按 Prometheus 写法转义；不符合 `[a-zA-Z_][a-zA-Z0-9_]*` 的标签名加引号；没有其余标签时为 `{}`。
 - `expr` 取 `generatorURL` 查询串中第一个 `g0.expr` 并做 URL 解码（`+` 解码为空格）；`generatorURL` 缺失、无法解析、没有 `g0.expr` 或其值编码错误时为空。其他参数的编码错误不影响 `g0.expr`。
-- 超过 `max_alerts` 时保留 `starts_at` 最早的告警，标记 truncated 和 resource_limit_reached，stderr 写出 `truncated: returned N of M alerts (max_alerts=K)`。
+- 响应体按元素逐个解码，只保留 `starts_at` 最早的 `max_alerts` 条，其余只计数，解码内存不随告警数增长。超过 `max_alerts` 时保留这些告警，标记 truncated 和 resource_limit_reached，stderr 写出 `truncated: returned N of M alerts (max_alerts=K)`。
 - 非 2xx 状态码：退出码 1，stdout 为空，stderr 为 `alertmanager returned HTTP <状态码> <状态文本>: <响应体前 512 字节，控制字符替换为空格>`。跳转、响应体超过 `max_response_bytes`、连接失败、超时、响应不是 JSON 数组按执行错误返回。
 - `credential` 与 `run_as`：目录校验时，配置了 `credential` 而 `run_as` 不是 `root` 的 action 被拒绝。未配置 `credential` 的 action 不要求 `run_as`，由 agent 直接执行。
 - 验证：`internal/builtin/alertmanager` 的单元测试用 httptest 覆盖参数映射、排序、转义、`expr`、截断和错误响应；集成测试用 testcontainers 启动 `prom/alertmanager:v0.34.1`，通过其 API 写入 3 条告警和 1 条静默（仅夹具写入，处理器只发 GET），验证 active/silenced 过滤、matcher、截断和 400/404 错误。Docker 不可用时集成测试 `t.Skip`。
