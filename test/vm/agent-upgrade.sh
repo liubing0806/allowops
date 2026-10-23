@@ -1,7 +1,8 @@
 #!/bin/sh
 # Test-only upgrade action: installs a staged package with the system package
 # manager, then restarts the agent from a transient systemd timer so the task
-# result reaches the gateway first. Production actions install from a repository.
+# result reaches the gateway first. The production example
+# examples/catalog/scripts/agent_upgrade.sh installs from a repository.
 set -eu
 package=/var/tmp/allowops-upgrade/$1
 if command -v dpkg >/dev/null 2>&1; then

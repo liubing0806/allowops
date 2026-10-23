@@ -81,5 +81,6 @@ yum/apt and schedules `systemctl restart allowops-agent.service` through a
 transient `systemd-run` timer, so the task result reaches the gateway before
 the agent stops. The test checks that `to/` reconnects with the new version and
 runs an action, and that `newer/` is refused by the gateway: the host stays
-offline, keeps the last accepted version and jobs fail. Production actions
-install from a repository instead of staged files.
+offline, keeps the last accepted version and jobs fail. The production
+example `examples/catalog/actions/agent_upgrade.yaml` installs from a repository
+instead of staged files.
