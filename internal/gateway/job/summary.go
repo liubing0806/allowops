@@ -103,7 +103,7 @@ func (s *Service) summary(ctx context.Context, j *v1.Job, f string) (*v1.JobSumm
 	return result, nil
 }
 
-// groupPreviews groups tasks with identical exit code and output hashes.
+// groupPreviews groups tasks with identical exit code, reason and output hashes.
 func groupPreviews(result *v1.JobSummary, items []Preview, f string) {
 	groups := map[string]*v1.OutputGroup{}
 	for _, p := range items {
@@ -117,12 +117,12 @@ func groupPreviews(result *v1.JobSummary, items []Preview, f string) {
 		if p.Task.Result.ExitCode != nil {
 			exit = fmt.Sprint(*p.Task.Result.ExitCode)
 		}
-		key := exit + ":" + hex.EncodeToString(p.StdoutHash) + ":" + hex.EncodeToString(p.StderrHash)
+		key := exit + ":" + p.Task.Result.Reason + ":" + hex.EncodeToString(p.StdoutHash) + ":" + hex.EncodeToString(p.StderrHash)
 		g := groups[key]
 		if g == nil {
 			stdout := textPrefix(p.Stdout, GroupBytes)
 			stderr := textPrefix(p.Stderr, GroupBytes-len(stdout))
-			g = &v1.OutputGroup{ExitCode: p.Task.Result.ExitCode, StdoutSha256: p.StdoutHash, StderrSha256: p.StderrHash, Stdout: stdout, Stderr: stderr, Truncated: p.Task.Result.Truncated || uint64(len(stdout)) < p.StdoutSize || uint64(len(stderr)) < p.StderrSize}
+			g = &v1.OutputGroup{ExitCode: p.Task.Result.ExitCode, StdoutSha256: p.StdoutHash, StderrSha256: p.StderrHash, Stdout: stdout, Stderr: stderr, Truncated: p.Task.Result.Truncated || uint64(len(stdout)) < p.StdoutSize || uint64(len(stderr)) < p.StderrSize, Reason: p.Task.Result.Reason}
 			groups[key] = g
 			result.Groups = append(result.Groups, g)
 		}

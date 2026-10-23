@@ -192,7 +192,7 @@ func files(ctx context.Context, cfg Config, glob string) ([]logFile, error) {
 		}
 	}
 	if !lexicallyAllowed {
-		return nil, errors.New("path_glob is outside allowed_roots")
+		return nil, builtin.NewError(builtin.ReasonPathOutsideRoots, "path_glob is outside allowed_roots")
 	}
 	matches, err := globWalk(ctx, glob)
 	if err != nil {
@@ -222,7 +222,7 @@ func files(ctx context.Context, cfg Config, glob string) ([]logFile, error) {
 			}
 		}
 		if root == "" {
-			return nil, errors.New("matched file is outside allowed_roots")
+			return nil, builtin.NewError(builtin.ReasonPathOutsideRoots, "matched file is outside allowed_roots")
 		}
 		info, err := os.Stat(resolved)
 		if err != nil {
