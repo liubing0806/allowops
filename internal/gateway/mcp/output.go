@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 )
 
@@ -51,14 +52,17 @@ func textPrefix(text string, limit int) string {
 	return text[:limit]
 }
 
-// HostOutputPage uses base64 so byte offsets remain lossless even when the
-// backend page boundary divides a multi-byte UTF-8 character (G43).
+// HostOutputPage uses base64 by default so byte offsets remain lossless even
+// when the backend page boundary divides a multi-byte UTF-8 character (G43).
+// With encoding=text, Data carries the page and NextOffset stops at the last
+// complete character, so concatenated pages equal the base64 bytes.
 type HostOutputPage struct {
 	JobID            string  `json:"job_id"`
 	StepIndex        *uint32 `json:"step_index,omitempty"`
 	Host             string  `json:"host"`
 	Stream           string  `json:"stream"`
-	DataBase64       string  `json:"data_base64"`
+	DataBase64       *string `json:"data_base64,omitempty"`
+	Data             *string `json:"data,omitempty"`
 	Encoding         string  `json:"encoding"`
 	NextOffset       uint64  `json:"next_offset"`
 	EOF              bool    `json:"eof"`
@@ -70,7 +74,7 @@ type HostOutputPage struct {
 
 // Call only after P6 has authorized view_output for this job and hostname.
 // A result-budget cut is a page boundary, not permanent output truncation.
-func outputPageResult(jobID, host string, stream v1.OutputStream, offset uint64, response *v1.GetJobOutputResponse, index *uint32) (*ToolResult, error) {
+func outputPageResult(jobID, host string, stream v1.OutputStream, offset uint64, response *v1.GetJobOutputResponse, index *uint32, text bool) (*ToolResult, error) {
 	if jobID == "" || host == "" || response == nil {
 		return nil, errors.New("job, hostname and output response required")
 	}
@@ -80,11 +84,30 @@ func outputPageResult(jobID, host string, stream v1.OutputStream, offset uint64,
 	if uint64(len(response.Data)) > ^uint64(0)-offset {
 		return nil, errors.New("output offset overflow")
 	}
+	limit := len(response.Data)
+	if text {
+		var err error
+		if limit, err = textLimit(response.Data, response.Eof); err != nil {
+			return nil, err
+		}
+	}
 	candidate := func(n int) (*ToolResult, int, error) {
-		return toolResult(&HostOutputPage{JobID: jobID, StepIndex: index, Host: host, Stream: strings.ToLower(strings.TrimPrefix(stream.String(), "OUTPUT_STREAM_")), DataBase64: base64.StdEncoding.EncodeToString(response.Data[:n]), Encoding: "base64", NextOffset: offset + uint64(n), EOF: response.Eof && n == len(response.Data), Truncated: response.Truncated, ScanLimitReached: response.ScanLimitReached, OutputStored: response.OutputStored, OutputTrust: "untrusted"})
+		page := &HostOutputPage{JobID: jobID, StepIndex: index, Host: host, Stream: strings.ToLower(strings.TrimPrefix(stream.String(), "OUTPUT_STREAM_")), Encoding: "base64", Truncated: response.Truncated, ScanLimitReached: response.ScanLimitReached, OutputStored: response.OutputStored, OutputTrust: "untrusted"}
+		if text {
+			for n > 0 && n < limit && !utf8.RuneStart(response.Data[n]) {
+				n--
+			}
+			data := string(response.Data[:n])
+			page.Data, page.Encoding = &data, "text"
+		} else {
+			data := base64.StdEncoding.EncodeToString(response.Data[:n])
+			page.DataBase64 = &data
+		}
+		page.NextOffset, page.EOF = offset+uint64(n), response.Eof && n == len(response.Data)
+		return toolResult(page)
 	}
 	// Binary search counts the whole JSON result, including its text copy.
-	low, high := 0, len(response.Data)
+	low, high := 0, limit
 	var best *ToolResult
 	for low <= high {
 		middle := low + (high-low)/2
@@ -99,8 +122,33 @@ func outputPageResult(jobID, host string, stream v1.OutputStream, offset uint64,
 			high = middle - 1
 		}
 	}
-	if best == nil || (len(response.Data) > 0 && best.StructuredContent.(*HostOutputPage).NextOffset == offset) {
+	if best == nil || (limit > 0 && best.StructuredContent.(*HostOutputPage).NextOffset == offset) {
 		return nil, errors.New("output metadata exceeds 32KB result limit")
 	}
 	return best, nil
+}
+
+// textLimit returns the length of the valid UTF-8 prefix of a page. Before EOF
+// a trailing incomplete character is a page boundary cut and is left for the
+// next page; any other invalid byte makes the page non-text.
+func textLimit(data []byte, eof bool) (int, error) {
+	limit := len(data)
+	if !eof {
+		for i := len(data) - 1; i >= 0 && i >= len(data)-utf8.UTFMax+1; i-- {
+			if utf8.RuneStart(data[i]) {
+				if !utf8.FullRune(data[i:]) {
+					limit = i
+				}
+				break
+			}
+		}
+	}
+	if !utf8.Valid(data[:limit]) {
+		err := connect.NewError(connect.CodeFailedPrecondition, errors.New("output page is not valid UTF-8 text; use encoding=base64"))
+		if detail, detailErr := connect.NewErrorDetail(&v1.ErrorDetail{Reason: "ENCODING_NOT_TEXT"}); detailErr == nil {
+			err.AddDetail(detail)
+		}
+		return 0, err
+	}
+	return limit, nil
 }

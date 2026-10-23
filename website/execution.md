@@ -76,6 +76,7 @@ Known limits of the wrapped-command check:
 | Builtin | Behavior and boundary |
 |---|---|
 | `log_search` | Search allowed plain/gzip logs with bounded files, scan bytes, matches and context; path globs stay within allowed roots. |
+| `log_query` | List named log sources (`mode: sources`) or search one source within a time range (`mode: search`): multiline records, paginated JSON with cursors, fixed error reason codes. Sources and allowed roots are declared in `builtin_config`. |
 | `mysql_query` | One SELECT/SHOW/DESC/EXPLAIN statement, read-only transaction, bounded rows, result bytes and timeout. Host credentials stay in root-owned mode-0600 files. |
 | `redis_command` | Read-only allowlist: GET, MGET, HGET, HLEN, TTL, TYPE, EXISTS, STRLEN, LLEN, SCARD, ZCARD, SCAN and INFO. |
 | `http_get` | GET within signed URL prefixes; no redirects; bounded response. |

@@ -1,28 +1,39 @@
 name: log_search
-description: Search allowed plain or gzip logs with bounded scan and match limits.
+description: Search a named log source within a time range (default the last hour). Returns JSON records, newest first by default, at most limit per page; pass next_cursor with unchanged parameters for the next page. Multiline records such as Java stack traces are one record. matched=0 means no hits; failures carry a reason code. Call log_sources first to list sources.
 risk: read
 run_as: root
-params:
-  path_glob:
-    type: string
-    description: Log path glob restricted by the builtin allowed roots.
-    regex: ^/[^\r\n]+$
-    max_len: 256
-  pattern:
-    type: string
-    description: Bounded search pattern without line breaks.
-    regex: ^[^\r\n]+$
-    max_len: 200
 timeout: 30s
-builtin: log_search
+builtin: log_query
 builtin_config:
+  mode: search
+  sources:
+    app:
+      type: file
+      paths: [/data/logs/app/*.log, /data/logs/app/*.log.*]
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+    nginx-access:
+      type: file
+      paths: [/var/log/nginx/access.log*]
+      timestamp:
+        layouts: ['02/Jan/2006:15:04:05 -0700']
+        bracketed: true
+      multiline: none
+    nginx-error:
+      type: file
+      paths: [/var/log/nginx/error.log*]
+      timestamp:
+        layouts: ['2006/01/02 15:04:05']
+      multiline: none
   allowed_roots: [/var/log, /data/logs]
   max_files: 50
   max_scan: 256MB
-  max_context: 10
-  max_matches: 500
+  max_window: 24h
+  max_page_records: 200
+  max_record_bytes: 64KB
 max_output: 64KB
-filters: [match, exclude, tail, head, count]
-max_scan: 256MB
+filters: []
 redact:
   builtin: [secrets, pii]

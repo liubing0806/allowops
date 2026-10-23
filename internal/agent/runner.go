@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/execd"
 	"github.com/liubing0806/allowops/internal/executor"
@@ -151,6 +152,9 @@ func helperReason(reason string) error {
 	case "TIMEOUT":
 		return context.DeadlineExceeded
 	default:
+		if builtin.KnownReason(reason) {
+			return builtin.NewError(reason, "")
+		}
 		return errors.New("EXECUTION_FAILED")
 	}
 }

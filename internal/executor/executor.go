@@ -236,7 +236,19 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 		var raw catalog.BuiltinResult
 		var runErr error
 		stdoutRedactor := redactor
-		if structured, ok := handler.(catalog.RedactingBuiltinHandler); ok {
+		if budgeted, ok := handler.(catalog.BudgetedBuiltinHandler); ok {
+			// Records are redacted like stdout lines, with PEM state kept
+			// across the lines of one record. Overlong lines fail closed.
+			text := func(s string) string {
+				var b strings.Builder
+				if err := redactor.Stream(strings.NewReader(s), &b, redact.DefaultMaxLine); err != nil {
+					return "[REDACTED:overlong]"
+				}
+				return b.String()
+			}
+			raw, runErr = budgeted.RunBudgeted(ctx, a.BuiltinConfig, values, text, limit)
+			stdoutRedactor = &redact.Redactor{}
+		} else if structured, ok := handler.(catalog.RedactingBuiltinHandler); ok {
 			raw, runErr = structured.RunRedacted(ctx, a.BuiltinConfig, values, redactor.Line)
 			// Original values have already been redacted. Reapplying a custom
 			// rule to JSON/TSV could match encoding characters or replacement text.

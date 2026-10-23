@@ -25,6 +25,7 @@ A27：不传 selector 和 hostname 时，分页列出调用者可查看的全部
 - G54：deny 不创建 job；超过结果字节预算时返回可容纳的完整 denied_hosts 前缀（含规则）、denied_count、details_truncated=true。
 - A33：jobs_get 的可选 step_index 仅与 host 使用。省略保持 nil，由 P6 判断是否为组合 action；组合 action 返回 INVALID_ARGUMENT/INVALID_OUTPUT_STEP，MCP 补充 step_index 必填及需逐步骤读取的提示，工具结果 isError=true。参数定义和错误提示集中在 step.go；MCP 不拼接步骤输出。
 - G43：主机输出用 data_base64、encoding=base64、next_offset、eof。按字节续读可保留被分页切开的 UTF-8 字符和非文本字节；结果字节预算引起分页时不修改主机端 truncated 标记。
+- jobs_get 的 encoding 参数只与 host 使用，取值 base64（默认，行为同 G43）和 text。text 时本页以 UTF-8 文本放在 data、encoding=text，不返回 data_base64；未到 eof 时页尾不完整的多字节字符留给下一页，next_offset 停在完整字符边界，逐页拼接的字节与 base64 方式相同。本页其他位置含非法 UTF-8 字节，或 eof 时末尾字符不完整（例如主机端截断切开字符），返回 FAILED_PRECONDITION/ENCODING_NOT_TEXT，提示改用 encoding=base64。未到 eof 且本页只有一个不完整字符时，返回空 data 且 next_offset 不变。不带 host 传 encoding 返回 INVALID_ARGUMENT。
 
 ## SDK 依赖路径
 

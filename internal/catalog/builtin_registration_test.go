@@ -14,7 +14,10 @@ import (
 
 func registeredBuiltinAction(name string) Action {
 	configs := map[string]map[string]any{
-		"log_search":    {"allowed_roots": []string{"/nonexistent/catalog-root"}},
+		"log_search": {"allowed_roots": []string{"/nonexistent/catalog-root"}},
+		"log_query": {"mode": "search", "allowed_roots": []string{"/nonexistent/catalog-root"}, "sources": map[string]any{
+			"app": map[string]any{"type": "file", "paths": []string{"/nonexistent/catalog-root/app/*.log*"}, "timestamp": map[string]any{"layouts": []string{"2006-01-02 15:04:05.000"}, "timezone": "Asia/Shanghai"}},
+		}},
 		"http_get":      {"allowed_prefixes": []string{"http://127.0.0.1:12001/api"}},
 		"redis_command": {"address": "127.0.0.1:6379", "credential": "/etc/allowops/credentials/redis.json"},
 		"mysql_query":   {"address": "tcp://127.0.0.1:3306", "credential": "/etc/allowops/credentials/mysql.json"},
@@ -30,7 +33,7 @@ func TestBuiltinCatalogSchemas(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("schema_version: 1\ncatalog_id: four_builtins\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"log_search", "http_get", "redis_command", "mysql_query"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query"} {
 		a := registeredBuiltinAction(name)
 		data, err := json.Marshal(a)
 		if err != nil {
@@ -55,6 +58,10 @@ func TestBuiltinCatalogSchemas(t *testing.T) {
 			if properties["fixed"].(map[string]any)["type"] != "boolean" {
 				t.Error("fixed must be boolean")
 			}
+		case "log_query":
+			if fmt.Sprint(properties["source"].(map[string]any)["enum"]) != "[app]" || properties["limit"].(map[string]any)["maximum"] != 200 {
+				t.Errorf("log_query schema: %v", properties)
+			}
 		case "redis_command":
 			if properties["args"].(map[string]any)["type"] != "array" {
 				t.Error("args must be array")
@@ -66,8 +73,8 @@ func TestBuiltinCatalogSchemas(t *testing.T) {
 		}
 	}
 	loaded, err := Load(dir)
-	if err != nil || len(loaded.Actions) != 4 {
-		t.Fatalf("four builtin catalog: %#v %v", loaded, err)
+	if err != nil || len(loaded.Actions) != 5 {
+		t.Fatalf("five builtin catalog: %#v %v", loaded, err)
 	}
 }
 
@@ -80,6 +87,12 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 		{"log_search", "max_scan", "1KB", fmt.Sprint(builtin.DefaultLogMaxScan + 1)},
 		{"log_search", "max_matches", 1, builtin.DefaultLogMaxMatches + 1},
 		{"log_search", "max_context", 1, builtin.DefaultLogMaxContext + 1},
+		{"log_query", "max_files", 1, builtin.DefaultLogMaxFiles + 1},
+		{"log_query", "max_scan", "1KB", fmt.Sprint(builtin.DefaultLogMaxScan + 1)},
+		{"log_query", "max_window", "1h", "25h"},
+		{"log_query", "max_page_records", 10, 201},
+		{"log_query", "max_record_bytes", "1KB", "65537"},
+		{"log_query", "mode", "sources", "stats"},
 		{"http_get", "max_response_bytes", "1KB", fmt.Sprint(builtin.DefaultHTTPMaxResponseBytes + 1)},
 		{"redis_command", "max_response_bytes", Size(1024), fmt.Sprint(builtin.DefaultRedisMaxResponseBytes + 1)},
 		{"redis_command", "max_scan_count", 1, builtin.DefaultRedisMaxScanCount + 1},
@@ -100,7 +113,7 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 			}
 		})
 	}
-	for _, name := range []string{"log_search", "http_get", "redis_command", "mysql_query"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query"} {
 		a := registeredBuiltinAction(name)
 		a.BuiltinConfig["timeout"] = "20ms"
 		if _, err := ValidateAction(a); err != nil {
@@ -124,7 +137,7 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 }
 
 func TestBuiltinExecutionPlacement(t *testing.T) {
-	for _, name := range []string{"log_search", "http_get", "redis_command", "mysql_query"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query"} {
 		for _, runAs := range []string{"", "root"} {
 			a := registeredBuiltinAction(name)
 			a.RunAs = runAs
