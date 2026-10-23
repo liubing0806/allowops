@@ -137,8 +137,7 @@ func TestAlertmanagerIntegration(t *testing.T) {
 	cfg := Config{Address: address, Timeout: 10 * time.Second}
 
 	// Silencing is applied asynchronously after the alert is ingested.
-	var states func(Params) []string
-	states = func(p Params) []string {
+	states := func(p Params) []string {
 		r := run(t, cfg, p, nil)
 		var names []string
 		for _, line := range lines(r.Stdout) {
