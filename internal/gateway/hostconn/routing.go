@@ -103,7 +103,7 @@ func (s *Service) sendToConnection(ctx context.Context, host, expectedConnection
 			expires = deadline
 		}
 	}
-	if err := q.InsertGatewayMessage(ctx, db.InsertGatewayMessageParams{MessageID: id, OriginInstance: s.InstanceID, HostID: host, ConnectionID: connectionID, Request: raw, ExpiresAt: store.Timestamp(expires)}); err != nil {
+	if err := insertMessage(ctx, tx, id, s.InstanceID, host, connectionID, raw, expires); err != nil {
 		return nil, err
 	}
 	if err := store.Notify(ctx, tx, "message:"+id); err != nil {
@@ -245,7 +245,7 @@ func (s *Service) write(c *connection, stream *connect.BidiStream[v1.ConnectRequ
 	if err != nil || current.String != c.id {
 		return store.ErrOffline
 	}
-	live, err := q.GatewayMessageLive(c.ctx, db.GatewayMessageLiveParams{MessageID: item.mailbox, ConnectionID: c.id})
+	live, err := messageLive(c.ctx, tx, item.mailbox, c.id)
 	if err != nil {
 		return err
 	}
@@ -286,7 +286,7 @@ func (s *Service) write(c *connection, stream *connect.BidiStream[v1.ConnectRequ
 	existing := c.pending[id]
 	if (len(existing) > 0 && item.message.GetCancel() == nil) || (len(existing) == 0 && len(c.pending) >= c.maxInflight) || len(existing) >= 2 {
 		c.mu.Unlock()
-		err := q.FailGatewayMessageCapacity(c.ctx, item.mailbox)
+		err := failMessageCapacity(c.ctx, tx, item.mailbox)
 		if err != nil {
 			return err
 		}

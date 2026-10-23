@@ -79,15 +79,6 @@ func (q *Queries) FailConnectionMessages(ctx context.Context, connectionID strin
 	return err
 }
 
-const failGatewayMessageCapacity = `-- name: FailGatewayMessageCapacity :exec
-UPDATE gateway_messages SET failure='capacity' WHERE message_id=$1
-`
-
-func (q *Queries) FailGatewayMessageCapacity(ctx context.Context, messageID string) error {
-	_, err := q.db.Exec(ctx, failGatewayMessageCapacity, messageID)
-	return err
-}
-
 const failGatewayMessageOffline = `-- name: FailGatewayMessageOffline :exec
 UPDATE gateway_messages SET failure='offline' WHERE message_id=$1
 `
@@ -95,22 +86,6 @@ UPDATE gateway_messages SET failure='offline' WHERE message_id=$1
 func (q *Queries) FailGatewayMessageOffline(ctx context.Context, messageID string) error {
 	_, err := q.db.Exec(ctx, failGatewayMessageOffline, messageID)
 	return err
-}
-
-const gatewayMessageLive = `-- name: GatewayMessageLive :one
-SELECT EXISTS(SELECT 1 FROM gateway_messages WHERE message_id=$1 AND connection_id=$2 AND expires_at>now() AND response IS NULL AND failure='')
-`
-
-type GatewayMessageLiveParams struct {
-	MessageID    string
-	ConnectionID string
-}
-
-func (q *Queries) GatewayMessageLive(ctx context.Context, arg GatewayMessageLiveParams) (bool, error) {
-	row := q.db.QueryRow(ctx, gatewayMessageLive, arg.MessageID, arg.ConnectionID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }
 
 const getActiveHostConnectionForShare = `-- name: GetActiveHostConnectionForShare :one
@@ -228,31 +203,6 @@ func (q *Queries) GetTaskDispatchStateForShare(ctx context.Context, arg GetTaskD
 	return i, err
 }
 
-const insertGatewayMessage = `-- name: InsertGatewayMessage :exec
-INSERT INTO gateway_messages(message_id,origin_instance,host_id,connection_id,request,expires_at) VALUES ($1,$2,$3,$4,$5,$6)
-`
-
-type InsertGatewayMessageParams struct {
-	MessageID      string
-	OriginInstance string
-	HostID         string
-	ConnectionID   string
-	Request        []byte
-	ExpiresAt      pgtype.Timestamptz
-}
-
-func (q *Queries) InsertGatewayMessage(ctx context.Context, arg InsertGatewayMessageParams) error {
-	_, err := q.db.Exec(ctx, insertGatewayMessage,
-		arg.MessageID,
-		arg.OriginInstance,
-		arg.HostID,
-		arg.ConnectionID,
-		arg.Request,
-		arg.ExpiresAt,
-	)
-	return err
-}
-
 const lockMailboxCapacity = `-- name: LockMailboxCapacity :exec
 SELECT pg_advisory_xact_lock(418002)
 `
@@ -283,7 +233,8 @@ type SetGatewayInstanceVersionParams struct {
 
 // Host connection and mailbox routing statements. GetHost, GetCatalog,
 // CurrentCatalogs, RegisterInstance, TouchConnection, DisconnectHost and
-// DeleteExpiredMessages live in gateway.sql.
+// DeleteExpiredMessages live in gateway.sql. The three mailbox statements that
+// job tests identify by SQL text prefix are hand-written in hostconn/sql.go.
 func (q *Queries) SetGatewayInstanceVersion(ctx context.Context, arg SetGatewayInstanceVersionParams) error {
 	_, err := q.db.Exec(ctx, setGatewayInstanceVersion, arg.InstanceID, arg.Version)
 	return err

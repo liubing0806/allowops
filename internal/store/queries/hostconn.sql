@@ -1,6 +1,7 @@
 -- Host connection and mailbox routing statements. GetHost, GetCatalog,
 -- CurrentCatalogs, RegisterInstance, TouchConnection, DisconnectHost and
--- DeleteExpiredMessages live in gateway.sql.
+-- DeleteExpiredMessages live in gateway.sql. The three mailbox statements that
+-- job tests identify by SQL text prefix are hand-written in hostconn/sql.go.
 
 -- name: SetGatewayInstanceVersion :exec
 UPDATE gateway_instances SET version=$2 WHERE instance_id=$1;
@@ -28,9 +29,6 @@ SELECT count(*),COALESCE(sum(octet_length(request)+1048576),0)::bigint FROM gate
 -- name: GetOnlineHostConnectionForShare :one
 SELECT connection_id FROM hosts WHERE host_id=$1 AND certificate_status='active' AND instance_id IS NOT NULL FOR SHARE;
 
--- name: InsertGatewayMessage :exec
-INSERT INTO gateway_messages(message_id,origin_instance,host_id,connection_id,request,expires_at) VALUES ($1,$2,$3,$4,$5,$6);
-
 -- name: DeleteGatewayMessage :exec
 DELETE FROM gateway_messages WHERE message_id=$1;
 
@@ -43,9 +41,6 @@ SELECT host_id,connection_id,request FROM gateway_messages WHERE message_id=$1 A
 -- name: GetActiveHostConnectionForShare :one
 SELECT connection_id FROM hosts WHERE host_id=$1 AND certificate_status='active' FOR SHARE;
 
--- name: GatewayMessageLive :one
-SELECT EXISTS(SELECT 1 FROM gateway_messages WHERE message_id=$1 AND connection_id=$2 AND expires_at>now() AND response IS NULL AND failure='');
-
 -- name: GetJobDispatchStateForShare :one
 SELECT status,cancel_requested FROM jobs WHERE job_id=$1 FOR SHARE;
 
@@ -54,9 +49,6 @@ SELECT status,dispatched,host_id,COALESCE(connection_id,'') FROM tasks WHERE job
 
 -- name: FailGatewayMessageOffline :exec
 UPDATE gateway_messages SET failure='offline' WHERE message_id=$1;
-
--- name: FailGatewayMessageCapacity :exec
-UPDATE gateway_messages SET failure='capacity' WHERE message_id=$1;
 
 -- name: CompleteGatewayMessages :exec
 UPDATE gateway_messages SET response=$2 WHERE message_id=ANY($1::text[]) AND gateway_messages.connection_id=$3 AND expires_at>now() AND response IS NULL AND failure='' AND EXISTS(SELECT 1 FROM hosts WHERE hosts.host_id=$4 AND hosts.connection_id=$3 AND hosts.certificate_status='active');
