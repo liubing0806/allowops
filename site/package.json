@@ -2,10 +2,13 @@
   "name": "allowops-site",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.19.0" },
+  "engines": {
+    "node": ">=24.19.0"
+  },
   "scripts": {
     "build": "node build.mjs --docs",
     "build:pages": "node build.mjs",
-    "preview": "python3 -m http.server -d dist 4321"
+    "preview": "python3 -m http.server -d dist 4321",
+    "deploy": "npm run build && wrangler deploy"
   }
 }
