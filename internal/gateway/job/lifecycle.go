@@ -43,8 +43,8 @@ func (s *Service) Drain(ctx context.Context) error {
 	tick := time.NewTicker(pollInterval)
 	defer tick.Stop()
 	for {
-		var tasks int
-		if err := s.Store.Pool.QueryRow(ctx, "SELECT count(*) FROM tasks t JOIN hosts h ON h.host_id=t.host_id WHERE t.status IN (1,2) AND t.dispatched AND h.instance_id=$1 AND h.connection_id=t.connection_id", s.instanceID).Scan(&tasks); err != nil {
+		tasks, err := countDrainTasks(ctx, s.Store.Pool, s.instanceID)
+		if err != nil {
 			return err
 		}
 		if tasks == 0 && s.activeJobs.Load() == 0 && s.activePersists.Load() == 0 {
@@ -66,9 +66,7 @@ func (s *Service) RecoverLostInstances(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		var id, origin string
-		var version uint64
-		err = tx.QueryRow(ctx, "SELECT j.job_id,j.origin_instance,j.policy_version FROM jobs j JOIN gateway_instances i ON i.instance_id=j.origin_instance WHERE j.status IN (1,2) AND i.last_seen<now()-$1*interval '1 second' ORDER BY j.job_id FOR UPDATE OF j SKIP LOCKED LIMIT 1", s.lostAfter.Seconds()).Scan(&id, &origin, &version)
+		id, origin, version, err := lockLostInstanceJob(ctx, tx, s.lostAfter.Seconds())
 		if errors.Is(err, pgx.ErrNoRows) {
 			tx.Rollback(ctx)
 			return nil
@@ -91,26 +89,12 @@ func (s *Service) RecoverLostInstances(ctx context.Context) error {
 			{1, 7, v1.TaskStatus_TASK_STATUS_SKIPPED},
 			{2, 4, v1.TaskStatus_TASK_STATUS_FAILED},
 		} {
-			rows, err := tx.Query(ctx, "UPDATE tasks SET status=$3,result=$4,finished_at=now(),output_state='unavailable' WHERE job_id=$1 AND status=$2 RETURNING task_id", id, spec.from, spec.to, pendingResult(spec.status, "GATEWAY_INSTANCE_LOST"))
+			ids, err := recoverTasks(ctx, tx, id, spec.from, spec.to, pendingResult(spec.status, "GATEWAY_INSTANCE_LOST"))
 			if err != nil {
 				tx.Rollback(ctx)
 				return err
 			}
-			for rows.Next() {
-				var taskID string
-				if err := rows.Scan(&taskID); err != nil {
-					rows.Close()
-					tx.Rollback(ctx)
-					return err
-				}
-				recoveredTasks = append(recoveredTasks, taskID)
-			}
-			err = rows.Err()
-			rows.Close()
-			if err != nil {
-				tx.Rollback(ctx)
-				return err
-			}
+			recoveredTasks = append(recoveredTasks, ids...)
 		}
 		if err := s.finishJobTx(ctx, tx, id); err != nil {
 			tx.Rollback(ctx)
