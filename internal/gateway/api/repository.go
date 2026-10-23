@@ -16,6 +16,7 @@ import (
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authn"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -227,7 +228,7 @@ func (s *Service) issueSession(ctx context.Context, q querier, userID string, cl
 
 func page[T any](ctx context.Context, cfg Config, scope string, req *v1.PageRequest, items []T) ([]T, *v1.PageResponse, error) {
 	size, offset := cfg.PageSize, 0
-	binding := base64.RawURLEncoding.EncodeToString(hash(scope + ":" + actorID(ctx)))
+	binding := base64.RawURLEncoding.EncodeToString(hash(scope + ":" + reqctx.ActorID(ctx)))
 	if req != nil {
 		if req.PageSize > 0 {
 			size = int(req.PageSize)

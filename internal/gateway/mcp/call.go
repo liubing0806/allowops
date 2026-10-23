@@ -10,7 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
-	"github.com/liubing0806/allowops/internal/gateway/api"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -32,7 +32,7 @@ func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, available ma
 			}
 		}
 	}
-	event := api.RequestAuditInfo(ctx)
+	event := reqctx.RequestAuditInfo(ctx)
 	event.Operation = "mcp/unknown_tool"
 	if available[r.Params.Name] {
 		event.Operation = "mcp/" + r.Params.Name
@@ -200,7 +200,7 @@ func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, available
 		if state.jobID == "" {
 			return nil, accessError(connect.CodeUnavailable, "invalid job response")
 		}
-		return nativeSummaryResult(api.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, "")
+		return nativeSummaryResult(reqctx.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, "")
 	}
 }
 func fixedArguments(raw json.RawMessage, allowed ...string) (map[string]json.RawMessage, error) {
@@ -287,7 +287,7 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 		return nil, accessError(connect.CodeUnavailable, "job response unavailable")
 	}
 	if host == "" {
-		return nativeSummaryResult(api.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, cursor)
+		return nativeSummaryResult(reqctx.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, cursor)
 	}
 	outputStream := v1.OutputStream_OUTPUT_STREAM_STDOUT
 	if stream == "stderr" {
@@ -308,7 +308,7 @@ func (s *Service) listJobs(ctx context.Context, raw json.RawMessage) (*ToolResul
 	if err = decodeField(args, "next_cursor", &cursor, false); err != nil {
 		return nil, invalidArguments(err)
 	}
-	actor := api.RequestAuditInfo(ctx).ActorID
+	actor := reqctx.RequestAuditInfo(ctx).ActorID
 	// One backend item per page ensures metadata is measured before it reaches
 	// MCP; the backend's opaque cursor retains its scope/snapshot binding.
 	response, err := s.jobs.ListJobs(ctx, &v1.ListJobsRequest{SubjectId: actor, Page: &v1.PageRequest{PageSize: 1, PageToken: cursor}})

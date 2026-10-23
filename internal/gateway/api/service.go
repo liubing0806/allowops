@@ -23,6 +23,7 @@ import (
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/authn"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -33,20 +34,9 @@ import (
 const DefaultConsoleTTL = 7 * 24 * time.Hour
 const PolicyChannel = "allowops_policy"
 
-// AuditEvent is an allowlist: request bodies, credentials and provider errors
-// must never be added. NewAuditor maps this boundary to P7 Append.
-type AuditEvent struct {
-	JobID         string
-	Resource      string
-	Hostname      string
-	ActorID       string
-	Operation     string
-	Phase         string // authorized before a write; result after an operation
-	Outcome       string
-	PolicyVersion uint64
-	MatchedRules  []string
-	SourceIP      string
-}
+// AuditEvent is the request-audit allowlist defined in reqctx.
+type AuditEvent = reqctx.AuditEvent
+
 type Auditor interface {
 	Append(context.Context, AuditEvent) error
 }
@@ -152,14 +142,9 @@ func (s *Service) Handler() http.Handler {
 	return s.Middleware(mux)
 }
 
-type Identity struct {
-	Subject authz.Subject
-	User    *v1.User
-	Session *v1.CliSession
-	Client  v1.LoginClient
-	CSRF    string
-}
-type requestKey struct{}
+// Identity is the authenticated caller defined in reqctx.
+type Identity = reqctx.Identity
+
 type requestState struct {
 	identity                 *Identity
 	err                      error
@@ -179,15 +164,24 @@ type requestState struct {
 	authorizationAuditFailed bool
 }
 
-func FromContext(ctx context.Context) (*Identity, bool) {
-	r, _ := ctx.Value(requestKey{}).(*requestState)
-	if r == nil || r.identity == nil {
-		return nil, false
-	}
-	return r.identity, true
+func (r *requestState) Identity() *Identity    { return r.identity }
+func (r *requestState) SourceIP() string       { return r.ip }
+func (r *requestState) PolicyVersion() uint64  { return r.policyVersion }
+func (r *requestState) MatchedRules() []string { return r.matchedRules }
+
+// Fork isolates mutable authorization/audit metadata for MCP calls sharing an
+// HTTP batch. Authentication and transport values are preserved.
+func (r *requestState) Fork() reqctx.Request {
+	copy := *r
+	copy.matchedRules = nil
+	copy.auditTargets = nil
+	copy.auditHostname = ""
+	copy.resource = true
+	return &copy
 }
+
 func transport(ctx context.Context) *requestState {
-	r, _ := ctx.Value(requestKey{}).(*requestState)
+	r, _ := reqctx.From(ctx).(*requestState)
 	return r
 }
 
@@ -209,7 +203,7 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 		} else if cookie, err := r.Cookie("__Host-allowops-session"); err == nil {
 			state.identity, state.err = s.authenticate(r.Context(), cookie.Value, true)
 		}
-		ctx := context.WithValue(r.Context(), requestKey{}, state)
+		ctx := reqctx.With(r.Context(), state)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -217,7 +211,7 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 // Require is the reusable ABAC boundary for P4B and MCP. Host/action attributes
 // must come from the gateway store, never from caller-supplied roles or labels.
 func (s *Service) Require(ctx context.Context, op authz.Operation, action authz.Action, host authz.Host) (authz.Result, error) {
-	id, ok := FromContext(ctx)
+	id, ok := reqctx.FromContext(ctx)
 	if !ok {
 		return authz.Result{Decision: "deny"}, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
 	}
@@ -323,7 +317,7 @@ func (s *Service) unaryInterceptor(resolve func(string) (authz.Operation, bool, 
 				return nil, failure(connect.CodeUnauthenticated, "authentication required")
 			}
 			event := AuditEvent{Operation: req.Spec().Procedure, SourceIP: t.ip, Phase: "result", Outcome: "deny"}
-			event.ActorID = actorID(ctx)
+			event.ActorID = reqctx.ActorID(ctx)
 			recordResult, executed := true, false
 			defer func() {
 				if !recordResult || t.authorizationAuditFailed {

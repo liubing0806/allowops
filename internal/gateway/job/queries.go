@@ -14,8 +14,8 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
-	"github.com/liubing0806/allowops/internal/gateway/api"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -210,8 +210,8 @@ func (s *Service) ListJobs(ctx context.Context, r *v1.ListJobsRequest) (*v1.List
 		if r == nil {
 			return nil, failure(connect.CodeInvalidArgument, "REQUEST_REQUIRED")
 		}
-		id, _ := api.FromContext(ctx)
-		actor, _ := api.RequestInfo(ctx)
+		id, _ := reqctx.FromContext(ctx)
+		actor, _ := reqctx.RequestInfo(ctx)
 		subject := r.SubjectId
 		if id.Subject.Kind == "service_account" {
 			if subject != "" && subject != actor {
@@ -345,7 +345,7 @@ func (s *Service) ListTasks(ctx context.Context, r *v1.ListTasksRequest) (*v1.Li
 				items = append(items, t)
 			}
 		}
-		actor, _ := api.RequestInfo(ctx)
+		actor, _ := reqctx.RequestInfo(ctx)
 		items, page, err := paginate(fmt.Sprintf("tasks:%s:%s:%s:%v", actor, r.JobId, r.Hostname, r.Statuses), r.Page, items)
 		return &v1.ListTasksResponse{Tasks: items, Page: page}, err
 	})
@@ -394,7 +394,7 @@ func (s *Service) ListTaskSteps(ctx context.Context, r *v1.ListTaskStepsRequest)
 		if err := rows.Err(); err != nil {
 			return nil, err
 		}
-		actor, _ := api.RequestInfo(ctx)
+		actor, _ := reqctx.RequestInfo(ctx)
 		items, page, err := paginate("steps:"+actor+":"+r.JobId+":"+r.TaskId, r.Page, items)
 		return &v1.ListTaskStepsResponse{Steps: items, Page: page}, err
 	})

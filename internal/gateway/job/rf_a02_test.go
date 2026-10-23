@@ -15,7 +15,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
-	"github.com/liubing0806/allowops/internal/gateway/api"
 	"github.com/liubing0806/allowops/internal/gateway/hostconn"
 	"github.com/liubing0806/allowops/internal/gateway/job"
 	"google.golang.org/protobuf/proto"
@@ -131,7 +130,7 @@ func TestRFA02CommittedJobRetainsScheduler(t *testing.T) {
 				return status > 2
 			})
 			var healthy bool
-			if err := f.DB.Pool.QueryRow(context.Background(), "SELECT last_seen>now()-$2*interval '1 second' FROM gateway_instances WHERE instance_id=$1", f.A.Host.InstanceID, api.InstanceLostAfter(f.A.Host.Config).Seconds()).Scan(&healthy); err != nil {
+			if err := f.DB.Pool.QueryRow(context.Background(), "SELECT last_seen>now()-$2*interval '1 second' FROM gateway_instances WHERE instance_id=$1", f.A.Host.InstanceID, hostconn.InstanceLostAfter(f.A.Host.Config).Seconds()).Scan(&healthy); err != nil {
 				t.Fatal(err)
 			}
 			if status != int16(v1.JobStatus_JOB_STATUS_SUCCEEDED) || !healthy {

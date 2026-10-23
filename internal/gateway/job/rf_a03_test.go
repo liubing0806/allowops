@@ -14,7 +14,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
-	"github.com/liubing0806/allowops/internal/gateway/api"
 	"github.com/liubing0806/allowops/internal/gateway/hostconn"
 	"github.com/liubing0806/allowops/internal/gateway/job"
 	"google.golang.org/protobuf/proto"
@@ -156,7 +155,7 @@ func TestRFA03SchedulerRetainsOwnerAfterSQLFailure(t *testing.T) {
 				t.Errorf("%s recovered database job status=%d; want %s(%d)", mode, status, want, want)
 			}
 			var healthy bool
-			if err := f.DB.Pool.QueryRow(ctx, "SELECT last_seen>now()-$2*interval '1 second' FROM gateway_instances WHERE instance_id=$1", f.A.Host.InstanceID, api.InstanceLostAfter(f.A.Host.Config).Seconds()).Scan(&healthy); err != nil || !healthy {
+			if err := f.DB.Pool.QueryRow(ctx, "SELECT last_seen>now()-$2*interval '1 second' FROM gateway_instances WHERE instance_id=$1", f.A.Host.InstanceID, hostconn.InstanceLostAfter(f.A.Host.Config).Seconds()).Scan(&healthy); err != nil || !healthy {
 				t.Errorf("source owner health=%t error=%v", healthy, err)
 			}
 			var one int

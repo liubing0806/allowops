@@ -722,12 +722,12 @@ func TestTwoGatewaysRealAgentsAndSeaweedFS(t *testing.T) {
 		}
 		objects := f.Storage.Storage.(*output.S3)
 		bad := &output.S3{Client: objects.Client, Bucket: "missing-fixture-bucket"}
-		f.A.Job.Access.ConfigureJobDependencies(f.A.Job, bad)
+		f.A.Job.Access.(*api.Service).ConfigureJobDependencies(f.A.Job, bad)
 		r, err = client.GetSystemStatus(ctx, connect.NewRequest(&v1.GetSystemStatusRequest{}))
 		if err != nil || r.Msg.Status != v1.HealthStatus_HEALTH_STATUS_DEGRADED || r.Msg.Dependencies[2].Status != v1.HealthStatus_HEALTH_STATUS_UNAVAILABLE {
 			t.Fatalf("storage failure health=%v error=%v", r, err)
 		}
-		f.A.Job.Access.ConfigureJobDependencies(f.A.Job, objects)
+		f.A.Job.Access.(*api.Service).ConfigureJobDependencies(f.A.Job, objects)
 	})
 }
 

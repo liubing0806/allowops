@@ -19,6 +19,7 @@ import (
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -522,16 +523,6 @@ func selectHosts(hosts []authz.Host, t *v1.HostTargets, reported ...map[string]m
 	}
 	return out, nil
 }
-func actorID(ctx context.Context) string {
-	id, _ := FromContext(ctx)
-	if id == nil {
-		return ""
-	}
-	if id.User != nil {
-		return id.User.UserId
-	}
-	return id.Subject.ID
-}
 func decision(r authz.Result, reason string) *v1.PolicyDecision {
 	effect := v1.PolicyEffect_POLICY_EFFECT_DENY
 	if r.Decision == "allow" {
@@ -626,7 +617,7 @@ func (s *Service) TestPolicy(ctx context.Context, r *connect.Request[v1.TestPoli
 	tb, _ := encode(test)
 	cb, _ := json.Marshal(changes)
 	eb, _ := json.Marshal(testEnvironment{Environment: env, Cases: r.Msg.Cases})
-	_, err = tx.Exec(ctx, "INSERT INTO policy_tests(test_id,actor_id,base_version,candidate,candidate_hash,snapshot_hash,environment,test,changes,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", test.TestId, actorID(ctx), current.Version, b, test.CandidateSha256, sh, eb, tb, cb, test.ExpiresAt.AsTime())
+	_, err = tx.Exec(ctx, "INSERT INTO policy_tests(test_id,actor_id,base_version,candidate,candidate_hash,snapshot_hash,environment,test,changes,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", test.TestId, reqctx.ActorID(ctx), current.Version, b, test.CandidateSha256, sh, eb, tb, cb, test.ExpiresAt.AsTime())
 	if err != nil {
 		return nil, dbError(err)
 	}
@@ -637,14 +628,14 @@ func (s *Service) TestPolicy(ctx context.Context, r *connect.Request[v1.TestPoli
 }
 func (s *Service) GetPolicyTestChanges(ctx context.Context, r *connect.Request[v1.GetPolicyTestChangesRequest]) (*connect.Response[v1.GetPolicyTestChangesResponse], error) {
 	var b []byte
-	if err := s.Store.Pool.QueryRow(ctx, "SELECT changes FROM policy_tests WHERE test_id=$1 AND actor_id=$2 AND expires_at>now()", r.Msg.TestId, actorID(ctx)).Scan(&b); err != nil {
+	if err := s.Store.Pool.QueryRow(ctx, "SELECT changes FROM policy_tests WHERE test_id=$1 AND actor_id=$2 AND expires_at>now()", r.Msg.TestId, reqctx.ActorID(ctx)).Scan(&b); err != nil {
 		return nil, dbError(err)
 	}
 	var changes []*v1.PolicyChange
 	if err := json.Unmarshal(b, &changes); err != nil {
 		return nil, dbError(err)
 	}
-	changes, p, err := page(ctx, s.Config, "changes:"+r.Msg.TestId+":"+actorID(ctx), r.Msg.Page, changes)
+	changes, p, err := page(ctx, s.Config, "changes:"+r.Msg.TestId+":"+reqctx.ActorID(ctx), r.Msg.Page, changes)
 	return connect.NewResponse(&v1.GetPolicyTestChangesResponse{Changes: changes, Page: p}), err
 }
 func (s *Service) persistPolicy(ctx context.Context, base uint64, candidate *v1.PolicyRules, target uint64, testID, reason string) (*v1.PolicyVersion, error) {
@@ -683,7 +674,7 @@ func (s *Service) persistPolicy(ctx context.Context, base uint64, candidate *v1.
 		return nil, failure(connect.CodeInvalidArgument, "invalid policy rules")
 	}
 	var candidateHash, storedSnapshot, environment []byte
-	if err := tx.QueryRow(ctx, "SELECT candidate_hash,snapshot_hash,environment FROM policy_tests WHERE test_id=$1 AND actor_id=$2 AND base_version=$3 AND expires_at>clock_timestamp() AND NOT consumed FOR UPDATE", testID, actorID(ctx), base).Scan(&candidateHash, &storedSnapshot, &environment); err != nil {
+	if err := tx.QueryRow(ctx, "SELECT candidate_hash,snapshot_hash,environment FROM policy_tests WHERE test_id=$1 AND actor_id=$2 AND base_version=$3 AND expires_at>clock_timestamp() AND NOT consumed FOR UPDATE", testID, reqctx.ActorID(ctx), base).Scan(&candidateHash, &storedSnapshot, &environment); err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, failure(connect.CodeAborted, "policy test expired or changed")
 		}
@@ -751,7 +742,7 @@ func (s *Service) persistPolicy(ctx context.Context, base uint64, candidate *v1.
 	if target > 0 {
 		rolled = target
 	}
-	if _, err := tx.Exec(ctx, "INSERT INTO policy_versions(version,rules,created_by,reason,rolled_back_from) VALUES ($1,$2,$3,$4,$5)", base+1, b, actorID(ctx), reason, rolled); err != nil {
+	if _, err := tx.Exec(ctx, "INSERT INTO policy_versions(version,rules,created_by,reason,rolled_back_from) VALUES ($1,$2,$3,$4,$5)", base+1, b, reqctx.ActorID(ctx), reason, rolled); err != nil {
 		return nil, dbError(err)
 	}
 	if _, err := tx.Exec(ctx, "UPDATE policy_tests SET consumed=true WHERE test_id=$1", testID); err != nil {
@@ -827,7 +818,7 @@ func (s *Service) ListPolicyHistory(ctx context.Context, r *connect.Request[v1.L
 	for candidate := 1; candidate <= len(items); candidate++ {
 		next := &v1.PageResponse{}
 		if offset+candidate < total {
-			binding := base64.RawURLEncoding.EncodeToString(hash("policy_history:" + actorID(ctx)))
+			binding := base64.RawURLEncoding.EncodeToString(hash("policy_history:" + reqctx.ActorID(ctx)))
 			next.NextPageToken = base64.RawURLEncoding.EncodeToString([]byte(binding + ":" + strconv.Itoa(offset+candidate)))
 		}
 		b, err := protojson.Marshal(&v1.ListPolicyHistoryResponse{Policies: items[:candidate], Page: next})

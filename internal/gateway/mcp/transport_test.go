@@ -23,6 +23,7 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/authn"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/catalogsvc"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
 	"github.com/liubing0806/allowops/internal/testpg"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -437,7 +438,7 @@ func (j *testJobs) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobR
 			return nil, e
 		}
 	}
-	id, _ := api.FromContext(ctx)
+	id, _ := reqctx.FromContext(ctx)
 	if err := j.audit.Append(ctx, api.AuditEvent{ActorID: id.Subject.ID, Operation: "run_job", Phase: "authorized", Outcome: "allow"}); err != nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("authorization audit unavailable"))
 	}
@@ -468,7 +469,7 @@ func (j *testJobs) GetJob(ctx context.Context, r *v1.GetJobRequest) (*v1.GetJobR
 	if job == nil {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("job not found"))
 	}
-	id, ok := api.FromContext(ctx)
+	id, ok := reqctx.FromContext(ctx)
 	if !ok || id.Subject.Kind == "service_account" && id.Subject.ID != job.SubjectId {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("owner required"))
 	}

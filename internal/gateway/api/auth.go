@@ -20,6 +20,7 @@ import (
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authn"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"golang.org/x/oauth2"
 )
 
@@ -171,7 +172,7 @@ func (s *Service) BeginOidcLogin(ctx context.Context, r *connect.Request[v1.Begi
 func (s *Service) oidcStart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	event := AuditEvent{ActorID: actorID(r.Context()), Operation: "/auth/oidc/start", Phase: "result", Outcome: "deny", SourceIP: transport(r.Context()).ip}
+	event := AuditEvent{ActorID: reqctx.ActorID(r.Context()), Operation: "/auth/oidc/start", Phase: "result", Outcome: "deny", SourceIP: transport(r.Context()).ip}
 	if r.Method != http.MethodGet || r.TLS == nil {
 		if err := s.AppendResultAudit(r.Context(), event); err != nil {
 			http.Error(w, "audit unavailable", http.StatusServiceUnavailable)
@@ -355,14 +356,14 @@ func (s *Service) LoginLdap(ctx context.Context, r *connect.Request[v1.LoginLdap
 	return connect.NewResponse(response), nil
 }
 func (s *Service) GetCurrentSession(ctx context.Context, _ *connect.Request[v1.GetCurrentSessionRequest]) (*connect.Response[v1.GetCurrentSessionResponse], error) {
-	id, ok := FromContext(ctx)
+	id, ok := reqctx.FromContext(ctx)
 	if !ok || id.Session == nil {
 		return nil, failure(connect.CodeFailedPrecondition, "user session required")
 	}
 	return connect.NewResponse(&v1.GetCurrentSessionResponse{User: id.User, Client: id.Client, ExpiresAt: id.Session.ExpiresAt, CsrfToken: id.CSRF}), nil
 }
 func (s *Service) Logout(ctx context.Context, _ *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error) {
-	id, ok := FromContext(ctx)
+	id, ok := reqctx.FromContext(ctx)
 	if !ok || id.Session == nil {
 		return nil, failure(connect.CodeFailedPrecondition, "user session required")
 	}
@@ -375,7 +376,7 @@ func (s *Service) Logout(ctx context.Context, _ *connect.Request[v1.LogoutReques
 	return connect.NewResponse(&v1.LogoutResponse{}), nil
 }
 func (s *Service) sessionUser(ctx context.Context, userID string) (string, error) {
-	id, ok := FromContext(ctx)
+	id, ok := reqctx.FromContext(ctx)
 	if !ok || id.User == nil {
 		return "", failure(connect.CodePermissionDenied, "user session required")
 	}

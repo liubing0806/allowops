@@ -54,11 +54,3 @@ func (s *Service) RequireBatch(ctx context.Context, op authz.Operation, action a
 	t.policyVersion = current.version
 	return results, current.version, nil
 }
-
-// RequestInfo contains gateway-authenticated audit identifiers only.
-func RequestInfo(ctx context.Context) (actor, sourceIP string) {
-	if t := transport(ctx); t != nil {
-		return actorID(ctx), t.ip
-	}
-	return "", ""
-}

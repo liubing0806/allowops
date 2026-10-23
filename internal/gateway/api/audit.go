@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/liubing0806/allowops/internal/gateway/audit"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
 type auditAdapter struct{ appender audit.Appender }
@@ -62,7 +63,7 @@ func (s *Service) Authorize(ctx context.Context, _ http.Header, operation string
 	if _, err := s.Require(ctx, authz.ViewAudit, authz.Action{}, authz.Host{}); err != nil {
 		return "", err
 	}
-	return actorID(ctx), nil
+	return reqctx.ActorID(ctx), nil
 }
 
 var _ audit.Access = (*Service)(nil)

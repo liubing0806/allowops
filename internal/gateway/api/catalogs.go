@@ -17,6 +17,7 @@ import (
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
 	"github.com/liubing0806/allowops/internal/store/db"
 )
@@ -105,7 +106,7 @@ func (s *Service) BeginCatalogUpload(ctx context.Context, req *connect.Request[v
 	if _, err = tx.Exec(ctx, "DELETE FROM catalog_uploads WHERE expires_at<=now()"); err != nil {
 		return nil, dbError(err)
 	}
-	if _, err = tx.Exec(ctx, "INSERT INTO catalog_uploads(upload_id,actor_id,envelope_size,envelope_sha256,expires_at) VALUES ($1,$2,$3,$4,$5)", id, actorID(ctx), req.Msg.EnvelopeSizeBytes, req.Msg.EnvelopeSha256, expires); err != nil {
+	if _, err = tx.Exec(ctx, "INSERT INTO catalog_uploads(upload_id,actor_id,envelope_size,envelope_sha256,expires_at) VALUES ($1,$2,$3,$4,$5)", id, reqctx.ActorID(ctx), req.Msg.EnvelopeSizeBytes, req.Msg.EnvelopeSha256, expires); err != nil {
 		return nil, dbError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -147,7 +148,7 @@ func (s *Service) upload(ctx context.Context, tx pgx.Tx, id string) (*upload, er
 	if err != nil {
 		return nil, dbError(err)
 	}
-	if actor != actorID(ctx) {
+	if actor != reqctx.ActorID(ctx) {
 		return nil, failure(connect.CodePermissionDenied, "upload belongs to another caller")
 	}
 	if !time.Now().Before(expires) {
