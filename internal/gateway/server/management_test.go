@@ -55,13 +55,11 @@ func TestP4BCLISmokeAndDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	certificate, roots := managementTLS(t)
-	native := server.New(agent, certificate)
-	native.Catalogs = f.catalogs
-	native.Audit = &audit.Service{Store: chain}
 	if err = identity.ConfigureManagement(api.ManagementConfig{Upstream: "https://" + address, CAPin: api.TLSCAPin(certificate.Certificate)}, agent, f.catalogs); err != nil {
 		t.Fatal(err)
 	}
-	native.UseIdentity(identity)
+	native := server.New(agent, certificate, server.WithIdentity(identity), server.WithAudit(&audit.Service{Store: chain}))
+	native.Catalogs = f.catalogs
 	done := make(chan error, 1)
 	go func() { done <- native.Serve(listener) }()
 	defer func() {

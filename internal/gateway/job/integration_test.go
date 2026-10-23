@@ -290,10 +290,9 @@ func (f *fixture) start(t *testing.T) *gateway {
 		t.Fatal(err)
 	}
 	jobs.Start()
-	srv := server.New(hosts, f.Certificate)
-	srv.Jobs = jobs
 	access.ConfigureJobDependencies(jobs, f.Storage.Storage.(api.ObjectStorageHealth))
-	srv.UseIdentity(access)
+	srv := server.New(hosts, f.Certificate, server.WithIdentity(access))
+	srv.Jobs = jobs
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(listener) }()
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: f.Roots, MinVersion: tls.VersionTLS13}}, Timeout: 20 * time.Second}

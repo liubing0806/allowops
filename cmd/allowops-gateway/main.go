@@ -181,30 +181,32 @@ func runWithAudit(args []string, auditor api.Auditor) error {
 			agent.Close()
 			return fmt.Errorf("listen gateway")
 		}
-		srv := server.New(agent, certificate)
-		srv.Output = objects
-		srv.Jobs = jobs
-		srv.Audit = &audit.Service{Store: auditStore}
-		srv.Catalogs = &catalogsvc.Service{Store: db, Trusted: trusted, MaxEnvelopeBytes: cfg.Gateway.EnvelopeBytes, MaxActionBytes: cfg.Gateway.ActionBytes, MaxReferenceBytes: cfg.Gateway.MessageBytes - cfg.Gateway.ChunkBytes - 1024}
+		catalogs := &catalogsvc.Service{Store: db, Trusted: trusted, MaxEnvelopeBytes: cfg.Gateway.EnvelopeBytes, MaxActionBytes: cfg.Gateway.ActionBytes, MaxReferenceBytes: cfg.Gateway.MessageBytes - cfg.Gateway.ChunkBytes - 1024}
 		if cfg.Management.CAPin == "" {
 			cfg.Management.CAPin = api.TLSCAPin(certificate.Certificate)
 		}
 		if cfg.Management.CAPin == "" {
 			fmt.Fprintln(os.Stderr, "gateway TLS CA pin unavailable; CreateJoinToken disabled; configure management.ca_pin")
 		}
-		if err := identity.ConfigureManagement(cfg.Management, agent, srv.Catalogs); err != nil {
+		if err := identity.ConfigureManagement(cfg.Management, agent, catalogs); err != nil {
 			agent.Close()
 			listener.Close()
 			return err
 		}
-		srv.UseIdentity(identity)
-		mcpService, err := mcp.New(identity, srv.Catalogs, job.Client(jobs), mcp.Config{})
+		mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcp.Config{})
 		if err != nil {
 			agent.Close()
 			listener.Close()
 			return err
 		}
-		srv.MCP = mcpService.Handler()
+		srv := server.New(agent, certificate,
+			server.WithIdentity(identity),
+			server.WithAudit(&audit.Service{Store: auditStore}),
+			server.WithMCP(mcpService.Handler()),
+		)
+		srv.Output = objects
+		srv.Jobs = jobs
+		srv.Catalogs = catalogs
 		auditCtx, stopAudit := context.WithCancel(context.Background())
 		defer stopAudit()
 		auditErrors := make(chan error, 2)
