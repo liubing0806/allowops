@@ -34,6 +34,7 @@ type Params struct {
 	Start    string
 	End      string
 	Step     time.Duration
+	HasStep  bool // Step was given; a given 0s is below min_step, not "omitted".
 	Match    []string
 	Label    string
 	Summary  bool

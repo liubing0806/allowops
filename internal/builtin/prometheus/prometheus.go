@@ -140,7 +140,7 @@ func (c Config) buildRequest(p Params, at time.Time) (request, error) {
 		if err != nil {
 			return request{}, err
 		}
-		step, err := c.queryStep(p.Step, start, end)
+		step, err := c.queryStep(p.Step, p.HasStep, start, end)
 		if err != nil {
 			return request{}, err
 		}
@@ -224,10 +224,10 @@ func (c Config) timeRange(p Params, at time.Time) (start, end time.Time, err err
 
 // queryStep returns the requested step or derives one from max_points, and
 // checks the number of points per series.
-func (c Config) queryStep(requested time.Duration, start, end time.Time) (time.Duration, error) {
+func (c Config) queryStep(requested time.Duration, given bool, start, end time.Time) (time.Duration, error) {
 	span := end.Sub(start)
 	step := requested
-	if step == 0 {
+	if !given {
 		// Times are whole seconds, so the span is too.
 		intervals := int64(c.MaxPoints - 1)
 		seconds := (int64(span/time.Second) + intervals - 1) / intervals

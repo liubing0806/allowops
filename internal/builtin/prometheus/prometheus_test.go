@@ -351,7 +351,7 @@ func TestMaskRunsBeforeEncoding(t *testing.T) {
 func TestQueryRange(t *testing.T) {
 	useFixedClock(t)
 	f := serve(t, 200, success(fmt.Sprintf(`{"resultType":"matrix","result":[{"metric":{"__name__":"up","job":"a"},"values":[[%d,"1"],[%d,"0"]]}]}`, fixedUnix-60, fixedUnix)))
-	r := mustRun(t, config("query_range", f), Params{Query: "up", Start: "now-1h", End: "now", Step: time.Minute})
+	r := mustRun(t, config("query_range", f), Params{Query: "up", Start: "now-1h", End: "now", Step: time.Minute, HasStep: true})
 	want := []string{
 		"# api=query_range start=2026-10-23T02:12:00Z end=2026-10-23T03:12:00Z step=60s",
 		`up{job="a"}` + "\t2026-10-23T03:11:00Z\t1",
@@ -407,7 +407,7 @@ func TestQueryRangeSummary(t *testing.T) {
 		{"metric":{"__name__":"cpu","job":"c"},"values":[[%d,"0.5"],[%d,"+Inf"]]}]}`,
 		fixedUnix-180, fixedUnix-120, fixedUnix-60, fixedUnix, fixedUnix, fixedUnix-60, fixedUnix))
 	f := serve(t, 200, body)
-	r := mustRun(t, config("query_range", f), Params{Query: "cpu", Start: "now-1h", Step: time.Minute, Summary: true})
+	r := mustRun(t, config("query_range", f), Params{Query: "cpu", Start: "now-1h", Step: time.Minute, HasStep: true, Summary: true})
 	want := []string{
 		"# api=query_range start=2026-10-23T02:12:00Z end=2026-10-23T03:12:00Z step=60s",
 		`cpu{job="a"}` + "\t1\t2\t3\t2",
@@ -425,16 +425,16 @@ func TestQueryRangeRejectsBadRanges(t *testing.T) {
 	cfg := config("query_range", f)
 	cfg.MaxRange, cfg.MaxPoints = 2*time.Hour, 100
 	cases := map[string]Params{
-		"missing query":        {Start: "now-1h", Step: time.Minute},
-		"missing start":        {Query: "up", Step: time.Minute},
-		"start equals":         {Query: "up", Start: "now", End: "now", Step: time.Minute},
-		"start after":          {Query: "up", Start: "now-5m", End: "now-10m", Step: time.Minute},
-		"range too long":       {Query: "up", Start: "now-3h", Step: time.Minute},
-		"step too small":       {Query: "up", Start: "now-1h", Step: 14 * time.Second},
+		"missing query":        {Start: "now-1h", Step: time.Minute, HasStep: true},
+		"missing start":        {Query: "up", Step: time.Minute, HasStep: true},
+		"start equals":         {Query: "up", Start: "now", End: "now", Step: time.Minute, HasStep: true},
+		"start after":          {Query: "up", Start: "now-5m", End: "now-10m", Step: time.Minute, HasStep: true},
+		"range too long":       {Query: "up", Start: "now-3h", Step: time.Minute, HasStep: true},
+		"step too small":       {Query: "up", Start: "now-1h", Step: 14 * time.Second, HasStep: true},
 		"bad end default step": {Query: "up", Start: "now-1h", End: "bad"},
-		"too many":             {Query: "up", Start: "now-2h", Step: time.Minute},
-		"bad start":            {Query: "up", Start: "yesterday", Step: time.Minute},
-		"bad end":              {Query: "up", Start: "now-1h", End: "tomorrow", Step: time.Minute},
+		"too many":             {Query: "up", Start: "now-2h", Step: time.Minute, HasStep: true},
+		"bad start":            {Query: "up", Start: "yesterday", Step: time.Minute, HasStep: true},
+		"bad end":              {Query: "up", Start: "now-1h", End: "tomorrow", Step: time.Minute, HasStep: true},
 	}
 	for name, p := range cases {
 		if r, err := Run(context.Background(), cfg, p); err == nil {
@@ -445,9 +445,9 @@ func TestQueryRangeRejectsBadRanges(t *testing.T) {
 		t.Errorf("%d requests sent for rejected parameters", f.count())
 	}
 	// Exactly max_points points and exactly max_range are allowed.
-	ok := Params{Query: "up", Start: "now-99m", Step: time.Minute}
+	ok := Params{Query: "up", Start: "now-99m", Step: time.Minute, HasStep: true}
 	mustRun(t, cfg, ok)
-	ok = Params{Query: "up", Start: "now-2h", Step: 2 * time.Minute}
+	ok = Params{Query: "up", Start: "now-2h", Step: 2 * time.Minute, HasStep: true}
 	mustRun(t, cfg, ok)
 }
 
@@ -570,7 +570,7 @@ func TestQueryTruncationByMaxSeries(t *testing.T) {
 	f = serve(t, 200, success(fmt.Sprintf(`{"resultType":"matrix","result":[{"metric":{"job":"a"},"values":[[%d,"1"]]},{"metric":{"job":"b"},"values":[[%d,"1"]]}]}`, fixedUnix, fixedUnix)))
 	cfg = config("query_range", f)
 	cfg.MaxSeries = 1
-	r = mustRun(t, cfg, Params{Query: "up", Start: "now-1h", Step: time.Minute, Summary: true})
+	r = mustRun(t, cfg, Params{Query: "up", Start: "now-1h", Step: time.Minute, HasStep: true, Summary: true})
 	if got := lines(r.Stdout); len(got) != 2 || !r.Truncated {
 		t.Errorf("summary result = %+v", r)
 	}
@@ -759,7 +759,7 @@ func TestAddressPathPrefixAndOnlyAllowedPaths(t *testing.T) {
 		"query": "/api/v1/query", "query_range": "/api/v1/query_range", "series": "/api/v1/series", "labels": "/api/v1/labels",
 		"label_values": "/api/v1/label/job/values", "alerts": "/api/v1/alerts", "rules": "/api/v1/rules", "targets": "/api/v1/targets",
 	}
-	sample := Params{Query: "up", Start: "now-1h", Step: time.Minute, Match: []string{"up"}, Label: "job"}
+	sample := Params{Query: "up", Start: "now-1h", Step: time.Minute, HasStep: true, Match: []string{"up"}, Label: "job"}
 	for api, path := range allowed {
 		f := serve(t, 200, success(`{"resultType":"vector","result":[]}`))
 		if _, err := Run(context.Background(), config(api, f), sample); err != nil {
@@ -787,7 +787,7 @@ func TestRejectsUnexpectedDataShapes(t *testing.T) {
 		"query_range": success(`{"resultType":"vector","result":[]}`),
 	} {
 		f := serve(t, 200, body)
-		r, err := Run(context.Background(), config(api, f), Params{Query: "up", Start: "now-1h", Step: time.Minute, Match: []string{"up"}})
+		r, err := Run(context.Background(), config(api, f), Params{Query: "up", Start: "now-1h", Step: time.Minute, HasStep: true, Match: []string{"up"}})
 		if err == nil || r.ExitCode != 1 {
 			t.Errorf("%s accepted malformed response: %+v", api, r)
 		}
@@ -806,5 +806,16 @@ func TestQueryParameterEncoding(t *testing.T) {
 	got, err := url.ParseQuery(f.last(t).URL.RawQuery)
 	if err != nil || got.Get("query") != query {
 		t.Errorf("query = %q, %v", got.Get("query"), err)
+	}
+}
+
+func TestQueryRangeGivenZeroStepIsBelowMinStep(t *testing.T) {
+	useFixedClock(t)
+	f := serve(t, 200, success(`{"resultType":"matrix","result":[]}`))
+	if r, err := Run(context.Background(), config("query_range", f), Params{Query: "up", Start: "now-1h", HasStep: true}); err == nil {
+		t.Errorf("step=0s accepted: %+v", r)
+	}
+	if f.count() != 0 {
+		t.Error("request sent for step=0s")
 	}
 }

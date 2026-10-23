@@ -161,7 +161,7 @@ func TestPrometheusIntegration(t *testing.T) {
 	})
 
 	t.Run("query_range", func(t *testing.T) {
-		summary := eventually(t, cfg("query_range"), Params{Query: "up", Start: "now-2m", Step: 15 * time.Second, Summary: true},
+		summary := eventually(t, cfg("query_range"), Params{Query: "up", Start: "now-2m", Step: 15 * time.Second, HasStep: true, Summary: true},
 			func(r Result) bool { return strings.Contains(r.Stdout, upSeries) })
 		rows := lines(summary.Stdout)
 		if !strings.HasPrefix(rows[0], "# api=query_range start=") || !strings.HasSuffix(rows[0], " step=15s") {
@@ -170,7 +170,7 @@ func TestPrometheusIntegration(t *testing.T) {
 		if want := upSeries + "\t1\t1\t1\t1"; rows[1] != want {
 			t.Errorf("summary = %q; want %q", rows[1], want)
 		}
-		points := run(t, cfg("query_range"), Params{Query: "up", Start: "now-2m", Step: 15 * time.Second})
+		points := run(t, cfg("query_range"), Params{Query: "up", Start: "now-2m", Step: 15 * time.Second, HasStep: true})
 		for _, row := range lines(points.Stdout)[1:] {
 			if fields := strings.Split(row, "\t"); len(fields) != 3 || fields[0] != upSeries || fields[2] != "1" {
 				t.Errorf("point row = %q", row)

@@ -95,7 +95,7 @@ func (prometheusHandler) RunRedacted(ctx context.Context, input, values map[stri
 	}
 	text := func(name string) string { s, _ := values[name].(string); return s }
 	p := prombuiltin.Params{Query: text("query"), Time: text("time"), Start: text("start"), End: text("end"), Label: text("label"), RuleType: text("rule_type")}
-	p.Step, _ = values["step"].(time.Duration)
+	p.Step, p.HasStep = values["step"].(time.Duration)
 	p.Match, _ = values["match"].([]string)
 	p.Summary, _ = values["summary"].(bool)
 	r, err := prombuiltin.RunRedacted(ctx, cfg, p, mask)
