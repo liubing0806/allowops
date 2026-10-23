@@ -65,6 +65,8 @@ func (f *formatter) num(s string) string {
 	return f.m(s)
 }
 
+var metricName = regexp.MustCompile(`^[a-zA-Z_:][a-zA-Z0-9_:]*$`)
+
 var numberText = regexp.MustCompile(`^([+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?|[+-]?Inf|NaN)$`)
 
 // row writes one escaped line unless the output limit would be exceeded, in
@@ -153,29 +155,35 @@ func (f *formatter) listed(value string) string {
 	return value
 }
 
-// labelSet renders labels in Prometheus notation with sorted label names. Each
+// labelSet renders labels in Prometheus notation with sorted label names.
+// Names outside the legacy syntax are quoted, and a metric name that needs
+// quoting becomes the first element inside the braces (Prometheus 3). Each
 // name="value" pair is masked on its own: a rule that matches to the end of the
 // line would otherwise swallow the labels after the one it redacts.
 func (f *formatter) labelSet(labels map[string]string) string {
-	var b strings.Builder
 	name := labels["__name__"]
-	if name != "" {
-		b.WriteString(f.m(name))
-	}
 	names := slices.Sorted(maps.Keys(labels))
-	names = slices.DeleteFunc(names, func(name string) bool { return name == "__name__" })
-	if len(names) == 0 && name != "" {
-		return b.String()
-	}
-	b.WriteByte('{')
-	for i, n := range names {
-		if i > 0 {
-			b.WriteByte(',')
+	names = slices.DeleteFunc(names, func(n string) bool { return n == "__name__" })
+	var elements []string
+	head := ""
+	switch {
+	case name == "":
+	case metricName.MatchString(name):
+		head = f.m(name)
+		if len(names) == 0 {
+			return head
 		}
-		b.WriteString(f.m(n + "=" + quoteLabelValue(labels[n])))
+	default:
+		elements = append(elements, f.m(quoteLabelValue(name)))
 	}
-	b.WriteByte('}')
-	return b.String()
+	for _, n := range names {
+		pair := n
+		if !labelName.MatchString(n) {
+			pair = quoteLabelValue(n)
+		}
+		elements = append(elements, f.m(pair+"="+quoteLabelValue(labels[n])))
+	}
+	return head + "{" + strings.Join(elements, ",") + "}"
 }
 
 var labelValueEscaper = strings.NewReplacer("\\", `\\`, `"`, `\"`, "\n", `\n`)
