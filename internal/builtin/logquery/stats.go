@@ -36,13 +36,14 @@ type StatsOutput struct {
 	FirstMatch string            `json:"first_match,omitempty"`
 	LastMatch  string            `json:"last_match,omitempty"`
 	Histogram  []HistogramBucket `json:"histogram"`
-	// ByLevel is present when the source declares a level rule.
-	ByLevel          map[string]int `json:"by_level,omitempty"`
-	ByFile           []FileCount    `json:"by_file"`
-	Files            FileCounts     `json:"files"`
-	ScannedBytes     int64          `json:"scanned_bytes"`
-	ScanLimitReached bool           `json:"scan_limit_reached"`
-	ScannedUntil     string         `json:"scanned_until"`
+	// ByLevel is present, possibly empty, when the source declares a level
+	// rule.
+	ByLevel          *map[string]int `json:"by_level,omitempty"`
+	ByFile           []FileCount     `json:"by_file"`
+	Files            FileCounts      `json:"files"`
+	ScannedBytes     int64           `json:"scanned_bytes"`
+	ScanLimitReached bool            `json:"scan_limit_reached"`
+	ScannedUntil     string          `json:"scanned_until"`
 }
 
 // HistogramBucket counts matches in [Start, Start+bucket). Empty buckets are
@@ -115,8 +116,10 @@ func runStats(ctx context.Context, cfg Config, roots []string, p Params) ([]byte
 	var indexes []int64
 	var byFile []FileCount
 	var byLevel map[string]int
+	var byLevelOut *map[string]int
 	if rule != nil {
 		byLevel = map[string]int{}
+		byLevelOut = &byLevel
 	}
 	var first, last time.Time
 	err = s.walk(ctx, tl.files, func(file string, r record) {
@@ -146,7 +149,7 @@ func runStats(ctx context.Context, cfg Config, roots []string, p Params) ([]byte
 	}
 	tl.counts.Searched = s.searched
 	out := StatsOutput{Source: p.Source, Since: formatTime(s.since, location), Until: formatTime(s.until, location), Bucket: width.String(),
-		Matched: s.matched, Histogram: []HistogramBucket{}, ByLevel: byLevel, ByFile: []FileCount{}, Files: tl.counts,
+		Matched: s.matched, Histogram: []HistogramBucket{}, ByLevel: byLevelOut, ByFile: []FileCount{}, Files: tl.counts,
 		ScannedBytes: s.scanned, ScanLimitReached: s.limited, ScannedUntil: formatTime(s.scannedUntil(), location)}
 	if !first.IsZero() {
 		out.FirstMatch, out.LastMatch = formatTime(first, location), formatTime(last, location)

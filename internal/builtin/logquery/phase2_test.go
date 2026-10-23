@@ -211,7 +211,7 @@ func TestStatsHistogramEqualsSearchMatched(t *testing.T) {
 			files += f.Count
 		}
 		levels := 0
-		for _, n := range st.ByLevel {
+		for _, n := range *st.ByLevel {
 			levels += n
 		}
 		if files != st.Matched || levels != st.Matched {
@@ -237,8 +237,12 @@ func TestStatsOutput(t *testing.T) {
 	if fmt.Sprint(out.Histogram) != fmt.Sprint(want) {
 		t.Fatalf("histogram=%v\nwant      %v", out.Histogram, want)
 	}
-	if fmt.Sprint(out.ByLevel) != fmt.Sprint(map[string]int{"ERROR": 12, "INFO": 32, "WARN": 16}) {
+	if out.ByLevel == nil || fmt.Sprint(*out.ByLevel) != fmt.Sprint(map[string]int{"ERROR": 12, "INFO": 32, "WARN": 16}) {
 		t.Fatalf("by_level=%v", out.ByLevel)
+	}
+	// With a level rule, by_level is present even without matches.
+	if _, raw, err := stats(t, cfg, Params{Source: "app", Pattern: "absent"}); err != nil || !strings.Contains(raw, `"by_level":{}`) {
+		t.Fatalf("no matches: %s err=%v", raw, err)
 	}
 	wantFiles := []FileCount{{filepath.Join(root, "app.log.2.gz"), 20}, {filepath.Join(root, "app.log.1"), 20}, {filepath.Join(root, "app.log"), 20}}
 	if fmt.Sprint(out.ByFile) != fmt.Sprint(wantFiles) {

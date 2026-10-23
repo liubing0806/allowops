@@ -1,6 +1,6 @@
 # 日志检索设计
 
-本文是设计。状态：第一阶段已实现（见 6.11），第二、三阶段未实现。
+本文是设计。状态：第一阶段已实现（见 6.11），第二阶段已实现（见 7.5），第三阶段未实现。
 
 ## 1. 背景
 
@@ -247,6 +247,7 @@ builtin 的错误使用固定的代码。代码写入 `ExecutionResult.reason`�
 | `TIMESTAMP_UNPARSED` | 时间范围内的文件都解析不出时间戳 | 建议去掉时间范围，或检查源的 `timestamp.layouts` |
 | `PATTERN_INVALID` | 正则编译失败 | 返回 RE2 的错误位置 |
 | `CURSOR_INVALID`、`CURSOR_EXPIRED` | 见 6.5 | 见 6.5 |
+| `LEVEL_UNSUPPORTED` | 给出了 `level`，但源没有声明级别规则（第二阶段增加，见 7.5） | 去掉 `level`，或用 `pattern` 匹配级别文字 |
 
 改动点：
 
@@ -378,6 +379,41 @@ level:
 1. `log_stats` 的直方图总数等于同一参数下 `log_search` 的 `matched`。
 2. `log_patterns` 对固定样例日志的输出稳定：同一输入多次执行，结果相同。
 3. 两个 action 在 compose 演示主机上执行成功；扫描量超限时标记 `scan_limit_reached`。
+
+### 7.5 第二阶段实现记录
+
+第二阶段已在 `internal/builtin/logquery` 实现（2026-10-23）：6.4 的 `level` 参数、7.3 的级别提取、`mode: stats`、`mode: patterns`。示例 catalog 增加 `log_stats`、`log_patterns`，`app` 和 `nginx-error` 两个源增加 `level.regex`（四个 log_query action 的 sources 相同）。
+
+代码位置：
+
+- `level.go`：`Level`（源配置）、`withLevels`（把 `level` 参数加到匹配函数上）。
+- `walk.go`：`prepareScan`（源、匹配、时间范围、文件时间线）和 `searcher.walk`（从早到晚把范围内的每条记录交给回调）。stats 和 patterns 只通过 `walk` 读取记录。第三阶段的源类型提供记录流后，替换 `walk` 的循环体即可，`runStats`、`runPatterns` 不需要改。
+- `stats.go`、`patterns.go`：两种模式。
+- 对第一阶段文件的改动只增加分支和字段：`config.go` 增加 `ModeStats`、`ModePatterns` 常量，`Source.Level` 字段，`Validate` 的模式判断，`Source.validate` 中编译 `level.regex`；`search.go` 的 `Params` 增加 `Level`、`Bucket`、`Top` 字段，`Run` 增加两个模式分支，`runSearch` 在 `compilePatterns` 之后调用 `withLevels`；`params.go` 的 search 分支把返回的 map 赋给变量后按需加入 `level`，并增加两个模式分支。
+
+与上文设计不一致之处：
+
+1. `level` 参数类型为 `string_array`，元素只能是 `ERROR`、`WARN`、`INFO`、`DEBUG`。只有 action 中至少一个源声明了 `level.regex` 时才提供该参数。所选源没有级别规则时返回新代码 `LEVEL_UNSUPPORTED`，它已加入 `internal/builtin/reason.go` 的白名单和网关的 `reasonHints`。没有复用 `SOURCE_UNSUPPORTED`：该代码的提示针对容器存储驱动（8.2），含义不同。
+2. 提取到的级别转为大写后比较，所以 nginx 错误日志的 `[warn]` 对应 `WARN`。提取结果不是 1 到 16 个字母时记为 `UNKNOWN`，不会把日志正文写进 `by_level`。
+3. stats 和 patterns 都从早到晚扫描（与 `log_search` 的 `asc` 相同）。扫描量超限时结果是时间范围的开头一段，输出 `scanned_until`。.gz 文件只能从头解压，`since` 之前的内容也计入扫描量，所以 `max_scan` 较小时可能在到达 `since` 之前就超限，此时命中数为 0、`scan_limit_reached` 为 true。
+4. stats 输出比 7.1 多 `files`（同 `log_search`）和 `scanned_until`。`bucket` 用 Go 时长格式（`5m0s`）。直方图省略计数为 0 的桶。桶的起点是来源时区当天零点起桶宽的整数倍，例如 5m 桶从 14:45 开始，而不是从请求的 since 开始。省略 `bucket` 时从 1s 到 24h 的固定档位中选最小的、使桶数不超过 60 的一档；给定的 `bucket` 使桶数超过 720 时按省略处理。有级别规则时 `by_level` 一定输出（没有命中时为 `{}`）。`by_file` 只列出有命中的文件，按读取顺序。
+5. patterns 的参数为 `source`、`since`、`until`、`exclude`、`level`、`top`，不接受 `fixed`、`ignore_case`。输出比 7.2 多 `clusters`（模板总数）、`unclustered`、`omitted`、`files`、`scanned_until`，并包含 `source`、`since`、`until`。
+6. Drain 的实现参数：按空白切分单词（连续空白合并为一个空格）；树的第一层是单词数，下面两层是前两个单词，含数字或 `<_>` 的单词走通配分支，每个节点最多 100 个子节点；与模板的相似度不低于 0.4 时并入，不同位置替换为 `<_>`。模板超过 2000 个后，新出现的模板只计入 `unclustered`。只使用第一行的前 4KB。模板和样例先脱敏，再截到 1KB。输出超过 `max_output` 时从末尾减少模板，减少的数量写入 `omitted`。
+7. 变量替换的范围：日期和日期时间（`2026-10-23`、`2026-10-23 14:45:00.123`、`2026-10-23T14:45:00Z`、`2026/10/23 14:45:00`、`23/Oct/2026:14:45:00 +0800`、`14:45:00`）、UUID、IPv4 地址（可带端口）、`0x` 开头的十六进制数、含数字的 8 位以上十六进制串、以单词边界分隔的十进制数。与字母相连的数字（`user123`）不替换。
+8. Drain 的结果取决于输入顺序。输入顺序由文件时间线和文件内顺序决定，同一输入的输出相同。前两个单词不同的行（例如不含数字的不同线程名 `[main]`、`[scheduler]`）不会聚到同一模板。
+9. 7.4 第 3 项在本机用 `allowops catalog try` 执行，未使用 compose 演示主机。
+
+验证（本机 `allowops catalog try`，未连接任何主机）：三个文件为 2026-10-23 00:00 到 06:00 的 Logback 日志：`app.log.2026-10-23.0.gz`、`app.log.2026-10-23.1.gz`、`app.log`，共 105703 行，含 ERROR 记录的异常堆栈。时间范围 01:30 到 04:30 跨三个文件：
+
+| 参数 | `log_stats` matched | 直方图总数 | `log_search` matched |
+|---|---|---|---|
+| 无 | 47989 | 47989 | 47989 |
+| `pattern=ERROR` | 2419 | 2419 | 2419 |
+| `pattern=SocketTimeoutException`（只出现在堆栈续行） | 2419 | 2419 | 2419 |
+| `level=["WARN","ERROR"]` | 7224 | 7224 | 7224 |
+| `pattern=listAll`、`exclude=returned 1` | 18603 | 18603 | 18603 |
+
+自动桶宽为 5m（36 个桶）。`log_patterns` 连续执行 3 次输出相同，47989 条记录聚为 5 个模板，例如 `<_> [http-nio-<_>-exec-<_>] ERROR c.e.App - order <_> failed [REDACTED:credential]`（原文为 `password=hunter2`）。`max_scan` 改为 4MB 后，两个 action 都返回 `scan_limit_reached: true`、`scanned_until` 为 02:19:04.841，`log_stats` matched 为 13145。单元测试 `TestStatsHistogramEqualsSearchMatched`、`TestPatternsDeterministic` 分别对应 7.4 第 1、2 项。
 
 ## 8. 第三阶段：容器、Kubernetes 和导出
 

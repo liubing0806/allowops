@@ -4,11 +4,11 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 93 个 action：92 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-23 起原 `log_search` 改名 `log_grep`，新的 `log_search` 和新增的 `log_sources` 使用内置 log_query 处理器；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 95 个 action：94 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-23 起原 `log_search` 改名 `log_grep`，新的 `log_search` 和新增的 `log_sources`、`log_stats`、`log_patterns` 使用内置 log_query 处理器；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
-`disk_usage_paths` 查询路径所在文件系统容量，`disk_dir_size` 统计目录文件大小，两者保留。`log_search_dir` 使用固定 grep 检索未压缩目录，`log_grep` 使用内置 log_search 处理器按路径通配检索普通和 gzip 文件，`log_sources`、`log_search` 使用内置 log_query 处理器按目录中声明的日志源和时间范围检索（设计见 `log-search-design.md` 第 6 节），均保留。第 20 节 D3 已取代第 18 节“压缩日志不在 MVP”的旧限制；本目录包含 gzip 日志检索需求，不使用 zgrep。
+`disk_usage_paths` 查询路径所在文件系统容量，`disk_dir_size` 统计目录文件大小，两者保留。`log_search_dir` 使用固定 grep 检索未压缩目录，`log_grep` 使用内置 log_search 处理器按路径通配检索普通和 gzip 文件，`log_sources`、`log_search`、`log_stats`、`log_patterns` 使用内置 log_query 处理器按目录中声明的日志源和时间范围列出、检索、统计和聚类（设计见 `log-search-design.md` 第 6、7 节），均保留。第 20 节 D3 已取代第 18 节“压缩日志不在 MVP”的旧限制；本目录包含 gzip 日志检索需求，不使用 zgrep。
 
 内置处理器的正式参数和配置 schema（字段结构及校验规则）由 `internal/catalog/builtin.go` 和 `builtin_adapters.go` 定义。P12D 已实现 G30 的 Redis/MySQL 收紧配置，语义见 `builtin-config.md`（含 G31、G34）；四个示例已恢复命令、键前缀、分区和库范围限制。内置参数默认值的剩余缺口见第 4 节。目录校验不检查目标主机的工具、凭据文件或外部服务，不据此宣称这些环境可执行全部 action。
 
@@ -2122,6 +2122,30 @@ builtin_config:
   max_matches: 500
 ```
 
+### `log_patterns`
+
+把日志源在时间范围内的记录聚类为模板（Drain 算法），返回条数最多的模板。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（log_query，mode: patterns） |
+| filters | 无（输出是 JSON） |
+| redact | secrets, pii |
+| 执行限制 | timeout=30s；max_output=64KB |
+| CentOS 7 | 由 Go 实现，不依赖外部命令；主机端须在能力中声明 `log_query`。 |
+| 安全说明 | 只使用每条记录的第一行（前 4KB）。聚类前把时间戳、UUID、IP 地址（可带端口）、十六进制串和数字替换为 `<_>`。模板和样例都先按 action 的脱敏规则逐行脱敏，再截到 1KB。不接受 `pattern`；`exclude` 和 `level` 仍在原文上匹配，调用方可以用 `records` 的变化试探原文，限制同第 4 节第 11 项。超过 2000 个模板后，新出现的模板计入 `unclustered`。按 max_output 从末尾减少模板数，减少的数量写入 `omitted`。路径规则同 `log_search`。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `source`、`since`、`until`、`exclude`、`level` | 同 `log_search` | 同 `log_search` | 同 `log_search` |
+| `top` | int | 处理器提供；`min: 1`；`max: 100`；默认 `20` | 返回的模板数 |
+
+builtin_config 为 `mode: patterns` 加上与 `log_search` 相同的 sources、allowed_roots、max_files、max_scan、max_window。
+
 ### `log_search`
 
 按目录中声明的日志源名称和时间范围检索日志，返回分页的 JSON 记录。
@@ -2135,7 +2159,7 @@ builtin_config:
 | redact | secrets, pii |
 | 执行限制 | timeout=30s；max_output=64KB |
 | CentOS 7 | 由 Go 实现，不依赖 grep、zcat 或解释器；主机端须在能力中声明 `log_query`。 |
-| 安全说明 | 日志源的 paths 在签名校验时检查 glob 文字前缀位于 allowed_roots 内；执行时逐个解析符号链接，解析后不在根目录内返回 `PATH_OUTSIDE_ROOTS`，非普通文件跳过并计入 `files.skipped_not_regular`；用 os.Root 打开并核验设备号和 inode。pattern、exclude 在原文上匹配（RE2），匹配之后逐条脱敏再编码，限制同第 4 节第 11 项。builtin 按 max_output 减少本页记录数，不截断 JSON。依据：`internal/builtin/logquery/`、`internal/catalog/builtin_adapters.go` 的 `logQueryConfig`。 |
+| 安全说明 | 源的 `level.regex` 在签名校验时编译，必须含名为 `level` 的捕获组，只作用于记录第一行。日志源的 paths 在签名校验时检查 glob 文字前缀位于 allowed_roots 内；执行时逐个解析符号链接，解析后不在根目录内返回 `PATH_OUTSIDE_ROOTS`，非普通文件跳过并计入 `files.skipped_not_regular`；用 os.Root 打开并核验设备号和 inode。pattern、exclude 在原文上匹配（RE2），匹配之后逐条脱敏再编码，限制同第 4 节第 11 项。builtin 按 max_output 减少本页记录数，不截断 JSON。依据：`internal/builtin/logquery/`、`internal/catalog/builtin_adapters.go` 的 `logQueryConfig`。 |
 
 参数：
 
@@ -2148,8 +2172,9 @@ builtin_config:
 | `limit` | int | 处理器提供；`min: 1`；`max: 200`；默认 `50` | 本页最多记录数 |
 | `order` | enum | 处理器提供；`desc`、`asc`；默认 `desc` | 新的在前或旧的在前 |
 | `cursor` | string | 处理器提供；`max_len: 4096`；可选 | 上一页的 next_cursor，其他参数须与上一页相同 |
+| `level` | string_array | 处理器提供；元素为 `ERROR`、`WARN`、`INFO`、`DEBUG`；`max_items: 4`；可选；只在至少一个源声明 `level.regex` 时提供 | 只保留第一行级别为其中之一的记录；所选源未声明 level 规则时返回 `LEVEL_UNSUPPORTED` |
 
-builtin_config（与示例 YAML 一致，`log_sources` 使用相同的 sources）：
+builtin_config（与示例 YAML 一致，`log_sources`、`log_stats`、`log_patterns` 使用相同的 sources）：
 
 ```yaml
 builtin: log_query
@@ -2163,6 +2188,8 @@ builtin_config:
         layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
         timezone: Asia/Shanghai
       multiline: timestamp_start
+      level:
+        regex: '^\S+ \S+ \[[^\]]*\] (?P<level>[A-Z]+)'
     nginx-access:
       type: file
       paths: [/var/log/nginx/access.log*]
@@ -2176,6 +2203,8 @@ builtin_config:
       timestamp:
         layouts: ['2006/01/02 15:04:05']
       multiline: none
+      level:
+        regex: '^\S+ \S+ \[(?P<level>[a-z]+)\]'
   allowed_roots: [/var/log, /data/logs]
   max_files: 50
   max_scan: 256MB
@@ -2229,6 +2258,30 @@ exec: [/usr/bin/grep, -r, -E, -m, '{max_matches}', -e, '{pattern}', --, '{path}'
 | 安全说明 | 只读取每个文件的元数据和开头（最多 64 行、解压后 256KB），不扫描全文。路径规则同 `log_search`。输出 status 为 `ok`、`no_files`、`timestamp_unparsed` 之一。 |
 
 参数：无（targets 等公共参数除外）。builtin_config 为 `mode: sources` 加上与 `log_search` 相同的 sources 和 allowed_roots。
+
+### `log_stats`
+
+统计日志源在时间范围内的命中数、时间分布、级别和文件分布，不返回日志内容。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（log_query，mode: stats） |
+| filters | 无（输出是 JSON） |
+| redact | secrets, pii（输出只有数字、时间、文件名和级别名） |
+| 执行限制 | timeout=30s；max_output=64KB |
+| CentOS 7 | 由 Go 实现，不依赖外部命令；主机端须在能力中声明 `log_query`。 |
+| 安全说明 | 从早到晚扫描整个时间范围，受 max_scan、max_files 限制；超限时 `scan_limit_reached` 为 true，`scanned_until` 为已扫描部分的结束时间。`pattern`、`exclude`、`level` 在原文上匹配，限制同第 4 节第 11 项。`by_level` 的键是提取到的级别转大写，提取结果不是 1 到 16 个字母时记为 `UNKNOWN`，所以输出不含日志正文。路径规则同 `log_search`。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `source`、`since`、`until`、`pattern`、`exclude`、`fixed`、`ignore_case`、`level` | 同 `log_search` | 同 `log_search` | 同 `log_search` |
+| `bucket` | string | 处理器提供；`regex: ^[1-9][0-9]{0,4}(s\|m\|h)$`；可选 | 直方图桶宽；省略时取使桶数不超过 60 的最小档位；给定值使桶数超过 720 时按省略处理 |
+
+builtin_config 为 `mode: stats` 加上与 `log_search` 相同的 sources、allowed_roots、max_files、max_scan、max_window。
 
 ### `log_tail_file`
 
@@ -3051,7 +3104,7 @@ exec: [/usr/bin/systemctl, status, '{service}', --no-pager]
 
 10. **写操作（已删除）**：2026-10-22 起示例目录不含任何 risk 不是 read 的 action，process_signal 和 docker_stop 已删除。写操作如需恢复，须单独评审授权范围（PID 复用、容器强制终止、Docker root 权限、容器挂载和容器内链接），本节点没有执行任何写 action。
 
-11. **按模式检索的 action 在原文上匹配（已确定）**：以下 action 把调用方给出的 pattern 交给 grep、journalctl 或内置 log_search，在未脱敏的原文上匹配，匹配之后才脱敏输出：`log_grep_file`、`log_grep_fixed`、`log_search_dir`、`log_grep`、`log_search`、`journal_grep`、`docker_file_grep`、`k8s_pod_file_grep`、`mysql_error_log`。`mysql_slow_log` 在第四轮审阅（redaction/F2）中改为不接受 pattern，只读取文件末尾 N 行，脱敏后才由 match、exclude 过滤，已不属于此类。调用方可以用是否命中（退出码、输出是否为空、`count` 过滤的结果）判断原文是否含某字符串，逐字符试探即可还原被脱敏的值，脱敏规则不能阻止这一点。因此这些 action 的检索根目录只能放日志，不能放含凭据的配置文件：`docker_file_grep`、`k8s_pod_file_grep` 的根目录已去掉 `/etc/nginx`，其余 action 的根目录限于 `/var/log`、`/data/logs`（`journal_grep` 检索 journald）。日志本身可能含凭据，这类内容只能靠脱敏降低暴露，不能保证无法试探；运维评审 catalog 时须保证检索根目录内没有配置文件，也没有指向配置文件的符号链接。读取配置的 action（`app_config_view`、`docker_app_config_view`、`k8s_configmap_view`、`docker_jar_read_entry`、`k8s_pod_jar_read_entry`、`mysql_config_view`、`redis_config_file_view`、`mysql_slow_log`、`redis_log_view`）不接受 pattern，退出码与内容无关，match 与 exclude 只作用于脱敏之后的输出。数据库查询（`mysql_query_readonly`）的 WHERE 条件作用于原值，其范围由数据库账号的权限决定。依据：`docker_file_grep` 实测，`/etc/nginx/nginx.conf` 含 `proxy_set_header Authorization "Basic …";` 时，pattern 为其中的密文返回退出码 0，为不存在的字符串返回退出码 1，两种情况的输出都不含密文。
+11. **按模式检索的 action 在原文上匹配（已确定）**：以下 action 把调用方给出的 pattern 交给 grep、journalctl 或内置 log_search，在未脱敏的原文上匹配，匹配之后才脱敏输出：`log_grep_file`、`log_grep_fixed`、`log_search_dir`、`log_grep`、`log_search`、`log_stats`、`log_patterns`（`exclude`、`level`）、`journal_grep`、`docker_file_grep`、`k8s_pod_file_grep`、`mysql_error_log`。`mysql_slow_log` 在第四轮审阅（redaction/F2）中改为不接受 pattern，只读取文件末尾 N 行，脱敏后才由 match、exclude 过滤，已不属于此类。调用方可以用是否命中（退出码、输出是否为空、`count` 过滤的结果）判断原文是否含某字符串，逐字符试探即可还原被脱敏的值，脱敏规则不能阻止这一点。因此这些 action 的检索根目录只能放日志，不能放含凭据的配置文件：`docker_file_grep`、`k8s_pod_file_grep` 的根目录已去掉 `/etc/nginx`，其余 action 的根目录限于 `/var/log`、`/data/logs`（`journal_grep` 检索 journald）。日志本身可能含凭据，这类内容只能靠脱敏降低暴露，不能保证无法试探；运维评审 catalog 时须保证检索根目录内没有配置文件，也没有指向配置文件的符号链接。读取配置的 action（`app_config_view`、`docker_app_config_view`、`k8s_configmap_view`、`docker_jar_read_entry`、`k8s_pod_jar_read_entry`、`mysql_config_view`、`redis_config_file_view`、`mysql_slow_log`、`redis_log_view`）不接受 pattern，退出码与内容无关，match 与 exclude 只作用于脱敏之后的输出。数据库查询（`mysql_query_readonly`）的 WHERE 条件作用于原值，其范围由数据库账号的权限决定。依据：`docker_file_grep` 实测，`/etc/nginx/nginx.conf` 含 `proxy_set_header Authorization "Basic …";` 时，pattern 为其中的密文返回退出码 0，为不存在的字符串返回退出码 1，两种情况的输出都不含密文。
 
 ### G30 示例收紧结果（P12D）
 
@@ -3066,11 +3119,11 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 
 ## 5. 本地示例检查
 
-`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 93 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 95 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
 
 配置脱敏冒烟在同一临时目录中把 app_config_view、app_config_keys 的 allowed_roots 改为临时配置目录，写入 properties、JSON、XML 形式的凭据和 PEM 私钥：断言 app_config_view 输出不含凭据值、match 过滤命中与否都以退出码 0 返回，app_config_keys 只输出键名且不输出 PEM 内容。该检查依赖本机 grep 支持 -P 和 head。
 
-日志冒烟在自动删除的临时目录复制目录，仅替换 log_grep 的 builtin_config.allowed_roots。它创建普通与 gzip 测试日志，并通过 catalog try 验证逐行结果、count=3、无匹配退出码 0、max_matches=1 的 truncated/resource_limit_reached。log_sources、log_search 的冒烟把副本中的 allowed_roots 和源路径改到临时目录，写入一条带 Java 堆栈的 Logback 记录，断言 log_sources 的 app 源 status 为 ok，log_search 按堆栈中的一行命中整条记录且输出已脱敏。原始示例路径和文件不被修改；try 始终以当前用户执行，run_as 不在此检查中验证。检查不运行 Redis、MySQL、HTTP、Docker、Kubernetes、DNS 或任何写 action。check_agent_upgrade.py 用只记录调用的替身 dpkg-query、apt-get、rpm、yum、systemd-run 执行 agent_upgrade 脚本，检查升级、已是目标版本、拒绝降级和安装后版本不符四种情况的命令序列与退出码，不安装任何软件包。
+日志冒烟在自动删除的临时目录复制目录，仅替换 log_grep 的 builtin_config.allowed_roots。它创建普通与 gzip 测试日志，并通过 catalog try 验证逐行结果、count=3、无匹配退出码 0、max_matches=1 的 truncated/resource_limit_reached。log_sources、log_search 的冒烟把副本中的 allowed_roots 和源路径改到临时目录，写入一条带 Java 堆栈的 Logback 记录，断言 log_sources 的 app 源 status 为 ok，log_search 按堆栈中的一行命中整条记录且输出已脱敏；再写入第二条 ERROR 记录，断言 `level=["ERROR"]` 时 log_search 与 log_stats 的 matched 都为 2、直方图总数为 2、by_level 为 `{"ERROR": 2}` 且 log_stats 输出不含日志正文，log_patterns 把两条 ERROR 记录聚成一个模板且模板和样例不含口令原文。原始示例路径和文件不被修改；try 始终以当前用户执行，run_as 不在此检查中验证。检查不运行 Redis、MySQL、HTTP、Docker、Kubernetes、DNS 或任何写 action。check_agent_upgrade.py 用只记录调用的替身 dpkg-query、apt-get、rpm、yum、systemd-run 执行 agent_upgrade 脚本，检查升级、已是目标版本、拒绝降级和安装后版本不符四种情况的命令序列与退出码，不安装任何软件包。
 
 选择把 examples-check 作为 `make test` 的依赖。现有 `.github/workflows/ci.yml` 已执行 make test，因此无需改动工作流即可在本机和 CI 使用同一检查；检查失败会阻止 Go 测试目标继续。脚本 action 的签名风险警告属于预期输出，不表示校验失败。
 
