@@ -68,32 +68,7 @@ func (s *Service) summary(ctx context.Context, j *v1.Job, f string) (*v1.JobSumm
 	if err != nil {
 		return nil, err
 	}
-	groups := map[string]*v1.OutputGroup{}
-	for _, p := range items {
-		if p.Task.Result.Status == v1.TaskStatus_TASK_STATUS_OFFLINE {
-			result.OfflineHosts = append(result.OfflineHosts, p.Task.Hostname)
-		}
-		if len(p.StdoutHash) != 32 || len(p.StderrHash) != 32 {
-			continue
-		}
-		exit := "absent"
-		if p.Task.Result.ExitCode != nil {
-			exit = fmt.Sprint(*p.Task.Result.ExitCode)
-		}
-		key := exit + ":" + hex.EncodeToString(p.StdoutHash) + ":" + hex.EncodeToString(p.StderrHash)
-		g := groups[key]
-		if g == nil {
-			stdout := textPrefix(p.Stdout, GroupBytes)
-			stderr := textPrefix(p.Stderr, GroupBytes-len(stdout))
-			g = &v1.OutputGroup{ExitCode: p.Task.Result.ExitCode, StdoutSha256: p.StdoutHash, StderrSha256: p.StderrHash, Stdout: stdout, Stderr: stderr, Truncated: p.Task.Result.Truncated || uint64(len(stdout)) < p.StdoutSize || uint64(len(stderr)) < p.StderrSize}
-			groups[key] = g
-			result.Groups = append(result.Groups, g)
-		}
-		g.HostCount++
-		if f == "detailed" || len(g.Hosts) < 2 {
-			g.Hosts = append(g.Hosts, p.Task.Hostname)
-		}
-	}
+	groupPreviews(result, items, f)
 	// Measure the entire protobuf JSON response, accounting for escaping/base64.
 	response := &v1.GetJobResponse{Job: j, Summary: result}
 	for {
@@ -126,4 +101,34 @@ func (s *Service) summary(ctx context.Context, j *v1.Job, f string) (*v1.JobSumm
 		}
 	}
 	return result, nil
+}
+
+// groupPreviews groups tasks with identical exit code and output hashes.
+func groupPreviews(result *v1.JobSummary, items []Preview, f string) {
+	groups := map[string]*v1.OutputGroup{}
+	for _, p := range items {
+		if p.Task.Result.Status == v1.TaskStatus_TASK_STATUS_OFFLINE {
+			result.OfflineHosts = append(result.OfflineHosts, p.Task.Hostname)
+		}
+		if len(p.StdoutHash) != 32 || len(p.StderrHash) != 32 {
+			continue
+		}
+		exit := "absent"
+		if p.Task.Result.ExitCode != nil {
+			exit = fmt.Sprint(*p.Task.Result.ExitCode)
+		}
+		key := exit + ":" + hex.EncodeToString(p.StdoutHash) + ":" + hex.EncodeToString(p.StderrHash)
+		g := groups[key]
+		if g == nil {
+			stdout := textPrefix(p.Stdout, GroupBytes)
+			stderr := textPrefix(p.Stderr, GroupBytes-len(stdout))
+			g = &v1.OutputGroup{ExitCode: p.Task.Result.ExitCode, StdoutSha256: p.StdoutHash, StderrSha256: p.StderrHash, Stdout: stdout, Stderr: stderr, Truncated: p.Task.Result.Truncated || uint64(len(stdout)) < p.StdoutSize || uint64(len(stderr)) < p.StderrSize}
+			groups[key] = g
+			result.Groups = append(result.Groups, g)
+		}
+		g.HostCount++
+		if f == "detailed" || len(g.Hosts) < 2 {
+			g.Hosts = append(g.Hosts, p.Task.Hostname)
+		}
+	}
 }
