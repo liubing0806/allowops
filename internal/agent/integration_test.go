@@ -73,6 +73,8 @@ type testGateway struct {
 	silent bool
 	// blockPull holds catalog pulls open until the stream context ends.
 	blockPull bool
+	// pulling, when set, receives a value each time a blocked pull starts.
+	pulling chan struct{}
 	// reject, when set, refuses Connect after the hello like a version check.
 	reject   atomic.Pointer[connect.Error]
 	rejected atomic.Int32
@@ -211,8 +213,12 @@ func (g *testGateway) PullCatalog(ctx context.Context, request *connect.Request[
 	data := g.packages[request.Msg.Catalog.CatalogId+":"+strconv.FormatUint(request.Msg.Catalog.Version, 10)]
 	bad := g.badOffset
 	block := g.blockPull
+	pulling := g.pulling
 	g.mu.Unlock()
 	if block {
+		if pulling != nil {
+			pulling <- struct{}{}
+		}
 		<-ctx.Done()
 		return ctx.Err()
 	}

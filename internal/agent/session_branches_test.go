@@ -220,13 +220,25 @@ func TestSessionCatalogWorkerFailures(t *testing.T) {
 		h := newSessionHarness(t, Limits{ControlMessages: 2})
 		action := catalog.Action{Name: "noop", Description: "noop", Risk: "read", Exec: []any{"/usr/bin/true"}, Timeout: "5s", MaxOutput: 1024}
 		_, notice := publish(t, h.g, h.a, []catalog.Action{action}, time.Now(), time.Hour)
+		pulling := make(chan struct{}, 1)
 		h.g.mu.Lock()
 		h.g.blockPull = true
+		h.g.pulling = pulling
 		h.g.mu.Unlock()
 		done := h.start()
 		c := connection(t, h.g)
-		for range 6 {
-			c.send(t, &v1.ConnectResponse{Message: &v1.ConnectResponse_CatalogAvailable{CatalogAvailable: notice}})
+		available := &v1.ConnectResponse{Message: &v1.ConnectResponse_CatalogAvailable{CatalogAvailable: notice}}
+		// The single catalog worker holds the first notice in a blocked pull.
+		c.send(t, available)
+		select {
+		case <-pulling:
+		case <-time.After(5 * time.Second):
+			t.Fatal("catalog pull did not start")
+		}
+		// Two notices fill the queue and the third overflows it. Nothing is sent
+		// after that: the session ends and closes the stream.
+		for range 3 {
+			c.send(t, available)
 		}
 		outcome := waitOutcome(t, done)
 		if outcome.err == nil || outcome.err.Error() != "CATALOG_QUEUE_FULL" || outcome.delay != 0 {
