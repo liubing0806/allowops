@@ -13,7 +13,6 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
@@ -47,31 +46,19 @@ func storedPackage(raw []byte) (*catalog.Package, error) {
 	return catalog.ParsePackage(payload)
 }
 func (s *Service) storedCatalogs(ctx context.Context, id string, current bool) ([]storedCatalog, error) {
-	sql := `SELECT c.dsse,c.published_at,c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id) FROM catalog_versions c WHERE ($1='' OR c.catalog_id=$1)`
-	if current {
-		sql += ` AND c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id)`
-	}
-	sql += " ORDER BY c.catalog_id,c.version DESC"
-	rows, err := s.Store.Pool.Query(ctx, sql, id)
+	rows, err := storedCatalogRows(ctx, s.Store.Pool, id, current)
 	if err != nil {
 		return nil, dbError(err)
 	}
-	defer rows.Close()
 	out := []storedCatalog{}
-	for rows.Next() {
-		var raw []byte
-		var published pgtype.Timestamptz
-		var isCurrent bool
-		if err = rows.Scan(&raw, &published, &isCurrent); err != nil {
-			return nil, dbError(err)
-		}
-		p, err := storedPackage(raw)
+	for _, r := range rows {
+		p, err := storedPackage(r.raw)
 		if err != nil {
 			return nil, failure(connect.CodeInternal, "stored catalog invalid")
 		}
-		out = append(out, storedCatalog{catalogMeta(p, raw, published.Time, isCurrent), p, raw})
+		out = append(out, storedCatalog{catalogMeta(p, r.raw, r.published.Time, r.current), p, r.raw})
 	}
-	return out, dbError(rows.Err())
+	return out, nil
 }
 func (s *Service) getCatalog(ctx context.Context, ref *v1.CatalogRef) (storedCatalog, error) {
 	if ref == nil || ref.CatalogId == "" || ref.Version > 1<<63-1 {
@@ -103,10 +90,10 @@ func (s *Service) BeginCatalogUpload(ctx context.Context, req *connect.Request[v
 		return nil, dbError(err)
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, "DELETE FROM catalog_uploads WHERE expires_at<=now()"); err != nil {
+	if err = purgeCatalogUploads(ctx, tx); err != nil {
 		return nil, dbError(err)
 	}
-	if _, err = tx.Exec(ctx, "INSERT INTO catalog_uploads(upload_id,actor_id,envelope_size,envelope_sha256,expires_at) VALUES ($1,$2,$3,$4,$5)", id, reqctx.ActorID(ctx), req.Msg.EnvelopeSizeBytes, req.Msg.EnvelopeSha256, expires); err != nil {
+	if err = insertCatalogUpload(ctx, tx, id, reqctx.ActorID(ctx), req.Msg.EnvelopeSizeBytes, req.Msg.EnvelopeSha256, expires); err != nil {
 		return nil, dbError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -141,17 +128,15 @@ func (u *upload) repeatedChunk(offset uint64, data []byte) bool {
 }
 
 func (s *Service) upload(ctx context.Context, tx pgx.Tx, id string) (*upload, error) {
-	u := &upload{}
-	var actor string
-	var expires time.Time
-	err := tx.QueryRow(ctx, "SELECT actor_id,envelope_size,envelope_sha256,data,expires_at,published_catalog,chunk_ends FROM catalog_uploads WHERE upload_id=$1 FOR UPDATE", id).Scan(&actor, &u.size, &u.digest, &u.data, &expires, &u.published, &u.chunkEnds)
+	r, err := lockCatalogUpload(ctx, tx, id)
 	if err != nil {
 		return nil, dbError(err)
 	}
-	if actor != reqctx.ActorID(ctx) {
+	u := &upload{size: r.size, digest: r.digest, data: r.data, published: r.published, chunkEnds: r.chunkEnds}
+	if r.actor != reqctx.ActorID(ctx) {
 		return nil, failure(connect.CodePermissionDenied, "upload belongs to another caller")
 	}
-	if !time.Now().Before(expires) {
+	if !time.Now().Before(r.expires) {
 		return nil, failure(connect.CodeFailedPrecondition, "upload expired; begin again")
 	}
 	return u, nil
@@ -183,7 +168,7 @@ func (s *Service) UploadCatalogChunk(ctx context.Context, req *connect.Request[v
 	if next+uint64(len(req.Msg.Data)) > u.size {
 		return nil, failure(connect.CodeInvalidArgument, "chunk exceeds declared envelope size")
 	}
-	if _, err = tx.Exec(ctx, "UPDATE catalog_uploads SET data=data||$2::bytea,chunk_ends=$3 WHERE upload_id=$1", req.Msg.UploadId, req.Msg.Data, binary.BigEndian.AppendUint32(u.chunkEnds, uint32(next+uint64(len(req.Msg.Data))))); err != nil {
+	if err = appendCatalogChunk(ctx, tx, req.Msg.UploadId, req.Msg.Data, binary.BigEndian.AppendUint32(u.chunkEnds, uint32(next+uint64(len(req.Msg.Data))))); err != nil {
 		return nil, dbError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -230,8 +215,8 @@ func (s *Service) PublishCatalog(ctx context.Context, req *connect.Request[v1.Pu
 	if err != nil {
 		return nil, dbError(err)
 	}
-	var published time.Time
-	if err = tx.QueryRow(ctx, "SELECT published_at FROM catalog_versions WHERE catalog_id=$1 AND version=$2", p.CatalogID, p.Version).Scan(&published); err != nil {
+	published, err := catalogPublishedAt(ctx, tx, p.CatalogID, p.Version)
+	if err != nil {
 		return nil, dbError(err)
 	}
 	meta := catalogMeta(p, u.data, published, true)
@@ -239,7 +224,7 @@ func (s *Service) PublishCatalog(ctx context.Context, req *connect.Request[v1.Pu
 	if err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(ctx, "UPDATE catalog_uploads SET published_catalog=$2 WHERE upload_id=$1", req.Msg.UploadId, b); err != nil {
+	if err = setCatalogUploadPublished(ctx, tx, req.Msg.UploadId, b); err != nil {
 		return nil, dbError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
