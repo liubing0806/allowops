@@ -357,6 +357,13 @@ func TestEveryCredentialWordInBothForms(t *testing.T) {
 		)
 	}
 	checkSecretCases(t, r, cases)
+	// The key is replaced together with its prefix, whatever characters it holds.
+	checkExact(t, r, [][2]string{
+		{"db.pass=Hunter2", "[REDACTED:credential]"},
+		{"db-pass=Hunter2", "[REDACTED:credential]"},
+		{"my-app.secret_key: Hunter2", "[REDACTED:credential]"},
+		{"a1.b-2_c.api_key=Hunter2", "[REDACTED:credential]"},
+	})
 	for _, w := range []string{"bypass", "compass", "passed", "token_count", "keyboard", "primary_key"} {
 		for _, form := range []string{"%s=1", "%s: 1"} {
 			if line := fmt.Sprintf(form, w); r.Line(line) != line {
@@ -369,4 +376,17 @@ func TestEveryCredentialWordInBothForms(t *testing.T) {
 			t.Errorf("changed %q => %q", line, got)
 		}
 	}
+}
+
+// A query parameter ends at whitespace or '&': the rest of an access log line
+// stays readable, the value is hidden.
+func TestQueryParameterEndsAtAmpersandOrSpace(t *testing.T) {
+	r := builtinOnly(t)
+	checkExact(t, r, [][2]string{
+		{`127.0.0.1 - - [x] "GET /cb?access_token=Hunter2&state=1 HTTP/1.1" 200 12`, `127.0.0.1 - - [x] "GET /cb?[REDACTED:credential]&state=1 HTTP/1.1" 200 12`},
+		{`GET /login?user=bob&password=Hunter2 HTTP/1.1`, `GET /login?user=bob&[REDACTED:credential] HTTP/1.1`},
+		{`GET /x?pwd=Hunter2&y=2 HTTP/1.1`, `GET /x?[REDACTED:credential]&y=2 HTTP/1.1`},
+		{`GET /x?db_pass=Hunter2;more&y=2 HTTP/1.1`, `GET /x?[REDACTED:credential]&y=2 HTTP/1.1`},
+		{`GET /x?token_count=5 HTTP/1.1`, `GET /x?token_count=5 HTTP/1.1`},
+	})
 }
