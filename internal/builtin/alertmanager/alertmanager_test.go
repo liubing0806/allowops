@@ -450,3 +450,30 @@ func TestMaskAppliesToEachLabel(t *testing.T) {
 		t.Fatalf("labels = %q, want zone and the closing brace kept", fields[4])
 	}
 }
+
+// Alerts whose startsAt cannot be parsed sort after every valid time, so a
+// max_alerts cut drops them first. Their text is kept as received.
+func TestUnparsableStartsAtSortsLast(t *testing.T) {
+	srv, _ := serve(t, 200, `[
+ {"startsAt":"not a time","fingerprint":"a","status":{"state":"active"},"labels":{"alertname":"Bad1"}},
+ {"fingerprint":"b","status":{"state":"active"},"labels":{"alertname":"Missing"}},
+ {"startsAt":"2026-10-23T05:00:00Z","fingerprint":"c","status":{"state":"active"},"labels":{"alertname":"Late"}},
+ {"startsAt":"2026-10-23T01:00:00Z","fingerprint":"d","status":{"state":"active"},"labels":{"alertname":"Early"}}]`)
+	r := run(t, Config{Address: srv.URL}, Params{Active: true}, nil)
+	got := lines(r.Stdout)
+	if len(got) != 4 {
+		t.Fatalf("stdout = %q", r.Stdout)
+	}
+	for i, want := range []string{"Early", "Late", "Bad1", "Missing"} {
+		if f := strings.Split(got[i], "\t"); f[2] != want {
+			t.Errorf("row %d = %s, want %s", i, f[2], want)
+		}
+	}
+	if !strings.HasPrefix(got[2], "not a time\t") || !strings.HasPrefix(got[3], "\t") {
+		t.Errorf("unparsable text must be kept: %q %q", got[2], got[3])
+	}
+	cut := run(t, Config{Address: srv.URL, MaxAlerts: 2}, Params{Active: true}, nil)
+	if !cut.Truncated || strings.Contains(cut.Stdout, "Bad1") || strings.Contains(cut.Stdout, "Missing") || !strings.Contains(cut.Stderr, "2 of 4") {
+		t.Fatalf("a cut must drop unparsable alerts first: %+v", cut)
+	}
+}
