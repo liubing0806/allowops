@@ -17,6 +17,7 @@ import (
 	"time"
 
 	driver "github.com/go-sql-driver/mysql"
+	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
@@ -130,7 +131,7 @@ func TestMySQLIntegration(t *testing.T) {
 
 	// Run requires a root-only credential file. This test exercises its exact
 	// connection/query/rollback implementation with ephemeral in-memory credentials.
-	cfg := Config{Address: "tcp://" + address, MaxRows: 2, Timeout: time.Second}
+	cfg := Config{Address: "tcp://" + address, MaxRows: 2, MaxResponseBytes: builtin.DefaultMySQLMaxResponseBytes, Timeout: time.Second}
 	cred := credential{Username: "root", Password: password}
 	for _, tc := range []struct {
 		name, query, output string

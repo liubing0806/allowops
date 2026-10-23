@@ -34,14 +34,14 @@ SELECT status>2 FROM tasks WHERE job_id=$1 AND task_id=$2;
 -- name: ListStatisticsJobs :many
 SELECT job_id,status FROM jobs WHERE status IN (1,2) OR (status IN (4,5) AND finished_at>=now()-interval '24 hours') ORDER BY job_id;
 
--- name: LockTaskForEvent :one
-SELECT j.action_definition,t.status,t.created_at,t.host_id,t.hostname,COALESCE(t.connection_id,''),t.dispatched,j.subject_id,j.policy_version FROM tasks t JOIN jobs j ON j.job_id=t.job_id WHERE t.job_id=$1 AND t.task_id=$2 FOR UPDATE OF t;
-
 -- name: MarkTaskStarted :exec
 UPDATE tasks SET status=2,result=$3,started_at=now() WHERE job_id=$1 AND task_id=$2;
 
 -- name: InsertTaskStep :exec
 INSERT INTO task_steps(job_id,task_id,created_at,step_index,name,result) VALUES ($1,$2,$3,$4,$5,$6);
+
+-- name: InsertTaskStepIfAbsent :exec
+INSERT INTO task_steps(job_id,task_id,created_at,step_index,name,result) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING;
 
 -- name: GetTaskStatusResult :one
 SELECT status,result FROM tasks WHERE job_id=$1 AND task_id=$2;
@@ -78,6 +78,12 @@ SELECT status,count(*) FROM tasks WHERE job_id=$1 GROUP BY status;
 
 -- name: LockLostInstanceJob :one
 SELECT j.job_id,j.origin_instance,j.policy_version FROM jobs j JOIN gateway_instances i ON i.instance_id=j.origin_instance WHERE j.status IN (1,2) AND i.last_seen<now()-$1*interval '1 second' ORDER BY j.job_id FOR UPDATE OF j SKIP LOCKED LIMIT 1;
+
+-- name: LockLostOutputTask :one
+SELECT t.job_id,t.task_id,t.host_id,t.hostname,j.subject_id,j.action,j.policy_version FROM tasks t JOIN jobs j ON j.job_id=t.job_id JOIN gateway_instances i ON i.instance_id=t.output_instance WHERE t.output_state='pending' AND t.status>2 AND i.last_seen<now()-$1*interval '1 second' ORDER BY t.job_id,t.task_id FOR UPDATE OF t SKIP LOCKED LIMIT 1;
+
+-- name: MarkTaskOutputUnavailable :exec
+UPDATE tasks SET output_state='unavailable' WHERE job_id=$1 AND task_id=$2;
 
 -- name: GetJobActionDefinition :one
 SELECT action_definition FROM jobs WHERE job_id=$1;

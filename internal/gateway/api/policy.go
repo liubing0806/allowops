@@ -117,7 +117,17 @@ func loadPolicy(ctx context.Context, q querier, version uint64) (*v1.PolicyVersi
 	return p, decode(row.Rules, p.Rules)
 }
 
+// refresh brings the loaded policy up to the stored current version. Each call
+// reads that version, because every authorization must see the latest policy,
+// but the rules are loaded and decoded only when it differs from the loaded one.
 func (s *Service) refresh(ctx context.Context) error {
+	latest, err := currentPolicyVersion(ctx, s.Store.Pool)
+	if err != nil {
+		return err
+	}
+	if current := s.state.Load(); current != nil && current.version == uint64(latest) {
+		return nil
+	}
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
 	p, err := loadPolicy(ctx, s.Store.Pool, 0)

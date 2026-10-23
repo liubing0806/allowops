@@ -14,6 +14,7 @@ const (
 	DefaultHTTPMaxResponseBytes  int64 = 64 << 10
 	DefaultHTTPMaxHeaderBytes    int64 = 64 << 10
 	DefaultRedisMaxResponseBytes int64 = 64 << 10
+	DefaultMySQLMaxResponseBytes int64 = 64 << 10
 	DefaultRedisMaxScanCount           = 1000
 	DefaultRedisScanCount              = 100
 	ExitSuccess                        = 0

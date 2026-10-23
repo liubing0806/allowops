@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
@@ -72,6 +73,9 @@ type testGateway struct {
 	silent bool
 	// blockPull holds catalog pulls open until the stream context ends.
 	blockPull bool
+	// reject, when set, refuses Connect after the hello like a version check.
+	reject   atomic.Pointer[connect.Error]
+	rejected atomic.Int32
 }
 
 type testConnection struct {
@@ -154,6 +158,10 @@ func (g *testGateway) Connect(ctx context.Context, stream *connect.BidiStream[v1
 	}
 	if first.GetHello() == nil {
 		return errors.New("first message must be hello")
+	}
+	if rejection := g.reject.Load(); rejection != nil {
+		g.rejected.Add(1)
+		return rejection
 	}
 	c := &testConnection{stream: stream, hello: first.GetHello(), messages: make(chan *v1.ConnectRequest, 256), closed: make(chan struct{})}
 	defer func() { c.mu.Lock(); defer c.mu.Unlock(); close(c.closed) }()
@@ -702,3 +710,84 @@ func TestReconnectAndBackoff(t *testing.T) {
 }
 
 var _ Runner = LocalRunner{}
+
+type agentLogSink struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *agentLogSink) Enabled(context.Context, slog.Level) bool { return true }
+func (h *agentLogSink) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r)
+	return nil
+}
+func (h *agentLogSink) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *agentLogSink) WithGroup(string) slog.Handler      { return h }
+func (h *agentLogSink) matching(message string) []map[string]string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []map[string]string
+	for _, r := range h.records {
+		if r.Message != message {
+			continue
+		}
+		attrs := map[string]string{"level": r.Level.String()}
+		r.Attrs(func(a slog.Attr) bool { attrs[a.Key] = a.Value.String(); return true })
+		out = append(out, attrs)
+	}
+	return out
+}
+
+func versionRejection(message string) *connect.Error {
+	e := connect.NewError(connect.CodeUnimplemented, errors.New(message))
+	if d, err := connect.NewErrorDetail(&v1.ErrorDetail{Reason: "AGENT_VERSION_UNSUPPORTED"}); err == nil {
+		e.AddDetail(d)
+	}
+	return e
+}
+
+func TestVersionRejectionIsLoggedOncePerStreak(t *testing.T) {
+	sink := &agentLogSink{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(sink))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	g, _, config := startGateway(t, false)
+	g.reject.Store(versionRejection("agent version dev unsupported by gateway 0.1.0"))
+	// With the default 1s-30s limits the retry after three rejections can wait 8s, longer than connection() allows.
+	config.Limits.ReconnectMin, config.Limits.ReconnectMax = 10*time.Millisecond, 100*time.Millisecond
+	startAgent(t, config)
+	waitRejected := func(n int32) {
+		t.Helper()
+		deadline := time.Now().Add(15 * time.Second)
+		for g.rejected.Load() < n {
+			if time.Now().After(deadline) {
+				t.Fatalf("agent made %d connection attempts, want %d", g.rejected.Load(), n)
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	// Repeated identical rejections must not flood the journal.
+	waitRejected(3)
+	logs := sink.matching("gateway rejected agent version")
+	if len(logs) != 1 {
+		t.Fatalf("rejection logs=%v, want exactly one", logs)
+	}
+	if a := logs[0]; a["level"] != "WARN" || a["agent_version"] != "dev" || a["reason"] != "AGENT_VERSION_UNSUPPORTED" || a["error"] != "agent version dev unsupported by gateway 0.1.0" {
+		t.Fatalf("rejection log=%v", a)
+	}
+	// After an accepted connection, a new rejection is logged again.
+	g.reject.Store(nil)
+	c := connection(t, g)
+	g.reject.Store(versionRejection("agent version dev unsupported by gateway 0.1.0"))
+	c.send(t, &v1.ConnectResponse{Message: &v1.ConnectResponse_Reconnect{Reconnect: &v1.Reconnect{CloseAt: timestamppb.Now(), RetryAfterMin: durationpb.New(time.Second), RetryAfterMax: durationpb.New(time.Second)}}})
+	waitRejected(g.rejected.Load() + 1)
+	deadline := time.Now().Add(5 * time.Second)
+	for len(sink.matching("gateway rejected agent version")) != 2 {
+		if time.Now().After(deadline) {
+			t.Fatalf("rejection logs after reconnect=%v, want two", sink.matching("gateway rejected agent version"))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}

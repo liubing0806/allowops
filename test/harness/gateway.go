@@ -62,6 +62,12 @@ func Check(t testing.TB, err error) {
 
 func New(t *testing.T, hosts int) *Gateway {
 	t.Helper()
+	return NewWithActions(t, hosts, nil)
+}
+
+// NewWithActions adds extra actions to the signed fixture catalog.
+func NewWithActions(t *testing.T, hosts int, extra map[string]catalog.Action) *Gateway {
+	t.Helper()
 	ctx := context.Background()
 	dsn := testpg.Start(t)
 	Check(t, store.Migrate(ctx, dsn))
@@ -105,11 +111,15 @@ func New(t *testing.T, hosts int) *Gateway {
 	Check(t, os.WriteFile(filepath.Join(g.Dir, "keys", "catalog.pem"), keyPEM, 0644))
 	examples, err := catalog.Load("../../examples/catalog")
 	Check(t, err)
-	g.Catalog, err = catalog.Build(&catalog.Catalog{Config: catalog.Config{SchemaVersion: 1, CatalogID: "p10a"}, Actions: map[string]catalog.Action{
+	actions := map[string]catalog.Action{
 		"noop":          {Name: "noop", Description: "Protocol-only zero-duration result", Risk: "read", Exec: []any{"/usr/bin/true"}, Timeout: "10s", MaxOutput: 1024},
 		"system_load":   examples.Actions["system_load"],
 		"root_identity": {Name: "root_identity", Description: "Verify the packaged sudo helper", Risk: "write", RunAs: "root", Exec: []any{"/usr/bin/id", "-u"}, Timeout: "10s", MaxOutput: 1024},
-	}}, catalog.BuildOptions{Now: time.Now(), TTL: 2 * time.Hour})
+	}
+	for name, action := range extra {
+		actions[name] = action
+	}
+	g.Catalog, err = catalog.Build(&catalog.Catalog{Config: catalog.Config{SchemaVersion: 1, CatalogID: "p10a"}, Actions: actions}, catalog.BuildOptions{Now: time.Now(), TTL: 2 * time.Hour})
 	Check(t, err)
 	payload, err := catalog.CanonicalJSON(g.Catalog)
 	Check(t, err)
@@ -199,8 +209,21 @@ func (g *Gateway) Stop(t *testing.T) {
 }
 
 func (g *Gateway) RunJob(names []string, action string) (*v1.RunJobResponse, time.Duration, error) {
+	return g.RunJobWithParams(names, action, nil)
+}
+
+// RunJobWithParams passes params as the job's JSON parameter object.
+func (g *Gateway) RunJobWithParams(names []string, action string, params map[string]any) (*v1.RunJobResponse, time.Duration, error) {
 	start := time.Now()
-	r, err := g.Client.RunJob(context.Background(), connect.NewRequest(&v1.RunJobRequest{Action: action, Targets: &v1.HostTargets{Selection: &v1.HostTargets_Hosts{Hosts: &v1.HostNames{Names: names}}}, Reason: "local P10A acceptance", WaitSeconds: proto.Uint32(120)}))
+	request := &v1.RunJobRequest{Action: action, Targets: &v1.HostTargets{Selection: &v1.HostTargets_Hosts{Hosts: &v1.HostNames{Names: names}}}, Reason: "local P10A acceptance", WaitSeconds: proto.Uint32(120)}
+	if params != nil {
+		raw, err := json.Marshal(params)
+		if err != nil {
+			return nil, 0, err
+		}
+		request.Params = &v1.Parameters{Json: raw}
+	}
+	r, err := g.Client.RunJob(context.Background(), connect.NewRequest(request))
 	if err != nil {
 		return nil, time.Since(start), err
 	}

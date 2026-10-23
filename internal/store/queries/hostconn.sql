@@ -55,3 +55,12 @@ UPDATE gateway_messages SET response=$2 WHERE message_id=ANY($1::text[]) AND gat
 
 -- name: FailConnectionMessages :exec
 UPDATE gateway_messages SET failure='offline' WHERE connection_id=$1 AND response IS NULL;
+
+-- name: GetHostHostname :one
+SELECT hostname FROM hosts WHERE host_id=$1;
+
+-- name: ListExistingGatewayMessageIDs :many
+SELECT message_id FROM gateway_messages WHERE message_id=ANY(sqlc.arg(message_ids)::text[]);
+
+-- name: ListActiveTaskIDsOnConnection :many
+SELECT DISTINCT task_id FROM tasks WHERE task_id=ANY(sqlc.arg(task_ids)::text[]) AND host_id=sqlc.arg(host_id) AND connection_id=sqlc.arg(connection_id) AND status IN (1,2);

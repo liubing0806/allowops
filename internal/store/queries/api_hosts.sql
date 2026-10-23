@@ -30,3 +30,6 @@ SELECT token_id,max_uses,used_count,expires_at,created_at,revoked_at FROM join_t
 
 -- name: RevokeJoinToken :execrows
 UPDATE join_tokens SET revoked=true,revoked_at=CASE WHEN revoked THEN revoked_at ELSE now() END WHERE token_id=$1;
+
+-- name: ListActiveHostIDsByLabels :many
+SELECT host_id FROM hosts WHERE certificate_status='active' AND authorization_labels @> sqlc.arg(authorization_labels)::jsonb AND reported_labels @> sqlc.arg(reported_labels)::jsonb ORDER BY host_id;

@@ -51,6 +51,18 @@ The migration Secret is always provisioned independently. The pre-install /
 pre-upgrade Job runs `allowops-gateway migrate`; failed migrations prevent
 the release from starting or upgrading. Successful hook Jobs are deleted.
 
+Identity providers in `gateway.providers` read their secrets from environment
+variables (`client_secret_env` for OIDC, `bind_password_env` for LDAP). Map each
+variable to a pre-provisioned Secret with `gateway.providerSecretEnv`, a list of
+`{name, secretName, key}` entries rendered as `secretKeyRef` variables in the
+gateway Deployment and the export StatefulSet. The gateway does not start when a
+referenced variable is empty. Names reserved by the chart (`ALLOWOPS_DATABASE_URL`,
+`AWS_SHARED_CREDENTIALS_FILE`, `AWS_EC2_METADATA_DISABLED`) are rejected. Secret
+values never enter the ConfigMap. `python3 deploy/helm/verify-provider-secrets.py`
+renders the chart with an LDAP and an OIDC provider and checks this contract
+(needs helm and PyYAML). The chart does not mount provider CA files; `ca_file`
+paths must already exist in the image.
+
 G35 requires either a self-signed root CA in `tls.crt`'s full chain or an
 explicit `gateway.management.ca_pin` (SHA-256 of the TLS root CA DER).
 The host identity CA is a different CA. `gateway.management.upstream` defaults

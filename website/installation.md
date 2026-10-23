@@ -78,7 +78,8 @@ migration database credential through existing Kubernetes Secrets. Also provisio
 `allowops-output` with an `aws-credentials` file and `allowops-audit-cursor` with
 `audit-cursor-key` containing exactly 32 raw random bytes, shared by all gateway
 instances. Keep secrets out of Helm values and release history.
-Configure the identity provider, public
+Configure the identity provider (give an OIDC `client_secret_env` or LDAP
+`bind_password_env` variable a Secret through `gateway.providerSecretEnv`), public
 HTTPS origin, output bucket/region/endpoint and S3 credential delivery according
 to the chart's values and Secret contract. The TLS certificate name must match
 the public upstream address. Apply the required runtime database grants before

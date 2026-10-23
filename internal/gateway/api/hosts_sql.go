@@ -54,13 +54,15 @@ func scanHost(row pgx.Row) (*v1.Host, error) {
 }
 
 // activeHosts lists active hosts by ID, locking the rows when lock is set.
-// window is the heartbeat window as interval text.
-func activeHosts(ctx context.Context, q querier, window string, lock bool) ([]*v1.Host, error) {
-	sql := "SELECT " + hostColumns + " FROM hosts h WHERE certificate_status='active' ORDER BY host_id"
+// window is the heartbeat window as interval text. where is an extra condition
+// over h whose placeholders start at $2 ($1 is the window) and args are its
+// arguments; with lock, only the selected rows are locked, in host_id order.
+func activeHosts(ctx context.Context, q querier, window, where string, lock bool, args ...any) ([]*v1.Host, error) {
+	sql := "SELECT " + hostColumns + " FROM hosts h WHERE certificate_status='active'" + where + " ORDER BY host_id"
 	if lock {
 		sql += " FOR UPDATE OF h"
 	}
-	rows, err := q.Query(ctx, sql, window)
+	rows, err := q.Query(ctx, sql, append([]any{window}, args...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +76,12 @@ func activeHosts(ctx context.Context, q querier, window string, lock bool) ([]*v
 		out = append(out, h)
 	}
 	return out, rows.Err()
+}
+
+// activeHostIDsByLabels lists the IDs of active hosts whose authorization and
+// reported labels (JSON objects) contain the given labels, in host_id order.
+func activeHostIDsByLabels(ctx context.Context, q querier, authorization, reported []byte) ([]string, error) {
+	return db.New(q).ListActiveHostIDsByLabels(ctx, db.ListActiveHostIDsByLabelsParams{AuthorizationLabels: authorization, ReportedLabels: reported})
 }
 
 // activeHostByName reads one active host by hostname.

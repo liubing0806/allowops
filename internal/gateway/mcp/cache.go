@@ -13,6 +13,7 @@ import (
 
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/job"
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store/db"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -56,7 +57,7 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	definitions, available, unsupported, err := visibleTools(ctx, engine, snap.id, actions)
+	definitions, available, unsupported, err := visibleTools(ctx, engine, snap.id, actions, s.config.Jobs)
 	if err != nil {
 		return nil, err
 	}
@@ -161,8 +162,8 @@ func projectRules(rules []authz.Rule) ruleSnapshot {
 
 // visibleTools returns the tool definitions to register, plus the set of
 // callable names and the subset whose schema the SDK cannot register.
-func visibleTools(ctx context.Context, engine *authz.Engine, id *reqctx.Identity, actions map[string]catalog.Action) ([]ToolDefinition, map[string]bool, map[string]bool, error) {
-	definitions := fixedTools()
+func visibleTools(ctx context.Context, engine *authz.Engine, id *reqctx.Identity, actions map[string]catalog.Action, cfg job.Config) ([]ToolDefinition, map[string]bool, map[string]bool, error) {
+	definitions := fixedTools(cfg)
 	names := slices.Collect(maps.Keys(actions))
 	slices.Sort(names)
 	available := map[string]bool{}
@@ -179,7 +180,7 @@ func visibleTools(ctx context.Context, engine *authz.Engine, id *reqctx.Identity
 		if result.Decision != "allow" {
 			continue
 		}
-		tool, err := actionTool(a)
+		tool, err := actionTool(a, cfg)
 		if errors.Is(err, errUnsupportedActionSchema) {
 			// Preserve projected visibility for a stable direct-call error without
 			// registering an invalid SDK schema or dispatching the action.

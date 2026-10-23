@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -186,7 +187,7 @@ func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, available
 		if unsupportedActionSchema(action) {
 			return nil, accessError(connect.CodeFailedPrecondition, errUnsupportedActionSchema.Error())
 		}
-		request, format, err := actionRequest(action, r.Params.Arguments)
+		request, format, err := actionRequest(action, r.Params.Arguments, s.config.Jobs)
 		if err != nil {
 			return nil, invalidArguments(err)
 		}
@@ -246,9 +247,14 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 		return nil, err
 	}
 	state.jobID = id
-	wait := uint32(defaultWaitSeconds)
-	if decodeField(args, "wait_seconds", &wait, false) != nil || wait > maxWaitSeconds {
-		return nil, accessError(connect.CodeInvalidArgument, "wait_seconds allowed: integer in [0,120]")
+	// An omitted wait_seconds stays nil so the job layer applies the gateway default.
+	var wait uint32
+	if decodeField(args, "wait_seconds", &wait, false) != nil || wait > s.config.Jobs.MaxWaitSeconds {
+		return nil, accessError(connect.CodeInvalidArgument, fmt.Sprintf("wait_seconds allowed: integer in [0,%d]", s.config.Jobs.MaxWaitSeconds))
+	}
+	var waitSeconds *uint32
+	if _, present := args["wait_seconds"]; present {
+		waitSeconds = &wait
 	}
 	format := "concise"
 	if decodeField(args, "response_format", &format, false) != nil || !slices.Contains([]string{"concise", "detailed"}, format) {
@@ -282,7 +288,7 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 	var response *v1.GetJobResponse
 	err = s.withProgress(ctx, r, func() error {
 		var e error
-		response, e = s.jobs.GetJob(ctx, &v1.GetJobRequest{JobId: id, WaitSeconds: &wait, ResponseFormat: format})
+		response, e = s.jobs.GetJob(ctx, &v1.GetJobRequest{JobId: id, WaitSeconds: waitSeconds, ResponseFormat: format})
 		return e
 	})
 	if err != nil {

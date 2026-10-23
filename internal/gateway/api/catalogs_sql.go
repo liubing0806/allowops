@@ -19,17 +19,32 @@ type catalogRow struct {
 	current   bool
 }
 
+// catalogQuery selects catalog rows. version 0 matches every version; limit 0
+// means no limit.
+type catalogQuery struct {
+	id      string
+	version int64
+	current bool
+	offset  int
+	limit   int
+}
+
 // storedCatalogRows lists catalog versions ordered by catalog and newest
-// version first. catalogID filters to one catalog when not empty and current
-// keeps only each catalog's newest version. The optional filter makes the
-// statement text dynamic.
-func storedCatalogRows(ctx context.Context, q querier, catalogID string, current bool) ([]catalogRow, error) {
-	sql := `SELECT c.dsse,c.published_at,c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id) FROM catalog_versions c WHERE ($1='' OR c.catalog_id=$1)`
-	if current {
+// version first. q.id filters to one catalog when not empty, q.version to one
+// version when not 0 and q.current keeps only each catalog's newest version.
+// With q.limit it returns at most q.limit+1 rows: the extra row tells the caller
+// that more follow. The optional filter makes the statement text dynamic.
+func storedCatalogRows(ctx context.Context, q querier, query catalogQuery) ([]catalogRow, error) {
+	sql := `SELECT c.dsse,c.published_at,c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id) FROM catalog_versions c WHERE ($1='' OR c.catalog_id=$1) AND ($2::bigint=0 OR c.version=$2::bigint)`
+	if query.current {
 		sql += ` AND c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id)`
 	}
-	sql += " ORDER BY c.catalog_id,c.version DESC"
-	rows, err := q.Query(ctx, sql, catalogID)
+	sql += " ORDER BY c.catalog_id,c.version DESC OFFSET $3::bigint LIMIT $4::bigint"
+	var limit *int
+	if query.limit > 0 {
+		limit = new(query.limit + 1)
+	}
+	rows, err := q.Query(ctx, sql, query.id, query.version, query.offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -43,6 +58,13 @@ func storedCatalogRows(ctx context.Context, q querier, catalogID string, current
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// countCatalogVersions counts the stored versions of one catalog, or of every
+// catalog when catalogID is empty.
+func countCatalogVersions(ctx context.Context, q querier, catalogID string) (int, error) {
+	n, err := db.New(q).CountCatalogVersions(ctx, catalogID)
+	return int(n), err
 }
 
 func purgeCatalogUploads(ctx context.Context, q querier) error {

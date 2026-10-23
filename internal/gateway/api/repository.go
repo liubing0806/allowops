@@ -169,36 +169,55 @@ func (s *Service) issueSession(ctx context.Context, q querier, userID string, cl
 	return sess, token, dbError(err)
 }
 
-func page[T any](ctx context.Context, cfg Config, scope string, req *v1.PageRequest, items []T) ([]T, *v1.PageResponse, error) {
-	size, offset := cfg.PageSize, 0
-	binding := base64.RawURLEncoding.EncodeToString(hash(scope + ":" + reqctx.ActorID(ctx)))
+// pageCursor resolves the requested page size and start offset. The cursor is
+// bound to the scope and caller.
+func pageCursor(ctx context.Context, cfg Config, scope string, req *v1.PageRequest) (size, offset int, binding string, err error) {
+	size = cfg.PageSize
+	binding = base64.RawURLEncoding.EncodeToString(hash(scope + ":" + reqctx.ActorID(ctx)))
 	if req != nil {
 		if req.PageSize > 0 {
 			size = int(req.PageSize)
 		}
 		if size > cfg.MaxPageSize {
-			return nil, nil, failure(connect.CodeInvalidArgument, "page size exceeds limit")
+			return 0, 0, "", failure(connect.CodeInvalidArgument, "page size exceeds limit")
 		}
 		if req.PageToken != "" {
 			data, err := base64.RawURLEncoding.Strict().DecodeString(req.PageToken)
 			parts := strings.Split(string(data), ":")
 			if err != nil || len(parts) != 2 || parts[0] != binding {
-				return nil, nil, failure(connect.CodeInvalidArgument, "page cursor scope mismatch")
+				return 0, 0, "", failure(connect.CodeInvalidArgument, "page cursor scope mismatch")
 			}
 			offset, err = strconv.Atoi(parts[1])
-			if err != nil || offset < 0 || offset > len(items) {
-				return nil, nil, failure(connect.CodeInvalidArgument, "invalid page cursor")
+			if err != nil || offset < 0 {
+				return 0, 0, "", failure(connect.CodeInvalidArgument, "invalid page cursor")
 			}
 		}
 	}
-	limit := offset + min(size, len(items)-offset)
-	end := offset
-	for candidate := offset + 1; candidate <= limit; candidate++ {
+	return size, offset, binding, nil
+}
+
+func page[T any](ctx context.Context, cfg Config, scope string, req *v1.PageRequest, items []T) ([]T, *v1.PageResponse, error) {
+	size, offset, binding, err := pageCursor(ctx, cfg, scope, req)
+	if err != nil {
+		return nil, nil, err
+	}
+	if offset > len(items) {
+		return nil, nil, failure(connect.CodeInvalidArgument, "invalid page cursor")
+	}
+	return pageWindow(cfg, binding, offset, size, items[offset:], false)
+}
+
+// pageWindow fits the items that start at offset into one response. window may
+// stop short of the whole list; more says that items exist after it.
+func pageWindow[T any](cfg Config, binding string, offset, size int, window []T, more bool) ([]T, *v1.PageResponse, error) {
+	limit := min(size, len(window))
+	end := 0
+	for candidate := 1; candidate <= limit; candidate++ {
 		p := &v1.PageResponse{}
-		if candidate < len(items) {
-			p.NextPageToken = base64.RawURLEncoding.EncodeToString([]byte(binding + ":" + strconv.Itoa(candidate)))
+		if candidate < len(window) || more {
+			p.NextPageToken = base64.RawURLEncoding.EncodeToString([]byte(binding + ":" + strconv.Itoa(offset+candidate)))
 		}
-		message := pageMessage(any(items[offset:candidate]), p)
+		message := pageMessage(any(window[:candidate]), p)
 		if message == nil {
 			end = candidate
 			continue
@@ -211,14 +230,14 @@ func page[T any](ctx context.Context, cfg Config, scope string, req *v1.PageRequ
 			end = candidate
 		}
 	}
-	if offset < limit && end == offset {
+	if limit > 0 && end == 0 {
 		return nil, nil, failure(connect.CodeResourceExhausted, "list item exceeds message limit")
 	}
 	out := &v1.PageResponse{}
-	if end < len(items) {
-		out.NextPageToken = base64.RawURLEncoding.EncodeToString([]byte(binding + ":" + strconv.Itoa(end)))
+	if end < len(window) || more {
+		out.NextPageToken = base64.RawURLEncoding.EncodeToString([]byte(binding + ":" + strconv.Itoa(offset+end)))
 	}
-	return items[offset:end], out, nil
+	return window[:end], out, nil
 }
 
 // Measure the actual wire envelope, including its continuation cursor. All

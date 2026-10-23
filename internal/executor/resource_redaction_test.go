@@ -169,7 +169,10 @@ func TestResourceRedisRedaction(t *testing.T) {
 		case "strlen":
 			return 1 // key grows before GETRANGE
 		case "getrange":
-			return builtinSecret[:10]
+			// The key now holds the whole secret; answer the requested range.
+			start, _ := strconv.Atoi(args[2])
+			end, _ := strconv.Atoi(args[3])
+			return builtinSecret[start:min(end+1, len(builtinSecret))]
 		}
 		return fmt.Errorf("ERR unexpected command")
 	})

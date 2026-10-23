@@ -161,11 +161,11 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 1. 只用 `exec.Command(argv...)`，任何地方不出现 `sh -c` / `bash -c`。
 2. 占位符只作为完整 argv 元素替换，不做字符串内插。
 3. 拒绝以 `-` 开头的字符串参数值（防参数注入）。
-4. path 类型：`filepath.EvalSymlinks` 后检查是否在 allowed_roots 内，防 `../` 和软链接逃逸。
+4. path 类型：`filepath.EvalSymlinks` 后检查是否在 allowed_roots 内，防 `../` 和软链接逃逸。执行前再逐分量检查属主和写权限（`PATH_NOT_TRUSTED`），见 `docs/action-catalog-requirements.md` 第 4 节第 8 项。
 5. 执行环境清空，只保留 `PATH=/usr/sbin:/usr/bin:/sbin:/bin`、`LANG=C.UTF-8`、`PAGER=cat`、`SYSTEMD_PAGER=`。
 6. 每个动作都有超时（context），超时后结束整个进程组。
 7. 输出超过 max_output 时截断，结果中 `truncated: true`。脱敏在截断前执行。
-8. exec[0] 必须是绝对路径；拒绝 sh/bash/zsh/python/perl/awk/sed 等解释器和 `#!` 脚本（`allow_interpreter: true` 可覆盖并打印警告）。包装命令（`docker exec`、`kubectl exec --`、`nsenter`、`chroot`、`env`、`timeout`、`nice`、`ionice`、`stdbuf`、`xargs`）后真正执行的命令同样检查；禁止 `docker exec -t`、`kubectl exec -t`。
+8. exec[0] 必须是绝对路径；拒绝 sh/bash/zsh/python/perl/awk/sed 等解释器和 `#!` 脚本（`allow_interpreter: true` 可覆盖并打印警告）。包装命令（`docker exec`、`kubectl exec --`、`nsenter`、`chroot`、`env`、`timeout`、`nice`、`ionice`、`stdbuf`、`xargs`）后真正执行的命令同样检查；禁止 `docker exec -t`、`kubectl exec -t`。会执行命令的程序（`watch`、`ssh`、`su`、`setsid`、`git`、`psql`、`find -exec`、`tar --to-command` 等）按解释器处理；声明 `allow_interpreter` 时，占位符仍不能提供解释器选项、程序文本或这类程序的参数。名单和规则见决定记录 D10。
 9. 未知参数、缺失必填参数、类型错误一律拒绝，错误信息给出合法值。
 
 攻击测试集：`; rm -rf /`、`$(id)`、`` `id` ``、`--output=/etc/passwd`、`../../etc/shadow`、软链接逃逸、超长字符串、换行符注入等，全部被拒绝或被当作普通字面量；另加第 11 节威胁模型列出的测试。
@@ -285,7 +285,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 
 ### 控制台页面
 
-登录、概览、主机（筛选、详情、selector 批量设标签、CSV 导入并预览、删除）、join token、目录（版本、过期倒计时、action 详情、历史、版本分布）、策略（表单、试算、历史、回滚）、服务账号、job（详情、输出、取消）、审计（查询、哈希链校验）、用户与角色、系统（实例和依赖健康、主机端版本分布）。界面中英文。
+登录、概览（含网关新版本提醒）、主机（筛选、详情、selector 批量设标签、CSV 导入并预览、删除）、join token、目录（版本、过期倒计时、action 详情、历史、版本分布）、策略（表单、试算、历史、回滚）、服务账号、job（详情、输出、取消）、审计（查询、哈希链校验）、用户与角色、系统（实例和依赖健康、主机端版本分布、实例版本不一致提示、低于网关版本的主机数）。侧栏产品名下方显示网关版本号（来自 `GetCurrentSession` 的 `gateway_version`），有新版本时旁边显示标记。界面中英文。
 
 ### CLI
 
@@ -314,7 +314,9 @@ allowops-agent join|run|status
 ## 10. 发布与部署
 
 - 四个二进制同一 SemVer 版本，从同一 Git tag 发布。网关支持当前和上一主版本的主机端；主机端比网关新时拒绝连接。
-- 主机端：仅 amd64；`.deb`、`.rpm`、`.tar.gz`；`CGO_ENABLED=0`。支持 CentOS 7 / RHEL 7、Rocky/Alma/RHEL 8+、Ubuntu 20.04+、Debian 11+。rpm 不用弱依赖、不用 zstd 压缩，用 RSA 4096 GPG 签名；unit 只用 systemd 219 支持的选项。主机端升级由运维人员负责。
+- 主机端：仅 amd64；`.deb`、`.rpm`、`.tar.gz`；`CGO_ENABLED=0`。支持 CentOS 7 / RHEL 7、Rocky/Alma/RHEL 8+、Ubuntu 20.04+、Debian 11+。rpm 不用弱依赖、不用 zstd 压缩，用 RSA 4096 GPG 签名；unit 只用 systemd 219 支持的选项。
+- 主机端在线升级：签名目录中的升级 action（`run_as: root`、`risk: dangerous`），用 yum/apt 从内网软件源安装指定版本，再用 `systemd-run --on-active=5 --timer-property=AccuracySec=1s` 重启 `allowops-agent.service`，task 结果先回传。版本参数为 enum，只列出不高于当前网关的版本；先升级网关，再发布含新版本的目录。灰度用 job 主机选择器分批执行。软件源和包签名由运维人员维护。示例为 `examples/catalog` 的 `agent_upgrade`，不支持降级。依据见决定记录第 8 节。
+- 网关新版本提醒：网关读取发布清单（发布流水线从 Git tag 生成的静态 JSON，发布到文档站），发现新版本后在控制台提醒，不下载、不安装。配置 `update_check.enabled`（默认 `false`）和 `update_check.url`（默认文档站地址，内网可改为内部地址）。开启后每 24 小时检查一次并加随机延迟，请求只带 `User-Agent: allowops-gateway/<版本>`。多实例用 advisory lock 只由一个实例请求，结果写入单行表供所有实例读取。清单只含 `version` 和 `published_at`；版本号须为严格 SemVer，发布说明链接由控制台按版本号拼成。依据见决定记录第 8 节。
 - 主机端文件布局：
 
 ```

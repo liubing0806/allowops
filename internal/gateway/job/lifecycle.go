@@ -69,7 +69,7 @@ func (s *Service) RecoverLostInstances(ctx context.Context) error {
 		id, origin, version, err := lockLostInstanceJob(ctx, tx, s.lostAfter.Seconds())
 		if errors.Is(err, pgx.ErrNoRows) {
 			tx.Rollback(ctx)
-			return nil
+			return s.recoverLostOutputs(ctx)
 		}
 		if err != nil {
 			tx.Rollback(ctx)
@@ -107,6 +107,43 @@ func (s *Service) RecoverLostInstances(ctx context.Context) error {
 		event.Reason = "result"
 		if _, err := s.Audit.Append(ctx, event); err != nil {
 			slog.Error("lost gateway recovery result audit failed", "job_id", id)
+			return err
+		}
+	}
+}
+
+// recoverLostOutputs ends the pending output of terminal tasks whose receiving
+// gateway process is lost by the same last_seen rule as job recovery. That
+// process persisted the output from memory and no other process can; without
+// this, GetJobOutput would answer OUTPUT_PENDING forever. The audit event is
+// the one persist writes for a failed upload. A task whose output_instance is
+// NULL (written before the column existed) is not touched.
+func (s *Service) recoverLostOutputs(ctx context.Context) error {
+	for {
+		tx, err := s.Store.Pool.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		lost, err := lockLostOutputTask(ctx, tx, s.lostAfter.Seconds())
+		if errors.Is(err, pgx.ErrNoRows) {
+			tx.Rollback(ctx)
+			return nil
+		}
+		if err != nil {
+			tx.Rollback(ctx)
+			return err
+		}
+		if err := markTaskOutputUnavailable(ctx, tx, lost.jobID, lost.taskID); err != nil {
+			tx.Rollback(ctx)
+			return err
+		}
+		// Audit before COMMIT: a failed append leaves the task pending for the
+		// next pass instead of an unavailable output without a record.
+		if _, err := s.Audit.Append(ctx, audit.Payload{SubjectID: lost.actor, Operation: "store_output", Resource: lost.hostID, Hostname: lost.hostname, Decision: "deny", Reason: "OUTPUT_INSTANCE_LOST", JobID: lost.jobID, TaskID: lost.taskID, Action: lost.action, PolicyVersion: lost.version, Outputs: []audit.Output{}}); err != nil {
+			tx.Rollback(ctx)
+			return err
+		}
+		if err := tx.Commit(ctx); err != nil {
 			return err
 		}
 	}

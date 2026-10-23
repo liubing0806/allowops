@@ -1,10 +1,12 @@
 package catalog
 
 import (
+	"bytes"
 	"reflect"
 	"regexp"
 	"strings"
 	"testing"
+	"text/template"
 
 	"github.com/liubing0806/allowops/internal/redact"
 )
@@ -389,5 +391,49 @@ func TestExampleContainerFileActionsRedactNginxDirectives(t *testing.T) {
 	c := loadExamples(t)
 	for _, name := range []string{"docker_file_view", "docker_file_grep", "k8s_pod_file_view", "k8s_pod_file_grep"} {
 		checkRedactionCases(t, name, exampleRedactor(t, c, name), nginxDirectiveCases)
+	}
+}
+
+// k8s_configmap_view prints each ConfigMap key with its value. The redactor
+// works line by line, so a single-line value must be on the line of its key.
+func TestExampleConfigMapViewKeepsKeyAndValueOnOneLine(t *testing.T) {
+	a := loadExamples(t).Actions["k8s_configmap_view"]
+	var source string
+	for _, arg := range a.Exec {
+		if s, ok := arg.(string); ok && strings.HasPrefix(s, "go-template=") {
+			source = strings.TrimPrefix(s, "go-template=")
+		}
+	}
+	if source == "" {
+		t.Fatal("k8s_configmap_view has no go-template argument")
+	}
+	tmpl, err := template.New("cm").Parse(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	data := map[string]any{"data": map[string]any{
+		"APP_NAME":         "demo",
+		"DB_PASSWORD":      "SynthPw9xQ",
+		"redis.auth-token": "SynthTok7",
+		"application.yml":  "spring:\n  datasource:\n    password: SynthYml3\n",
+	}}
+	if err := tmpl.Execute(&out, data); err != nil {
+		t.Fatal(err)
+	}
+	r := exampleRedactor(t, loadExamples(t), "k8s_configmap_view")
+	var got bytes.Buffer
+	if err := r.Stream(&out, &got, redact.DefaultMaxLine); err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"SynthPw9xQ", "SynthTok7", "SynthYml3"} {
+		if strings.Contains(got.String(), secret) {
+			t.Errorf("leaks %q:\n%s", secret, got.String())
+		}
+	}
+	for _, keep := range []string{"APP_NAME", "demo", "application.yml", "spring:"} {
+		if !strings.Contains(got.String(), keep) {
+			t.Errorf("lost %q:\n%s", keep, got.String())
+		}
 	}
 }

@@ -26,6 +26,17 @@ func (q *Queries) AppendCatalogUploadChunk(ctx context.Context, arg AppendCatalo
 	return err
 }
 
+const countCatalogVersions = `-- name: CountCatalogVersions :one
+SELECT count(*) FROM catalog_versions WHERE ($1='' OR catalog_id=$1)
+`
+
+func (q *Queries) CountCatalogVersions(ctx context.Context, dollar_1 interface{}) (int64, error) {
+	row := q.db.QueryRow(ctx, countCatalogVersions, dollar_1)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countExpiringCatalogs = `-- name: CountExpiringCatalogs :one
 SELECT count(*) FROM catalog_versions c WHERE c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id) AND expires_at>now() AND expires_at<=now()+interval '14 days'
 `

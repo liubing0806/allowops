@@ -314,6 +314,31 @@ func (q *Queries) InsertTaskStep(ctx context.Context, arg InsertTaskStepParams) 
 	return err
 }
 
+const insertTaskStepIfAbsent = `-- name: InsertTaskStepIfAbsent :exec
+INSERT INTO task_steps(job_id,task_id,created_at,step_index,name,result) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING
+`
+
+type InsertTaskStepIfAbsentParams struct {
+	JobID     string
+	TaskID    string
+	CreatedAt pgtype.Timestamptz
+	StepIndex int32
+	Name      string
+	Result    []byte
+}
+
+func (q *Queries) InsertTaskStepIfAbsent(ctx context.Context, arg InsertTaskStepIfAbsentParams) error {
+	_, err := q.db.Exec(ctx, insertTaskStepIfAbsent,
+		arg.JobID,
+		arg.TaskID,
+		arg.CreatedAt,
+		arg.StepIndex,
+		arg.Name,
+		arg.Result,
+	)
+	return err
+}
+
 const isTaskTerminal = `-- name: IsTaskTerminal :one
 SELECT status>2 FROM tasks WHERE job_id=$1 AND task_id=$2
 `
@@ -626,42 +651,47 @@ func (q *Queries) LockLostInstanceJob(ctx context.Context, dollar_1 interface{})
 	return i, err
 }
 
-const lockTaskForEvent = `-- name: LockTaskForEvent :one
-SELECT j.action_definition,t.status,t.created_at,t.host_id,t.hostname,COALESCE(t.connection_id,''),t.dispatched,j.subject_id,j.policy_version FROM tasks t JOIN jobs j ON j.job_id=t.job_id WHERE t.job_id=$1 AND t.task_id=$2 FOR UPDATE OF t
+const lockLostOutputTask = `-- name: LockLostOutputTask :one
+SELECT t.job_id,t.task_id,t.host_id,t.hostname,j.subject_id,j.action,j.policy_version FROM tasks t JOIN jobs j ON j.job_id=t.job_id JOIN gateway_instances i ON i.instance_id=t.output_instance WHERE t.output_state='pending' AND t.status>2 AND i.last_seen<now()-$1*interval '1 second' ORDER BY t.job_id,t.task_id FOR UPDATE OF t SKIP LOCKED LIMIT 1
 `
 
-type LockTaskForEventParams struct {
+type LockLostOutputTaskRow struct {
+	JobID         string
+	TaskID        string
+	HostID        string
+	Hostname      string
+	SubjectID     string
+	Action        string
+	PolicyVersion int64
+}
+
+func (q *Queries) LockLostOutputTask(ctx context.Context, dollar_1 interface{}) (LockLostOutputTaskRow, error) {
+	row := q.db.QueryRow(ctx, lockLostOutputTask, dollar_1)
+	var i LockLostOutputTaskRow
+	err := row.Scan(
+		&i.JobID,
+		&i.TaskID,
+		&i.HostID,
+		&i.Hostname,
+		&i.SubjectID,
+		&i.Action,
+		&i.PolicyVersion,
+	)
+	return i, err
+}
+
+const markTaskOutputUnavailable = `-- name: MarkTaskOutputUnavailable :exec
+UPDATE tasks SET output_state='unavailable' WHERE job_id=$1 AND task_id=$2
+`
+
+type MarkTaskOutputUnavailableParams struct {
 	JobID  string
 	TaskID string
 }
 
-type LockTaskForEventRow struct {
-	ActionDefinition []byte
-	Status           int16
-	CreatedAt        pgtype.Timestamptz
-	HostID           string
-	Hostname         string
-	ConnectionID     string
-	Dispatched       bool
-	SubjectID        string
-	PolicyVersion    int64
-}
-
-func (q *Queries) LockTaskForEvent(ctx context.Context, arg LockTaskForEventParams) (LockTaskForEventRow, error) {
-	row := q.db.QueryRow(ctx, lockTaskForEvent, arg.JobID, arg.TaskID)
-	var i LockTaskForEventRow
-	err := row.Scan(
-		&i.ActionDefinition,
-		&i.Status,
-		&i.CreatedAt,
-		&i.HostID,
-		&i.Hostname,
-		&i.ConnectionID,
-		&i.Dispatched,
-		&i.SubjectID,
-		&i.PolicyVersion,
-	)
-	return i, err
+func (q *Queries) MarkTaskOutputUnavailable(ctx context.Context, arg MarkTaskOutputUnavailableParams) error {
+	_, err := q.db.Exec(ctx, markTaskOutputUnavailable, arg.JobID, arg.TaskID)
+	return err
 }
 
 const markTaskStarted = `-- name: MarkTaskStarted :exec

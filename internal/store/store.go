@@ -19,7 +19,7 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-const SchemaVersion int64 = 7
+const SchemaVersion int64 = 9
 const NotificationChannel = "allowops_gateway"
 
 //go:embed migrations/*.sql
@@ -47,6 +47,32 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 		return nil, fmt.Errorf("connect PostgreSQL")
 	}
 	return &Store{Pool: p, Queries: db.New(p)}, nil
+}
+
+// OpenPool opens a pool on the same database with its own connection limit,
+// independent of the pool Open returns and of any pool_max_conns in the DSN.
+// It lets a component that is called while another holds a pooled connection
+// (the audit store, appended to inside host write transactions) never wait for
+// that pool.
+func OpenPool(ctx context.Context, dsn string, maxConns int32) (*pgxpool.Pool, error) {
+	if maxConns < 1 {
+		return nil, fmt.Errorf("connection limit must be positive")
+	}
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("configure PostgreSQL")
+	}
+	config.MaxConns = maxConns
+	config.MinConns = 0
+	p, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("configure PostgreSQL")
+	}
+	if err := p.Ping(ctx); err != nil {
+		p.Close()
+		return nil, fmt.Errorf("connect PostgreSQL")
+	}
+	return p, nil
 }
 
 func (s *Store) Close() { s.Pool.Close() }

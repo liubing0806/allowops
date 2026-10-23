@@ -1,12 +1,17 @@
 package redis
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -340,6 +345,223 @@ func TestGetRangeBoundsConcurrentGrowth(t *testing.T) {
 	}
 	if strings.Contains(stats, "cmdstat_get:") || !strings.Contains(stats, "cmdstat_getrange:") || strings.Contains(stats, "cmdstat_watch:") || strings.Contains(stats, "cmdstat_multi:") {
 		t.Fatalf("unexpected read commands:\n%s", stats)
+	}
+}
+
+// STRLEN equal to the limit does not prove the GETRANGE prefix is complete:
+// the key may have grown in between, and an unchanged key of exactly limit
+// bytes must still be returned whole.
+func TestGetAtExactLimitDetectsGrowth(t *testing.T) {
+	const limit = 128
+	exact := strings.Repeat("x", limit)
+	for _, tc := range []struct {
+		name          string
+		grow          bool
+		wantTruncated bool
+	}{{"unchanged", false, false}, {"grown after STRLEN", true, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := startServer(t)
+			s.seed(t, "SET", "key", exact)
+			reader := redisclient.NewClient(s.client.Options())
+			defer reader.Close()
+			if tc.grow {
+				reader.AddHook(afterCommandHook{after: func(cmd redisclient.Cmder) {
+					if cmd.Name() == "strlen" {
+						s.seed(t, "SET", "key", exact+"tail")
+					}
+				}})
+			}
+			value, truncated, err := readResponse(context.Background(), reader, []any{"GET", "key"}, limit)
+			if err != nil || truncated != tc.wantTruncated || value != exact {
+				t.Fatalf("GET at limit: value=%q truncated=%v want %v error=%v", value, truncated, tc.wantTruncated, err)
+			}
+		})
+	}
+}
+
+// MGET prechecks sizes with STRLEN, but a key can grow before the values are
+// read. The read must stay bounded instead of fetching the grown value whole.
+func TestMGETGrowthIsReadWithBoundedRange(t *testing.T) {
+	s := startServer(t)
+	s.seed(t, "SET", "a", "small")
+	s.seed(t, "SET", "b", "small")
+	reader := redisclient.NewClient(s.client.Options())
+	defer reader.Close()
+	reader.AddHook(afterCommandHook{after: func(cmd redisclient.Cmder) {
+		if cmd.Name() == "strlen" && cmd.Args()[1] == "b" {
+			s.seed(t, "SET", "b", strings.Repeat("x", 1<<20))
+		}
+	}})
+	s.seed(t, "CONFIG", "RESETSTAT")
+	value, truncated, err := readResponse(context.Background(), reader, []any{"MGET", "a", "b"}, 128)
+	if !errors.Is(err, ErrResponseLimit) || !truncated || value != nil {
+		t.Fatalf("grown MGET: value=%v truncated=%v error=%v", value, truncated, err)
+	}
+	stats, err := s.client.Info(context.Background(), "commandstats").Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(stats, "cmdstat_mget:") || !strings.Contains(stats, "cmdstat_getrange:") {
+		t.Fatalf("MGET must read with GETRANGE only:\n%s", stats)
+	}
+}
+
+// MGET answers null for missing and non-string keys and keeps an empty string
+// distinct from them; the bounded per-key reads must preserve that.
+func TestMGETNullAndEmptyValues(t *testing.T) {
+	s := startServer(t)
+	s.seed(t, "SET", "text", "hello")
+	s.seed(t, "SET", "empty", "")
+	s.seed(t, "SET", "exact", strings.Repeat("y", 8))
+	s.seed(t, "HSET", "hash", "field", "value")
+	s.seed(t, "RPUSH", "list", "a")
+	want, err := s.client.MGet(context.Background(), "text", "missing", "hash", "empty", "list", "text", "exact").Result()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "exact" ends exactly at the limit: 5 + 5 + 8 = 18.
+	value, truncated, err := readResponse(context.Background(), s.client, []any{"MGET", "text", "missing", "hash", "empty", "list", "text", "exact"}, 18)
+	if err != nil || truncated || !reflect.DeepEqual(value, want) {
+		t.Fatalf("MGET: value=%#v want %#v truncated=%v error=%v", value, want, truncated, err)
+	}
+}
+
+// A fake server that passes the HSTRLEN precheck, then advertises a maximal
+// bulk string for HGET and never sends the body. The client must reject the
+// advertised length without allocating it.
+func TestHGetRejectsAdvertisedHugeBulkBeforeAllocation(t *testing.T) {
+	if !inRootNamespace(t) {
+		return
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		rd := bufio.NewReader(conn)
+		for {
+			// Commands from go-redis are arrays of bulk strings.
+			line, err := rd.ReadString('\n')
+			if err != nil || line[0] != '*' {
+				return
+			}
+			count, _ := strconv.Atoi(strings.TrimSpace(line[1:]))
+			var words []string
+			for range count {
+				header, err := rd.ReadString('\n')
+				if err != nil {
+					return
+				}
+				size, _ := strconv.Atoi(strings.TrimSpace(header[1:]))
+				word := make([]byte, size+2)
+				if _, err := io.ReadFull(rd, word); err != nil {
+					return
+				}
+				words = append(words, strings.ToUpper(string(word[:size])))
+			}
+			switch words[0] {
+			case "HELLO":
+				_, _ = conn.Write([]byte("*0\r\n"))
+			case "HSTRLEN":
+				_, _ = conn.Write([]byte(":5\r\n"))
+			case "HGET":
+				_, _ = conn.Write([]byte("$536870912\r\n"))
+				<-done
+				return
+			default:
+				_, _ = conn.Write([]byte("+OK\r\n"))
+			}
+		}
+	}()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	start := time.Now()
+	r, err := Run(context.Background(), Config{Address: ln.Addr().String(), Credential: credentials(t), MaxResponseBytes: 128, Timeout: 3 * time.Second}, Params{Command: "HGET", Args: []string{"hash", "field"}})
+	runtime.ReadMemStats(&after)
+	if !errors.Is(err, ErrResponseLimit) || !r.Truncated || r.Stdout != "" || r.ExitCode != 1 {
+		t.Fatalf("huge HGET: %+v error=%v after %v", r, err, time.Since(start))
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 64<<20 {
+		t.Fatalf("huge HGET allocated %d bytes", allocated)
+	}
+}
+
+type chunkConn struct {
+	net.Conn
+	data  []byte
+	chunk int
+}
+
+func (c *chunkConn) Read(p []byte) (int, error) {
+	if len(c.data) == 0 {
+		return 0, io.EOF
+	}
+	n := min(len(p), c.chunk, len(c.data))
+	copy(p, c.data[:n])
+	c.data = c.data[n:]
+	return n, nil
+}
+
+// The guard must follow RESP framing under any read fragmentation: a body that
+// looks like a header is not one, an exact-limit and a null bulk pass, and the
+// first digit over the limit is withheld.
+func TestBulkLimitConnFraming(t *testing.T) {
+	const limit = 12
+	for _, tc := range []struct {
+		name, stream, want string
+		wantErr            bool
+	}{
+		{"simple replies", "+OK\r\n+OK\r\n", "+OK\r\n+OK\r\n", false},
+		{"exact limit", "$12\r\n" + strings.Repeat("a", 12) + "\r\n", "$12\r\n" + strings.Repeat("a", 12) + "\r\n", false},
+		{"null bulk", "$-1\r\n", "$-1\r\n", false},
+		{"empty bulk", "$0\r\n\r\n", "$0\r\n\r\n", false},
+		{"body that looks like a header", "$12\r\n$999999999999\r\n:1\r\n", "$12\r\n$999999999999\r\n:1\r\n", false},
+		{"error line", "-ERR $999999\r\n+OK\r\n", "-ERR $999999\r\n+OK\r\n", false},
+		{"over limit", "+OK\r\n$13\r\n" + strings.Repeat("a", 13) + "\r\n", "+OK\r\n$1", true},
+		{"huge", "$536870912\r\n", "$5", true},
+	} {
+		for _, chunk := range []int{1, 2, 3, 7, 4096} {
+			t.Run(tc.name+"/"+strconv.Itoa(chunk), func(t *testing.T) {
+				conn := &bulkLimitConn{Conn: &chunkConn{data: []byte(tc.stream), chunk: chunk}, limit: limit}
+				var got []byte
+				buf := make([]byte, 64)
+				var err error
+				for err == nil {
+					var n int
+					n, err = conn.Read(buf)
+					got = append(got, buf[:n]...)
+				}
+				if tc.wantErr != errors.Is(err, ErrResponseLimit) || !tc.wantErr && err != io.EOF {
+					t.Fatalf("error=%v wantErr=%v", err, tc.wantErr)
+				}
+				// An error case delivers everything before the first over-limit digit.
+				if string(got) != tc.want {
+					t.Fatalf("delivered %q, want %q", got, tc.want)
+				}
+			})
+		}
+	}
+}
+
+// The wire guard must not reject a real server's value that fits the limit.
+func TestHGetAtExactLimitThroughWireGuard(t *testing.T) {
+	if !inRootNamespace(t) {
+		return
+	}
+	s := startServer(t)
+	value := strings.Repeat("v", 128)
+	s.seed(t, "HSET", "hash", "field", value)
+	r, err := Run(context.Background(), Config{Address: s.address, Credential: credentials(t), MaxResponseBytes: 128}, Params{Command: "HGET", Args: []string{"hash", "field"}})
+	if err != nil || r.Truncated || strings.TrimSpace(r.Stdout) != `"`+value+`"` {
+		t.Fatalf("HGET at limit: %+v, %v", r, err)
 	}
 }
 

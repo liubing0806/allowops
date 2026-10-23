@@ -27,7 +27,7 @@ import { ApiError } from '@/api/error'
 import {
   base64ToBytes,
   bytesToBase64,
-  parseLabels,
+  parseSelector,
   toBase64,
   validateLabel,
 } from '@/api/values'
@@ -55,7 +55,7 @@ const sha256 = async (bytes: Uint8Array) =>
 const zeros = bytesToBase64(new Uint8Array(32))
 
 function selected(host: Host, selector: string) {
-  return Object.entries(parseLabels(selector)).every(([key, value]) =>
+  return Object.entries(parseSelector(selector)).every(([key, value]) =>
     key.startsWith('reported.')
       ? host.reportedLabels[key.slice(9)] === value
       : host.authorizationLabels[key] === value,
@@ -640,6 +640,7 @@ export const mockApi: ConsoleApi = {
       client: 'LOGIN_CLIENT_CONSOLE',
       expiresAt: date(1),
       csrfToken: 'local-mock-only',
+      gatewayVersion: 'dev',
     }
   },
   async getLoginMethods() {
@@ -1248,6 +1249,10 @@ export const mockApi: ConsoleApi = {
         maxCatalogBytes: '67108864',
         maxCsvBytes: 524288,
       },
+      updateCheckEnabled: false,
+      gatewayVersion: 'dev',
+      updateCheckError: '',
+      hostsBelowGatewayVersion: '0',
     }
   },
   async listGatewayInstances() {

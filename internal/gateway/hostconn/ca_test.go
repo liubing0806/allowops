@@ -1,14 +1,17 @@
 package hostconn
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -70,5 +73,75 @@ func TestVersionCompatibility(t *testing.T) {
 	}
 	if err := CheckVersion("2.3.4-rc.2", "2.3.4"); err == nil {
 		t.Fatal("accepted newer release")
+	}
+}
+
+type caCreationStopped struct{}
+
+func TestOpenCAAfterInterruptedCreation(t *testing.T) {
+	defer func() { openCAStep = func(int) {} }()
+	for stop := 1; ; stop++ {
+		dir := t.TempDir()
+		certPath, keyPath := filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key")
+		openCAStep = func(step int) {
+			if step == stop {
+				panic(caCreationStopped{})
+			}
+		}
+		stopped := func() (stopped bool) {
+			defer func() {
+				if r := recover(); r != nil {
+					if _, ok := r.(caCreationStopped); !ok {
+						panic(r)
+					}
+					stopped = true
+				}
+			}()
+			OpenCA(certPath, keyPath)
+			return false
+		}()
+		openCAStep = func(int) {}
+		if !stopped {
+			if stop == 1 {
+				t.Fatal("CA creation reported no steps")
+			}
+			return
+		}
+		ca, err := OpenCA(certPath, keyPath)
+		if err != nil {
+			t.Fatalf("open after creation stopped at step %d: %v", stop, err)
+		}
+		again, err := OpenCA(certPath, keyPath)
+		if err != nil || !bytes.Equal(again.PEM, ca.PEM) {
+			t.Fatalf("reopen after step %d changed the CA: %v", stop, err)
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, entry := range entries {
+			names = append(names, entry.Name())
+		}
+		if strings.Join(names, ",") != "ca.key,ca.pem" {
+			t.Fatalf("files after step %d: %v", stop, names)
+		}
+	}
+}
+
+func TestOpenCARejectsKeyWithoutCertificate(t *testing.T) {
+	dir := t.TempDir()
+	certPath, keyPath := filepath.Join(dir, "ca.pem"), filepath.Join(dir, "ca.key")
+	if _, err := OpenCA(certPath, keyPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(certPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := OpenCA(certPath, keyPath); err == nil {
+		t.Fatal("accepted a CA key without its certificate")
+	}
+	if _, err := os.Lstat(certPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("created a certificate for an existing key: %v", err)
 	}
 }

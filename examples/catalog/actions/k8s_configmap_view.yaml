@@ -13,7 +13,7 @@ params:
     regex: ^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$
     max_len: 253
 exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, configmap, '{name}', -n, '{namespace}',
-  -o, 'go-template={{range $key, $value := .data}}### {{$key}}{{"\n"}}{{$value}}{{"\n"}}{{end}}']
+  -o, 'go-template={{range $key, $value := .data}}### {{$key}}={{$value}}{{"\n"}}{{end}}']
 exec_fallbacks: [/usr/local/bin/kubectl]
 timeout: 10s
 max_output: 64KB

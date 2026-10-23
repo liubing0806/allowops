@@ -36,6 +36,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { useCommand } from '@/lib/notifications'
 import { NotificationProvider } from '@/components/console/NotificationProvider'
+import { displayVersion, releaseNotesUrl } from '@/lib/release'
 import { applyTheme, useThemeStore } from '@/lib/theme-store'
 import { cn } from '@/lib/utils'
 const Login = lazy(() => import('@/pages/Login'))
@@ -80,6 +81,9 @@ function Layout() {
   const session = useQuery({
     queryKey: ['session'],
     queryFn: () => api.getCurrentSession(),
+    // The update notice comes with the session; a release found later must
+    // appear without a reload.
+    refetchInterval: 10 * 60 * 1000,
   })
   if (
     session.error instanceof ApiError &&
@@ -120,8 +124,24 @@ function Layout() {
               <span className="block truncate text-[11px] text-muted-foreground">
                 {t('app.subtitle')}
               </span>
+              <span className="block truncate text-[11px] text-muted-foreground">
+                {displayVersion(session.data.gatewayVersion)}
+              </span>
             </span>
           </Link>
+          {session.data.gatewayUpdate && (
+            <a
+              href={releaseNotesUrl(session.data.gatewayUpdate.latestVersion)}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={t('app.updateAvailableLabel', {
+                version: session.data.gatewayUpdate.latestVersion,
+              })}
+              className="shrink-0 self-end mb-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] leading-none font-medium text-primary hover:bg-primary/15 hover:no-underline"
+            >
+              {t('app.updateAvailable')}
+            </a>
+          )}
         </div>
         <Separator />
         <nav aria-label={t('nav.label')} className="flex flex-row flex-wrap gap-0.5 p-2 md:flex-1 md:flex-col md:flex-nowrap md:overflow-y-auto">

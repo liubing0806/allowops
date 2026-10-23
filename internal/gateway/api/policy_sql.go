@@ -20,6 +20,12 @@ func getPolicyVersion(ctx context.Context, q querier, version uint64) (db.Policy
 	return db.New(q).GetPolicyVersion(ctx, version)
 }
 
+// currentPolicyVersion returns the newest stored version number, or 0 when no
+// version is stored.
+func currentPolicyVersion(ctx context.Context, q querier) (int64, error) {
+	return db.New(q).GetCurrentPolicyVersionNumber(ctx)
+}
+
 // listPolicyVersions returns every stored version number, newest first.
 func listPolicyVersions(ctx context.Context, q querier) ([]uint64, error) {
 	rows, err := db.New(q).ListPolicyVersionNumbers(ctx)

@@ -103,6 +103,35 @@ func (q *Queries) InsertHostImportPreview(ctx context.Context, arg InsertHostImp
 	return err
 }
 
+const listActiveHostIDsByLabels = `-- name: ListActiveHostIDsByLabels :many
+SELECT host_id FROM hosts WHERE certificate_status='active' AND authorization_labels @> $1::jsonb AND reported_labels @> $2::jsonb ORDER BY host_id
+`
+
+type ListActiveHostIDsByLabelsParams struct {
+	AuthorizationLabels []byte
+	ReportedLabels      []byte
+}
+
+func (q *Queries) ListActiveHostIDsByLabels(ctx context.Context, arg ListActiveHostIDsByLabelsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listActiveHostIDsByLabels, arg.AuthorizationLabels, arg.ReportedLabels)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var host_id string
+		if err := rows.Scan(&host_id); err != nil {
+			return nil, err
+		}
+		items = append(items, host_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listJoinTokens = `-- name: ListJoinTokens :many
 SELECT token_id,max_uses,used_count,expires_at,created_at,revoked_at FROM join_tokens ORDER BY token_id
 `

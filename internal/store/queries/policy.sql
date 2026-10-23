@@ -31,3 +31,6 @@ UPDATE policy_tests SET consumed=true WHERE test_id=$1;
 
 -- name: NotifyPolicy :exec
 SELECT pg_notify($1,$2);
+
+-- name: GetCurrentPolicyVersionNumber :one
+SELECT COALESCE(max(version),0)::bigint FROM policy_versions;

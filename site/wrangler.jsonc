@@ -1,0 +1,14 @@
+// Cloudflare Workers static assets for allowops.com. Build first: npm run build
+{
+  "name": "allowops-site",
+  "compatibility_date": "2026-10-23",
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "allowops.com", "custom_domain": true },
+    { "pattern": "www.allowops.com", "custom_domain": true }
+  ]
+}

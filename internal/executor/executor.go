@@ -23,6 +23,11 @@ import (
 
 const DefaultMaxScan int64 = 256 * 1024 * 1024
 
+// pipeDrainDelay bounds how long Wait reads output after the process exits.
+// At exit at most one pipe buffer is unread; a longer wait means a descendant
+// that left the process group still holds the pipes.
+const pipeDrainDelay = 5 * time.Second
+
 var errScanLimit = errors.New("stdout scan limit reached")
 
 type Result struct {
@@ -93,6 +98,16 @@ func (w *limitedOutput) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// room reports how many more bytes the output accepts before truncating.
+func (w *limitedOutput) room() int64 {
+	if w.budget != nil {
+		w.budget.mu.Lock()
+		defer w.budget.mu.Unlock()
+		return w.budget.remaining
+	}
+	return w.limit - int64(w.buffer.Len())
+}
+
 type scanReader struct {
 	reader    io.Reader
 	remaining int64
@@ -157,6 +172,12 @@ type runPlan struct {
 	timeout  time.Duration
 	scan     int64
 	limit    int64
+}
+
+// trustPaths runs immediately before execution, in the process that will exec
+// as the target uid: nobody else may be able to swap a component of a path.
+func (p *runPlan) trustPaths() error {
+	return params.CheckPathsTrusted(p.defs, p.values, os.Geteuid())
 }
 
 // prepareRun checks host support and parses every input. It starts no process
@@ -247,6 +268,9 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 		if err != nil {
 			return result, err
 		}
+		if err := plan.trustPaths(); err != nil {
+			return result, err
+		}
 		return runCommand(ctx, argv, plan.redactor, plan.filters, plan.limit, plan.scan, nil, onStart)
 	default:
 		return runSteps(ctx, plan, callbacks, onStart)
@@ -255,6 +279,9 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 
 func runBuiltin(ctx context.Context, plan *runPlan, onStart func() error) (Result, error) {
 	a := plan.action
+	if err := plan.trustPaths(); err != nil {
+		return Result{ExitCode: -1}, err
+	}
 	if err := onStart(); err != nil {
 		return Result{ExitCode: -1}, err
 	}
@@ -290,6 +317,9 @@ func runScript(ctx context.Context, plan *runPlan, onStart func() error) (Result
 		return Result{ExitCode: -1}, err
 	}
 	defer cleanup()
+	if err := plan.trustPaths(); err != nil {
+		return Result{ExitCode: -1}, err
+	}
 	return runCommand(ctx, argv, plan.redactor, plan.filters, plan.limit, plan.scan, nil, onStart)
 }
 
@@ -299,6 +329,9 @@ func runScript(ctx context.Context, plan *runPlan, onStart func() error) (Result
 // after the step errors collected so far.
 func runSteps(ctx context.Context, plan *runPlan, callbacks Callbacks, onStart func() error) (Result, error) {
 	a := plan.action
+	if err := plan.trustPaths(); err != nil {
+		return Result{ExitCode: -1}, err
+	}
 	result := Result{ExitCode: 0}
 	var runErr error
 	budget := stepBudget(plan.limit)
@@ -316,6 +349,10 @@ func runSteps(ctx context.Context, plan *runPlan, callbacks Callbacks, onStart f
 		}
 		argv, err := renderCommand(step.Exec, nil, a.AllowInterpreter, plan.defs, plan.values)
 		r := Result{ExitCode: -1}
+		if err == nil {
+			// A later step starts after earlier steps ran for a while.
+			err = plan.trustPaths()
+		}
 		if err == nil {
 			r, err = runCommand(ctx, argv, plan.redactor, plan.filters, plan.limit, plan.scan, budget, onStart)
 		}
@@ -404,6 +441,7 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 	command := exec.Command(argv[0], argv[1:]...)
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8", "PAGER=cat", "SYSTEMD_PAGER="}
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	command.WaitDelay = pipeDrainDelay
 	stdoutReader, stdoutWriter := io.Pipe()
 	stderrReader, stderrWriter := io.Pipe()
 	defer stdoutReader.Close()
@@ -482,6 +520,14 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 	}
 	if parent.Err() != nil {
 		return result, parent.Err()
+	}
+	if errors.Is(waitErr, exec.ErrWaitDelay) {
+		// Wait returns ErrWaitDelay only after a successful exit: a descendant
+		// outside the process group, such as a started daemon, still held the
+		// output pipes. The command succeeded; output after pipeDrainDelay is lost.
+		result.ExitCode = 0
+		result.Truncated = true
+		return result, nil
 	}
 	if waitErr == nil {
 		result.ExitCode = 0

@@ -20,6 +20,17 @@ func (q *Queries) ConsumePolicyTest(ctx context.Context, testID string) error {
 	return err
 }
 
+const getCurrentPolicyVersionNumber = `-- name: GetCurrentPolicyVersionNumber :one
+SELECT COALESCE(max(version),0)::bigint FROM policy_versions
+`
+
+func (q *Queries) GetCurrentPolicyVersionNumber(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, getCurrentPolicyVersionNumber)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getPolicyTestChanges = `-- name: GetPolicyTestChanges :one
 SELECT changes FROM policy_tests WHERE test_id=$1 AND actor_id=$2 AND expires_at>now()
 `

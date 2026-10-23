@@ -55,7 +55,7 @@ func TestConsoleHTTPSCookieAndCSRF(t *testing.T) {
 	}
 	origin := "https://" + listener.Addr().String()
 	chain := audit.New(db.Pool, audit.Config{})
-	identity, err := api.New(ctx, db, api.Config{Origin: origin}, api.NewAuditor(chain))
+	identity, err := api.New(ctx, db, api.Config{Origin: origin, Version: "0.4.0"}, api.NewAuditor(chain))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,6 +132,9 @@ func TestConsoleHTTPSCookieAndCSRF(t *testing.T) {
 	}
 	if current.Msg.User.UserId != "console-admin" || current.Msg.CsrfToken == "" {
 		t.Fatal("console session fixture was not authenticated")
+	}
+	if current.Msg.GatewayVersion != "0.4.0" {
+		t.Fatalf("gateway version=%q", current.Msg.GatewayVersion)
 	}
 	joins := rpc.NewJoinTokenServiceClient(client, origin)
 	request := func(csrf string) *connect.Request[v1.CreateJoinTokenRequest] {

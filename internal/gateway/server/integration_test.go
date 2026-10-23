@@ -11,11 +11,13 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -214,6 +216,42 @@ func receive(t *testing.T, stream *connect.BidiStreamForClient[v1.ConnectRequest
 		t.Fatal("receive timeout")
 		return nil
 	}
+}
+
+type logRecord struct {
+	level slog.Level
+	attrs map[string]string
+}
+
+type logSink struct {
+	mu      sync.Mutex
+	entries map[string][]logRecord
+}
+
+func (h *logSink) Enabled(context.Context, slog.Level) bool { return true }
+func (h *logSink) Handle(_ context.Context, r slog.Record) error {
+	attrs := map[string]string{}
+	r.Attrs(func(a slog.Attr) bool { attrs[a.Key] = a.Value.String(); return true })
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.entries[r.Message] = append(h.entries[r.Message], logRecord{r.Level, attrs})
+	return nil
+}
+func (h *logSink) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *logSink) WithGroup(string) slog.Handler      { return h }
+func (h *logSink) records(message string) []logRecord {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]logRecord(nil), h.entries[message]...)
+}
+
+func captureLogs(t *testing.T) *logSink {
+	t.Helper()
+	sink := &logSink{entries: map[string][]logRecord{}}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(sink))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return sink
 }
 
 func expectCode(t *testing.T, err error, code connect.Code) {
@@ -609,17 +647,39 @@ func TestTwoGatewayEndToEnd(t *testing.T) {
 		}
 	})
 	t.Run("version_rejection", func(t *testing.T) {
-		_, cert := f.join(t, f.a, "version-host")
-		for _, version := range []string{"2.3.5", "3.0.0", "0.9.0", "2.03.4"} {
+		host, cert := f.join(t, f.a, "version-host")
+		logs := captureLogs(t)
+		reject := func(version string) {
+			t.Helper()
 			c := f.a.client(t, server.AgentALPN, &cert).Connect(ctx)
 			if err := c.Send(&v1.ConnectRequest{Message: &v1.ConnectRequest_Hello{Hello: &v1.AgentHello{AgentVersion: version, MaxConcurrentTasks: 1}}}); err != nil {
 				t.Fatal(err)
 			}
 			_, err := c.Receive()
 			expectCode(t, err, connect.CodeUnimplemented)
+			// The agent journals this message, so it must name both versions.
+			if want := "agent version " + version + " unsupported by gateway 2.3.4"; connect.CodeOf(err) == connect.CodeUnimplemented && err.(*connect.Error).Message() != want {
+				t.Fatalf("rejection message=%q, want %q", err.(*connect.Error).Message(), want)
+			}
 			c.CloseResponse()
 		}
+		// Retries with an unchanged version log once per host and version.
+		for _, version := range []string{"2.3.5", "2.3.5", "3.0.0", "0.9.0", "2.03.4"} {
+			reject(version)
+		}
 		open(t, f.a, cert, "1.99.0")
+		reject("2.3.5")
+		var got []string
+		for _, r := range logs.records("agent version unsupported") {
+			a := r.attrs
+			if r.level != slog.LevelWarn || a["host_id"] != host.HostId || a["hostname"] != "version-host" || a["gateway_version"] != "2.3.4" {
+				t.Fatalf("rejection log %v at %v", a, r.level)
+			}
+			got = append(got, a["agent_version"])
+		}
+		if want := []string{"2.3.5", "3.0.0", "0.9.0", "2.03.4", "2.3.5"}; strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("logged agent versions=%v, want %v", got, want)
+		}
 	})
 	t.Run("heartbeat_and_input_limits", func(t *testing.T) {
 		_, cert := f.join(t, f.a, "heartbeat-host")

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/liubing0806/allowops/internal/catalog"
+	"github.com/liubing0806/allowops/internal/gateway/job"
 )
 
 // Inputs cover each validation step of actionRequest, including combinations
@@ -97,7 +98,7 @@ func actionRequestGoldenRun() map[string][]actionRequestGoldenResult {
 	for name, a := range actionRequestGoldenActions() {
 		for _, input := range actionRequestGoldenInputs {
 			var result actionRequestGoldenResult
-			req, format, err := actionRequest(a, json.RawMessage(input))
+			req, format, err := actionRequest(a, json.RawMessage(input), job.DefaultConfig())
 			if err != nil {
 				result.Error = err.Error()
 			} else {

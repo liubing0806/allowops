@@ -81,10 +81,17 @@ type taskEventScope struct {
 	row    taskEvent
 	action catalog.Action
 	out    *taskOutput
+	// replay is true when an earlier attempt of the same event may have
+	// committed before this attempt began.
+	replay bool
 }
 
-// OnMessage applies one agent message to its task inside a transaction that
-// holds the task row lock. A rejected event rolls the transaction back.
+// OnMessage applies one agent message to its task. A database failure is not a
+// protocol violation. Closing the stream would end every running task on the
+// host, so the whole transaction is retried while the connection lives.
+// In-memory task state changes only after COMMIT. A failed attempt may still
+// have committed, so later attempts are replays that accept the state an
+// earlier attempt wrote for this same event.
 func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 	if e.Message == nil {
 		return nil
@@ -93,27 +100,51 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 	if !ok {
 		return nil
 	}
+	// A database failure is not a protocol violation. Closing the stream would
+	// end every running task on the host, so retry the whole transaction while
+	// the connection lives. In-memory task state changes only after COMMIT.
+	// A failed attempt may still have committed, so later attempts are replays
+	// that accept the state an earlier attempt wrote for this same event.
+	replay := false
+	return retrySQL(ctx, jobID, func(ctx context.Context) error {
+		err := s.taskEvent(ctx, e, jobID, taskID, replay)
+		replay = true
+		return err
+	})
+}
+
+// commitTaskEvent commits a non-terminal task event. Tests replace it to report
+// a lost COMMIT acknowledgement after the server committed.
+var commitTaskEvent = func(ctx context.Context, tx pgx.Tx) error { return tx.Commit(ctx) }
+
+// taskEvent is one attempt at applying an agent message to its task inside a
+// transaction that holds the task row lock. A rejected event rolls the
+// transaction back.
+func (s *Service) taskEvent(ctx context.Context, e hostconn.Event, jobID, taskID string, replay bool) error {
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 	row, err := lockTaskForEvent(ctx, tx, jobID, taskID)
-	if err != nil {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return errors.New("UNKNOWN_TASK_EVENT")
+	}
+	if err != nil {
+		return err
 	}
 	if row.hostID != e.HostID || row.connection != e.ConnectionID || !row.dispatched {
 		return errors.New("TASK_CONNECTION_MISMATCH")
 	}
 	if row.state > 2 {
-		return s.ignoreTerminalTaskEvent(ctx, tx, e, jobID, taskID, row.state)
+		return s.ignoreTerminalTaskEvent(ctx, tx, e, jobID, taskID, row, replay)
 	} // First terminal result wins; late messages are ignored.
 	var a catalog.Action
 	if err := json.Unmarshal(row.definition, &a); err != nil {
 		return err
 	}
 	if e.Message.GetTaskStarted() != nil {
-		return s.onTaskStarted(ctx, tx, jobID, taskID, row.state)
+		return s.onTaskStarted(ctx, tx, jobID, taskID, row.state, replay)
 	}
 	if err := checkEventPreconditions(e.Message, row.state, a); err != nil {
 		return err
@@ -124,7 +155,7 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 	// and serialize results from unrelated hosts.
 	out.mu.Lock()
 	defer out.mu.Unlock()
-	scope := &taskEventScope{tx: tx, jobID: jobID, taskID: taskID, row: row, action: a, out: out}
+	scope := &taskEventScope{tx: tx, jobID: jobID, taskID: taskID, row: row, action: a, out: out, replay: replay}
 	switch {
 	case e.Message.GetOutput() != nil:
 		return s.onOutputChunk(ctx, scope, e.Message.GetOutput())
@@ -138,13 +169,52 @@ func (s *Service) OnMessage(ctx context.Context, e hostconn.Event) error {
 
 // ignoreTerminalTaskEvent drops a message for a task that already has a
 // terminal result and releases its buffers. A late TaskStarted additionally
-// makes the owner cancel the task on the agent.
-func (s *Service) ignoreTerminalTaskEvent(ctx context.Context, tx pgx.Tx, e hostconn.Event, jobID, taskID string, state int16) error {
+// makes the owner cancel the task on the agent. A replayed TaskCompleted that
+// finds its own terminal result with the output still pending starts the
+// output persistence instead.
+func (s *Service) ignoreTerminalTaskEvent(ctx context.Context, tx pgx.Tx, e hostconn.Event, jobID, taskID string, row taskEvent, replay bool) error {
 	tx.Rollback(ctx)
+	if completed := e.Message.GetTaskCompleted(); replay && completed != nil && completed.Result != nil && row.outputState == "pending" {
+		// An earlier attempt of this event may have committed this result
+		// while both its COMMIT reply and the terminalCommitted check were
+		// lost. That attempt did not start persistence; start it now, or the
+		// output stays pending while this instance is alive.
+		raw, err := proto.Marshal(completed.Result)
+		if err == nil && row.state == int16(completed.Result.Status) && bytes.Equal(raw, row.result) {
+			return s.persistReplayedTerminal(jobID, taskID, row)
+		}
+	}
 	s.clearTasks(jobID, taskID)
 	if e.Message.GetTaskStarted() != nil && s.Router != nil {
-		s.cancelLateStart(e, jobID, taskID, state)
+		s.cancelLateStart(e, jobID, taskID, row.state)
 	}
+	return nil
+}
+
+// persistReplayedTerminal starts the persistence of a task whose terminal result
+// an earlier attempt of the same event committed.
+func (s *Service) persistReplayedTerminal(jobID, taskID string, row taskEvent) error {
+	var a catalog.Action
+	if err := json.Unmarshal(row.definition, &a); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	if err := s.ctx.Err(); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	out := s.outputs[outputID(jobID, taskID)]
+	if out == nil {
+		out = &taskOutput{Streams: map[streamKey]*streamOutput{}}
+	}
+	s.activePersists.Add(1)
+	s.wg.Add(1)
+	s.mu.Unlock()
+	go func() {
+		defer s.wg.Done()
+		defer s.activePersists.Add(-1)
+		s.persist(jobID, taskID, row.hostID, row.hostname, row.actor, a.Name, row.created, row.policyVersion, out)
+	}()
 	return nil
 }
 
@@ -179,7 +249,12 @@ func (s *Service) cancelLateStart(e hostconn.Event, jobID, taskID string, state 
 	}()
 }
 
-func (s *Service) onTaskStarted(ctx context.Context, tx pgx.Tx, jobID, taskID string, state int16) error {
+func (s *Service) onTaskStarted(ctx context.Context, tx pgx.Tx, jobID, taskID string, state int16, replay bool) error {
+	if state == 2 && replay {
+		// The host stream is serial, so only this event's earlier attempt
+		// can have started the task.
+		return nil
+	}
 	if state != 1 {
 		return errors.New("DUPLICATE_TASK_START")
 	}
@@ -189,7 +264,7 @@ func (s *Service) onTaskStarted(ctx context.Context, tx pgx.Tx, jobID, taskID st
 	// Output events publish their buffer while holding the task row lock.
 	// Do not create an empty entry after COMMIT releases that lock: a
 	// terminal writer may already have committed and cleared the task.
-	return tx.Commit(ctx)
+	return commitTaskEvent(ctx, tx)
 }
 
 // checkEventPreconditions rejects output, step and completion messages that do
@@ -248,7 +323,7 @@ func (s *Service) onOutputChunk(ctx context.Context, sc *taskEventScope, chunk *
 	if eof || chunk.Offset != size || out.Bytes+int64(len(chunk.Data)) > int64(a.MaxOutput) {
 		return errors.New("OUTPUT_OFFSET_OR_BUDGET")
 	}
-	if err := sc.tx.Commit(ctx); err != nil {
+	if err := commitTaskEvent(ctx, sc.tx); err != nil {
 		return err
 	}
 	if stream == nil {
@@ -270,10 +345,12 @@ func (s *Service) onStepCompleted(ctx context.Context, sc *taskEventScope, step 
 	if err != nil {
 		return err
 	}
-	if err := insertTaskStep(ctx, sc.tx, sc.jobID, sc.taskID, sc.row.created, step.StepIndex, step.StepName, raw); err != nil {
+	// out.Steps changes only after COMMIT, so on a replay an existing row for
+	// this index was written by this event's earlier attempt.
+	if err := insertTaskStep(ctx, sc.tx, sc.jobID, sc.taskID, sc.row.created, step.StepIndex, step.StepName, raw, sc.replay); err != nil {
 		return err
 	}
-	if err := sc.tx.Commit(ctx); err != nil {
+	if err := commitTaskEvent(ctx, sc.tx); err != nil {
 		return err
 	}
 	out.Steps = append(out.Steps, &v1.TaskStep{Index: step.StepIndex, Name: step.StepName, Result: proto.Clone(step.Result).(*v1.ExecutionResult)})
@@ -314,9 +391,12 @@ func (s *Service) onTaskCompleted(ctx context.Context, sc *taskEventScope, compl
 	if err != nil {
 		return err
 	}
-	if err := completeTask(ctx, sc.tx, sc.jobID, sc.taskID, int16(completed.Result.Status), raw, stdout[:min(len(stdout), GroupBytes)], stderr[:min(len(stderr), GroupBytes)], stdoutHash[:], stderrHash[:], len(out.Steps), len(stdout), len(stderr)); err != nil {
+	if err := completeTask(ctx, sc.tx, sc.jobID, sc.taskID, int16(completed.Result.Status), raw, stdout[:min(len(stdout), GroupBytes)], stderr[:min(len(stderr), GroupBytes)], stdoutHash[:], stderrHash[:], len(out.Steps), len(stdout), len(stderr), s.instanceID); err != nil {
 		return err
 	}
+	// output_instance names the process whose persist goroutine moves
+	// output_state on; it can differ from jobs.origin_instance. If that
+	// process dies first, RecoverLostInstances marks the output unavailable.
 	return s.commitTerminalResult(ctx, sc, completed.Result.Status, raw)
 }
 

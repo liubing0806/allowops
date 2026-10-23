@@ -25,8 +25,10 @@ import (
 // convert between Go and column types. The statements below stay hand-written:
 //
 //   - the job package's tests identify them by SQL text (exact or prefix) in
-//     pgx query tracers and fault injectors, and sqlc prepends a "-- name:"
-//     comment that would change that text;
+//     pgx query tracers, fault injectors and the COMMIT-loss proxy, and sqlc
+//     prepends a "-- name:" comment that would change that text (the task event
+//     read, matched by events_retry_test.go, and the task completion write,
+//     matched by rf_a06_test.go, fx6_regression_test.go and rr_a04_commit_test.go);
 //   - the dynamic ListJobs filter and the partition DDL have no fixed shape;
 //   - the host disconnect statement is a CTE whose final SELECT sqlc reports
 //     as ambiguous on host_id.
@@ -117,14 +119,35 @@ func updateTaskTerminal(ctx context.Context, d db.DBTX, jobID, taskID string, st
 }
 
 // completeTask writes the terminal result and the output previews of a task event.
-func completeTask(ctx context.Context, tx pgx.Tx, jobID, taskID string, status int16, result, stdoutPreview, stderrPreview, stdoutHash, stderrHash []byte, steps, stdoutSize, stderrSize int) error {
-	_, err := tx.Exec(ctx, "UPDATE tasks SET status=$3,result=$4,finished_at=now(),stdout_preview=$5,stderr_preview=$6,stdout_sha256=$7,stderr_sha256=$8,step_count=$9,stdout_size=$10,stderr_size=$11 WHERE job_id=$1 AND task_id=$2 AND status IN (1,2)", jobID, taskID, status, result, stdoutPreview, stderrPreview, stdoutHash, stderrHash, steps, stdoutSize, stderrSize)
+// outputInstance is the gateway process that persists the task's output.
+func completeTask(ctx context.Context, tx pgx.Tx, jobID, taskID string, status int16, result, stdoutPreview, stderrPreview, stdoutHash, stderrHash []byte, steps, stdoutSize, stderrSize int, outputInstance string) error {
+	_, err := tx.Exec(ctx, "UPDATE tasks SET status=$3,result=$4,finished_at=now(),stdout_preview=$5,stderr_preview=$6,stdout_sha256=$7,stderr_sha256=$8,step_count=$9,stdout_size=$10,stderr_size=$11,output_instance=$12 WHERE job_id=$1 AND task_id=$2 AND status IN (1,2)", jobID, taskID, status, result, stdoutPreview, stderrPreview, stdoutHash, stderrHash, steps, stdoutSize, stderrSize, outputInstance)
 	return err
 }
 
 func updateOutputState(ctx context.Context, d db.DBTX, jobID, taskID string, stored bool, state string) error {
 	_, err := d.Exec(ctx, "UPDATE tasks SET output_stored=$3,output_state=$4 WHERE job_id=$1 AND task_id=$2", jobID, taskID, stored, state)
 	return err
+}
+
+type taskEvent struct {
+	definition                   []byte
+	state                        int16
+	created                      time.Time
+	hostID, hostname, connection string
+	dispatched                   bool
+	actor                        string
+	policyVersion                uint64
+	result                       []byte
+	outputState                  string
+}
+
+// lockTaskForEvent locks the task row of an agent event and reads its job. A
+// missing task is reported as pgx.ErrNoRows.
+func lockTaskForEvent(ctx context.Context, tx pgx.Tx, jobID, taskID string) (taskEvent, error) {
+	var r taskEvent
+	err := tx.QueryRow(ctx, "SELECT j.action_definition,t.status,t.created_at,t.host_id,t.hostname,COALESCE(t.connection_id,''),t.dispatched,j.subject_id,j.policy_version,t.result,t.output_state FROM tasks t JOIN jobs j ON j.job_id=t.job_id WHERE t.job_id=$1 AND t.task_id=$2 FOR UPDATE OF t", jobID, taskID).Scan(&r.definition, &r.state, &r.created, &r.hostID, &r.hostname, &r.connection, &r.dispatched, &r.actor, &r.policyVersion, &r.result, &r.outputState)
+	return r, err
 }
 
 // recoverTasks moves a lost instance's tasks from one status to another.
@@ -381,33 +404,19 @@ func listStatisticsJobs(ctx context.Context, d db.DBTX) ([]statisticsJob, error)
 	return items, nil
 }
 
-type taskEvent struct {
-	definition                   []byte
-	state                        int16
-	created                      time.Time
-	hostID, hostname, connection string
-	dispatched                   bool
-	actor                        string
-	policyVersion                uint64
-}
-
-// lockTaskForEvent locks the task row of an agent event and reads its job.
-func lockTaskForEvent(ctx context.Context, tx pgx.Tx, jobID, taskID string) (taskEvent, error) {
-	r, err := db.New(tx).LockTaskForEvent(ctx, db.LockTaskForEventParams{JobID: jobID, TaskID: taskID})
-	if err != nil {
-		return taskEvent{}, err
-	}
-	return taskEvent{definition: r.ActionDefinition, state: r.Status, created: r.CreatedAt.Time, hostID: r.HostID, hostname: r.Hostname, connection: r.ConnectionID, dispatched: r.Dispatched, actor: r.SubjectID, policyVersion: uint64(r.PolicyVersion)}, nil
-}
-
 func markTaskStarted(ctx context.Context, tx pgx.Tx, jobID, taskID string, result []byte) error {
 	return db.New(tx).MarkTaskStarted(ctx, db.MarkTaskStartedParams{JobID: jobID, TaskID: taskID, Result: result})
 }
 
-func insertTaskStep(ctx context.Context, tx pgx.Tx, jobID, taskID string, created time.Time, index uint32, name string, result []byte) error {
+// insertTaskStep stores a step result. With replay set, a row that an earlier
+// attempt of the same event already wrote for the index is kept.
+func insertTaskStep(ctx context.Context, tx pgx.Tx, jobID, taskID string, created time.Time, index uint32, name string, result []byte, replay bool) error {
 	i, err := toInt32(index)
 	if err != nil {
 		return err
+	}
+	if replay {
+		return db.New(tx).InsertTaskStepIfAbsent(ctx, db.InsertTaskStepIfAbsentParams{JobID: jobID, TaskID: taskID, CreatedAt: timestamptz(created), StepIndex: i, Name: name, Result: result})
 	}
 	return db.New(tx).InsertTaskStep(ctx, db.InsertTaskStepParams{JobID: jobID, TaskID: taskID, CreatedAt: timestamptz(created), StepIndex: i, Name: name, Result: result})
 }
@@ -551,4 +560,21 @@ func listJobTaskPreviews(ctx context.Context, d db.DBTX, jobID string) ([]Previe
 		out = append(out, v)
 	}
 	return out, nil
+}
+
+// lostOutputTask is a terminal task whose output is still pending.
+type lostOutputTask struct {
+	jobID, taskID, hostID, hostname, actor, action string
+	version                                        uint64
+}
+
+// lockLostOutputTask locks one terminal task with pending output whose
+// receiving gateway instance is lost, skipping tasks locked by another survivor.
+func lockLostOutputTask(ctx context.Context, tx pgx.Tx, lostAfterSeconds float64) (lostOutputTask, error) {
+	r, err := db.New(tx).LockLostOutputTask(ctx, lostAfterSeconds)
+	return lostOutputTask{jobID: r.JobID, taskID: r.TaskID, hostID: r.HostID, hostname: r.Hostname, actor: r.SubjectID, action: r.Action, version: uint64(r.PolicyVersion)}, err
+}
+
+func markTaskOutputUnavailable(ctx context.Context, tx pgx.Tx, jobID, taskID string) error {
+	return db.New(tx).MarkTaskOutputUnavailable(ctx, db.MarkTaskOutputUnavailableParams{JobID: jobID, TaskID: taskID})
 }

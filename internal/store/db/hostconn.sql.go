@@ -115,6 +115,17 @@ func (q *Queries) GetGatewayMessageResult(ctx context.Context, messageID string)
 	return i, err
 }
 
+const getHostHostname = `-- name: GetHostHostname :one
+SELECT hostname FROM hosts WHERE host_id=$1
+`
+
+func (q *Queries) GetHostHostname(ctx context.Context, hostID string) (string, error) {
+	row := q.db.QueryRow(ctx, getHostHostname, hostID)
+	var hostname string
+	err := row.Scan(&hostname)
+	return hostname, err
+}
+
 const getJobDispatchStateForShare = `-- name: GetJobDispatchStateForShare :one
 SELECT status,cancel_requested FROM jobs WHERE job_id=$1 FOR SHARE
 `
@@ -201,6 +212,60 @@ func (q *Queries) GetTaskDispatchStateForShare(ctx context.Context, arg GetTaskD
 		&i.ConnectionID,
 	)
 	return i, err
+}
+
+const listActiveTaskIDsOnConnection = `-- name: ListActiveTaskIDsOnConnection :many
+SELECT DISTINCT task_id FROM tasks WHERE task_id=ANY($1::text[]) AND host_id=$2 AND connection_id=$3 AND status IN (1,2)
+`
+
+type ListActiveTaskIDsOnConnectionParams struct {
+	TaskIds      []string
+	HostID       string
+	ConnectionID pgtype.Text
+}
+
+func (q *Queries) ListActiveTaskIDsOnConnection(ctx context.Context, arg ListActiveTaskIDsOnConnectionParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listActiveTaskIDsOnConnection, arg.TaskIds, arg.HostID, arg.ConnectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var task_id string
+		if err := rows.Scan(&task_id); err != nil {
+			return nil, err
+		}
+		items = append(items, task_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExistingGatewayMessageIDs = `-- name: ListExistingGatewayMessageIDs :many
+SELECT message_id FROM gateway_messages WHERE message_id=ANY($1::text[])
+`
+
+func (q *Queries) ListExistingGatewayMessageIDs(ctx context.Context, messageIds []string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listExistingGatewayMessageIDs, messageIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var message_id string
+		if err := rows.Scan(&message_id); err != nil {
+			return nil, err
+		}
+		items = append(items, message_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockMailboxCapacity = `-- name: LockMailboxCapacity :exec

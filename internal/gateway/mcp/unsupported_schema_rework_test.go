@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
+	"github.com/liubing0806/allowops/internal/gateway/job"
 	"github.com/liubing0806/allowops/internal/params"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -23,7 +24,7 @@ func TestUnsupportedSchemaKeepsOtherValidationErrors(t *testing.T) {
 	} {
 		a := testAction()
 		mutate(&a)
-		if _, err := actionTool(a); err == nil || errors.Is(err, errUnsupportedActionSchema) {
+		if _, err := actionTool(a, job.DefaultConfig()); err == nil || errors.Is(err, errUnsupportedActionSchema) {
 			t.Error("ordinary schema error swallowed as unsupported capability")
 		}
 	}

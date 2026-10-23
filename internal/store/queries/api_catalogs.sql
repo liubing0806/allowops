@@ -28,3 +28,6 @@ SELECT count(*) FROM service_account_tokens WHERE revoked_at IS NULL AND expires
 
 -- name: ListGatewayInstanceHosts :many
 SELECT i.instance_id,i.version,i.draining,i.started_at,i.last_seen,(SELECT count(*) FROM hosts h WHERE h.instance_id=i.instance_id AND host_id=ANY(sqlc.arg(host_ids)::text[]) AND certificate_status='active')::bigint AS connected_hosts FROM gateway_instances i ORDER BY instance_id;
+
+-- name: CountCatalogVersions :one
+SELECT count(*) FROM catalog_versions WHERE ($1='' OR catalog_id=$1);

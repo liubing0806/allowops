@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file allowops/v1/system.proto.
  */
 export const file_allowops_v1_system: GenFile = /*@__PURE__*/
-  fileDesc("ChhhbGxvd29wcy92MS9zeXN0ZW0ucHJvdG8SC2FsbG93b3BzLnYxIlsKEERlcGVuZGVuY3lIZWFsdGgSDAoEbmFtZRgBIAEoCRIpCgZzdGF0dXMYAiABKA4yGS5hbGxvd29wcy52MS5IZWFsdGhTdGF0dXMSDgoGcmVhc29uGAMgASgJIvYBCg9HYXRld2F5SW5zdGFuY2USEwoLaW5zdGFuY2VfaWQYASABKAkSDwoHdmVyc2lvbhgCIAEoCRIQCghkcmFpbmluZxgDIAEoCBIXCg9jb25uZWN0ZWRfaG9zdHMYBCABKAQSLgoKc3RhcnRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLQoJbGFzdF9zZWVuGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIzCgxkZXBlbmRlbmNpZXMYByADKAsyHS5hbGxvd29wcy52MS5EZXBlbmRlbmN5SGVhbHRoIuUBCglBcGlMaW1pdHMSGQoRbWF4X21lc3NhZ2VfYnl0ZXMYASABKA0SFwoPbWF4X2NodW5rX2J5dGVzGAIgASgNEhkKEWRlZmF1bHRfcGFnZV9zaXplGAMgASgNEhUKDW1heF9wYWdlX3NpemUYBCABKA0SIQoZZGVmYXVsdF9vdXRwdXRfcGFnZV9ieXRlcxgFIAEoDRIdChVtYXhfb3V0cHV0X3BhZ2VfYnl0ZXMYBiABKA0SGQoRbWF4X2NhdGFsb2dfYnl0ZXMYByABKAQSFQoNbWF4X2Nzdl9ieXRlcxgIIAEoDSIYChZHZXRTeXN0ZW1TdGF0dXNSZXF1ZXN0IvwCChdHZXRTeXN0ZW1TdGF0dXNSZXNwb25zZRIvCgtvYnNlcnZlZF9hdBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKQoGc3RhdHVzGAIgASgOMhkuYWxsb3dvcHMudjEuSGVhbHRoU3RhdHVzEhQKDG9ubGluZV9ob3N0cxgDIAEoBBIVCg1vZmZsaW5lX2hvc3RzGAQgASgEEhQKDHJ1bm5pbmdfam9icxgFIAEoBBIhChlmYWlsZWRfam9ic19sYXN0XzI0X2hvdXJzGAYgASgEEhkKEWV4cGlyaW5nX2NhdGFsb2dzGAcgASgEEicKH2V4cGlyaW5nX3NlcnZpY2VfYWNjb3VudF90b2tlbnMYCCABKAQSMwoMZGVwZW5kZW5jaWVzGAkgAygLMh0uYWxsb3dvcHMudjEuRGVwZW5kZW5jeUhlYWx0aBImCgZsaW1pdHMYCiABKAsyFi5hbGxvd29wcy52MS5BcGlMaW1pdHMiRQobTGlzdEdhdGV3YXlJbnN0YW5jZXNSZXF1ZXN0EiYKBHBhZ2UYASABKAsyGC5hbGxvd29wcy52MS5QYWdlUmVxdWVzdCJ4ChxMaXN0R2F0ZXdheUluc3RhbmNlc1Jlc3BvbnNlEi8KCWluc3RhbmNlcxgBIAMoCzIcLmFsbG93b3BzLnYxLkdhdGV3YXlJbnN0YW5jZRInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlIlQKEUFnZW50VmVyc2lvbkNvdW50EhUKDWFnZW50X3ZlcnNpb24YASABKAkSEgoKaG9zdF9jb3VudBgCIAEoBBIUCgxvbmxpbmVfY291bnQYAyABKAQiTAoiR2V0QWdlbnRWZXJzaW9uRGlzdHJpYnV0aW9uUmVxdWVzdBImCgRwYWdlGAEgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QigAEKI0dldEFnZW50VmVyc2lvbkRpc3RyaWJ1dGlvblJlc3BvbnNlEjAKCHZlcnNpb25zGAEgAygLMh4uYWxsb3dvcHMudjEuQWdlbnRWZXJzaW9uQ291bnQSJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSqDAQoMSGVhbHRoU3RhdHVzEh0KGUhFQUxUSF9TVEFUVVNfVU5TUEVDSUZJRUQQABIZChVIRUFMVEhfU1RBVFVTX0hFQUxUSFkQARIaChZIRUFMVEhfU1RBVFVTX0RFR1JBREVEEAISHQoZSEVBTFRIX1NUQVRVU19VTkFWQUlMQUJMRRADMt0CCg1TeXN0ZW1TZXJ2aWNlElwKD0dldFN5c3RlbVN0YXR1cxIjLmFsbG93b3BzLnYxLkdldFN5c3RlbVN0YXR1c1JlcXVlc3QaJC5hbGxvd29wcy52MS5HZXRTeXN0ZW1TdGF0dXNSZXNwb25zZRJrChRMaXN0R2F0ZXdheUluc3RhbmNlcxIoLmFsbG93b3BzLnYxLkxpc3RHYXRld2F5SW5zdGFuY2VzUmVxdWVzdBopLmFsbG93b3BzLnYxLkxpc3RHYXRld2F5SW5zdGFuY2VzUmVzcG9uc2USgAEKG0dldEFnZW50VmVyc2lvbkRpc3RyaWJ1dGlvbhIvLmFsbG93b3BzLnYxLkdldEFnZW50VmVyc2lvbkRpc3RyaWJ1dGlvblJlcXVlc3QaMC5hbGxvd29wcy52MS5HZXRBZ2VudFZlcnNpb25EaXN0cmlidXRpb25SZXNwb25zZUI8WjpnaXRodWIuY29tL2xpdWJpbmcwODA2L2FsbG93b3BzL2dlbi9hbGxvd29wcy92MTthbGxvd29wc3YxYgZwcm90bzM", [file_allowops_v1_common, file_google_protobuf_timestamp]);
+  fileDesc("ChhhbGxvd29wcy92MS9zeXN0ZW0ucHJvdG8SC2FsbG93b3BzLnYxIlsKEERlcGVuZGVuY3lIZWFsdGgSDAoEbmFtZRgBIAEoCRIpCgZzdGF0dXMYAiABKA4yGS5hbGxvd29wcy52MS5IZWFsdGhTdGF0dXMSDgoGcmVhc29uGAMgASgJIvYBCg9HYXRld2F5SW5zdGFuY2USEwoLaW5zdGFuY2VfaWQYASABKAkSDwoHdmVyc2lvbhgCIAEoCRIQCghkcmFpbmluZxgDIAEoCBIXCg9jb25uZWN0ZWRfaG9zdHMYBCABKAQSLgoKc3RhcnRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLQoJbGFzdF9zZWVuGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIzCgxkZXBlbmRlbmNpZXMYByADKAsyHS5hbGxvd29wcy52MS5EZXBlbmRlbmN5SGVhbHRoIuUBCglBcGlMaW1pdHMSGQoRbWF4X21lc3NhZ2VfYnl0ZXMYASABKA0SFwoPbWF4X2NodW5rX2J5dGVzGAIgASgNEhkKEWRlZmF1bHRfcGFnZV9zaXplGAMgASgNEhUKDW1heF9wYWdlX3NpemUYBCABKA0SIQoZZGVmYXVsdF9vdXRwdXRfcGFnZV9ieXRlcxgFIAEoDRIdChVtYXhfb3V0cHV0X3BhZ2VfYnl0ZXMYBiABKA0SGQoRbWF4X2NhdGFsb2dfYnl0ZXMYByABKAQSFQoNbWF4X2Nzdl9ieXRlcxgIIAEoDSIYChZHZXRTeXN0ZW1TdGF0dXNSZXF1ZXN0It8EChdHZXRTeXN0ZW1TdGF0dXNSZXNwb25zZRIvCgtvYnNlcnZlZF9hdBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKQoGc3RhdHVzGAIgASgOMhkuYWxsb3dvcHMudjEuSGVhbHRoU3RhdHVzEhQKDG9ubGluZV9ob3N0cxgDIAEoBBIVCg1vZmZsaW5lX2hvc3RzGAQgASgEEhQKDHJ1bm5pbmdfam9icxgFIAEoBBIhChlmYWlsZWRfam9ic19sYXN0XzI0X2hvdXJzGAYgASgEEhkKEWV4cGlyaW5nX2NhdGFsb2dzGAcgASgEEicKH2V4cGlyaW5nX3NlcnZpY2VfYWNjb3VudF90b2tlbnMYCCABKAQSMwoMZGVwZW5kZW5jaWVzGAkgAygLMh0uYWxsb3dvcHMudjEuRGVwZW5kZW5jeUhlYWx0aBImCgZsaW1pdHMYCiABKAsyFi5hbGxvd29wcy52MS5BcGlMaW1pdHMSHAoUdXBkYXRlX2NoZWNrX2VuYWJsZWQYCyABKAgSFwoPZ2F0ZXdheV92ZXJzaW9uGAwgASgJEjIKDmdhdGV3YXlfdXBkYXRlGA0gASgLMhouYWxsb3dvcHMudjEuR2F0ZXdheVVwZGF0ZRI1ChF1cGRhdGVfY2hlY2tlZF9hdBgOIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGgoSdXBkYXRlX2NoZWNrX2Vycm9yGA8gASgJEiMKG2hvc3RzX2JlbG93X2dhdGV3YXlfdmVyc2lvbhgQIAEoBCKJAQoNR2F0ZXdheVVwZGF0ZRIWCg5sYXRlc3RfdmVyc2lvbhgBIAEoCRIwCgxwdWJsaXNoZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmNoZWNrZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkUKG0xpc3RHYXRld2F5SW5zdGFuY2VzUmVxdWVzdBImCgRwYWdlGAEgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QieAocTGlzdEdhdGV3YXlJbnN0YW5jZXNSZXNwb25zZRIvCglpbnN0YW5jZXMYASADKAsyHC5hbGxvd29wcy52MS5HYXRld2F5SW5zdGFuY2USJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSJUChFBZ2VudFZlcnNpb25Db3VudBIVCg1hZ2VudF92ZXJzaW9uGAEgASgJEhIKCmhvc3RfY291bnQYAiABKAQSFAoMb25saW5lX2NvdW50GAMgASgEIkwKIkdldEFnZW50VmVyc2lvbkRpc3RyaWJ1dGlvblJlcXVlc3QSJgoEcGFnZRgBIAEoCzIYLmFsbG93b3BzLnYxLlBhZ2VSZXF1ZXN0IoABCiNHZXRBZ2VudFZlcnNpb25EaXN0cmlidXRpb25SZXNwb25zZRIwCgh2ZXJzaW9ucxgBIAMoCzIeLmFsbG93b3BzLnYxLkFnZW50VmVyc2lvbkNvdW50EicKBHBhZ2UYAiABKAsyGS5hbGxvd29wcy52MS5QYWdlUmVzcG9uc2UqgwEKDEhlYWx0aFN0YXR1cxIdChlIRUFMVEhfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGQoVSEVBTFRIX1NUQVRVU19IRUFMVEhZEAESGgoWSEVBTFRIX1NUQVRVU19ERUdSQURFRBACEh0KGUhFQUxUSF9TVEFUVVNfVU5BVkFJTEFCTEUQAzLdAgoNU3lzdGVtU2VydmljZRJcCg9HZXRTeXN0ZW1TdGF0dXMSIy5hbGxvd29wcy52MS5HZXRTeXN0ZW1TdGF0dXNSZXF1ZXN0GiQuYWxsb3dvcHMudjEuR2V0U3lzdGVtU3RhdHVzUmVzcG9uc2USawoUTGlzdEdhdGV3YXlJbnN0YW5jZXMSKC5hbGxvd29wcy52MS5MaXN0R2F0ZXdheUluc3RhbmNlc1JlcXVlc3QaKS5hbGxvd29wcy52MS5MaXN0R2F0ZXdheUluc3RhbmNlc1Jlc3BvbnNlEoABChtHZXRBZ2VudFZlcnNpb25EaXN0cmlidXRpb24SLy5hbGxvd29wcy52MS5HZXRBZ2VudFZlcnNpb25EaXN0cmlidXRpb25SZXF1ZXN0GjAuYWxsb3dvcHMudjEuR2V0QWdlbnRWZXJzaW9uRGlzdHJpYnV0aW9uUmVzcG9uc2VCPFo6Z2l0aHViLmNvbS9saXViaW5nMDgwNi9hbGxvd29wcy9nZW4vYWxsb3dvcHMvdjE7YWxsb3dvcHN2MWIGcHJvdG8z", [file_allowops_v1_common, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message allowops.v1.DependencyHealth
@@ -323,6 +323,44 @@ export type GetSystemStatusResponse = Message<"allowops.v1.GetSystemStatusRespon
    * @generated from field: allowops.v1.ApiLimits limits = 10;
    */
   limits?: ApiLimits | undefined;
+
+  /**
+   * @generated from field: bool update_check_enabled = 11;
+   */
+  updateCheckEnabled: boolean;
+
+  /**
+   * Build version of the serving gateway; "dev" for development builds.
+   *
+   * @generated from field: string gateway_version = 12;
+   */
+  gatewayVersion: string;
+
+  /**
+   * Set only when the check is enabled and a newer release is known.
+   *
+   * @generated from field: allowops.v1.GatewayUpdate gateway_update = 13;
+   */
+  gatewayUpdate?: GatewayUpdate | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp update_checked_at = 14;
+   */
+  updateCheckedAt?: Timestamp | undefined;
+
+  /**
+   * Fixed category of the last failed check, empty after a success.
+   *
+   * @generated from field: string update_check_error = 15;
+   */
+  updateCheckError: string;
+
+  /**
+   * Permission-filtered hosts whose SemVer agent version is lower than the gateway's.
+   *
+   * @generated from field: uint64 hosts_below_gateway_version = 16;
+   */
+  hostsBelowGatewayVersion: bigint;
 };
 
 /**
@@ -378,6 +416,44 @@ export type GetSystemStatusResponseJson = {
    * @generated from field: allowops.v1.ApiLimits limits = 10;
    */
   limits?: ApiLimitsJson;
+
+  /**
+   * @generated from field: bool update_check_enabled = 11;
+   */
+  updateCheckEnabled?: boolean;
+
+  /**
+   * Build version of the serving gateway; "dev" for development builds.
+   *
+   * @generated from field: string gateway_version = 12;
+   */
+  gatewayVersion?: string;
+
+  /**
+   * Set only when the check is enabled and a newer release is known.
+   *
+   * @generated from field: allowops.v1.GatewayUpdate gateway_update = 13;
+   */
+  gatewayUpdate?: GatewayUpdateJson;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp update_checked_at = 14;
+   */
+  updateCheckedAt?: TimestampJson;
+
+  /**
+   * Fixed category of the last failed check, empty after a success.
+   *
+   * @generated from field: string update_check_error = 15;
+   */
+  updateCheckError?: string;
+
+  /**
+   * Permission-filtered hosts whose SemVer agent version is lower than the gateway's.
+   *
+   * @generated from field: uint64 hosts_below_gateway_version = 16;
+   */
+  hostsBelowGatewayVersion?: string;
 };
 
 /**
@@ -386,6 +462,53 @@ export type GetSystemStatusResponseJson = {
  */
 export const GetSystemStatusResponseSchema: GenMessage<GetSystemStatusResponse, {jsonType: GetSystemStatusResponseJson}> = /*@__PURE__*/
   messageDesc(file_allowops_v1_system, 4);
+
+/**
+ * @generated from message allowops.v1.GatewayUpdate
+ */
+export type GatewayUpdate = Message<"allowops.v1.GatewayUpdate"> & {
+  /**
+   * @generated from field: string latest_version = 1;
+   */
+  latestVersion: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp published_at = 2;
+   */
+  publishedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp checked_at = 3;
+   */
+  checkedAt?: Timestamp | undefined;
+};
+
+/**
+ * @generated from message allowops.v1.GatewayUpdate
+ */
+export type GatewayUpdateJson = {
+  /**
+   * @generated from field: string latest_version = 1;
+   */
+  latestVersion?: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp published_at = 2;
+   */
+  publishedAt?: TimestampJson;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp checked_at = 3;
+   */
+  checkedAt?: TimestampJson;
+};
+
+/**
+ * Describes the message allowops.v1.GatewayUpdate.
+ * Use `create(GatewayUpdateSchema)` to create a new message.
+ */
+export const GatewayUpdateSchema: GenMessage<GatewayUpdate, {jsonType: GatewayUpdateJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_system, 5);
 
 /**
  * @generated from message allowops.v1.ListGatewayInstancesRequest
@@ -412,7 +535,7 @@ export type ListGatewayInstancesRequestJson = {
  * Use `create(ListGatewayInstancesRequestSchema)` to create a new message.
  */
 export const ListGatewayInstancesRequestSchema: GenMessage<ListGatewayInstancesRequest, {jsonType: ListGatewayInstancesRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_system, 5);
+  messageDesc(file_allowops_v1_system, 6);
 
 /**
  * @generated from message allowops.v1.ListGatewayInstancesResponse
@@ -449,7 +572,7 @@ export type ListGatewayInstancesResponseJson = {
  * Use `create(ListGatewayInstancesResponseSchema)` to create a new message.
  */
 export const ListGatewayInstancesResponseSchema: GenMessage<ListGatewayInstancesResponse, {jsonType: ListGatewayInstancesResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_system, 6);
+  messageDesc(file_allowops_v1_system, 7);
 
 /**
  * @generated from message allowops.v1.AgentVersionCount
@@ -496,7 +619,7 @@ export type AgentVersionCountJson = {
  * Use `create(AgentVersionCountSchema)` to create a new message.
  */
 export const AgentVersionCountSchema: GenMessage<AgentVersionCount, {jsonType: AgentVersionCountJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_system, 7);
+  messageDesc(file_allowops_v1_system, 8);
 
 /**
  * @generated from message allowops.v1.GetAgentVersionDistributionRequest
@@ -523,7 +646,7 @@ export type GetAgentVersionDistributionRequestJson = {
  * Use `create(GetAgentVersionDistributionRequestSchema)` to create a new message.
  */
 export const GetAgentVersionDistributionRequestSchema: GenMessage<GetAgentVersionDistributionRequest, {jsonType: GetAgentVersionDistributionRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_system, 8);
+  messageDesc(file_allowops_v1_system, 9);
 
 /**
  * @generated from message allowops.v1.GetAgentVersionDistributionResponse
@@ -560,7 +683,7 @@ export type GetAgentVersionDistributionResponseJson = {
  * Use `create(GetAgentVersionDistributionResponseSchema)` to create a new message.
  */
 export const GetAgentVersionDistributionResponseSchema: GenMessage<GetAgentVersionDistributionResponse, {jsonType: GetAgentVersionDistributionResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_system, 9);
+  messageDesc(file_allowops_v1_system, 10);
 
 /**
  * @generated from enum allowops.v1.HealthStatus

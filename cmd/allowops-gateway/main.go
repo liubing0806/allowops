@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -22,6 +23,7 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/mcp"
 	"github.com/liubing0806/allowops/internal/gateway/output"
 	"github.com/liubing0806/allowops/internal/gateway/server"
+	"github.com/liubing0806/allowops/internal/gateway/updatecheck"
 	"github.com/liubing0806/allowops/internal/store"
 	"gopkg.in/yaml.v3"
 )
@@ -61,7 +63,34 @@ type configuration struct {
 	Providers  []api.ProviderConfig `yaml:"providers"`
 	Jobs       job.Config           `yaml:"jobs"`
 	Output     output.Config        `yaml:"output"`
+	// Opt-in: the gateway makes no outbound request unless enabled.
+	UpdateCheck updatecheck.Config `yaml:"update_check"`
 }
+
+// decodeConfig applies the defaults, rejects unknown keys and validates
+// update_check when it is enabled.
+func decodeConfig(r io.Reader) (configuration, error) {
+	cfg := configuration{Address: ":443", Gateway: hostconn.DefaultConfig(), Identity: api.Config{Origin: "https://localhost"}, Jobs: job.DefaultConfig(), UpdateCheck: updatecheck.DefaultConfig()}
+	if version != "dev" {
+		cfg.Gateway.Version = version
+	}
+	decoder := yaml.NewDecoder(r)
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&cfg); err != nil {
+		return cfg, fmt.Errorf("invalid gateway config: %w", err)
+	}
+	if cfg.UpdateCheck.Enabled {
+		if err := cfg.UpdateCheck.Validate(); err != nil {
+			return cfg, fmt.Errorf("invalid gateway config: %w", err)
+		}
+	}
+	return cfg, nil
+}
+
+// auditPoolConns bounds the audit store's own pool: three connections for the
+// export leader, its batch and the batch's page read, and three for appends and
+// audit queries.
+const auditPoolConns = 6
 
 func run(args []string) error {
 	return runWithAudit(args, nil)
@@ -99,7 +128,8 @@ func runWithAudit(args []string, auditor api.Auditor) error {
 }
 
 // serve starts the gateway and blocks until shutdown. Deferred cleanups run in
-// reverse order of acquisition: audit workers, jobs, identity, database, config file.
+// reverse order of acquisition: background workers, jobs, identity, audit pool,
+// database, config file.
 func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	path := flags.String("config", "", "Gateway YAML configuration")
@@ -114,9 +144,12 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 		return fmt.Errorf("open gateway config")
 	}
 	defer f.Close()
-	cfg, err := decodeConfiguration(f)
+	cfg, err := decodeConfig(f)
 	if err != nil {
 		return err
+	}
+	if cfg.Audit.Export.Enabled && (cfg.Audit.ExportDirectory == "" || cfg.Audit.CursorName == "") {
+		return fmt.Errorf("audit export_directory and cursor_name required when audit.export.enabled=true")
 	}
 	db, err := store.Open(ctx, dsn)
 	if err != nil {
@@ -130,10 +163,21 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 	if err != nil {
 		return err
 	}
-	auditStore := audit.New(db.Pool, auditCfg)
+	// Host write handlers append audit events while holding a business
+	// transaction connection, so the audit store never shares db's pool. The
+	// pool stays small: appends serialize on one advisory lock, so extra
+	// connections only queue (see auditPoolConns).
+	auditPool, err := store.OpenPool(ctx, dsn, auditPoolConns)
+	if err != nil {
+		return err
+	}
+	defer auditPool.Close()
+	auditStore := audit.New(auditPool, auditCfg)
 	if auditor == nil {
 		auditor = api.NewAuditor(auditStore)
 	}
+	cfg.Identity.Version = version
+	cfg.Identity.UpdateCheckEnabled = cfg.UpdateCheck.Enabled
 	identity, err := startIdentity(ctx, db, cfg, auditor)
 	if err != nil {
 		return err
@@ -156,26 +200,9 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 	if err != nil {
 		return err
 	}
-	auditErrors, stopAudit := startAuditWorkers(&cfg, auditStore)
-	defer stopAudit()
+	auditErrors, stopAudit, waitUpdateCheck := startBackgroundWorkers(&cfg, db, auditStore)
+	defer func() { stopAudit(); waitUpdateCheck() }()
 	return serveUntilDone(ctx, cfg, srv, agent, listener, auditErrors, stopAudit)
-}
-
-// decodeConfiguration applies defaults, then the YAML file, and rejects unknown fields.
-func decodeConfiguration(f *os.File) (configuration, error) {
-	cfg := configuration{Address: ":443", Gateway: hostconn.DefaultConfig(), Identity: api.Config{Origin: "https://localhost"}, Jobs: job.DefaultConfig()}
-	if version != "dev" {
-		cfg.Gateway.Version = version
-	}
-	decoder := yaml.NewDecoder(f)
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&cfg); err != nil {
-		return cfg, fmt.Errorf("invalid gateway config: %w", err)
-	}
-	if cfg.Audit.Export.Enabled && (cfg.Audit.ExportDirectory == "" || cfg.Audit.CursorName == "") {
-		return cfg, fmt.Errorf("audit export_directory and cursor_name required when audit.export.enabled=true")
-	}
-	return cfg, nil
 }
 
 // startIdentity builds the identity service and starts it. The caller closes it.
@@ -260,7 +287,7 @@ func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service
 		listener.Close()
 		return nil, err
 	}
-	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcp.Config{})
+	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcp.Config{Jobs: cfg.Jobs})
 	if err != nil {
 		agent.Close()
 		listener.Close()
@@ -277,9 +304,11 @@ func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service
 	return srv, nil
 }
 
-// startAuditWorkers runs the checkpoint worker and, when enabled, the exporter.
-// A worker that stops sends on the returned channel.
-func startAuditWorkers(cfg *configuration, auditStore *audit.Store) (<-chan error, context.CancelFunc) {
+// startBackgroundWorkers runs the audit checkpoint worker, the exporter when
+// enabled and the update check when enabled, all under one context. An audit
+// worker that stops sends on the returned channel. The returned cancel stops
+// every worker; the returned wait blocks until the update check has returned.
+func startBackgroundWorkers(cfg *configuration, db *store.Store, auditStore *audit.Store) (<-chan error, context.CancelFunc, func()) {
 	auditCtx, stopAudit := context.WithCancel(context.Background())
 	auditErrors := make(chan error, 2)
 	go func() { auditErrors <- auditStore.RunCheckpoints(auditCtx) }()
@@ -290,7 +319,14 @@ func startAuditWorkers(cfg *configuration, auditStore *audit.Store) (<-chan erro
 		exporter := &audit.Exporter{Store: auditStore, Cursor: cfg.Audit.CursorName, Storage: audit.FileStorage{Directory: cfg.Audit.ExportDirectory, MaxBytes: cfg.Audit.MaxFileBytes}}
 		go func() { auditErrors <- exporter.Run(auditCtx, time.Second) }()
 	}
-	return auditErrors, stopAudit
+	wait := func() {}
+	if cfg.UpdateCheck.Enabled {
+		checker := updatecheck.New(db.Pool, cfg.UpdateCheck, version)
+		checked := make(chan struct{})
+		go func() { checker.Run(auditCtx); close(checked) }()
+		wait = func() { <-checked }
+	}
+	return auditErrors, stopAudit, wait
 }
 
 // serveUntilDone serves until a signal, an audit worker failure or a listener

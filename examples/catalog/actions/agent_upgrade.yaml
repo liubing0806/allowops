@@ -1,0 +1,21 @@
+name: agent_upgrade
+description: Install one allowops-agent version from the configured package repository and restart the agent.
+risk: dangerous
+run_as: root
+params:
+  version:
+    type: enum
+    description: Agent package version; list only versions not newer than the gateway.
+    values: ['0.1.0']
+timeout: 10m
+max_output: 64KB
+script:
+  file: scripts/agent_upgrade.sh
+  interpreter: /bin/sh
+args: ['{version}']
+filters: []
+redact:
+  builtin: [secrets]
+idempotent: true
+batch_size: 1
+max_failures: 1

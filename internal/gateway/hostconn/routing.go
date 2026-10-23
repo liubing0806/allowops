@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/store"
 	"github.com/liubing0806/allowops/internal/store/db"
@@ -215,6 +216,81 @@ func (s *Service) forgetPending(host, connectionID, task, mailbox string) {
 	} else {
 		delete(c.pending, task)
 	}
+}
+
+// reconcilePending drops pending mailbox IDs whose gateway_messages row no longer
+// exists, which only the connection owner can detect when the sender ran on another
+// instance: that sender deletes the row on timeout or cancellation, but forgetPending
+// reaches only the sender's own connection map. The agent ignores a cancel for a task
+// it does not know, so such an entry would otherwise stay until the connection ends
+// and count against MaxInflight.
+//
+// The rule is deliberately narrower than "the row is gone". An ID is dropped only if
+//   - it is not the first in its task's list and its row is gone: write admits a second
+//     ID only for a cancel, so the first ID is the assignment and later ones are
+//     cancels, and a stale cancel must not block a retried cancel (limit of two); or
+//   - its row is gone and the task is not active on this connection per the database
+//     (finished, absent, or owned by another connection).
+//
+// The ID of a task that is still executing is kept even when its sender is gone, so
+// the task keeps occupying its slot until TaskCompleted arrives. A mailbox that is
+// added after the snapshot is never considered; its row exists when write adds it.
+func (s *Service) reconcilePending(ctx context.Context, c *connection) error {
+	c.mu.Lock()
+	var ids, tasks []string
+	for task, mailboxes := range c.pending {
+		tasks = append(tasks, task)
+		ids = append(ids, mailboxes...)
+	}
+	c.mu.Unlock()
+	if len(ids) == 0 {
+		return nil
+	}
+	found, err := s.Store.Queries.ListExistingGatewayMessageIDs(ctx, ids)
+	if err != nil {
+		return err
+	}
+	exists := make(map[string]bool, len(found))
+	for _, id := range found {
+		exists[id] = true
+	}
+	missing := map[string]bool{}
+	for _, id := range ids {
+		if !exists[id] {
+			missing[id] = true
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	// The status predicate matches tasks_host_connection. A task only leaves the
+	// active states, so a task read as inactive here cannot become active later.
+	activeTasks, err := s.Store.Queries.ListActiveTaskIDsOnConnection(ctx, db.ListActiveTaskIDsOnConnectionParams{TaskIds: tasks, HostID: c.identity.HostID, ConnectionID: pgtype.Text{String: c.id, Valid: true}})
+	if err != nil {
+		return err
+	}
+	active := make(map[string]bool, len(activeTasks))
+	for _, task := range activeTasks {
+		active[task] = true
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for task, mailboxes := range c.pending {
+		i := -1
+		kept := slices.DeleteFunc(slices.Clone(mailboxes), func(id string) bool {
+			i++
+			return missing[id] && (i > 0 || !active[task])
+		})
+		if len(kept) == len(mailboxes) {
+			continue
+		}
+		if len(kept) > 0 {
+			c.pending[task] = kept
+		} else {
+			delete(c.pending, task)
+		}
+	}
+	return nil
 }
 
 func (s *Service) notification(payload string) {

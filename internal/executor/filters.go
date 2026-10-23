@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/liubing0806/allowops/internal/params"
 	"io"
@@ -92,16 +93,31 @@ func parseLineCount(value any) (int64, error) {
 	return values["lines"].(int64), nil
 }
 
+// filterWriter applies match/exclude/head/count/tail to a stream of redacted
+// lines, one line per Write. tail retains the newest lines in one contiguous
+// buffer instead of a slice of strings: retained bytes stay within the output
+// limit plus the newest line, whatever tail asks for, so a huge tail over a
+// huge stream cannot exhaust memory. Older lines are evicted first; losing a
+// line that tail asked for sets the output's truncated flag.
 type filterWriter struct {
-	output         io.Writer
+	output         *limitedOutput
 	options        FilterOptions
 	match, exclude *regexp.Regexp
-	tail           []string
-	next           int
-	lines          int64
+	// tailData[tailStart:] holds the retained lines. Only the final line of a
+	// stream may lack its "\n", so line boundaries are found by scanning
+	// instead of keeping a per-line index that would dominate memory for
+	// streams of very short lines.
+	tailData  []byte
+	tailStart int
+	tailLines int64
+	// tailSeen counts every line offered to tail. The retained lines are always
+	// the newest ones, so fewer than min(Tail, tailSeen) means a requested line
+	// was dropped for bytes.
+	tailSeen int64
+	lines    int64
 }
 
-func newFilterWriter(output io.Writer, options FilterOptions) *filterWriter {
+func newFilterWriter(output *limitedOutput, options FilterOptions) *filterWriter {
 	w := &filterWriter{output: output, options: options}
 	if options.Match != "" {
 		w.match = regexp.MustCompile(options.Match)
@@ -124,6 +140,31 @@ func (w *filterWriter) emit(line string) error {
 	return err
 }
 
+// dropOldest evicts the oldest retained line. The dead prefix is compacted
+// once it outgrows the live part, which keeps eviction amortized O(1) and the
+// backing array within about twice the retained bytes.
+func (w *filterWriter) dropOldest() {
+	rest := w.tailData[w.tailStart:]
+	n := bytes.IndexByte(rest, '\n') + 1
+	if n == 0 {
+		n = len(rest)
+	}
+	w.tailStart += n
+	w.tailLines--
+	if live := len(w.tailData) - w.tailStart; w.tailStart > live {
+		w.tailData = w.tailData[:copy(w.tailData, w.tailData[w.tailStart:])]
+		w.tailStart = 0
+	}
+}
+
+// trimTail drops the oldest lines until the retained bytes fit limit, always
+// keeping the newest line so that the output limit cuts inside it.
+func (w *filterWriter) trimTail(limit int64) {
+	for w.tailLines > 1 && int64(len(w.tailData)-w.tailStart) > limit {
+		w.dropOldest()
+	}
+}
+
 func (w *filterWriter) Write(p []byte) (int, error) {
 	line := string(p)
 	text := strings.TrimSuffix(line, "\n")
@@ -131,22 +172,34 @@ func (w *filterWriter) Write(p []byte) (int, error) {
 		return len(p), nil
 	}
 	if w.options.Tail > 0 {
-		if int64(len(w.tail)) < w.options.Tail {
-			w.tail = append(w.tail, line)
-		} else {
-			w.tail[w.next] = line
-			w.next = (w.next + 1) % len(w.tail)
+		w.tailData = append(w.tailData, p...)
+		w.tailLines++
+		w.tailSeen++
+		if w.tailLines > w.options.Tail {
+			w.dropOldest()
 		}
+		w.trimTail(w.output.limit)
 		return len(p), nil
 	}
 	return len(p), w.emit(line)
 }
 
 func (w *filterWriter) finish() error {
-	for i := range w.tail {
-		if err := w.emit(w.tail[(w.next+i)%len(w.tail)]); err != nil {
+	// A step shares its budget with other output, so the room left now can be
+	// smaller than the limit; keep the newest lines that fit it.
+	w.trimTail(w.output.room())
+	if w.tailLines < min(w.options.Tail, w.tailSeen) {
+		w.output.truncated = true
+	}
+	for rest := w.tailData[w.tailStart:]; len(rest) > 0; {
+		n := bytes.IndexByte(rest, '\n') + 1
+		if n == 0 {
+			n = len(rest)
+		}
+		if err := w.emit(string(rest[:n])); err != nil {
 			return err
 		}
+		rest = rest[n:]
 	}
 	if w.options.Count {
 		_, err := io.WriteString(w.output, strconv.FormatInt(w.lines, 10)+"\n")

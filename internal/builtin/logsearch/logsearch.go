@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -83,6 +84,90 @@ func within(root, path string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
+// ErrGlobLimit means path_glob examined more directory entries than allowed.
+var ErrGlobLimit = errors.New("path_glob examined too many directory entries")
+
+// maxGlobEntries bounds the directory entries one path_glob may examine,
+// matching or not: 400 times the default file limit, enough for directories of
+// rotated logs, while a deliberately wide tree stops long before it is walked.
+const maxGlobEntries = 400 * builtin.DefaultLogMaxFiles
+
+// globWalk expands pattern like filepath.Glob, with the same lexical order and
+// pattern syntax, except that it observes ctx, counts examined directory
+// entries against maxGlobEntries, and does not descend into a symlinked
+// directory matched by a wildcard segment. Literal segments are followed as
+// written. filepath.Glob has none of these bounds: symlink loops multiply every
+// wildcard level. Unreadable directories are skipped, as filepath.Glob does.
+func globWalk(ctx context.Context, pattern string) ([]string, error) {
+	if _, err := filepath.Match(pattern, ""); err != nil {
+		return nil, err
+	}
+	segments := strings.Split(strings.Trim(filepath.Clean(pattern), string(filepath.Separator)), string(filepath.Separator))
+	paths := []string{string(filepath.Separator)}
+	examined := 0
+	for i, segment := range segments {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		last := i == len(segments)-1
+		var next []string
+		if !strings.ContainsAny(segment, `*?[\`) {
+			for _, path := range paths {
+				path = filepath.Join(path, segment)
+				if _, err := os.Lstat(path); err == nil || !last {
+					next = append(next, path)
+				}
+			}
+			paths = next
+			continue
+		}
+		for _, dir := range paths {
+			names, err := globDir(ctx, dir, segment, last, &examined)
+			if err != nil {
+				return nil, err
+			}
+			for _, name := range names {
+				next = append(next, filepath.Join(dir, name))
+			}
+		}
+		paths = next
+	}
+	return paths, nil
+}
+
+// globDir returns the sorted entries of dir matching segment. Only real
+// directories qualify unless last. examined is shared across the whole walk.
+func globDir(ctx context.Context, dir, segment string, last bool, examined *int) ([]string, error) {
+	f, err := os.Open(dir)
+	if err != nil {
+		return nil, nil
+	}
+	defer f.Close()
+	var names []string
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		entries, err := f.ReadDir(256)
+		for _, entry := range entries {
+			if *examined++; *examined > maxGlobEntries {
+				return nil, ErrGlobLimit
+			}
+			if !last && !entry.IsDir() {
+				continue
+			}
+			if ok, _ := filepath.Match(segment, entry.Name()); ok {
+				names = append(names, entry.Name())
+			}
+		}
+		if err != nil {
+			break // io.EOF, or an unreadable directory ends the listing
+		}
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
 type logFile struct{ name, root, relative string }
 
 // Resolve and validate every match before reading, including matches beyond the
@@ -109,7 +194,7 @@ func files(ctx context.Context, cfg Config, glob string) ([]logFile, error) {
 	if !lexicallyAllowed {
 		return nil, errors.New("path_glob is outside allowed_roots")
 	}
-	matches, err := filepath.Glob(glob)
+	matches, err := globWalk(ctx, glob)
 	if err != nil {
 		return nil, err
 	}
