@@ -59,7 +59,7 @@ func TestBuiltinCatalogSchemas(t *testing.T) {
 				t.Error("fixed must be boolean")
 			}
 		case "log_query":
-			if fmt.Sprint(properties["source"].(map[string]any)["enum"]) != "[app]" || properties["limit"].(map[string]any)["maximum"] != 200 {
+			if fmt.Sprint(properties["source"].(map[string]any)["enum"]) != "[app]" || properties["limit"].(map[string]any)["maximum"] != 500 {
 				t.Errorf("log_query schema: %v", properties)
 			}
 		case "redis_command":
@@ -90,7 +90,7 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 		{"log_query", "max_files", 1, builtin.DefaultLogMaxFiles + 1},
 		{"log_query", "max_scan", "1KB", fmt.Sprint(builtin.DefaultLogMaxScan + 1)},
 		{"log_query", "max_window", "1h", "25h"},
-		{"log_query", "max_page_records", 10, 201},
+		{"log_query", "max_page_records", 10, 501},
 		{"log_query", "max_record_bytes", "1KB", "65537"},
 		{"log_query", "mode", "sources", "stats"},
 		{"http_get", "max_response_bytes", "1KB", fmt.Sprint(builtin.DefaultHTTPMaxResponseBytes + 1)},

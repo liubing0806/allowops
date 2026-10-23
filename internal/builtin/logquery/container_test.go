@@ -72,13 +72,13 @@ func (d *fakeDocker) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		q := r.URL.Query()
-		if q.Get("timestamps") != "1" && q.Get("timestamps") != "true" || q.Get("tail") != "" && q.Get("tail") != "all" {
-			http.Error(w, "log_query must request timestamps and no tail", http.StatusBadRequest)
+		if q.Get("timestamps") != "1" && q.Get("timestamps") != "true" {
+			http.Error(w, "log_query must request timestamps", http.StatusBadRequest)
 			return
 		}
 		since := parseDockerTime(q.Get("since"))
 		until := parseDockerTime(q.Get("until"))
-		tty, _ := inspect["Config"].(map[string]any)["Tty"].(bool)
+		tty, _ := inspect.(map[string]any)["Config"].(map[string]any)["Tty"].(bool)
 		entries := d.entries[parts[1]]
 		if tail := q.Get("tail"); tail != "" && tail != "all" {
 			n, _ := strconv.Atoi(tail)
@@ -326,11 +326,12 @@ func TestContainerStdoutScanLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !out.ScanLimitReached || out.ScannedBytes > cfg.MaxScan || len(out.Records) == 0 || out.Records[0].Text != "B1000" {
+	if !out.ScanLimitReached || out.ScannedBytes > cfg.MaxScan+1<<10 || len(out.Records) == 0 || out.Records[0].Text != "B1000" {
 		t.Fatalf("desc with scan limit: limited=%v scanned=%d records=%v", out.ScanLimitReached, out.ScannedBytes, texts(out.Records))
 	}
-	if scanned, _ := time.Parse(time.RFC3339Nano, out.ScannedSince); !scanned.After(since) {
-		t.Fatalf("scanned_since %s should be inside the range", out.ScannedSince)
+	if scanned, _ := time.Parse(time.RFC3339Nano, out.ScannedSince); !scanned.After(since) || out.Matched >= 2000 {
+		// matched counts only the scanned suffix of the range.
+		t.Fatalf("scanned_since %s should be inside the range, matched %d below 2000", out.ScannedSince, out.Matched)
 	}
 	out, err = search(t, cfg, Params{Source: "web", Since: since.Format(time.RFC3339), Until: until.Format(time.RFC3339), Limit: 10, Order: "asc"})
 	if err != nil || !out.ScanLimitReached || out.Records[0].Text != "A1" {

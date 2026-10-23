@@ -9,6 +9,7 @@ const (
 	ReasonSourceUnknown     = "SOURCE_UNKNOWN"
 	ReasonSourceNoFiles     = "SOURCE_NO_FILES"
 	ReasonSourceUnsupported = "SOURCE_UNSUPPORTED"
+	ReasonSourceUnavailable = "SOURCE_UNAVAILABLE"
 	ReasonPathOutsideRoots  = "PATH_OUTSIDE_ROOTS"
 	ReasonWindowTooLarge    = "WINDOW_TOO_LARGE"
 	ReasonTimeInvalid       = "TIME_INVALID"
@@ -20,7 +21,7 @@ const (
 
 var reasons = map[string]bool{
 	ReasonSourceUnknown: true, ReasonSourceNoFiles: true, ReasonSourceUnsupported: true,
-	ReasonPathOutsideRoots: true, ReasonWindowTooLarge: true, ReasonTimeInvalid: true,
+	ReasonSourceUnavailable: true, ReasonPathOutsideRoots: true, ReasonWindowTooLarge: true, ReasonTimeInvalid: true,
 	ReasonTimestampUnparsed: true, ReasonPatternInvalid: true, ReasonCursorInvalid: true,
 	ReasonCursorExpired: true,
 }

@@ -47,6 +47,12 @@ func loadLocation(name string) (*time.Location, error) {
 	return location, nil
 }
 
+// runtimeParser reads the RFC 3339 time that Docker and CRI put before each
+// line. location only formats output times.
+func runtimeParser(location *time.Location) *timeParser {
+	return &timeParser{location: location, firstField: true}
+}
+
 // parse reads the timestamp at the start of the line, or inside its first
 // [...] when bracketed. Layouts are tried in order.
 func (p *timeParser) parse(line string) (time.Time, bool) {

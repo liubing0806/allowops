@@ -82,9 +82,10 @@ func TestExportPagesByMaxOutput(t *testing.T) {
 	var got []string
 	pages := 0
 	for ; pages < 20; pages++ {
-		lines, trailer := exportLines(t, export(t, cfg, p, nil, 600))
+		lines, trailer := exportLines(t, export(t, cfg, p, nil, 1200))
 		for _, l := range lines {
-			got = append(got, l[strings.Index(l, " - ")+3:])
+			_, message, _ := strings.Cut(l, " - ")
+			got = append(got, message)
 		}
 		next := trailerField(trailer, "next_cursor")
 		if next == "" {

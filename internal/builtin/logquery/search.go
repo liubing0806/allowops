@@ -55,6 +55,8 @@ func Run(ctx context.Context, cfg Config, p Params, redact func(string) string, 
 		output, err = runSources(ctx, cfg, roots)
 	case ModeSearch:
 		output, r.Truncated, err = runSearch(ctx, cfg, roots, p, redact, maxOutput)
+	case ModeExport:
+		output, r.Truncated, err = runExport(ctx, cfg, roots, p, redact, maxOutput)
 	}
 	if err != nil {
 		return r, err
@@ -171,6 +173,13 @@ type query struct {
 	position     int
 	cursor       *cursor
 	since, until time.Time
+	docker       *dockerClient
+}
+
+func (q *query) close() {
+	if q.docker != nil {
+		q.docker.close()
+	}
 }
 
 // prepare validates the request parameters and resolves the source's
@@ -218,6 +227,14 @@ func prepare(ctx context.Context, cfg Config, roots []string, p Params, defaultL
 		return nil, err
 	}
 	q.s = &searcher{cfg: cfg, source: source, parser: parser, content: content, since: q.since, until: q.until, match: match}
+	if source.Type == TypeContainerStdout {
+		q.docker = newDockerClient()
+		if q.segments, err = stdoutSegments(ctx, q.docker, source, q.since, q.until, p.Order, q.cursor); err != nil {
+			q.close()
+			return nil, err
+		}
+		return q, nil
+	}
 	tl, err := buildTimeline(ctx, source, roots, parser, q.since, q.until)
 	if err != nil {
 		return nil, err
@@ -251,6 +268,7 @@ func runSearch(ctx context.Context, cfg Config, roots []string, p Params, redact
 	if err != nil {
 		return nil, false, err
 	}
+	defer q.close()
 	p, s := q.p, q.s
 	var hits []hit
 	if p.Order == "asc" {
@@ -389,8 +407,12 @@ func (s *searcher) scanFile(ctx context.Context, file *os.File, f *logFile, star
 	}, emit)
 }
 
-// fileLines returns the line source for a file of the searched source.
+// fileLines returns the line source for a file of the searched source:
+// Pod log files are in the CRI format.
 func (s *searcher) fileLines(lines *lineReader) lineSource {
+	if s.source.Type == TypeK8sPod {
+		return &criLines{lines: lines, max: s.cfg.MaxRecordBytes}
+	}
 	return lines
 }
 
@@ -529,43 +551,66 @@ func (s *searcher) matchRecord(r record, keep func()) {
 	}
 }
 
+// maxSplits bounds how often desc splits segments that exceeded the budget;
+// the bytes read for discarded attempts are bounded by 4 * max_scan.
+const maxSplits = 32
+
+// splitter is a segment that desc can split in two by time when reading it
+// exceeds the budget: then the newer half is read first and the older half
+// after it.
+type splitter interface {
+	split() (older, newer segment, ok bool)
+}
+
 // descending scans segments newest first. Each segment is read forward,
 // keeping its newest hits in a ring buffer. The scanned part is always a
 // suffix of the range: when the budget runs out inside a segment, that
-// segment's hits are discarded.
+// segment's hits are discarded; a segment that can be split is retried as
+// two halves.
 func (s *searcher) descending(ctx context.Context, segments []segment, want, position int, c *cursor) ([]hit, error) {
 	var hits []hit
 	if position < 0 {
 		position = len(segments) - 1
 	}
-scan:
-	for i := position; i >= 0; i-- {
+	// Segments newest first; the cursor applies to the first one.
+	pending := slices.Clone(segments[:position+1])
+	slices.Reverse(pending)
+	from, splits, discarded := c, 0, int64(0)
+	for len(pending) > 0 {
 		remaining := s.cfg.MaxScan - s.scanned
 		if s.searched == s.cfg.MaxFiles || remaining <= 0 {
 			s.limited = true
 			break
 		}
-		var from *cursor
-		if i == position {
-			from = c
-		}
+		current := pending[0]
 		ring := newRing(max(want-len(hits), 0))
-		matchedBefore, firstBefore := s.matched, s.first
-		stop, err := segments[i].descend(ctx, s, from, remaining, func(h hit) {
+		matchedBefore, firstBefore, scannedBefore := s.matched, s.first, s.scanned
+		stop, err := current.descend(ctx, s, from, remaining, func(h hit) {
 			s.matchRecord(h.record, func() { ring.push(h) })
 		})
 		if err != nil {
 			return nil, err
 		}
-		switch stop {
-		case scanSkipped:
-			s.limited = true
-			break scan
-		case scanExceeded:
+		if stop == scanExceeded {
 			s.matched, s.first = matchedBefore, firstBefore
+			if sp, ok := current.(splitter); ok && splits < maxSplits && discarded+s.scanned-scannedBefore <= 4*s.cfg.MaxScan {
+				if older, newer, ok := sp.split(); ok {
+					// scanned_bytes counts the segments whose hits are kept.
+					splits++
+					discarded += s.scanned - scannedBefore
+					s.scanned = scannedBefore
+					pending = append([]segment{newer, older}, pending[1:]...)
+					continue
+				}
+			}
 			s.limited = true
-			break scan
+			break
 		}
+		if stop == scanSkipped {
+			s.limited = true
+			break
+		}
+		pending, from = pending[1:], nil
 		hits = append(hits, ring.newestFirst()...)
 		if stop == scanPartial {
 			s.limited = true

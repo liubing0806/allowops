@@ -59,6 +59,7 @@ type SourceSummary struct {
 	Latest            string `json:"latest,omitempty"`
 	TimestampParsed   bool   `json:"timestamp_parsed"`
 	Status            string `json:"status"`
+	Reason            string `json:"reason,omitempty"`
 	SkippedNotRegular int    `json:"skipped_not_regular,omitempty"`
 }
 
@@ -142,15 +143,25 @@ func runSources(ctx context.Context, cfg Config, roots []string) ([]byte, error)
 	out := SourcesOutput{Sources: []SourceSummary{}}
 	for _, name := range cfg.SourceNames() {
 		source := cfg.Sources[name]
-		parser, err := newTimeParser(source.Timestamp)
+		parser, _, err := sourceParsers(source)
 		if err != nil {
 			return nil, err
 		}
+		if source.Type == TypeContainerStdout {
+			out.Sources = append(out.Sources, stdoutSummary(ctx, name, source, parser.location))
+			continue
+		}
+		summary := SourceSummary{Name: name, Type: source.Type, Status: "no_files"}
 		resolved, err := resolveFiles(ctx, source, roots)
+		if status, reason := sourceStatus(err); status != "" {
+			summary.Status, summary.Reason = status, reason
+			out.Sources = append(out.Sources, summary)
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
-		summary := SourceSummary{Name: name, Type: source.Type, Files: len(resolved.files), SkippedNotRegular: resolved.skippedNotRegular, Status: "no_files"}
+		summary.Files, summary.SkippedNotRegular = len(resolved.files), resolved.skippedNotRegular
 		var earliest, latest time.Time
 		for _, f := range resolved.files {
 			if err := f.readHeader(parser); err != nil {
