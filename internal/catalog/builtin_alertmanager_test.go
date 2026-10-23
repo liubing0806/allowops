@@ -56,11 +56,11 @@ func TestAlertmanagerParameters(t *testing.T) {
 	if _, err := params.JSONSchema(defs); err != nil {
 		t.Fatal(err)
 	}
-	a.Params = map[string]params.Definition{"filter": {Type: params.StringArray, MaxLen: 64}}
+	a.Params = map[string]params.Definition{"filter": {Type: params.StringArray, MaxLen: 64, Description: "x"}}
 	if _, err := ValidateAction(a); err != nil {
 		t.Fatalf("tightening filter length: %v", err)
 	}
-	a.Params = map[string]params.Definition{"filter": {Type: params.StringArray, MaxLen: 257}}
+	a.Params = map[string]params.Definition{"filter": {Type: params.StringArray, MaxLen: 257, Description: "x"}}
 	if _, err := ValidateAction(a); err == nil {
 		t.Fatal("widening filter length accepted")
 	}

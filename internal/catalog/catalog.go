@@ -373,6 +373,9 @@ func validateBody(a Action, defs map[string]params.Definition, unknownBuiltin bo
 		if err := Builtins[a.Builtin].ValidateConfig(a.BuiltinConfig); err != nil {
 			return err
 		}
+		if err := validateBuiltinRunAs(a); err != nil {
+			return err
+		}
 	}
 	return nil
 }

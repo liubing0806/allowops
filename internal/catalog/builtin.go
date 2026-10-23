@@ -38,7 +38,7 @@ type RedactingBuiltinHandler interface {
 }
 
 // Builtins is the process-local registration table; registration occurs at startup.
-var Builtins = map[string]BuiltinHandler{"mysql_query": mysqlHandler{}, "log_search": logSearchHandler{}, "http_get": httpGetHandler{}, "redis_command": redisHandler{}}
+var Builtins = map[string]BuiltinHandler{"mysql_query": mysqlHandler{}, "log_search": logSearchHandler{}, "http_get": httpGetHandler{}, "redis_command": redisHandler{}, "alertmanager_alerts": alertmanagerHandler{}}
 
 type mysqlHandler struct{}
 
