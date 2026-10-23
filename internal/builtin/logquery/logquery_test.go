@@ -669,7 +669,7 @@ func TestConfigValidate(t *testing.T) {
 		t.Fatalf("valid config: %v", err)
 	}
 	cases := map[string]func(*Config){
-		"mode":             func(c *Config) { c.Mode = "stats" },
+		"mode":             func(c *Config) { c.Mode = "export" },
 		"no sources":       func(c *Config) { c.Sources = nil },
 		"no roots":         func(c *Config) { c.AllowedRoots = nil },
 		"source name":      func(c *Config) { c.Sources = map[string]Source{"Bad Name": c.Sources["app"]} },
