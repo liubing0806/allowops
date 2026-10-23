@@ -1,0 +1,11 @@
+name: hosts_entries
+description: Read the host /etc/hosts file; use the match filter to select entries.
+risk: read
+params: {}
+exec: [/usr/bin/cat, --, /etc/hosts]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

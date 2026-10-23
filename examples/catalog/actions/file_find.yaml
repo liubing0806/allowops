@@ -1,0 +1,27 @@
+name: file_find
+description: Find regular files by name pattern under an allowed root with a bounded depth.
+risk: read
+run_as: root
+params:
+  root:
+    type: enum
+    description: Search root selected from the signed allowlist.
+    values: [/var/log, /data/logs, /etc/nginx]
+  depth:
+    type: int
+    description: Maximum directory depth below the root.
+    min: 1
+    max: 4
+    default: 2
+  glob:
+    type: string
+    description: File name glob limited to letters, digits, dot, underscore, hyphen, star and question mark.
+    regex: ^[A-Za-z0-9_*?.-]{1,64}$
+    max_len: 64
+exec: [/usr/bin/find, '{root}', -maxdepth, '{depth}', -type, f, -name, '{glob}']
+timeout: 20s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

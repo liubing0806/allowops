@@ -104,7 +104,10 @@ batch/failure limits, not increase the signed limits. stdout is redacted,
 filtered and truncated in that order. stderr is redacted before truncation.
 
 `secrets` is enabled by default; `pii` is optional. Custom rules use
-`redact.custom: [{name, regex}]`. Action-level redaction overrides global rules,
+`redact.custom: [{name, regex, before_builtin}]`. Custom rules run after the
+built-in rules unless `before_builtin: true` is set; use it for a rule that
+replaces whole quoted strings, such as SQL literals, so a built-in rule cannot
+consume a closing quote first. Action-level redaction overrides global rules,
 so explicitly retain `secrets` when adding an override. Redaction is imperfect.
 Do not define actions that intentionally expose credentials.
 

@@ -185,7 +185,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 - 内置规则：
   - `secrets`（默认开启）：PEM 私钥、阿里云 AccessKey、AWS Access Key、JWT、`Authorization: Bearer`、URL 中的用户名密码、`password=`/`secret=`/`token=` 等键值对、mysql 命令行 `-p<密码>`、`MYSQL_PWD=`、`REDISCLI_AUTH=`。
   - `pii`（默认关闭）：手机号、18 位身份证号（校验码）、银行卡号（Luhn）。
-- 自定义规则：`redact.custom: [{name, regex}]`，Go RE2。替换为 `[REDACTED:类型]`。
+- 自定义规则：`redact.custom: [{name, regex}]`，Go RE2。替换为 `[REDACTED:类型]`。可选字段 `before_builtin`（bool，默认 false）：为 true 时该规则在内置规则之前运行（多个此类规则保持配置顺序），其余自定义规则仍在内置规则之后；用于整体替换引号字符串的规则。
 - 文档写明局限：可能误伤；不能识别所有敏感内容。
 
 ### 主机身份与标签

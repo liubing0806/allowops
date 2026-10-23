@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -29,6 +30,15 @@ import (
 // retrieval, and returned response text for other commands. Final max_output
 // belongs to the executor after redaction and filtering. Defaults are DB 0,
 // timeout 10s, response 64KiB and SCAN COUNT <= 1000.
+//
+// CONFIG GET and SLOWLOG are opt-in: they are accepted only when Commands lists
+// them. CONFIG GET additionally requires ConfigParams, an allowlist of literal
+// parameter names; sensitive parameters (passwords, users, ACL settings) can
+// never be listed or requested. SLOWLOG GET returns only id, time, duration,
+// command name, argument count and client address of each entry; arguments and
+// client names are dropped. It is still refused when KeyPrefixes is set,
+// because the entries describe commands of all clients and cannot be limited
+// to the configured key prefixes.
 type Config struct {
 	Address          string        `yaml:"address"`
 	Credential       string        `yaml:"credential"`
@@ -39,9 +49,20 @@ type Config struct {
 	Commands         []string      `yaml:"commands" json:"commands"`
 	KeyPrefixes      []string      `yaml:"key_prefixes" json:"key_prefixes"`
 	InfoSections     []string      `yaml:"info_sections" json:"info_sections"`
+	ConfigParams     []string      `yaml:"config_params" json:"config_params"`
 }
 
-var allowedCommands = []string{"GET", "MGET", "HGET", "HLEN", "TTL", "TYPE", "EXISTS", "STRLEN", "LLEN", "SCARD", "ZCARD", "SCAN", "INFO"}
+// defaultCommands is the set allowed when Config.Commands is omitted.
+var defaultCommands = []string{"GET", "MGET", "HGET", "HLEN", "TTL", "TYPE", "EXISTS", "STRLEN", "LLEN", "SCARD", "ZCARD", "SCAN", "INFO"}
+
+// allowedCommands is the set Config.Commands may select from.
+var allowedCommands = append(slices.Clone(defaultCommands), "CONFIG", "SLOWLOG")
+
+const (
+	maxSlowlogCount     = 128
+	maxConfigGetParams  = 16
+	maxConfigParamBytes = 64
+)
 
 // Aggregate selectors (all/default/everything) cannot represent one restricted section.
 var allowedInfoSections = []string{"server", "clients", "memory", "persistence", "stats", "replication", "cpu", "commandstats", "errorstats", "latencystats", "cluster", "keyspace", "modules", "sentinel"}
@@ -90,6 +111,14 @@ func (c Config) Validate() error {
 			}
 		}
 	}
+	if c.ConfigParams != nil && len(c.ConfigParams) == 0 {
+		return errors.New("config_params must be a nonempty list of literal Redis parameter names")
+	}
+	for _, name := range c.ConfigParams {
+		if err := checkConfigParamName(name); err != nil {
+			return fmt.Errorf("config_params: %w", err)
+		}
+	}
 	if c.KeyPrefixes != nil && len(c.KeyPrefixes) == 0 {
 		return errors.New("key_prefixes must be a nonempty list of nonempty literal prefixes (1..4096 bytes, no NUL/newlines)")
 	}
@@ -101,13 +130,40 @@ func (c Config) Validate() error {
 	return nil
 }
 
+// checkConfigParamName accepts only literal parameter names: 1..64 bytes of
+// letters, digits and '-'. Glob characters are therefore never accepted.
+func checkConfigParamName(name string) error {
+	if name == "" || len(name) > maxConfigParamBytes || strings.HasPrefix(name, "-") {
+		return fmt.Errorf("parameter %q must be a literal name of 1..%d bytes", name, maxConfigParamBytes)
+	}
+	for i := 0; i < len(name); i++ {
+		b := name[i]
+		if !(b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9' || b == '-') {
+			return fmt.Errorf("parameter %q must be a literal name without wildcards", name)
+		}
+	}
+	if sensitiveConfigParam(name) {
+		return fmt.Errorf("parameter %q is sensitive and cannot be read", name)
+	}
+	return nil
+}
+
+// sensitiveConfigParam matches credential, user and ACL settings, including the
+// primary* aliases and TLS key passphrases (requirepass, masterauth, masteruser,
+// primaryauth, primaryuser, aclfile, tls-key-file-pass, ...). The match is broad
+// on purpose: a harmless name that is caught can be read through INFO instead.
+func sensitiveConfigParam(name string) bool {
+	name = strings.ToLower(name)
+	return strings.HasPrefix(name, "acl") || strings.Contains(name, "pass") || strings.Contains(name, "auth") || strings.Contains(name, "user")
+}
+
 func containsFold(values []string, value string) bool {
 	return slices.ContainsFunc(values, func(allowed string) bool { return strings.EqualFold(allowed, value) })
 }
 
 func ParamsSchema() map[string]any {
 	return map[string]any{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "additionalProperties": false, "required": []string{"command"}, "properties": map[string]any{
-		"command": map[string]any{"type": "string", "enum": slices.Clone(allowedCommands)},
+		"command": map[string]any{"type": "string", "enum": slices.Clone(defaultCommands)},
 		"args":    map[string]any{"type": "array", "maxItems": 128, "items": map[string]any{"type": "string", "maxLength": 4096, "pattern": "^([^-].*)?$"}},
 	}}
 }
@@ -139,6 +195,48 @@ func command(p Params, maxCount int) ([]any, error) {
 	case "INFO":
 		if n > 1 {
 			return nil, errors.New("INFO accepts at most one section")
+		}
+	case "CONFIG":
+		if n < 2 || !strings.EqualFold(p.Args[0], "GET") {
+			return nil, errors.New("CONFIG only supports GET with literal parameter names")
+		}
+		if n-1 > maxConfigGetParams {
+			return nil, fmt.Errorf("CONFIG GET accepts at most %d parameters", maxConfigGetParams)
+		}
+		normalized := []string{"GET"}
+		for _, param := range p.Args[1:] {
+			if err := checkConfigParamName(param); err != nil {
+				return nil, fmt.Errorf("CONFIG GET: %w (allowed names come from config_params)", err)
+			}
+			normalized = append(normalized, strings.ToLower(param))
+		}
+		p.Args = normalized
+	case "SLOWLOG":
+		const usage = "SLOWLOG accepts only GET [count] or LEN"
+		if n == 0 {
+			return nil, errors.New(usage)
+		}
+		switch strings.ToUpper(p.Args[0]) {
+		case "LEN":
+			if n != 1 {
+				return nil, errors.New(usage)
+			}
+			p.Args = []string{"LEN"}
+		case "GET":
+			if n > 2 {
+				return nil, errors.New(usage)
+			}
+			normalized := []string{"GET"}
+			if n == 2 {
+				count, err := strconv.ParseUint(p.Args[1], 10, 32)
+				if err != nil || count == 0 || count > maxSlowlogCount {
+					return nil, fmt.Errorf("SLOWLOG GET count must be an integer in 1..%d", maxSlowlogCount)
+				}
+				normalized = append(normalized, strconv.FormatUint(count, 10))
+			}
+			p.Args = normalized
+		default:
+			return nil, errors.New(usage)
 		}
 	case "SCAN":
 		if n == 0 || n%2 != 1 {
@@ -183,6 +281,26 @@ func (c Config) validateCommand(args []any) error {
 	name := args[0].(string)
 	if c.Commands != nil && !containsFold(c.Commands, name) {
 		return fmt.Errorf("commands allows only: %s", strings.Join(c.Commands, ", "))
+	}
+	if c.Commands == nil && !containsFold(defaultCommands, name) {
+		return fmt.Errorf("commands must list %s explicitly; the default allows only: %s", name, strings.Join(defaultCommands, ", "))
+	}
+	switch name {
+	case "CONFIG":
+		if c.ConfigParams == nil {
+			return errors.New("config_params must be configured to allow CONFIG GET")
+		}
+		for _, param := range args[2:] {
+			if !containsFold(c.ConfigParams, param.(string)) {
+				return fmt.Errorf("config_params allows only: %s", strings.Join(c.ConfigParams, ", "))
+			}
+		}
+		return nil
+	case "SLOWLOG":
+		if c.KeyPrefixes != nil && args[1] == "GET" {
+			return errors.New("key_prefixes cannot be enforced on SLOWLOG GET; only SLOWLOG LEN is allowed with key_prefixes")
+		}
+		return nil
 	}
 	if name == "INFO" {
 		if c.InfoSections != nil && len(args) > 1 && !containsFold(c.InfoSections, args[1].(string)) {
@@ -381,6 +499,59 @@ func maskResponse(value any, mask func(string) string) any {
 	}
 }
 
+// slowlogEntryMaxArgc is the server limit on stored arguments per slow log
+// entry (SLOWLOG_ENTRY_MAX_ARGC in Redis and Valkey).
+const slowlogEntryMaxArgc = 32
+
+var slowlogTruncatedArgs = regexp.MustCompile(`^\.\.\. \((\d+) more arguments\)$`)
+
+// summarizeSlowlog reduces each SLOWLOG GET entry to [id, unix time,
+// duration in microseconds, command name, argument count, client address].
+// Command arguments (keys and values of any client) and the client name are
+// dropped, so the result cannot expose data outside key_prefixes.
+func summarizeSlowlog(value any) (any, bool, error) {
+	entries, ok := value.([]any)
+	if !ok {
+		return nil, false, errors.New("unexpected SLOWLOG GET reply")
+	}
+	out := make([]any, 0, len(entries))
+	for _, raw := range entries {
+		entry, ok := raw.([]any)
+		if !ok || len(entry) < 4 {
+			return nil, false, errors.New("unexpected SLOWLOG GET entry")
+		}
+		args, ok := entry[3].([]any)
+		if !ok {
+			return nil, false, errors.New("unexpected SLOWLOG GET entry")
+		}
+		var name string
+		if len(args) > 0 {
+			name, _ = args[0].(string)
+		}
+		count := int64(len(args))
+		if len(args) >= slowlogEntryMaxArgc {
+			// The server stores at most slowlogEntryMaxArgc arguments and, when
+			// the command had more, replaces the last stored one with a
+			// "... (N more arguments)" marker. A shorter entry was not
+			// truncated, so an argument that looks like the marker was sent by
+			// a client and must not change the count.
+			if last, _ := args[len(args)-1].(string); last != "" {
+				if m := slowlogTruncatedArgs.FindStringSubmatch(last); m != nil {
+					if more, err := strconv.ParseInt(m[1], 10, 32); err == nil {
+						count = int64(len(args)) - 1 + more
+					}
+				}
+			}
+		}
+		var addr string
+		if len(entry) > 4 {
+			addr, _ = entry[4].(string)
+		}
+		out = append(out, []any{entry[0], entry[1], entry[2], name, count, addr})
+	}
+	return out, false, nil
+}
+
 // ErrResponseLimit means values exceeded the configured response resource limit.
 var ErrResponseLimit = errors.New("redis response limit exceeded")
 
@@ -470,6 +641,9 @@ func readResponse(ctx context.Context, client *redisclient.Client, args []any, l
 	value, err := client.Do(ctx, args...).Result()
 	if errors.Is(err, ErrResponseLimit) {
 		return nil, true, err
+	}
+	if err == nil && name == "SLOWLOG" && len(args) > 1 && args[1] == "GET" {
+		return summarizeSlowlog(value)
 	}
 	if err == nil {
 		if text, ok := value.(string); ok && name == "HGET" && int64(len(text)) > limit {

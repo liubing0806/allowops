@@ -132,3 +132,64 @@ go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./internal/builtin/mysql/...
 ```
 
 验收 commit、各命令实际输出和退出码随交付报告提供。
+
+## 只读账号部署
+
+凭据来源为每台主机部署的只读账号凭据文件，沿用上文的 JSON 格式。内置处理器不从应用配置文件读取凭据。
+
+### 最小 GRANT
+
+以下语句在目标 MySQL 上创建账号。账号名、密码和库名为占位值，密码在主机上生成，不写入目录或文档。`app` 是 catalog 中 `databases` 与 `database` 参数固定的库名，按每台主机替换。
+
+```sql
+CREATE USER 'allowops_ro'@'localhost' IDENTIFIED BY '<在主机上生成的密码>';
+GRANT SELECT ON app.* TO 'allowops_ro'@'localhost';
+-- 仅在需要查看所有会话时增加：
+GRANT PROCESS ON *.* TO 'allowops_ro'@'localhost';
+```
+
+各项权限的实测结果（MySQL 8.4.6，本机容器，账号经 `tcp://` 连接）：
+
+| 用途 | 需要的权限 | 实测现象 |
+| --- | --- | --- |
+| 连接并使用默认库 `app` | 对 `app` 库至少有一项权限（如 `SELECT` 或 `SHOW VIEW`） | 账号只有 `USAGE` 时连接失败，错误码 1044 |
+| `SHOW VARIABLES` | 无需额外权限 | 只有 `SHOW VIEW ON app.*` 的账号可以读取 |
+| `SHOW PROCESSLIST` | 无 `PROCESS` 时只返回本账号自己的会话；有 `PROCESS` 时返回所有会话 | 无 `PROCESS` 的账号只看到自己的一行，不报错 |
+| `SELECT` 类 action | 对相应库表的 `SELECT` | 未在本节验证 |
+
+`PROCESS` 是全局权限（`ON *.*`）。授予后，`SHOW PROCESSLIST` 的 `Info` 列会返回其他账号正在执行的 SQL 文本，其中可能含密码、令牌和手机号字面值。`mysql_processlist` 对输出启用 secrets 和 pii 脱敏，但脱敏规则不能识别所有敏感内容。不需要查看其他会话的主机不要授予 `PROCESS`。不授予 `FILE`、`EXECUTE`、`SUPER`、`ALL PRIVILEGES` 或任何写权限。
+
+### 凭据文件
+
+格式见上文：
+
+```json
+{"username":"allowops_ro","password":"replace-on-host"}
+```
+
+- `username`、`password` 两个字段必填，密码可以是空字符串，不接受其他字段。
+- 属主 root，权限精确为 0600，必须是普通文件，末级路径不能是符号链接。处理器打开文件后在同一文件描述符上核验，不满足时拒绝连接。
+- 文件所在的父目录由 root 管理（属主 root，其他账号无写权限）。代码不检查父目录权限，该要求由部署步骤保证，否则非 root 账号可以替换文件。
+- 凭据文件路径写在 catalog 的 `builtin_config.credential`，示例为 `/etc/allowops/credentials/mysql-main.json`；目录和签名包中不包含密码。
+
+### 地址选择
+
+`builtin_config.address` 只接受 `tcp://host:port` 和 `unix:///绝对路径`，不接受用户信息和查询参数。
+
+| 场景 | 地址 | 账号的主机部分 |
+| --- | --- | --- |
+| MySQL 与 allowops 在同一台主机，且使用本机 socket | `unix:///var/run/mysqld/mysqld.sock`（实际路径以 `SHOW VARIABLES LIKE 'socket'` 为准） | `localhost` |
+| MySQL 在容器内、已发布端口，或在远程主机 | `tcp://127.0.0.1:3306` 或 `tcp://<主机>:<端口>` | 服务端看到的客户端地址。经 Docker 发布端口连接时，服务端看到的是 Docker 网桥地址，账号主机部分需要匹配该地址（本机实测使用 `'%'`） |
+
+本机实测仅覆盖 `tcp://` 地址。`unix://` 地址未在本机验证，原因是测试容器未挂载 socket 目录。
+
+### 每台主机的 databases 配置
+
+每台主机的数据库名和地址不同，在该主机对应的私有 catalog 中分别配置：
+
+- `builtin_config.databases`：该主机允许访问的库名列表，`database` 参数的正则也固定为其中之一。
+- `builtin_config.address` 和 `builtin_config.credential`：该主机的地址和凭据文件路径。
+- `show_types`：配置 `databases` 后，服务器级的 `SHOW PROCESSLIST`、`SHOW VARIABLES`、`SHOW STATUS`、`SHOW DATABASES` 必须在 `show_types` 中显式列出才允许（G34）。`mysql_processlist` 列出 `PROCESSLIST`，`mysql_variables` 列出 `VARIABLES`。
+- 服务器级 SHOW 的输出不按 `databases` 过滤，库范围之外的会话和变量也会返回，只读账号的权限是唯一的数据范围限制。
+
+公开示例 catalog 中的 `app`、凭据路径和 socket 路径是占位值，部署时在私有 catalog 中替换。

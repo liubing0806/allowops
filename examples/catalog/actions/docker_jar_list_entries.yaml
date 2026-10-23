@@ -1,0 +1,21 @@
+name: docker_jar_list_entries
+description: List entry names of one jar under an application directory inside an allowed container.
+risk: read
+run_as: root
+params:
+  container:
+    type: enum
+    description: Container selected from the signed allowlist.
+    values: [api, app]
+  jar:
+    type: string
+    description: Jar file path under /app, /opt/app or /data/app inside the container; path segments cannot start with a dot.
+    regex: '^/(app|opt/app|data/app)(/[A-Za-z0-9_][A-Za-z0-9._-]*)+\.jar$'
+    max_len: 200
+exec: [/usr/bin/docker, exec, '{container}', jar, tf, '{jar}']
+timeout: 20s
+max_output: 128KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

@@ -1,11 +1,12 @@
 name: dns_lookup
-description: Resolve an allowed generic name through the host resolver.
+description: Resolve one host name through the host resolver.
 risk: read
 params:
   name:
-    type: enum
-    description: Generic name from the signed resolver allowlist.
-    values: [localhost, nginx, api]
+    type: string
+    description: Host name in RFC 1123 form, at most 253 characters, not starting with a hyphen.
+    regex: ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$
+    max_len: 253
 exec: [/usr/bin/getent, hosts, '{name}']
 timeout: 10s
 max_output: 64KB
