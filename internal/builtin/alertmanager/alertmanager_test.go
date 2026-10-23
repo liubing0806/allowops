@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/liubing0806/allowops/internal/builtin/apiclient"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 type recorder struct {
@@ -428,5 +429,24 @@ func TestDefaultLimitsApplied(t *testing.T) {
 	r := run(t, Config{Address: srv.URL}, Params{Active: true}, nil)
 	if !r.Truncated || len(lines(r.Stdout)) != DefaultMaxAlerts {
 		t.Fatalf("default max_alerts must apply: truncated=%v lines=%d", r.Truncated, len(lines(r.Stdout)))
+	}
+}
+
+// A rule that matches to the end of the line must not swallow the labels that
+// follow the one it redacts.
+func TestMaskAppliesToEachLabel(t *testing.T) {
+	r, err := redact.New(&redact.Config{Builtin: []string{"secrets", "pii"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, _ := serve(t, 200, `[{"startsAt":"2026-10-23T02:00:00Z","status":{"state":"active"},
+ "labels":{"alertname":"A","msg":"password=hunter2","zone":"z"}}]`)
+	out := run(t, Config{Address: srv.URL}, Params{Active: true}, r.Line)
+	fields := strings.Split(lines(out.Stdout)[0], "\t")
+	if strings.Contains(out.Stdout, "hunter2") {
+		t.Fatalf("secret leaked: %q", out.Stdout)
+	}
+	if !strings.HasPrefix(fields[4], "{") || !strings.HasSuffix(fields[4], "}") || !strings.Contains(fields[4], `zone="z"`) {
+		t.Fatalf("labels = %q, want zone and the closing brace kept", fields[4])
 	}
 }
