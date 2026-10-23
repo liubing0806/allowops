@@ -3201,11 +3201,14 @@ redact:
 - 请求参数：`query`、`query_range` 发送 `timeout`（秒，如 `10`、`2.5`）；`series`、`labels`、`label_values` 发送 `limit=max_series+1`，不发送 `timeout`；`rules` 发送 `exclude_alerts=true`，有 `rule_type` 时发送 `type=alert|record`；`targets` 发送 `state=active`，只输出 `activeTargets`。时间以 UTC RFC 3339 发送。
 - 时间：`now` 取整到秒；`now-<n><s|m|h|d>` 的 n 为 1 到 6 位整数且偏移不超过 100 年；绝对时间只接受 `YYYY-MM-DDTHH:MM:SSZ`，拒绝时区偏移和小数秒。
 - 默认起点：`start` 省略时为 `end` 之前 `min(1h, max_range)`。`max_range` 小于 1 小时时，规格的 `now-1h` 会使省略 `start` 的请求必然超出 `max_range`。
+- 显式给出的 `step` 为 `0s` 时拒绝（小于 `min_step`），不按省略处理。
 - `step` 省略时为 `ceil(范围秒数 / (max_points - 1))` 秒，不小于 `min_step`；点数按 `floor(范围 / step) + 1` 与 `max_points` 比较。`max_points` 不得小于 2，`min_step` 只能不小于 15s。`step` 参数的上限为 168h。
-- `max_series` 同样限制 `alerts`、`rules`、`targets` 的输出行数。`series`、`labels`、`label_values` 在服务端已应用 `limit` 时总数未知，stderr 写 `returned N of at least M results (max_series)`；其他 api 写确切总数。
+- `max_series` 同样限制 `alerts`、`rules`、`targets` 的输出行数。超出时 stderr 写 `truncated: returned N of M results (max_series)`；`series`、`labels`、`label_values` 的总数受服务端 `limit` 影响，写 `returned N of at least M results (max_series)`。
 - `alerts` 的标签集列输出完整标签集（含 `alertname`）；`value` 保留 Prometheus 返回的字符串（如 `1e+00`）；`active_at`、`last_scrape` 转换为 UTC 秒级时间。`targets` 的 `job` 缺失时用 `scrapePool`。
 - `summary=true`：`min`、`avg`、`max` 不含 NaN 样本，`last` 保留最后一个样本的原始字符串；全部为 NaN 时四列均为 `NaN`；仅有原生直方图样本时前三列为空。
-- 脱敏：每个单元格先经过 executor 的脱敏函数，再做 TSV 转义；多个单元格组成的整行不再做第二遍脱敏（`mysql_query` 会做）。
+- 脱敏：只有文本单元格经过 executor 的脱敏函数，之后做 TSV 转义；数值和时间列不脱敏（样本值、`summary` 的 min/avg/max/last、`alerts` 的 value，以及全部时间列），否则 11 位整数值会被 pii 规则当作手机号替换。不符合数字写法的样本值，以及 `resultType=string` 的值，仍然脱敏。标签集逐个 `name="value"` 脱敏后再拼接，指标名单独脱敏，使一个标签触发的“到行尾”规则不会吞掉后面的标签；同一序列的标签集只构造和脱敏一次。`label_values` 的每个值以 `<label>="<value>"` 交给脱敏函数，被替换时输出脱敏后的整段，否则输出原值。`mysql_query` 对整行做的第二遍脱敏在这里不做。
+- 名称写法（Prometheus 3）：标签名不匹配 `^[a-zA-Z_][a-zA-Z0-9_]*$` 时加双引号；指标名不匹配 `^[a-zA-Z_:][a-zA-Z0-9_:]*$` 时放进花括号首位并加引号，例如 `{"http.server.duration","service.name"="x"}`。与 `alertmanager_alerts` 的标签名写法一致。
+- 输出上限：格式化后的输出不超过 `max_response_bytes`（range 查询的每一行都重复标签集，输出可大于原始响应）。超出时在整行边界停止，标记 truncated 和 resource_limit_reached，stderr 写 `truncated: output reached max_response_bytes (N)`。依据：`http_get`、`redis_command` 同样把该字段作为资源上限并标记 resource_limit_reached；executor 的 `max_scan`（默认 256MB）对处理器不可见，不能作为处理器上限。每个结果循环在处理下一项前检查 context，超时或取消后不再继续格式化。
 - 错误：Prometheus 返回 `status: error`、非 2xx 或非 JSON 响应时，退出码 1，stderr 写 `error: HTTP <状态码> errorType=<类型> error=<信息>`，不复制非 JSON 响应体。重定向、响应体超过 `max_response_bytes` 和网络错误作为处理器错误返回，退出码 1。`warnings` 每条写一行 `warning: ...`，不改变退出码，也不输出 `infos`。
 - run_as：配置 `credential` 时目录校验要求 `run_as` 恰为 `root`（目录校验通过 `ActionBuiltinValidator` 接口，由处理器实现）。未配置 `credential` 时 `run_as` 可省略，此时 action 由 agent 用户直接执行，与 `http_get` 相同；与 `mysql_query`、`redis_command` 不同，后者即使省略 `run_as` 也经 allowops-exec 以 root 执行。
-- 集成测试：`internal/builtin/prometheus/integration_test.go` 用 testcontainers 启动 `prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0`，抓取自身并加载一条告警规则和一条记录规则。容器使用 host 网络并只监听 127.0.0.1，不发布端口，并通过 `TESTCONTAINERS_RYUK_DISABLED` 关闭 Ryuk 容器（Ryuk 和默认 bridge 网络在 docker0 不存在的主机上无法创建容器）。测试结束时由测试自己终止容器；测试进程被强制终止时容器不会被回收。
+- 集成测试：`internal/builtin/prometheus/integration_test.go` 用 testcontainers 启动 `prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0`，抓取自身（`127.0.0.1:9090`）并加载一条告警规则和一条记录规则。写法与 PostgreSQL、MySQL 测试一致：默认 bridge 网络、启用 Ryuk，端口只发布到 127.0.0.1 并通过 testcontainers 读取映射端口。Docker 不可用时 `t.Skip`。
