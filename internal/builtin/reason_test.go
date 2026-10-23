@@ -21,6 +21,7 @@ func TestReasonOf(t *testing.T) {
 		{NewError(ReasonPathOutsideRoots, "path_glob is outside allowed_roots"), ReasonPathOutsideRoots},
 		{fmt.Errorf("wrapped: %w", NewError(ReasonCursorExpired, "")), ReasonCursorExpired},
 		{errors.Join(errors.New("output"), customReason(ReasonSourceUnsupported)), ReasonSourceUnsupported},
+		{customReason("SOURCE_UNAVAILABLE"), "SOURCE_UNAVAILABLE"},
 		{customReason("EXECUTION_FAILED"), ""},
 		{customReason("ROOT_REQUIRED"), ""},
 	} {
