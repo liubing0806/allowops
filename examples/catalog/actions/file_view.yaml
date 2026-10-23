@@ -22,7 +22,7 @@ redact:
   builtin: [secrets, pii]
   custom:
     - name: sensitive_property
-      regex: '(?i)[A-Za-z0-9_.-]*(?:pass|secret|token|key|credential)[A-Za-z0-9_.-]*\s*[=:].*|\b(?:[A-Za-z0-9_.-]{1,2}|[A-Za-z0-9_.-]{4,}|[0-9A-NP-Za-np-z_.-][A-Za-z0-9_.-]{2}|[Oo][0-9A-KM-Za-km-z_.-][A-Za-z0-9_.-]|[Oo][Ll][0-9A-CE-Za-ce-z_.-])pwd[A-Za-z0-9_.-]*\s*[=:].*|\bpwd[A-Za-z0-9_.-]+\s*[=:].*'
+      regex: '(?i)[A-Za-z0-9_.-]*(?:pass|secret|token|key|credential)[A-Za-z0-9_.-]*\s*[=:].*|\b(?:[A-Za-z0-9_.-]{1,2}|[A-Za-z0-9_.-]{4,}|[0-9A-NP-Za-np-z_.-][A-Za-z0-9_.-]{2}|[Oo][0-9A-KM-Za-km-z_.-][A-Za-z0-9_.-]|[Oo][Ll][0-9A-CE-Za-ce-z_.-])pwd[A-Za-z0-9_.-]*\s*[=:].*|\b(?:old)?pwd[A-Za-z0-9_.-]+\s*[=:].*|\b(?:old)?pwd\s*[=:]\s*[^/~\s].*'
     - name: json_credential
       regex: '(?i)["''][A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*["'']\s*:\s*(?:"(?:[^"\\]|\\.)*"|''[^'']*''|[^\s,}\]]+)'
     - name: auth_header
