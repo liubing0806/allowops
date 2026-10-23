@@ -1,6 +1,7 @@
 package redact
 
 import (
+	"math/rand"
 	"strings"
 	"testing"
 	"time"
@@ -8,8 +9,8 @@ import (
 
 // A rule that keeps a leading part of its match and scans the rest of the line
 // again must not cost more than one pass over the line. The longest line is
-// DefaultMaxLine (1 MiB); the bound is generous, the cost used to grow with the
-// square of the line length (minutes for 1 MiB).
+// DefaultMaxLine (1 MiB). The cost used to grow with the square of the line
+// length (4.5 minutes for 1 MiB); it is now below 1 s, and the bound is generous.
 func TestRepeatedSkippedTextIsLinear(t *testing.T) {
 	r := builtinOnly(t)
 	const size = 1 << 20
@@ -26,8 +27,8 @@ func TestRepeatedSkippedTextIsLinear(t *testing.T) {
 		case got := <-done:
 			t.Logf("%s: %d bytes in %v", name, len(line), time.Since(start))
 			_ = got
-		case <-time.After(2 * time.Second):
-			t.Errorf("%s: %d bytes not redacted within 2s", name, len(line))
+		case <-time.After(linearScanBound):
+			t.Errorf("%s: %d bytes not redacted within %v", name, len(line), linearScanBound)
 		}
 	}
 }
@@ -85,4 +86,75 @@ func TestCurlUserValueIsOneShellWord(t *testing.T) {
 		{`curl -u '' http://h:80/x`, ""},
 		{"curl -XPUT http://h:80/x", ""},
 	})
+}
+
+// applyRuleReference is the first version of the skip handling: it scans the
+// text after a skipped part again with the whole expression. It is slow on long
+// lines and only used to check that the single-pass scan gives the same result.
+func applyRuleReference(line string, rule compiledRule) string {
+	matches := rule.re.FindAllStringSubmatchIndex(line, -1)
+	if len(matches) == 0 {
+		return line
+	}
+	var out strings.Builder
+	cursor := 0
+	for _, m := range matches {
+		start, end := m[0], m[1]
+		if rule.group > 0 {
+			start, end = m[rule.group*2], m[rule.group*2+1]
+		}
+		if rule.keep != nil && rule.keep(line[m[0]:m[1]]) {
+			continue
+		}
+		if n := rule.skip(line[m[0]:m[1]]); n > 0 {
+			out.WriteString(line[cursor : m[0]+n])
+			out.WriteString(applyRuleReference(line[m[0]+n:], rule))
+			return out.String()
+		}
+		out.WriteString(line[cursor:start])
+		out.WriteString(replacement(rule.name))
+		cursor = end
+	}
+	if cursor == 0 {
+		return line
+	}
+	out.WriteString(line[cursor:])
+	return out.String()
+}
+
+func TestSinglePassScanMatchesReference(t *testing.T) {
+	r := builtinOnly(t)
+	var rules []compiledRule
+	for _, rule := range r.rules {
+		if rule.skip != nil {
+			rules = append(rules, rule)
+		}
+	}
+	if len(rules) != 2 {
+		t.Fatalf("rules with skip: %d", len(rules))
+	}
+	words := []string{
+		"X509_check_private_key:key values mismatch", "x509_check_private_key:", "key values mismatch", "mismatch", "mismatching", "routines:",
+		"failed for volume ", "failed  for\tvolume ", "volume ", "Volume ", `"db-secret"`, `'db-secret'`, `\"db-secret\"`, `"api_key"`, `"password"`, `'token'`,
+		"secret_key:", "secret:", "password:", "token=", "-token:", "private_key", "passphrase", "api_key", "key", "pwd",
+		" : ", ":", ": ", " ", "  ", "\t", ",", "{", "[", "]", "-", "- ", `"`, `'`, `\`, `\"`, ";", "=", "\n",
+		"LEAK", "value", `"quoted value"`, `'quoted value'`, `"open`, "<set to the key 'k' in secret 's'>  Optional: false", "<set to the key 'k' of config map 'm'>",
+		"not found", "reason", "é", "ſ",
+	}
+	rng := rand.New(rand.NewSource(11))
+	for i := 0; i < 60000; i++ {
+		var b strings.Builder
+		for n := rng.Intn(10) + 1; n > 0; n-- {
+			b.WriteString(words[rng.Intn(len(words))])
+			if rng.Intn(3) == 0 {
+				b.WriteByte(' ')
+			}
+		}
+		line := b.String()
+		for _, rule := range rules {
+			if got, want := applyRule(line, rule), applyRuleReference(line, rule); got != want {
+				t.Fatalf("%q\n got  %q\n want %q", line, got, want)
+			}
+		}
+	}
 }

@@ -37,6 +37,12 @@ type compiledRule struct {
 	// known not to be a secret. That part stays and the text after it is
 	// scanned again, so a credential later on the same line is still found.
 	skip func(string) int
+	// head, set for a rule with skip, matches the part of the expression in
+	// front of the value, with the same capture group. The value (lineValue)
+	// runs to the end of the line, so the full expression cannot be used to
+	// look for the next match after a skipped part: every search would read
+	// the rest of the line again.
+	head *regexp.Regexp
 	// needs lists lower-case substrings; one of them must occur in the line,
 	// otherwise the expression cannot match and is not run. It is a speed-up
 	// only and must be a necessary condition of the expression.
@@ -95,9 +101,19 @@ type secretRule struct {
 	needs  []string
 	keep   func(string) bool
 	skip   func(string) int
+	head   string
 	group  int
 	anchor string
 }
+
+// The expressions of the NAME: value rule and the "name": value rule, up to
+// the value. Both rules have a skip, which is why they are also used without
+// the value.
+const (
+	colonHead  = `(?i)` + keyPrefix + `(?:` + credentialWords + `|pwd)\s*:\s*`
+	jsonPrefix = `(?i)(?:^(?:\s*-)*|[{\[,]|(?:failed\s+for\s+)?\bvolume\s)\s*`
+	jsonKey    = `(?:"` + keyPrefix + `(?:` + credentialWords + `|pwd)"|'` + keyPrefix + `(?:` + credentialWords + `|pwd)'|\\"` + keyPrefix + `(?:` + credentialWords + `|pwd)\\")\s*:\s*`
+)
 
 // Rules are applied in order. Specific markers (bearer, url_credentials,
 // auth_header ...) come before the generic credential rules, so a header or
@@ -146,12 +162,12 @@ var secretRules = []secretRule{
 	// NAME: value, such as the Environment section of kubectl describe pod and
 	// YAML. The key is not quoted here, so a quoted name followed by a colon
 	// in prose ("volume "db-secret" : secret ... not found") is not a key.
-	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: `(?i)` + keyPrefix + `(?:` + credentialWords + `|pwd)\s*:\s*` + lineValue, keep: describeSecretReference, skip: skipOpenSSLMessage},
+	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: colonHead + lineValue, head: colonHead, keep: describeSecretReference, skip: skipOpenSSLMessage},
 	// "name": value in JSON and quoted YAML. The key starts a line (also after
 	// the "- " of a YAML list item), follows '{', '[' or ',', or follows the word
 	// volume, so it is a key and not a quoted word inside a sentence. The
 	// kubelet event "failed for volume "x" : reason" is kept by skipVolumeEvent.
-	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, group: 1, skip: skipVolumeEvent, regex: `(?i)(?:^(?:\s*-)*|[{\[,]|(?:failed\s+for\s+)?\bvolume\s)\s*((?:"` + keyPrefix + `(?:` + credentialWords + `|pwd)"|'` + keyPrefix + `(?:` + credentialWords + `|pwd)'|\\"` + keyPrefix + `(?:` + credentialWords + `|pwd)\\")\s*:\s*` + lineValue + `)`},
+	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, group: 1, skip: skipVolumeEvent, regex: jsonPrefix + `(` + jsonKey + lineValue + `)`, head: jsonPrefix + `(` + jsonKey + `)`},
 	// Command lines. Options that are also used with other meanings (-u, -a,
 	// -p) are only recognised after the command that gives them a password.
 	{name: "cli_password", needs: []string{"--"}, regex: `(?i)(?:^|\s)--` + optionWords + `(?:\s+|=)` + optionValue, keep: negatedOption, group: 1},
@@ -215,7 +231,7 @@ func New(config *Config) (*Redactor, error) {
 	if slices.Contains(builtins, "secrets") {
 		r.secrets = true
 		for _, rule := range secretRules {
-			r.rules = append(r.rules, compiledRule{name: rule.name, re: regexp.MustCompile(rule.regex), keep: rule.keep, skip: rule.skip, needs: rule.needs, group: rule.group, anchor: anchorRegexp(rule.anchor)})
+			r.rules = append(r.rules, compiledRule{name: rule.name, re: regexp.MustCompile(rule.regex), keep: rule.keep, skip: rule.skip, head: anchorRegexp(rule.head), needs: rule.needs, group: rule.group, anchor: anchorRegexp(rule.anchor)})
 		}
 	}
 	if slices.Contains(builtins, "pii") {
@@ -260,7 +276,60 @@ func replacement(name string) string { return "[REDACTED:" + name + "]" }
 func digit(b byte) bool              { return b >= '0' && b <= '9' }
 func letter(b byte) bool             { return b|0x20 >= 'a' && b|0x20 <= 'z' }
 
+// lineValueAtStart reads the value of a rule from the start of a text.
+var lineValueAtStart = regexp.MustCompile(`^` + lineValue)
+
+// applyRuleWithSkip is applyRule for a rule with skip. It looks for the part in
+// front of the value (head) and reads the value only for a match that is not
+// skipped, so the text after a skipped part is searched once, from the end of
+// that part, and the whole line is read once.
+func applyRuleWithSkip(line string, rule compiledRule) string {
+	var out strings.Builder
+	cursor, pos := 0, 0
+	for pos < len(line) {
+		loc := rule.head.FindStringSubmatchIndex(line[pos:])
+		if loc == nil {
+			break
+		}
+		for i := range loc {
+			if loc[i] >= 0 {
+				loc[i] += pos
+			}
+		}
+		from, headEnd := loc[0], loc[1]
+		if headEnd >= len(line) {
+			break // nothing follows the colon: no value, no match
+		}
+		// A skipped part reaches the end of the head, so no match can
+		// start inside it.
+		if n := rule.skip(line[from:]); n > 0 {
+			pos = from + n
+			continue
+		}
+		valueEnd := headEnd + lineValueAtStart.FindStringIndex(line[headEnd:])[1]
+		pos = valueEnd
+		if rule.keep != nil && rule.keep(line[from:valueEnd]) {
+			continue
+		}
+		start := from
+		if rule.group > 0 {
+			start = loc[rule.group*2]
+		}
+		out.WriteString(line[cursor:start])
+		out.WriteString(replacement(rule.name))
+		cursor = valueEnd
+	}
+	if cursor == 0 {
+		return line
+	}
+	out.WriteString(line[cursor:])
+	return out.String()
+}
+
 func applyRule(line string, rule compiledRule) string {
+	if rule.head != nil {
+		return applyRuleWithSkip(line, rule)
+	}
 	base := 0
 	if rule.anchor != nil {
 		loc := rule.anchor.FindStringIndex(line)
@@ -290,13 +359,6 @@ func applyRule(line string, rule compiledRule) string {
 		}
 		if rule.keep != nil && rule.keep(line[m[0]:m[1]]) {
 			continue
-		}
-		if rule.skip != nil {
-			if n := rule.skip(line[m[0]:m[1]]); n > 0 {
-				out.WriteString(line[cursor : m[0]+n])
-				out.WriteString(applyRule(line[m[0]+n:], rule))
-				return out.String()
-			}
 		}
 		if rule.valid != nil {
 			if (start > 0 && digit(line[start-1])) || (end < len(line) && digit(line[end])) || !rule.valid(line[start:end]) {
