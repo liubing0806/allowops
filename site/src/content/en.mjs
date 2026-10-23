@@ -5,6 +5,7 @@ export default {
   altPath: '/zh/',
   altLabel: '中文',
   consoleDir: 'en',
+  docs: '/docs/',
   title: 'allowops — No shell. Only actions you defined.',
   description: 'allowops is an open source operations gateway for AI agents. Operators define and sign a catalog of typed actions; agents call only those actions through MCP. The gateway checks policy for every target host, runs batches and records an audit trail.',
   nav: { how: 'How it works', catalog: 'Catalog', policy: 'Policy', console: 'Console', docs: 'Docs', releases: 'Releases', start: 'Get started' },
