@@ -80,11 +80,12 @@ Known limits of the wrapped-command check:
 | `redis_command` | Read-only allowlist: GET, MGET, HGET, HLEN, TTL, TYPE, EXISTS, STRLEN, LLEN, SCARD, ZCARD, SCAN and INFO. |
 | `http_get` | GET within signed URL prefixes; no redirects; bounded response. |
 | `prometheus_query` | Read-only Prometheus HTTP API v1 query. `builtin_config.api` fixes one of query, query_range, series, labels, label_values, alerts, rules and targets; GET only, no redirects; bounded time range, step, points, series and response size; TSV output. A host credential (bearer token or basic auth) requires `run_as: root`. |
+| `alertmanager_alerts` | Read-only `GET /api/v2/alerts` against one configured Alertmanager; no redirects; bounded alert count and response; TSV output sorted by start time. An action that sets a credential file (root-owned, mode 0600) must declare `run_as: root`. |
 
 Use `builtin_config` to narrow the handler's defined limits and resource
 allowlists. Database handlers use the privileged helper to read host-local
-credentials even if `run_as` is omitted. `log_search` and `http_get` without
-`run_as` run directly as the agent. `log_search` with no matches and `http_get`
+credentials even if `run_as` is omitted. `log_search`, `http_get` and
+`alertmanager_alerts` without `run_as` run directly as the agent. `log_search` with no matches and `http_get`
 with a non-success HTTP status can return exit code zero; inspect the result
 and HTTP status, not just the process exit code.
 

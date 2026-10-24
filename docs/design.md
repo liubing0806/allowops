@@ -137,6 +137,7 @@ redact:                                # 可选，覆盖全局脱敏规则
 | Redis 只读命令 | `builtin: redis_command` | 只允许 GET、MGET、HGET、HLEN、TTL、TYPE、EXISTS、STRLEN、LLEN、SCARD、ZCARD、SCAN、INFO |
 | HTTP 探测 | `builtin: http_get`，参数类型 `url`（`allowed_prefixes` 必填） | 只发 GET，不跟随跳转，响应大小上限 |
 | Prometheus 只读查询 | `builtin: prometheus_query`，`builtin_config.api` 固定 query、query_range、series、labels、label_values、alerts、rules、targets 之一 | 只发 GET，不跟随跳转；可选凭据（bearer_token，或 username 与 password）在主机 `/etc/allowops/credentials/`（root，0600），配置凭据的 action 须声明 `run_as: root`；时间范围、步长、点数、序列数和响应大小受限；输出 TSV |
+| Alertmanager 只读查询 | `builtin: alertmanager_alerts` | 只发 `GET /api/v2/alerts`，不跟随跳转；可选凭据在主机 `/etc/allowops/credentials/`（root，0600），配置凭据的 action 须声明 `run_as: root`；告警数和响应大小限制；输出 TSV |
 
 - 内置处理器的参数 schema 由 allowops 定义，目录只能通过 `builtin_config` 收紧。需要读取主机凭据或声明 `run_as` 的内置处理器在 allowops-exec 中执行。
 
