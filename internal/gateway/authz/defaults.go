@@ -2,7 +2,7 @@ package authz
 
 // DefaultRules creates fresh rule data for the five built-in roles.
 func DefaultRules() []Rule {
-	// A7: only admin receives default execution permissions for all hosts and actions.
+	// Only admin receives default execution permissions for all hosts and actions (design A7).
 	const defaultAdminCanExecute = true
 	rules := []Rule{
 		{ID: "default:admin", Effect: "allow", Roles: []string{"admin"}, Operations: []Operation{ModifyPolicy, ManageServiceAccounts, ManageHosts, CreateJoinToken, ManageUserRoles, PublishCatalog, ViewHosts, ViewCatalog, ViewJobs, ViewOutput, ViewAudit, ViewSystem}},

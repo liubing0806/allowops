@@ -18,14 +18,17 @@ type recordSink struct {
 }
 
 func (h *recordSink) Enabled(context.Context, slog.Level) bool { return true }
+
 func (h *recordSink) Handle(_ context.Context, r slog.Record) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.records = append(h.records, r)
 	return nil
 }
+
 func (h *recordSink) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h *recordSink) WithGroup(string) slog.Handler      { return h }
+
 func (h *recordSink) snapshot() []slog.Record {
 	h.mu.Lock()
 	defer h.mu.Unlock()

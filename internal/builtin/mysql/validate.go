@@ -168,7 +168,7 @@ func (c Config) validateStatement(stmt ast.StmtNode) error {
 		return fmt.Errorf("statement_types allows only: %s", strings.Join(c.StatementTypes, ", "))
 	}
 	if explain, ok := stmt.(*ast.ExplainStmt); ok && kind == "EXPLAIN" {
-		// G31: the EXPLAIN target must satisfy the statement restriction as well.
+		// The EXPLAIN target must satisfy the statement_types restriction as well (builtin-config G31).
 		return c.validateStatement(explain.Stmt)
 	}
 	return nil

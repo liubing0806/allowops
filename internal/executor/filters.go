@@ -20,7 +20,7 @@ type FilterOptions struct {
 	countSet       bool
 }
 
-// A17: match/exclude may combine with at most one result filter.
+// match/exclude may combine with at most one result filter (decisions A17).
 func validateFilterCombination(options FilterOptions) error {
 	selected := 0
 	if options.Tail > 0 {
@@ -127,6 +127,7 @@ func newFilterWriter(output *limitedOutput, options FilterOptions) *filterWriter
 	}
 	return w
 }
+
 func (w *filterWriter) emit(line string) error {
 	if w.options.Head > 0 && w.lines >= w.options.Head {
 		return nil
@@ -182,6 +183,7 @@ func (w *filterWriter) Write(p []byte) (int, error) {
 	}
 	return len(p), w.emit(line)
 }
+
 func (w *filterWriter) finish() error {
 	// A step shares its budget with other output, so the room left now can be
 	// smaller than the limit; keep the newest lines that fit it.

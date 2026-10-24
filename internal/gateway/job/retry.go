@@ -47,6 +47,7 @@ func retrySQL(ctx context.Context, jobID string, fn func(context.Context) error)
 		backoff = min(2*backoff, time.Second)
 	}
 }
+
 func retryableSQL(err error) bool {
 	var pgerr *pgconn.PgError
 	if errors.As(err, &pgerr) {

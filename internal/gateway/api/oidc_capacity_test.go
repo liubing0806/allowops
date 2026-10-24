@@ -17,6 +17,7 @@ import (
 func oidcBeginRequest() *connect.Request[v1.BeginOidcLoginRequest] {
 	return connect.NewRequest(&v1.BeginOidcLoginRequest{ProviderId: "test", Client: v1.LoginClient_LOGIN_CLIENT_CLI, CliLoopbackUri: "http://127.0.0.1:54321/callback", CliState: secret(""), CliCodeChallenge: oauth2.S256ChallengeFromVerifier(oauth2.GenerateVerifier())})
 }
+
 func seedOIDCCapacity(t *testing.T, f *fixture, n int) {
 	t.Helper()
 	// Seed a different provider: A47 caps the whole database, not each provider.
@@ -25,6 +26,7 @@ func seedOIDCCapacity(t *testing.T, f *fixture, n int) {
 		t.Fatal(err)
 	}
 }
+
 func TestOIDCBeginCleansExpiredAndPreservesLiveTransactions(t *testing.T) {
 	f := newFixture(t)
 	f.addOIDC(t, newOIDC(t))
@@ -56,6 +58,7 @@ func TestOIDCBeginCleansExpiredAndPreservesLiveTransactions(t *testing.T) {
 		t.Fatalf("expired=%d preserved live=%d total=%d; want 0,1,2", expired, live, total)
 	}
 }
+
 func TestOIDCGlobalCapacityRejectsAndCommitsExpiryCleanup(t *testing.T) {
 	f := newFixture(t)
 	f.addOIDC(t, newOIDC(t))
@@ -77,6 +80,7 @@ func TestOIDCGlobalCapacityRejectsAndCommitsExpiryCleanup(t *testing.T) {
 		t.Errorf("rejected begin left total=%d expired=%d; want 10000,0", total, expired)
 	}
 }
+
 func TestOIDCConsumptionReleasesGlobalCapacity(t *testing.T) {
 	f := newFixture(t)
 	provider := newOIDC(t)
@@ -111,6 +115,7 @@ func TestOIDCConsumptionReleasesGlobalCapacity(t *testing.T) {
 	_, err = f.complete(t, provider, dest, cookie, dest.Query().Get("state"))
 	code(t, err, connect.CodeUnauthenticated)
 }
+
 func TestOIDCGlobalCapacityConcurrentInstances(t *testing.T) {
 	f := newFixture(t)
 	f.addOIDC(t, newOIDC(t))

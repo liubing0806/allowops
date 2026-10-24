@@ -41,6 +41,7 @@ func builtinStringList(value any, name string) ([]string, error) {
 	}
 	return values, nil
 }
+
 func builtinTimeout(text string) (time.Duration, error) {
 	if text == "" {
 		return 0, nil
@@ -51,16 +52,19 @@ func builtinTimeout(text string) (time.Duration, error) {
 	}
 	return d, nil
 }
+
 func positiveBound(n, defaultValue int) int {
 	if n == 0 {
 		return defaultValue
 	}
 	return n
 }
+
 func integerDefinition(description string, min, max int, defaultValue any) params.Definition {
 	lower := int64(min)
 	return params.Definition{Type: params.Int, Description: description, Min: &lower, Max: max, Default: defaultValue}
 }
+
 func adaptBuiltinResult(r builtin.Result) BuiltinResult {
 	return BuiltinResult{Stdout: r.Stdout, ExitCode: r.ExitCode, ResourceLimited: r.Truncated}
 }
@@ -96,10 +100,12 @@ func logSearchConfig(input map[string]any) (logsearch.Config, error) {
 	}
 	return logsearch.Config{AllowedRoots: fields.AllowedRoots, MaxFiles: fields.MaxFiles, MaxScan: int64(fields.MaxScan), MaxMatches: fields.MaxMatches, MaxContext: fields.MaxContext, Timeout: timeout}, nil
 }
+
 func (logSearchHandler) ValidateConfig(input map[string]any) error {
 	_, err := logSearchConfig(input)
 	return err
 }
+
 func (logSearchHandler) Parameters(input map[string]any) (map[string]params.Definition, error) {
 	cfg, err := logSearchConfig(input)
 	if err != nil {
@@ -115,6 +121,7 @@ func (logSearchHandler) Parameters(input map[string]any) (map[string]params.Defi
 		"max_matches": integerDefinition("Maximum matches", 1, maxMatches, maxMatches),
 	}, nil
 }
+
 func (logSearchHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
 	cfg, err := logSearchConfig(input)
 	if err != nil {
@@ -214,10 +221,12 @@ func httpGetConfig(input map[string]any) (httpget.Config, error) {
 	cfg := httpget.Config{AllowedPrefixes: fields.AllowedPrefixes, Headers: fields.Headers, Timeout: timeout, MaxResponseBytes: int64(fields.MaxResponseBytes)}
 	return cfg, cfg.Validate()
 }
+
 func (httpGetHandler) ValidateConfig(input map[string]any) error {
 	_, err := httpGetConfig(input)
 	return err
 }
+
 func (httpGetHandler) Parameters(input map[string]any) (map[string]params.Definition, error) {
 	cfg, err := httpGetConfig(input)
 	if err != nil {
@@ -225,6 +234,7 @@ func (httpGetHandler) Parameters(input map[string]any) (map[string]params.Defini
 	}
 	return map[string]params.Definition{"url": {Type: params.URL, Description: "GET URL", AllowedPrefixes: cfg.AllowedPrefixes}}, nil
 }
+
 func (httpGetHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
 	cfg, err := httpGetConfig(input)
 	if err != nil {
@@ -272,10 +282,12 @@ func redisConfig(input map[string]any) (redisbuiltin.Config, error) {
 	cfg := redisbuiltin.Config{Address: fields.Address, Credential: fields.Credential, DB: fields.DB, Timeout: timeout, MaxResponseBytes: int64(fields.MaxResponseBytes), MaxScanCount: fields.MaxScanCount, Commands: fields.Commands, KeyPrefixes: fields.KeyPrefixes, InfoSections: fields.InfoSections, ConfigParams: fields.ConfigParams}
 	return cfg, cfg.Validate()
 }
+
 func (redisHandler) ValidateConfig(input map[string]any) error {
 	_, err := redisConfig(input)
 	return err
 }
+
 func (redisHandler) Parameters(input map[string]any) (map[string]params.Definition, error) {
 	cfg, err := redisConfig(input)
 	if err != nil {
@@ -294,6 +306,7 @@ func (redisHandler) Parameters(input map[string]any) (map[string]params.Definiti
 		"args":    {Type: params.StringArray, Description: "Redis command arguments", MaxLen: 4096, MaxItems: 128, Optional: true},
 	}, nil
 }
+
 func (redisHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
 	return (redisHandler{}).RunRedacted(ctx, input, values, nil)
 }

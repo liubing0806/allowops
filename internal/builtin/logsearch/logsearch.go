@@ -339,6 +339,7 @@ type numberedLine struct {
 	number int
 	text   string
 }
+
 type searchState struct {
 	cfg            Config
 	p              Params

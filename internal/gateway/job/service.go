@@ -5,24 +5,36 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"log/slog"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
-	"github.com/liubing0806/allowops/internal/gateway/api"
 	"github.com/liubing0806/allowops/internal/gateway/audit"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/hostconn"
 	"github.com/liubing0806/allowops/internal/gateway/output"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
 	"google.golang.org/protobuf/proto"
 )
 
+// AccessChecker is the part of the management API the job service uses for
+// request checks and authorization. *api.Service implements it.
+type AccessChecker interface {
+	// Middleware authenticates requests and stores the caller in the context.
+	Middleware(http.Handler) http.Handler
+	// CheckRequest applies the transport checks (TLS, origin, CSRF).
+	CheckRequest(ctx context.Context, write bool) error
+	// RequireBatch authorizes one operation against several hosts.
+	RequireBatch(ctx context.Context, op authz.Operation, action authz.Action, hosts []authz.Host) ([]authz.HostResult, uint64, error)
+}
+
 type Service struct {
 	Store                       *store.Store
-	Access                      *api.Service
+	Access                      AccessChecker
 	Router                      hostconn.Router
 	Storage                     output.Storage
 	Audit                       audit.Appender
@@ -44,7 +56,7 @@ type Service struct {
 	submitMu                    sync.Mutex
 }
 
-func New(db *store.Store, access *api.Service, router hostconn.Router, storage output.Storage, auditor audit.Appender, trusted map[string]ed25519.PublicKey, c Config) (*Service, error) {
+func New(db *store.Store, access AccessChecker, router hostconn.Router, storage output.Storage, auditor audit.Appender, trusted map[string]ed25519.PublicKey, c Config) (*Service, error) {
 	if db == nil || access == nil || router == nil || storage == nil || auditor == nil {
 		return nil, errors.New("job dependencies required")
 	}
@@ -59,7 +71,7 @@ func New(db *store.Store, access *api.Service, router hostconn.Router, storage o
 	s := &Service{Store: db, Access: access, Router: router, Storage: storage, Audit: auditor, Trusted: trusted, Config: c, ctx: ctx, cancel: cancel, outputs: map[string]*taskOutput{}, dispatches: map[string]context.CancelFunc{}, cancelWorkers: map[string]bool{}}
 	s.Previews = &DatabasePreviews{Store: db}
 	s.instanceID = owner.InstanceID
-	s.lostAfter = api.InstanceLostAfter(owner.Config)
+	s.lostAfter = hostconn.InstanceLostAfter(owner.Config)
 	s.recoveryInterval = min(owner.Config.CleanupInterval, s.lostAfter/2)
 	return s, nil
 }
@@ -105,6 +117,7 @@ func (s *Service) clearTasks(jobID string, taskIDs ...string) {
 }
 
 type operationKey struct{}
+
 type operationState struct {
 	JobID                               string
 	Version                             uint64
@@ -118,7 +131,7 @@ func operationInfo(ctx context.Context) *operationState {
 }
 
 func (s *Service) audit(ctx context.Context, op, phase, outcome, jobID string, version uint64, rules []string) error {
-	actor, ip := api.RequestInfo(ctx)
+	actor, ip := reqctx.RequestInfo(ctx)
 	_, err := s.Audit.Append(ctx, audit.Payload{SubjectID: actor, SourceIP: ip, Operation: op, Reason: phase, Decision: outcome, JobID: jobID, PolicyVersion: version, MatchedRules: rules})
 	if err != nil {
 		if phase == "authorized" {
@@ -131,7 +144,7 @@ func (s *Service) audit(ctx context.Context, op, phase, outcome, jobID string, v
 	return nil
 }
 
-// operation covers Connect and direct P6M calls with the same G28 phases.
+// operation covers Connect and direct MCP-service calls with the same two audit phases, authorized then result (design P6M, G28).
 func (s *Service) operation(ctx context.Context, op string, write bool, fn func(context.Context) (proto.Message, error)) (result proto.Message, err error) {
 	state := &operationState{}
 	ctx = context.WithValue(ctx, operationKey{}, state)
@@ -227,7 +240,7 @@ func (s *Service) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobRe
 		if err := s.audit(ctx, "run_job", "authorized", outcome, "", version, rules); err != nil {
 			return nil, err
 		}
-		actor, _ := api.RequestInfo(ctx)
+		actor, _ := reqctx.RequestInfo(ctx)
 		s.submitMu.Lock()
 		if s.draining.Load() {
 			s.submitMu.Unlock()

@@ -22,14 +22,12 @@ type ExportPage struct {
 // Bounds maps times to an unfiltered contiguous interval, including the row
 // just before the requested time range when it remains available.
 func (s *Store) Bounds(ctx context.Context, from, to *time.Time) (uint64, uint64, error) {
-	var first, last *uint64
-	err := s.Pool.QueryRow(ctx, `SELECT min(seq),max(seq) FROM audit_events WHERE ($1::timestamptz IS NULL OR at >= $1) AND ($2::timestamptz IS NULL OR at < $2)`, from, to).Scan(&first, &last)
+	first, last, err := seqBounds(ctx, s.Pool, from, to)
 	if err != nil || first == nil {
 		return 0, 0, err
 	}
 	if *first > 1 {
-		var exists bool
-		err = s.Pool.QueryRow(ctx, "SELECT EXISTS(SELECT FROM audit_events WHERE seq=$1)", *first-1).Scan(&exists)
+		exists, err := eventExists(ctx, s.Pool, *first-1)
 		if err != nil {
 			return 0, 0, err
 		}
@@ -64,7 +62,7 @@ func (s *Store) ExportPage(ctx context.Context, next, last uint64, limit int) (E
 		return p, ErrUnavailable
 	}
 	p.PrecedingHash = anchor
-	rows, err := tx.Query(ctx, "SELECT "+columns+" FROM audit_events WHERE seq>=$1 AND seq<=$2 ORDER BY seq,at", next, last)
+	rows, err := eventsBetween(ctx, tx, next, last)
 	if err != nil {
 		return p, err
 	}
@@ -109,8 +107,8 @@ func (s *Store) ExportPage(ctx context.Context, next, last uint64, limit int) (E
 	}
 	// A missing trailing row cannot masquerade as a completed export.
 	if expected <= last && p.LastSeq > 0 {
-		var exists bool
-		if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT FROM audit_events WHERE seq=$1)", expected).Scan(&exists); err != nil {
+		exists, err := eventExists(ctx, tx, expected)
+		if err != nil {
 			return p, err
 		}
 		if !exists {
@@ -120,7 +118,7 @@ func (s *Store) ExportPage(ctx context.Context, next, last uint64, limit int) (E
 	return p, nil
 }
 
-// ExportStorage is the A18 seam. Commit must make complete records durable
+// ExportStorage is the seam for the single export instance's persistent directory (design A18). Commit must make complete records durable
 // before Exporter advances the DB cursor. Each call may be replayed after crash.
 type ExportStorage interface {
 	Commit(context.Context, []Event) error
@@ -231,29 +229,29 @@ func (x *Exporter) Once(ctx context.Context) (count uint64, err error) {
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if acquired {
-			if _, unlockErr := conn.Exec(cleanup, "SELECT pg_advisory_unlock($1)", exportLock); err == nil {
+			if unlockErr := unlock(cleanup, conn, exportLock); err == nil {
 				err = unlockErr
 			}
 		}
 		_ = conn.Conn().Close(cleanup)
 		conn.Release()
 	}()
-	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", exportLock).Scan(&acquired); err != nil {
+	acquired, err = tryLock(ctx, conn, exportLock)
+	if err != nil {
 		return 0, err
 	}
 	if !acquired {
 		return 0, ErrBusy
 	}
-	var next uint64
-	var anchor []byte
-	err = conn.QueryRow(ctx, "SELECT next_seq,preceding_hash FROM audit_export_cursors WHERE name=$1", x.Cursor).Scan(&next, &anchor)
+	next, anchor, err := exportCursor(ctx, conn, x.Cursor)
 	if errors.Is(err, pgx.ErrNoRows) {
-		var seq uint64
-		if err := conn.QueryRow(ctx, "SELECT seq,hash FROM audit_boundary WHERE singleton").Scan(&seq, &anchor); err != nil {
+		seq, hash, err := currentBoundary(ctx, conn)
+		if err != nil {
 			return 0, err
 		}
+		anchor = hash
 		next = seq + 1
-		if _, err := conn.Exec(ctx, "INSERT INTO audit_export_cursors(name,next_seq,preceding_hash) VALUES ($1,$2,$3)", x.Cursor, next, anchor); err != nil {
+		if err := insertExportCursor(ctx, conn, x.Cursor, next, anchor); err != nil {
 			return 0, err
 		}
 	} else if err != nil {
@@ -266,7 +264,7 @@ func (x *Exporter) Once(ctx context.Context) (count uint64, err error) {
 	if n < 1 || n > x.Store.Config.VerifyRows {
 		return 0, ErrLimit
 	}
-	rows, err := conn.Query(ctx, "SELECT "+columns+" FROM audit_events WHERE seq >= $1 ORDER BY seq,at LIMIT $2", next, n)
+	rows, err := eventsFrom(ctx, conn, next, n)
 	if err != nil {
 		return 0, err
 	}
@@ -301,7 +299,7 @@ func (x *Exporter) Once(ctx context.Context) (count uint64, err error) {
 	if err := x.Storage.Commit(ctx, events); err != nil {
 		return 0, err
 	}
-	_, err = conn.Exec(ctx, "UPDATE audit_export_cursors SET next_seq=$2,preceding_hash=$3 WHERE name=$1", x.Cursor, expected, previous)
+	err = updateExportCursor(ctx, conn, x.Cursor, expected, previous)
 	return uint64(len(events)), err
 }
 
@@ -320,7 +318,7 @@ func (x *Exporter) Run(ctx context.Context, interval time.Duration) (err error) 
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if claimed {
-			if _, unlockErr := owner.Exec(cleanup, "SELECT pg_advisory_unlock($1)", exportLeaderLock); err == nil {
+			if unlockErr := unlock(cleanup, owner, exportLeaderLock); err == nil {
 				err = unlockErr
 			}
 		}
@@ -331,7 +329,8 @@ func (x *Exporter) Run(ctx context.Context, interval time.Duration) (err error) 
 	defer timer.Stop()
 	for {
 		if !claimed {
-			if err := owner.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", exportLeaderLock).Scan(&claimed); err != nil {
+			var err error
+			if claimed, err = tryLock(ctx, owner, exportLeaderLock); err != nil {
 				return err
 			}
 			if !claimed && !warned {
@@ -342,7 +341,7 @@ func (x *Exporter) Run(ctx context.Context, interval time.Duration) (err error) 
 		if claimed {
 			// Once uses another connection; verify that the session holding
 			// leadership is still alive before starting the next batch.
-			if _, err := owner.Exec(ctx, "SELECT 1"); err != nil {
+			if err := ping(ctx, owner); err != nil {
 				return err
 			}
 			if _, err := x.Once(ctx); err != nil && !errors.Is(err, ErrBusy) {

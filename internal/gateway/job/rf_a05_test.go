@@ -32,6 +32,7 @@ func (s *rfOutputDeadline) Put(ctx context.Context, _ string, _ []byte) error {
 	s.once.Do(func() { s.done <- time.Since(started) })
 	return ctx.Err()
 }
+
 func TestRFA05OutputStateAfterPersistenceFailure(t *testing.T) {
 	for _, mode := range []string{"actual_shared_30s_deadline", "state_update_connection_failure"} {
 		t.Run(mode, func(t *testing.T) {

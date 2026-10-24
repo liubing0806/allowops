@@ -15,6 +15,7 @@ func scriptDigest(content []byte) string {
 	sum := sha256.Sum256(content)
 	return hex.EncodeToString(sum[:])
 }
+
 func validateScript(s Script) error {
 	if s.File == "" || filepath.IsAbs(s.File) || strings.ContainsAny(s.File, "\x00\r\n\\") {
 		return fmt.Errorf("script.file must be a relative catalog path")
@@ -32,6 +33,7 @@ func validateScript(s Script) error {
 	}
 	return nil
 }
+
 func loadScript(dir string, s *Script) error {
 	root, err := os.OpenRoot(dir)
 	if err != nil {

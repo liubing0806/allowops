@@ -17,15 +17,18 @@ import (
 )
 
 type p6CancelRequestKey struct{}
+
 type p6CancelRequest struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 }
+
 type p6CancelResult struct {
 	err                                           error
 	committed, cancelled, detached, valueRetained bool
 	remaining                                     time.Duration
 }
+
 type p6CancelAudit struct {
 	audit.Appender
 	db   *store.Store
@@ -64,6 +67,7 @@ type p6CancelStorage struct{}
 func (p6CancelStorage) Put(context.Context, string, []byte) error {
 	return errors.New("unexpected output write in queued cancellation")
 }
+
 func (p6CancelStorage) Get(context.Context, string, int64) ([]byte, error) {
 	return nil, errors.New("unexpected output read in queued cancellation")
 }

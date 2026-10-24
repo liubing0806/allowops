@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/hostconn"
 )
 
 func (s *Service) systemHosts(ctx context.Context) ([]*v1.Host, error) {
@@ -27,6 +28,7 @@ func (s *Service) systemHosts(ctx context.Context) ([]*v1.Host, error) {
 	}
 	return out, nil
 }
+
 func (s *Service) dependencyHealth(ctx context.Context) []*v1.DependencyHealth {
 	postgres := &v1.DependencyHealth{Name: "postgresql", Status: v1.HealthStatus_HEALTH_STATUS_HEALTHY}
 	if s.Store.Pool.Ping(ctx) != nil {
@@ -50,6 +52,7 @@ func (s *Service) dependencyHealth(ctx context.Context) []*v1.DependencyHealth {
 	}
 	return []*v1.DependencyHealth{postgres, jobs, objects}
 }
+
 func (s *Service) GetSystemStatus(ctx context.Context, _ *connect.Request[v1.GetSystemStatusRequest]) (*connect.Response[v1.GetSystemStatusResponse], error) {
 	out := &v1.GetSystemStatusResponse{ObservedAt: stamp(time.Now()), Status: v1.HealthStatus_HEALTH_STATUS_DEGRADED, Dependencies: s.dependencyHealth(ctx)}
 	g := s.gatewayConfig()
@@ -97,7 +100,7 @@ func (s *Service) GetSystemStatus(ctx context.Context, _ *connect.Request[v1.Get
 		return nil, err
 	}
 	if ok {
-		if err = s.Store.Pool.QueryRow(ctx, `SELECT count(*) FROM catalog_versions c WHERE c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id) AND expires_at>now() AND expires_at<=now()+interval '14 days'`).Scan(&out.ExpiringCatalogs); err != nil {
+		if out.ExpiringCatalogs, err = countExpiringCatalogs(ctx, s.Store.Pool); err != nil {
 			return nil, dbError(err)
 		}
 	}
@@ -106,12 +109,13 @@ func (s *Service) GetSystemStatus(ctx context.Context, _ *connect.Request[v1.Get
 		return nil, err
 	}
 	if ok {
-		if err = s.Store.Pool.QueryRow(ctx, "SELECT count(*) FROM service_account_tokens WHERE revoked_at IS NULL AND expires_at>now() AND expires_at<=now()+interval '7 days'").Scan(&out.ExpiringServiceAccountTokens); err != nil {
+		if out.ExpiringServiceAccountTokens, err = countExpiringAccountTokens(ctx, s.Store.Pool); err != nil {
 			return nil, dbError(err)
 		}
 	}
 	return connect.NewResponse(out), nil
 }
+
 func (s *Service) ListGatewayInstances(ctx context.Context, req *connect.Request[v1.ListGatewayInstancesRequest]) (*connect.Response[v1.ListGatewayInstancesResponse], error) {
 	hosts, err := s.systemHosts(ctx)
 	if err != nil {
@@ -123,31 +127,24 @@ func (s *Service) ListGatewayInstances(ctx context.Context, req *connect.Request
 			ids = append(ids, h.HostId)
 		}
 	}
-	rows, err := s.Store.Pool.Query(ctx, `SELECT i.instance_id,i.version,i.draining,i.started_at,i.last_seen,(SELECT count(*) FROM hosts h WHERE h.instance_id=i.instance_id AND host_id=ANY($1::text[]) AND certificate_status='active') FROM gateway_instances i ORDER BY instance_id`, ids)
+	rows, err := gatewayInstanceRows(ctx, s.Store.Pool, ids)
 	if err != nil {
 		return nil, dbError(err)
 	}
-	defer rows.Close()
 	items := []*v1.GatewayInstance{}
-	for rows.Next() {
-		item := &v1.GatewayInstance{}
-		var started, last time.Time
-		if err = rows.Scan(&item.InstanceId, &item.Version, &item.Draining, &started, &last, &item.ConnectedHosts); err != nil {
-			return nil, dbError(err)
-		}
-		item.StartedAt = stamp(started)
+	for _, r := range rows {
+		item := &v1.GatewayInstance{InstanceId: r.InstanceID, Version: r.Version, Draining: r.Draining, ConnectedHosts: uint64(r.ConnectedHosts)}
+		last := r.LastSeen.Time
+		item.StartedAt = stamp(r.StartedAt.Time)
 		item.LastSeen = stamp(last)
 		status := v1.HealthStatus_HEALTH_STATUS_HEALTHY
 		reason := ""
-		if time.Since(last) > InstanceLostAfter(s.gatewayConfig()) {
+		if time.Since(last) > hostconn.InstanceLostAfter(s.gatewayConfig()) {
 			status = v1.HealthStatus_HEALTH_STATUS_UNAVAILABLE
 			reason = "instance heartbeat stale"
 		}
 		item.Dependencies = []*v1.DependencyHealth{{Name: "instance_heartbeat", Status: status, Reason: reason}}
 		items = append(items, item)
-	}
-	if err = rows.Err(); err != nil {
-		return nil, dbError(err)
 	}
 	items, cursor, err := page(ctx, s.Config, "gateway_instances", req.Msg.Page, items)
 	if err != nil {
@@ -155,6 +152,7 @@ func (s *Service) ListGatewayInstances(ctx context.Context, req *connect.Request
 	}
 	return connect.NewResponse(&v1.ListGatewayInstancesResponse{Instances: items, Page: cursor}), nil
 }
+
 func (s *Service) GetAgentVersionDistribution(ctx context.Context, req *connect.Request[v1.GetAgentVersionDistributionRequest]) (*connect.Response[v1.GetAgentVersionDistributionResponse], error) {
 	hosts, err := s.systemHosts(ctx)
 	if err != nil {

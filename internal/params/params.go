@@ -76,118 +76,170 @@ func SupportedType(t Type) bool {
 
 func validateDefinitions(defs map[string]Definition, allowUnknownTypes bool) error {
 	for _, name := range names(defs) {
-		d := defs[name]
-		if !namePattern.MatchString(name) || strings.TrimSpace(d.Description) == "" {
-			return fmt.Errorf("parameter %q: valid name and description required", name)
+		if err := validateDefinition(name, defs[name], allowUnknownTypes); err != nil {
+			return err
 		}
-		if allowUnknownTypes && !SupportedType(d.Type) {
-			if d.Type == "" || invalidText(string(d.Type)) || invalidText(d.Description) {
-				return fmt.Errorf("parameter %s: invalid type or description", name)
-			}
-			if d.MaxLen < 0 || d.MaxItems < 0 || (d.Min != nil && *d.Min < 0) {
-				return fmt.Errorf("parameter %s: constraints must be nonnegative", name)
-			}
-			var numericMax float64
-			switch max := d.Max.(type) {
-			case int:
-				numericMax = float64(max)
-			case int64:
-				numericMax = float64(max)
-			case float64:
-				numericMax = max
-			case json.Number:
-				var err error
-				numericMax, err = max.Float64()
-				if err != nil {
-					return fmt.Errorf("parameter %s: invalid numeric maximum", name)
-				}
-			}
-			if numericMax < 0 || math.IsNaN(numericMax) || math.IsInf(numericMax, 0) {
-				return fmt.Errorf("parameter %s: numeric maximum must be nonnegative and finite", name)
-			}
-			if d.Regex != "" {
-				if _, err := regexp.Compile(d.Regex); err != nil {
-					return fmt.Errorf("parameter %s: %w", name, err)
-				}
-			}
-			// Applicability and default parsing depend on the unsupported type.
-			// The signed definition is retained, but authoring/execution stay strict.
-			continue
+	}
+	return nil
+}
+
+// validateDefinition checks one parameter in a fixed order: name and
+// description, constraint applicability, type-specific rules, then the default.
+func validateDefinition(name string, d Definition, allowUnknownTypes bool) error {
+	if !namePattern.MatchString(name) || strings.TrimSpace(d.Description) == "" {
+		return fmt.Errorf("parameter %q: valid name and description required", name)
+	}
+	if allowUnknownTypes && !SupportedType(d.Type) {
+		// Applicability and default parsing depend on the unsupported type.
+		// The signed definition is retained, but authoring/execution stay strict.
+		return validateFutureDefinition(name, d)
+	}
+	if (d.Type != Enum && d.Values != nil) || (d.Type != Int && d.Min != nil) ||
+		(d.Type != Int && d.Type != Duration && d.Max != nil) ||
+		((d.Type != String && d.Type != StringArray) && (d.Regex != "" || d.MaxLen != 0)) || (d.Type != StringArray && d.MaxItems != 0) ||
+		(d.Type != Duration && d.Format != "") || (d.Type != Path && d.AllowedRoots != nil) || (d.Type != URL && d.AllowedPrefixes != nil) {
+		return fmt.Errorf("parameter %s: constraints do not apply to type %s; allowed: enum(values), int(min,max), string(regex,max_len), duration(max,format), path(allowed_roots)", name, d.Type)
+	}
+	if err := validateTypeRules(name, d, allowUnknownTypes); err != nil {
+		return err
+	}
+	if d.Default != nil {
+		if _, err := parseValue(d, d.Default, false); err != nil {
+			return fmt.Errorf("parameter %s default: %w", name, err)
 		}
-		if (d.Type != Enum && d.Values != nil) || (d.Type != Int && d.Min != nil) ||
-			(d.Type != Int && d.Type != Duration && d.Max != nil) ||
-			((d.Type != String && d.Type != StringArray) && (d.Regex != "" || d.MaxLen != 0)) || (d.Type != StringArray && d.MaxItems != 0) ||
-			(d.Type != Duration && d.Format != "") || (d.Type != Path && d.AllowedRoots != nil) || (d.Type != URL && d.AllowedPrefixes != nil) {
-			return fmt.Errorf("parameter %s: constraints do not apply to type %s; allowed: enum(values), int(min,max), string(regex,max_len), duration(max,format), path(allowed_roots)", name, d.Type)
+	}
+	return nil
+}
+
+// validateFutureDefinition applies only the common constraints to a type this
+// build does not understand.
+func validateFutureDefinition(name string, d Definition) error {
+	if d.Type == "" || invalidText(string(d.Type)) || invalidText(d.Description) {
+		return fmt.Errorf("parameter %s: invalid type or description", name)
+	}
+	if d.MaxLen < 0 || d.MaxItems < 0 || (d.Min != nil && *d.Min < 0) {
+		return fmt.Errorf("parameter %s: constraints must be nonnegative", name)
+	}
+	var numericMax float64
+	switch max := d.Max.(type) {
+	case int:
+		numericMax = float64(max)
+	case int64:
+		numericMax = float64(max)
+	case float64:
+		numericMax = max
+	case json.Number:
+		var err error
+		numericMax, err = max.Float64()
+		if err != nil {
+			return fmt.Errorf("parameter %s: invalid numeric maximum", name)
 		}
-		switch d.Type {
-		case Enum:
-			if len(d.Values) == 0 {
-				return fmt.Errorf("parameter %s: enum values required", name)
-			}
-			seen := map[string]bool{}
-			for _, value := range d.Values {
-				if invalidText(value) || seen[value] {
-					return fmt.Errorf("parameter %s: invalid or duplicate enum value", name)
-				}
-				seen[value] = true
-			}
-		case Int:
-			if d.Max != nil {
-				max, ok := integer(d.Max)
-				if !ok || (d.Min != nil && *d.Min > max) {
-					return fmt.Errorf("parameter %s: invalid integer bounds", name)
-				}
-			}
-		case Bool:
-		case String, StringArray:
-			if d.MaxItems < 0 {
-				return fmt.Errorf("parameter %s: max_items must be nonnegative", name)
-			}
-			if d.MaxLen < 0 {
-				return fmt.Errorf("parameter %s: max_len must be nonnegative", name)
-			}
-			if d.Regex != "" {
-				if _, err := regexp.Compile(d.Regex); err != nil {
-					return fmt.Errorf("parameter %s: %w", name, err)
-				}
-			}
-		case Duration:
-			max, ok := d.Max.(string)
-			parsed, err := time.ParseDuration(max)
-			if !ok || err != nil || parsed < 0 {
-				return fmt.Errorf("parameter %s: duration max required (Go duration)", name)
-			}
-			if d.Format != "" && d.Format != "go" && d.Format != "seconds" {
-				return fmt.Errorf("parameter %s: format allowed: go, seconds", name)
-			}
-		case URL:
-			if len(d.AllowedPrefixes) == 0 {
-				return fmt.Errorf("parameter %s: allowed_prefixes required", name)
-			}
-			for _, prefix := range d.AllowedPrefixes {
-				if _, err := ParseURL(prefix, []string{prefix}); err != nil {
-					return fmt.Errorf("parameter %s: %w", name, err)
-				}
-			}
-		case Path:
-			if len(d.AllowedRoots) == 0 {
-				return fmt.Errorf("parameter %s: allowed_roots required", name)
-			}
-			for _, root := range d.AllowedRoots {
-				if !filepath.IsAbs(root) || invalidText(root) {
-					return fmt.Errorf("parameter %s: allowed_roots must be absolute paths", name)
-				}
-			}
-		default:
-			if !allowUnknownTypes || d.Type == "" || invalidText(string(d.Type)) {
-				return fmt.Errorf("parameter %s: type %q unsupported; allowed: enum, int, string, duration, path, url, bool, string_array", name, d.Type)
-			}
+	}
+	if numericMax < 0 || math.IsNaN(numericMax) || math.IsInf(numericMax, 0) {
+		return fmt.Errorf("parameter %s: numeric maximum must be nonnegative and finite", name)
+	}
+	if d.Regex != "" {
+		if _, err := regexp.Compile(d.Regex); err != nil {
+			return fmt.Errorf("parameter %s: %w", name, err)
 		}
-		if d.Default != nil {
-			if _, err := parseValue(d, d.Default, false); err != nil {
-				return fmt.Errorf("parameter %s default: %w", name, err)
-			}
+	}
+	return nil
+}
+
+func validateTypeRules(name string, d Definition, allowUnknownTypes bool) error {
+	switch d.Type {
+	case Enum:
+		return validateEnumValues(name, d)
+	case Int:
+		return validateIntBounds(name, d)
+	case Bool:
+		return nil
+	case String, StringArray:
+		return validateStringLimits(name, d)
+	case Duration:
+		return validateDurationBounds(name, d)
+	case URL:
+		return validateURLPrefixes(name, d)
+	case Path:
+		return validatePathRoots(name, d)
+	default:
+		if !allowUnknownTypes || d.Type == "" || invalidText(string(d.Type)) {
+			return fmt.Errorf("parameter %s: type %q unsupported; allowed: enum, int, string, duration, path, url, bool, string_array", name, d.Type)
+		}
+		return nil
+	}
+}
+
+func validateEnumValues(name string, d Definition) error {
+	if len(d.Values) == 0 {
+		return fmt.Errorf("parameter %s: enum values required", name)
+	}
+	seen := map[string]bool{}
+	for _, value := range d.Values {
+		if invalidText(value) || seen[value] {
+			return fmt.Errorf("parameter %s: invalid or duplicate enum value", name)
+		}
+		seen[value] = true
+	}
+	return nil
+}
+
+func validateIntBounds(name string, d Definition) error {
+	if d.Max != nil {
+		max, ok := integer(d.Max)
+		if !ok || (d.Min != nil && *d.Min > max) {
+			return fmt.Errorf("parameter %s: invalid integer bounds", name)
+		}
+	}
+	return nil
+}
+
+func validateStringLimits(name string, d Definition) error {
+	if d.MaxItems < 0 {
+		return fmt.Errorf("parameter %s: max_items must be nonnegative", name)
+	}
+	if d.MaxLen < 0 {
+		return fmt.Errorf("parameter %s: max_len must be nonnegative", name)
+	}
+	if d.Regex != "" {
+		if _, err := regexp.Compile(d.Regex); err != nil {
+			return fmt.Errorf("parameter %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func validateDurationBounds(name string, d Definition) error {
+	max, ok := d.Max.(string)
+	parsed, err := time.ParseDuration(max)
+	if !ok || err != nil || parsed < 0 {
+		return fmt.Errorf("parameter %s: duration max required (Go duration)", name)
+	}
+	if d.Format != "" && d.Format != "go" && d.Format != "seconds" {
+		return fmt.Errorf("parameter %s: format allowed: go, seconds", name)
+	}
+	return nil
+}
+
+func validateURLPrefixes(name string, d Definition) error {
+	if len(d.AllowedPrefixes) == 0 {
+		return fmt.Errorf("parameter %s: allowed_prefixes required", name)
+	}
+	for _, prefix := range d.AllowedPrefixes {
+		if _, err := ParseURL(prefix, []string{prefix}); err != nil {
+			return fmt.Errorf("parameter %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func validatePathRoots(name string, d Definition) error {
+	if len(d.AllowedRoots) == 0 {
+		return fmt.Errorf("parameter %s: allowed_roots required", name)
+	}
+	for _, root := range d.AllowedRoots {
+		if !filepath.IsAbs(root) || invalidText(root) {
+			return fmt.Errorf("parameter %s: allowed_roots must be absolute paths", name)
 		}
 	}
 	return nil

@@ -41,6 +41,7 @@ type Result struct {
 	ResourceLimitReached bool         `json:"resource_limit_reached,omitempty"`
 	Steps                []StepResult `json:"steps,omitempty"`
 }
+
 type StepResult struct {
 	Index            int    `json:"index"`
 	Name             string `json:"name"`
@@ -61,14 +62,15 @@ type Callbacks struct {
 	StepCompleted func(StepResult, error) error
 }
 
-// A13: steps share stdout+stderr budget and use the first failed exit code.
-// Non-step actions preserve P1's independent stdout/stderr budgets.
+// Steps share one stdout+stderr budget and use the first failed exit code (decisions A13).
+// Non-step actions keep independent stdout/stderr budgets (design P1).
 func stepBudget(limit int64) *outputBudget { return &outputBudget{remaining: limit} }
 
 type outputBudget struct {
 	mu        sync.Mutex
 	remaining int64
 }
+
 type limitedOutput struct {
 	buffer    bytes.Buffer
 	limit     int64
@@ -160,32 +162,50 @@ func RunWithFilters(parent context.Context, a catalog.Action, actionInput, filte
 	return RunWithCallbacks(parent, a, actionInput, filterInput, globalRedact, Callbacks{})
 }
 
-func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, filterInput map[string]any, globalRedact *redact.Config, callbacks Callbacks) (result Result, runErr error) {
-	result.ExitCode = -1
-	start := time.Now()
-	defer func() { result.DurationMS = time.Since(start).Milliseconds() }()
+// runPlan is the validated, side-effect-free part of an execution request.
+type runPlan struct {
+	action   catalog.Action
+	defs     map[string]params.Definition
+	values   map[string]any
+	filters  FilterOptions
+	redactor *redact.Redactor
+	timeout  time.Duration
+	scan     int64
+	limit    int64
+}
+
+// trustPaths runs immediately before execution, in the process that will exec
+// as the target uid: nobody else may be able to swap a component of a path.
+func (p *runPlan) trustPaths() error {
+	return params.CheckPathsTrusted(p.defs, p.values, os.Geteuid())
+}
+
+// prepareRun checks host support and parses every input. It starts no process
+// and creates no context. The checks run in a fixed order, so the first
+// failing check decides the returned error.
+func prepareRun(a catalog.Action, actionInput, filterInput map[string]any, globalRedact *redact.Config) (*runPlan, error) {
 	support := catalog.CheckHost(a)
 	if !support.Supported {
-		return result, fmt.Errorf("unsupported: %s", support.Reason)
+		return nil, fmt.Errorf("unsupported: %s", support.Reason)
 	}
 	for _, warning := range support.Warnings {
 		fmt.Fprintln(os.Stderr, "warning:", warning)
 	}
 	filters, err := ParseFilters(a.Filters, filterInput)
 	if err != nil {
-		return result, err
+		return nil, err
 	}
 	defs, err := catalog.ParameterDefinitions(a)
 	if err != nil {
-		return result, err
+		return nil, err
 	}
 	values, err := params.Parse(defs, actionInput)
 	if err != nil {
-		return result, err
+		return nil, err
 	}
 	if a.Builtin != "" && len(a.Params) > 0 {
 		if _, err := params.Parse(a.Params, subset(actionInput, a.Params)); err != nil {
-			return result, err
+			return nil, err
 		}
 	}
 	config := a.Redact
@@ -194,21 +214,21 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 	}
 	redactor, err := redact.New(config)
 	if err != nil {
-		return result, err
+		return nil, err
 	}
 	timeout, _ := time.ParseDuration(a.Timeout)
-	ctx, cancel := context.WithTimeout(parent, timeout)
-	defer cancel()
-	if err := ctx.Err(); err != nil {
-		return result, err
-	}
 	scan := int64(a.MaxScan)
 	if scan == 0 {
 		scan = DefaultMaxScan
 	}
-	limit := int64(a.MaxOutput)
+	return &runPlan{action: a, defs: defs, values: values, filters: filters, redactor: redactor, timeout: timeout, scan: scan, limit: int64(a.MaxOutput)}, nil
+}
+
+// startOnce returns a function that invokes callbacks.Started on its first
+// call only. A callback error cancels the execution context.
+func startOnce(callbacks Callbacks, cancel context.CancelFunc) func() error {
 	started := false
-	onStart := func() error {
+	return func() error {
 		if started {
 			return nil
 		}
@@ -222,78 +242,111 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 		}
 		return nil
 	}
-	// Immediately before execution, in the process that will exec as the
-	// target uid: nobody else may be able to swap a component of a path.
-	trustPaths := func() error { return params.CheckPathsTrusted(defs, values, os.Geteuid()) }
-	if a.Builtin != "" {
-		if err := trustPaths(); err != nil {
-			return result, err
-		}
-		if err := onStart(); err != nil {
-			return result, err
-		}
-		handler := catalog.Builtins[a.Builtin]
-		var raw catalog.BuiltinResult
-		var runErr error
-		stdoutRedactor := redactor
-		if budgeted, ok := handler.(catalog.BudgetedBuiltinHandler); ok {
-			// Records are redacted like stdout lines, with PEM state kept
-			// across the lines of one record. Overlong lines fail closed.
-			text := func(s string) string {
-				var b strings.Builder
-				if err := redactor.Stream(strings.NewReader(s), &b, redact.DefaultMaxLine); err != nil {
-					return "[REDACTED:overlong]"
-				}
-				return b.String()
-			}
-			raw, runErr = budgeted.RunBudgeted(ctx, a.BuiltinConfig, values, text, limit)
-			stdoutRedactor = &redact.Redactor{}
-		} else if structured, ok := handler.(catalog.RedactingBuiltinHandler); ok {
-			raw, runErr = structured.RunRedacted(ctx, a.BuiltinConfig, values, redactor.Line)
-			// Original values have already been redacted. Reapplying a custom
-			// rule to JSON/TSV could match encoding characters or replacement text.
-			stdoutRedactor = &redact.Redactor{}
-		} else {
-			raw, runErr = handler.Run(ctx, a.BuiltinConfig, values)
-		}
-		out, outputErr := processOutput(strings.NewReader(raw.Stdout), strings.NewReader(raw.Stderr), stdoutRedactor, redactor, filters, limit, scan, nil)
-		out.ExitCode = raw.ExitCode
-		out.StatusCode = raw.StatusCode
-		out.ResourceLimitReached = raw.ResourceLimited
-		out.Truncated = out.Truncated || raw.ResourceLimited
-		return out, errors.Join(runErr, outputErr)
+}
 
-	}
-	if a.Script != nil {
-		args, err := params.Render(a.Args, defs, values)
-		if err != nil {
-			return result, err
-		}
-		argv, cleanup, err := prepareScript(*a.Script, args)
-		if err != nil {
-			return result, err
-		}
-		defer cleanup()
-		if err := trustPaths(); err != nil {
-			return result, err
-		}
-		return runCommand(ctx, argv, redactor, filters, limit, scan, nil, onStart)
-	}
-	if a.Steps == nil {
-		argv, err := renderCommand(a.Exec, a.ExecFallbacks, a.AllowInterpreter, defs, values)
-		if err != nil {
-			return result, err
-		}
-		if err := trustPaths(); err != nil {
-			return result, err
-		}
-		return runCommand(ctx, argv, redactor, filters, limit, scan, nil, onStart)
-	}
-	if err := trustPaths(); err != nil {
+func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, filterInput map[string]any, globalRedact *redact.Config, callbacks Callbacks) (result Result, runErr error) {
+	result.ExitCode = -1
+	start := time.Now()
+	defer func() { result.DurationMS = time.Since(start).Milliseconds() }()
+	plan, err := prepareRun(a, actionInput, filterInput, globalRedact)
+	if err != nil {
 		return result, err
 	}
-	budget := stepBudget(limit)
-	result.ExitCode = 0
+	ctx, cancel := context.WithTimeout(parent, plan.timeout)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	onStart := startOnce(callbacks, cancel)
+	switch {
+	case a.Builtin != "":
+		return runBuiltin(ctx, plan, onStart)
+	case a.Script != nil:
+		return runScript(ctx, plan, onStart)
+	case a.Steps == nil:
+		argv, err := renderCommand(a.Exec, a.ExecFallbacks, a.AllowInterpreter, plan.defs, plan.values)
+		if err != nil {
+			return result, err
+		}
+		if err := plan.trustPaths(); err != nil {
+			return result, err
+		}
+		return runCommand(ctx, argv, plan.redactor, plan.filters, plan.limit, plan.scan, nil, onStart)
+	default:
+		return runSteps(ctx, plan, callbacks, onStart)
+	}
+}
+
+func runBuiltin(ctx context.Context, plan *runPlan, onStart func() error) (Result, error) {
+	a := plan.action
+	if err := plan.trustPaths(); err != nil {
+		return Result{ExitCode: -1}, err
+	}
+	if err := onStart(); err != nil {
+		return Result{ExitCode: -1}, err
+	}
+	handler := catalog.Builtins[a.Builtin]
+	var raw catalog.BuiltinResult
+	var runErr error
+	stdoutRedactor := plan.redactor
+	if budgeted, ok := handler.(catalog.BudgetedBuiltinHandler); ok {
+		// Records are redacted like stdout lines, with PEM state kept
+		// across the lines of one record. Overlong lines fail closed.
+		text := func(s string) string {
+			var b strings.Builder
+			if err := plan.redactor.Stream(strings.NewReader(s), &b, redact.DefaultMaxLine); err != nil {
+				return "[REDACTED:overlong]"
+			}
+			return b.String()
+		}
+		raw, runErr = budgeted.RunBudgeted(ctx, a.BuiltinConfig, plan.values, text, plan.limit)
+		stdoutRedactor = &redact.Redactor{}
+	} else if structured, ok := handler.(catalog.RedactingBuiltinHandler); ok {
+		raw, runErr = structured.RunRedacted(ctx, a.BuiltinConfig, plan.values, plan.redactor.Line)
+		// Original values have already been redacted. Reapplying a custom
+		// rule to JSON/TSV could match encoding characters or replacement text.
+		stdoutRedactor = &redact.Redactor{}
+	} else {
+		raw, runErr = handler.Run(ctx, a.BuiltinConfig, plan.values)
+	}
+	out, outputErr := processOutput(strings.NewReader(raw.Stdout), strings.NewReader(raw.Stderr), stdoutRedactor, plan.redactor, plan.filters, plan.limit, plan.scan, nil)
+	out.ExitCode = raw.ExitCode
+	out.StatusCode = raw.StatusCode
+	out.ResourceLimitReached = raw.ResourceLimited
+	out.Truncated = out.Truncated || raw.ResourceLimited
+	return out, errors.Join(runErr, outputErr)
+}
+
+// runScript reports ExitCode -1 for errors before the process starts.
+func runScript(ctx context.Context, plan *runPlan, onStart func() error) (Result, error) {
+	a := plan.action
+	args, err := params.Render(a.Args, plan.defs, plan.values)
+	if err != nil {
+		return Result{ExitCode: -1}, err
+	}
+	argv, cleanup, err := prepareScript(*a.Script, args)
+	if err != nil {
+		return Result{ExitCode: -1}, err
+	}
+	defer cleanup()
+	if err := plan.trustPaths(); err != nil {
+		return Result{ExitCode: -1}, err
+	}
+	return runCommand(ctx, argv, plan.redactor, plan.filters, plan.limit, plan.scan, nil, onStart)
+}
+
+// runSteps runs the steps in order. Steps share one output budget. A failed
+// step stops the rest only when on_error is "stop"; later steps are then
+// reported as skipped. A callback error ends the run at once and is joined
+// after the step errors collected so far.
+func runSteps(ctx context.Context, plan *runPlan, callbacks Callbacks, onStart func() error) (Result, error) {
+	a := plan.action
+	if err := plan.trustPaths(); err != nil {
+		return Result{ExitCode: -1}, err
+	}
+	result := Result{ExitCode: 0}
+	var runErr error
+	budget := stepBudget(plan.limit)
 	stopped := false
 	for index, step := range a.Steps {
 		if stopped {
@@ -306,26 +359,16 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 			}
 			continue
 		}
-		argv, err := renderCommand(step.Exec, nil, a.AllowInterpreter, defs, values)
+		argv, err := renderCommand(step.Exec, nil, a.AllowInterpreter, plan.defs, plan.values)
 		r := Result{ExitCode: -1}
 		if err == nil {
 			// A later step starts after earlier steps ran for a while.
-			err = trustPaths()
+			err = plan.trustPaths()
 		}
 		if err == nil {
-			r, err = runCommand(ctx, argv, redactor, filters, limit, scan, budget, onStart)
+			r, err = runCommand(ctx, argv, plan.redactor, plan.filters, plan.limit, plan.scan, budget, onStart)
 		}
-		sr := StepResult{Index: index, Name: step.Name, DurationMS: r.DurationMS, Stdout: r.Stdout, Stderr: r.Stderr, Truncated: r.Truncated, ScanLimitReached: r.ScanLimitReached}
-		if r.ExitCode >= 0 {
-			code := r.ExitCode
-			sr.ExitCode = &code
-		}
-		result.Steps = append(result.Steps, sr)
-		result.Truncated = result.Truncated || r.Truncated
-		result.ScanLimitReached = result.ScanLimitReached || r.ScanLimitReached
-		if result.ExitCode == 0 && (r.ExitCode != 0 || err != nil) {
-			result.ExitCode = r.ExitCode
-		}
+		sr := recordStep(&result, index, step.Name, r, err)
 		if err != nil {
 			runErr = errors.Join(runErr, err)
 		}
@@ -339,6 +382,23 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 	return result, runErr
 }
 
+// recordStep appends the step result to result and folds its flags and exit
+// code into the totals. The first failure decides the overall exit code.
+func recordStep(result *Result, index int, name string, r Result, err error) StepResult {
+	sr := StepResult{Index: index, Name: name, DurationMS: r.DurationMS, Stdout: r.Stdout, Stderr: r.Stderr, Truncated: r.Truncated, ScanLimitReached: r.ScanLimitReached}
+	if r.ExitCode >= 0 {
+		code := r.ExitCode
+		sr.ExitCode = &code
+	}
+	result.Steps = append(result.Steps, sr)
+	result.Truncated = result.Truncated || r.Truncated
+	result.ScanLimitReached = result.ScanLimitReached || r.ScanLimitReached
+	if result.ExitCode == 0 && (r.ExitCode != 0 || err != nil) {
+		result.ExitCode = r.ExitCode
+	}
+	return sr
+}
+
 func subset(input map[string]any, defs map[string]params.Definition) map[string]any {
 	out := map[string]any{}
 	for name := range defs {
@@ -348,6 +408,7 @@ func subset(input map[string]any, defs map[string]params.Definition) map[string]
 	}
 	return out
 }
+
 func renderCommand(template []any, fallbacks []string, allow bool, defs map[string]params.Definition, values map[string]any) ([]string, error) {
 	program, err := catalog.ResolveExecutable(template, fallbacks, allow)
 	if err != nil {
@@ -372,6 +433,7 @@ func streamStdout(input io.Reader, output *limitedOutput, r *redact.Redactor, fi
 	}
 	return err
 }
+
 func processOutput(stdout, stderr io.Reader, stdoutRedactor, stderrRedactor *redact.Redactor, filters FilterOptions, limit, scan int64, budget *outputBudget) (Result, error) {
 	out := &limitedOutput{limit: limit, budget: budget}
 	diagnostic := &limitedOutput{limit: limit, budget: budget}
@@ -486,8 +548,9 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 	var exitErr *exec.ExitError
 	if errors.As(waitErr, &exitErr) {
 		result.ExitCode = exitErr.ExitCode()
-		// A50: only the scan cleanup signal is a nominal success. Preserve
-		// an observed natural nonzero exit, other signals and wait failures.
+		// Only the kill sent to stop scanning at the max_scan limit counts as a nominal
+		// success. Preserve an observed natural nonzero exit, other signals and wait
+		// failures (A50).
 		if result.ScanLimitReached && killedForScan {
 			if status, ok := exitErr.Sys().(syscall.WaitStatus); ok && status.Signaled() && status.Signal() == syscall.SIGKILL {
 				result.ExitCode = 0

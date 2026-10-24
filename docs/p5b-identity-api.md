@@ -4,7 +4,7 @@
 
 ## 接入边界
 
-`internal/gateway/api.Service` 实现 PolicyService、ServiceAccountService、UserService 和 AuthService。`server.Server.UseIdentity` 设置 API handler、MCP 的身份中间件和 P7 Access。P7 AuditService 使用同一认证、view_audit 拦截器和结果审计，不修改主机 ALPN、hostconn 或 catalogsvc。
+`internal/gateway/api.Service` 实现 PolicyService、ServiceAccountService、UserService 和 AuthService。`server.New` 通过 `WithIdentity`、`WithAudit`、`WithMCP` 选项注入 API handler、MCP 的身份中间件和 P7 Access。P7 AuditService 使用同一认证、view_audit 拦截器和结果审计，不修改主机 ALPN、hostconn 或 catalogsvc。
 
 P4B 的 Connect handler 应先经过 `identity.Middleware`，再通过 `identity.InterceptorFor` 按每个 RPC 指定 `RPCPermission`。未列出的 RPC 拒绝。该拦截器统一认证、Cookie CSRF、ABAC 和审计。MCP handler 使用同一个中间件和 `identity.Require`；主机标签及 action 风险属性由调用方从网关存储读取。直接使用 Require 的 Cookie 请求必须提供 Origin 和 X-CSRF-Token。来源 IP 使用 TLS 连接的远端地址，忽略转发头。主机证书不会产生用户身份。
 

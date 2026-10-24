@@ -67,10 +67,19 @@ type testGateway struct {
 	packages    map[string][]byte
 	badOffset   bool
 	renewSoon   bool
+	// hello overrides the gateway hello. A nil response sends none; an error ends the stream.
+	hello func() (*v1.ConnectResponse, error)
+	// silent stops the gateway from answering agent heartbeats.
+	silent bool
+	// blockPull holds catalog pulls open until the stream context ends.
+	blockPull bool
+	// pulling, when set, receives a value each time a blocked pull starts.
+	pulling chan struct{}
 	// reject, when set, refuses Connect after the hello like a version check.
 	reject   atomic.Pointer[connect.Error]
 	rejected atomic.Int32
 }
+
 type testConnection struct {
 	stream   *connect.BidiStream[v1.ConnectRequest, v1.ConnectResponse]
 	mu       sync.Mutex
@@ -87,6 +96,7 @@ func (c *testConnection) send(t *testing.T, message *v1.ConnectResponse) {
 		t.Fatal(err)
 	}
 }
+
 func (c *testConnection) next(t *testing.T, match func(*v1.ConnectRequest) bool) *v1.ConnectRequest {
 	t.Helper()
 	timer := time.NewTimer(5 * time.Second)
@@ -127,6 +137,7 @@ func (g *testGateway) issue(csrPEM []byte) (*v1.HostCertificate, error) {
 	}
 	return &v1.HostCertificate{HostId: "host-test", CertificateChainPem: chain, ExpiresAt: timestamppb.New(leaf.NotAfter), RenewAfter: timestamppb.New(renewAt)}, nil
 }
+
 func (g *testGateway) Join(_ context.Context, request *connect.Request[v1.JoinRequest]) (*connect.Response[v1.JoinResponse], error) {
 	if request.Msg.JoinToken != "test-token" {
 		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("token"))
@@ -135,11 +146,13 @@ func (g *testGateway) Join(_ context.Context, request *connect.Request[v1.JoinRe
 	certificate, err := g.issue(request.Msg.CsrPem)
 	return connect.NewResponse(&v1.JoinResponse{Certificate: certificate}), err
 }
+
 func (g *testGateway) RenewCertificate(_ context.Context, request *connect.Request[v1.RenewCertificateRequest]) (*connect.Response[v1.RenewCertificateResponse], error) {
 	g.renewals.Add(1)
 	certificate, err := g.issue(request.Msg.CsrPem)
 	return connect.NewResponse(&v1.RenewCertificateResponse{Certificate: certificate}), err
 }
+
 func (g *testGateway) Connect(ctx context.Context, stream *connect.BidiStream[v1.ConnectRequest, v1.ConnectResponse]) error {
 	first, err := stream.Receive()
 	if err != nil {
@@ -154,8 +167,20 @@ func (g *testGateway) Connect(ctx context.Context, stream *connect.BidiStream[v1
 	}
 	c := &testConnection{stream: stream, hello: first.GetHello(), messages: make(chan *v1.ConnectRequest, 256), closed: make(chan struct{})}
 	defer func() { c.mu.Lock(); defer c.mu.Unlock(); close(c.closed) }()
-	if err := stream.Send(&v1.ConnectResponse{Message: &v1.ConnectResponse_Hello{Hello: &v1.GatewayHello{GatewayVersion: "0.1.0", ConnectionId: "test-connection", Limits: &v1.ConnectionLimits{HeartbeatInterval: durationpb.New(50 * time.Millisecond), HeartbeatTimeout: durationpb.New(time.Second), MaxMessageBytes: MaxMessageBytes, MaxChunkBytes: 7, MaxInflightTasks: MaxConcurrentTasks}}}}); err != nil {
-		return err
+	g.mu.Lock()
+	helloOverride, silent := g.hello, g.silent
+	g.mu.Unlock()
+	hello := &v1.ConnectResponse{Message: &v1.ConnectResponse_Hello{Hello: &v1.GatewayHello{GatewayVersion: "0.1.0", ConnectionId: "test-connection", Limits: &v1.ConnectionLimits{HeartbeatInterval: durationpb.New(50 * time.Millisecond), HeartbeatTimeout: durationpb.New(time.Second), MaxMessageBytes: MaxMessageBytes, MaxChunkBytes: 7, MaxInflightTasks: MaxConcurrentTasks}}}}
+	if helloOverride != nil {
+		hello, err = helloOverride()
+		if err != nil {
+			return err
+		}
+	}
+	if hello != nil {
+		if err := stream.Send(hello); err != nil {
+			return err
+		}
 	}
 	select {
 	case g.connections <- c:
@@ -167,7 +192,7 @@ func (g *testGateway) Connect(ctx context.Context, stream *connect.BidiStream[v1
 		if err != nil {
 			return err
 		}
-		if heartbeat := message.GetHeartbeat(); heartbeat != nil {
+		if heartbeat := message.GetHeartbeat(); heartbeat != nil && !silent {
 			c.mu.Lock()
 			err = stream.Send(&v1.ConnectResponse{Message: &v1.ConnectResponse_Heartbeat{Heartbeat: &v1.GatewayHeartbeat{Sequence: heartbeat.Sequence}}})
 			c.mu.Unlock()
@@ -182,11 +207,21 @@ func (g *testGateway) Connect(ctx context.Context, stream *connect.BidiStream[v1
 		}
 	}
 }
-func (g *testGateway) PullCatalog(_ context.Context, request *connect.Request[v1.PullCatalogRequest], stream *connect.ServerStream[v1.PullCatalogResponse]) error {
+
+func (g *testGateway) PullCatalog(ctx context.Context, request *connect.Request[v1.PullCatalogRequest], stream *connect.ServerStream[v1.PullCatalogResponse]) error {
 	g.mu.Lock()
 	data := g.packages[request.Msg.Catalog.CatalogId+":"+strconv.FormatUint(request.Msg.Catalog.Version, 10)]
 	bad := g.badOffset
+	block := g.blockPull
+	pulling := g.pulling
 	g.mu.Unlock()
+	if block {
+		if pulling != nil {
+			pulling <- struct{}{}
+		}
+		<-ctx.Done()
+		return ctx.Err()
+	}
 	if len(data) == 0 {
 		return connect.NewError(connect.CodeNotFound, errors.New("catalog"))
 	}
@@ -312,6 +347,7 @@ func startAgent(t *testing.T, config Config) (*Agent, context.CancelFunc) {
 	})
 	return a, cancel
 }
+
 func connection(t *testing.T, g *testGateway) *testConnection {
 	t.Helper()
 	select {
@@ -380,14 +416,17 @@ func publish(t *testing.T, g *testGateway, a *Agent, actions []catalog.Action, n
 	sum := sha256.Sum256(data)
 	return p, &v1.CatalogAvailable{Catalog: &v1.CatalogRef{CatalogId: p.CatalogID, Version: uint64(p.Version)}, EnvelopeSha256: sum[:], EnvelopeSizeBytes: uint64(len(data))}
 }
+
 func task(p *catalog.Package, name, id string) *v1.TaskAssignment {
 	digest, _ := hex.DecodeString(p.Digests[name])
 	return &v1.TaskAssignment{JobId: "job-test", TaskId: id, Catalog: &v1.CatalogRef{CatalogId: p.CatalogID, Version: uint64(p.Version)}, Action: name, ActionSha256: digest, Params: &v1.Parameters{Json: []byte("{}")}, Timeout: durationpb.New(5 * time.Second)}
 }
+
 func sendTask(t *testing.T, c *testConnection, assignment *v1.TaskAssignment) {
 	t.Helper()
 	c.send(t, &v1.ConnectResponse{Message: &v1.ConnectResponse_Task{Task: assignment}})
 }
+
 func collectTask(t *testing.T, c *testConnection, id string) []*v1.ConnectRequest {
 	t.Helper()
 	var messages []*v1.ConnectRequest
@@ -552,6 +591,7 @@ func waitPIDs(t *testing.T, path string) []int {
 	t.Fatal("process fixture did not start")
 	return nil
 }
+
 func assertTerminated(t *testing.T, ids []int) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)

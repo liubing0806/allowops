@@ -21,10 +21,13 @@ func (nativeParameterBuiltin) Parameters(map[string]any) (map[string]params.Defi
 		"args":  {Type: params.StringArray, Description: "arguments", MaxLen: 8, MaxItems: 2},
 	}, nil
 }
+
 func (nativeParameterBuiltin) ValidateConfig(map[string]any) error { return nil }
+
 func (nativeParameterBuiltin) Run(_ context.Context, _ map[string]any, values map[string]any) (catalog.BuiltinResult, error) {
 	return catalog.BuiltinResult{Stdout: fmt.Sprintf("%t %s\n", values["fixed"].(bool), strings.Join(values["args"].([]string), " "))}, nil
 }
+
 func TestCatalogTryNativeBuiltinInputs(t *testing.T) {
 	const name = "cli_native_fixture"
 	catalog.Builtins[name] = nativeParameterBuiltin{}
