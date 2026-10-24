@@ -37,8 +37,15 @@ type RedactingBuiltinHandler interface {
 	RunRedacted(context.Context, map[string]any, map[string]any, func(string) string) (BuiltinResult, error)
 }
 
+// BudgetedBuiltinHandler also receives the action's max_output and a
+// function that redacts multi-line text like the executor's stdout stream, so
+// it can drop whole records instead of having its JSON cut by the executor.
+type BudgetedBuiltinHandler interface {
+	RunBudgeted(ctx context.Context, config, values map[string]any, redact func(string) string, maxOutput int64) (BuiltinResult, error)
+}
+
 // Builtins is the process-local registration table; registration occurs at startup.
-var Builtins = map[string]BuiltinHandler{"mysql_query": mysqlHandler{}, "log_search": logSearchHandler{}, "http_get": httpGetHandler{}, "redis_command": redisHandler{}}
+var Builtins = map[string]BuiltinHandler{"mysql_query": mysqlHandler{}, "log_search": logSearchHandler{}, "log_query": logQueryHandler{}, "http_get": httpGetHandler{}, "redis_command": redisHandler{}}
 
 type mysqlHandler struct{}
 

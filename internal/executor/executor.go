@@ -289,7 +289,19 @@ func runBuiltin(ctx context.Context, plan *runPlan, onStart func() error) (Resul
 	var raw catalog.BuiltinResult
 	var runErr error
 	stdoutRedactor := plan.redactor
-	if structured, ok := handler.(catalog.RedactingBuiltinHandler); ok {
+	if budgeted, ok := handler.(catalog.BudgetedBuiltinHandler); ok {
+		// Records are redacted like stdout lines, with PEM state kept
+		// across the lines of one record. Overlong lines fail closed.
+		text := func(s string) string {
+			var b strings.Builder
+			if err := plan.redactor.Stream(strings.NewReader(s), &b, redact.DefaultMaxLine); err != nil {
+				return "[REDACTED:overlong]"
+			}
+			return b.String()
+		}
+		raw, runErr = budgeted.RunBudgeted(ctx, a.BuiltinConfig, plan.values, text, plan.limit)
+		stdoutRedactor = &redact.Redactor{}
+	} else if structured, ok := handler.(catalog.RedactingBuiltinHandler); ok {
 		raw, runErr = structured.RunRedacted(ctx, a.BuiltinConfig, plan.values, plan.redactor.Line)
 		// Original values have already been redacted. Reapplying a custom
 		// rule to JSON/TSV could match encoding characters or replacement text.

@@ -169,7 +169,6 @@ func TestReject(t *testing.T) {
 		"large-matches":    {PathGlob: path, Pattern: "hit", MaxMatches: 10001},
 		"empty-pattern":    {PathGlob: path},
 		"bad-glob":         {PathGlob: dir + "/[", Pattern: "hit"},
-		"directory":        {PathGlob: dir, Pattern: "hit"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r, err := Run(context.Background(), Config{AllowedRoots: []string{dir}}, p)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/liubing0806/allowops/internal/builtin/httpget"
+	"github.com/liubing0806/allowops/internal/builtin/logquery"
 	"github.com/liubing0806/allowops/internal/builtin/logsearch"
 	redisbuiltin "github.com/liubing0806/allowops/internal/builtin/redis"
 	"github.com/liubing0806/allowops/internal/params"
@@ -128,6 +129,73 @@ func (logSearchHandler) Run(ctx context.Context, input, values map[string]any) (
 	}
 	exclude, _ := values["exclude"].(string)
 	r, err := logsearch.Run(ctx, cfg, logsearch.Params{PathGlob: values["path_glob"].(string), Pattern: values["pattern"].(string), Fixed: values["fixed"].(bool), Exclude: exclude, Context: int(values["context"].(int64)), MaxMatches: int(values["max_matches"].(int64))})
+	return adaptBuiltinResult(r), err
+}
+
+type logQueryHandler struct{}
+
+func logQueryConfig(input map[string]any) (logquery.Config, error) {
+	var fields struct {
+		Mode           string                     `json:"mode"`
+		Sources        map[string]logquery.Source `json:"sources"`
+		AllowedRoots   []string                   `json:"allowed_roots"`
+		MaxFiles       int                        `json:"max_files"`
+		MaxScan        Size                       `json:"max_scan"`
+		MaxWindow      string                     `json:"max_window"`
+		MaxPageRecords int                        `json:"max_page_records"`
+		MaxRecordBytes Size                       `json:"max_record_bytes"`
+		Timeout        string                     `json:"timeout"`
+	}
+	if err := decodeBuiltinConfig(input, &fields); err != nil {
+		return logquery.Config{}, err
+	}
+	timeout, err := builtinTimeout(fields.Timeout)
+	if err != nil {
+		return logquery.Config{}, err
+	}
+	var window time.Duration
+	if fields.MaxWindow != "" {
+		if window, err = time.ParseDuration(fields.MaxWindow); err != nil {
+			return logquery.Config{}, fmt.Errorf("log_query max_window requires a Go duration")
+		}
+	}
+	if fields.MaxRecordBytes > logquery.DefaultMaxRecordBytes {
+		return logquery.Config{}, fmt.Errorf("log_query max_record_bytes may only tighten default %d", logquery.DefaultMaxRecordBytes)
+	}
+	cfg := logquery.Config{Mode: fields.Mode, Sources: fields.Sources, AllowedRoots: fields.AllowedRoots, MaxFiles: fields.MaxFiles, MaxScan: int64(fields.MaxScan), MaxWindow: window,
+		MaxPageRecords: fields.MaxPageRecords, MaxRecordBytes: int(fields.MaxRecordBytes), Timeout: timeout}
+	return cfg, cfg.Validate()
+}
+func (logQueryHandler) ValidateConfig(input map[string]any) error {
+	_, err := logQueryConfig(input)
+	return err
+}
+func (logQueryHandler) Parameters(input map[string]any) (map[string]params.Definition, error) {
+	cfg, err := logQueryConfig(input)
+	if err != nil {
+		return nil, err
+	}
+	return logquery.Parameters(cfg), nil
+}
+func (h logQueryHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
+	return h.RunBudgeted(ctx, input, values, nil, 0)
+}
+func (h logQueryHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+	return h.RunBudgeted(ctx, input, values, mask, 0)
+}
+func (logQueryHandler) RunBudgeted(ctx context.Context, input, values map[string]any, redact func(string) string, maxOutput int64) (BuiltinResult, error) {
+	cfg, err := logQueryConfig(input)
+	if err != nil {
+		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
+	}
+	text := func(name string) string { s, _ := values[name].(string); return s }
+	flag := func(name string) bool { b, _ := values[name].(bool); return b }
+	limit, _ := values["limit"].(int64)
+	top, _ := values["top"].(int64)
+	level, _ := values["level"].([]string)
+	p := logquery.Params{Source: text("source"), Since: text("since"), Until: text("until"), Pattern: text("pattern"), Fixed: flag("fixed"), Exclude: text("exclude"),
+		IgnoreCase: flag("ignore_case"), Limit: int(limit), Order: text("order"), Cursor: text("cursor"), Level: level, Bucket: text("bucket"), Top: int(top)}
+	r, err := logquery.Run(ctx, cfg, p, redact, maxOutput)
 	return adaptBuiltinResult(r), err
 }
 

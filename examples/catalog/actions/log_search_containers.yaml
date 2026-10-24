@@ -1,0 +1,43 @@
+name: log_search_containers
+description: Search the output and log files of named containers and Kubernetes Pods on this host within a time range (default the last hour). Container output and Pod logs use the time recorded by Docker or the kubelet. Returns JSON records, newest first by default, at most limit per page; pass next_cursor with unchanged parameters for the next page. matched=0 means no hits; failures carry a reason code.
+risk: read
+run_as: root
+timeout: 30s
+builtin: log_query
+builtin_config:
+  mode: search
+  sources:
+    web-app-stdout:
+      type: container_stdout
+      container: web-app
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+    web-app-files:
+      type: container_file
+      container: web-app
+      paths: [/opt/app/logs/*.log, /opt/app/logs/*.log.*]
+      allowed_roots: [/opt/app/logs]
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+    web-app-pod:
+      type: k8s_pod
+      namespace: default
+      pod: web-app-
+      container: app
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+  max_files: 50
+  max_scan: 256MB
+  max_window: 24h
+  max_page_records: 200
+  max_record_bytes: 64KB
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets, pii]
