@@ -179,7 +179,7 @@ label('主机主动外连 :443', 412, 652, { fs: 12.5, bold: true, color: C.host
 label('gRPC 双向流 + mTLS（ALPN allowops-agent/1，详见第 2 部分）；网关不主动连接主机', 412, 672, { fs: 12, color: '#6b4511' });
 const ag = box(50, 730, 330, 112, C.host, 'allowops-agent（用户 allowops）', ['systemd 服务；维持长连接、同步并验签目录', '直接执行未声明 run_as 的 action', '输出在主机上脱敏后上报']);
 const ex = box(470, 730, 330, 112, C.host, 'allowops-exec（root）', ['只处理声明了 run_as 的 action', '验签、防回退、校验参数', '切换到 run_as 用户执行，脱敏输出']);
-const tg = box(890, 730, 300, 112, C.host, '被执行的命令', ['exec / steps：固定 argv，不经 shell', 'script：随目录签名的脚本', 'builtin：日志检索、MySQL、Redis、HTTP']);
+const tg = box(890, 730, 300, 112, C.host, '被执行的命令', ['exec / steps：固定 argv，不经 shell', 'script：随目录签名的脚本', 'builtin：日志检索、MySQL、Redis、HTTP、', 'Prometheus、Alertmanager']);
 arrow([[ag.r, 786], [ex.x, 786]], { color: C.host.stroke }); label('sudo -n', 425, 778, { fs: 12, bold: true, color: C.host.title, align: 'center' });
 arrow([[ex.r, 786], [tg.x, 786]], { color: C.host.stroke }); label('run_as', 845, 778, { fs: 12, bold: true, color: C.host.title, align: 'center' });
 box(1240, 730, 390, 112, C.file, '主机上的固定文件', ['`/etc/sudoers.d/allowops（只允许调用 exec）', '`/etc/allowops/catalog-keys/（签名公钥）', '`/var/lib/allowops-exec/（防回退状态）', '`/etc/allowops/credentials/（内置处理器凭据）'], { ts: 13, fs: 11 });
@@ -321,6 +321,9 @@ const groups = [
     ['mysql_query_readonly', '单条只读 SQL（builtin）', 'root'], ['mysql_show', '固定 SHOW 语句（builtin）', 'root'], ['mysql_variables', '服务端变量', 'root'], ['mysql_processlist', '连接与语句', 'root'], ['mysql_error_log', '错误日志检索', 'root'], ['mysql_slow_log', '慢查询日志末尾', 'root'], ['mysql_config_view', 'option 文件，凭据脱敏', 'root']]],
   ['Redis', [
     ['redis_get', '读允许前缀的 key（builtin）', 'root'], ['redis_info', 'INFO 的 server/memory/stats 段', 'root'], ['redis_config_get', 'CONFIG GET，参数名白名单', 'root'], ['redis_slowlog', '慢日志元数据', 'root'], ['redis_config_file_view', '配置文件，凭据脱敏', 'root'], ['redis_log_view', '日志末尾', 'root']]],
+  ['Prometheus 与 Alertmanager（builtin）', [
+    ['prometheus_query', 'PromQL 单点查询', 'root'], ['prometheus_query_range', 'PromQL 范围查询，可只返回汇总', 'root'], ['prometheus_series', '按选择器列出序列', 'root'], ['prometheus_label_values', '标签值或指标名', 'root'], ['prometheus_alerts', 'Prometheus 当前告警', 'root'], ['prometheus_rules', '规则健康状态与最近错误', 'root'], ['alertmanager_alerts', 'Alertmanager 告警，含静默状态', '直接'],
+  ]],
   ['Dubbo QoS（本机 HTTP）', [
     ['dubbo_qos_ls', '服务列表', '直接'], ['dubbo_qos_ps', '服务端口', '直接'], ['dubbo_qos_version', '框架版本', '直接'], ['dubbo_qos_live', '存活探针', '直接'], ['dubbo_qos_ready', '就绪探针', '直接'], ['dubbo_qos_startup', '启动探针', '直接'], ['dubbo_qos_logger_info', '日志适配器与级别', '直接'], ['dubbo_qos_get_address', '服务提供者地址', '直接'], ['dubbo_qos_get_config', '生效配置，凭据脱敏', '直接']]],
 ];
@@ -334,7 +337,7 @@ groups.forEach(([title, items]) => {
 });
 const footY = Math.max(...colY) + 12;
 canvas('actions', footY + 50);
-heading('5', '首批支持的命令（examples/catalog，91 个 action：90 个只读，1 个危险）', '依据 examples/catalog/actions/ 与 docs/action-catalog-requirements.md。右侧标签为执行身份：“直接”= agent 以 allowops 用户执行；root、app = 经 allowops-exec 以该用户执行。');
+heading('5', '首批支持的命令（examples/catalog，98 个 action：97 个只读，1 个危险）', '依据 examples/catalog/actions/ 与 docs/action-catalog-requirements.md。右侧标签为执行身份：“直接”= agent 以 allowops 用户执行；root、app = 经 allowops-exec 以该用户执行。');
 groups.forEach(([title, items], i) => {
   const [x, y, gh] = place[i];
   box(x, y, gw4, gh, C.host, `${title}（${items.length}）`, [], { ts: 14.5 });
@@ -349,7 +352,7 @@ groups.forEach(([title, items], i) => {
     label(who, x + gw4 - tw / 2 - 12, yy + 1, { fs: 11, color: tc.title, align: 'center' });
   });
 });
-label('执行方式：exec 68 个，steps 1 个（host_snapshot），script 2 个（nginx_access_stats、agent_upgrade），builtin 20 个。', 30, footY, { fs: 12.5 });
+label('执行方式：exec 68 个，steps 1 个（host_snapshot），script 2 个（nginx_access_stats、agent_upgrade），builtin 27 个。', 30, footY, { fs: 12.5 });
 label('这是公开示例目录，只用通用名称和路径。公司自己的目录放在单独的私有仓库，按同样格式编写并签名后发布。', 30, footY + 22, { fs: 12.5, color: '#6b7280' });
 </script>
 </body>
