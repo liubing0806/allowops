@@ -14,6 +14,8 @@ builtin_config:
         layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
         timezone: Asia/Shanghai
       multiline: timestamp_start
+      level:
+        regex: '^\S+ \S+ \[[^\]]*\] (?P<level>[A-Z]+)'
     nginx-access:
       type: file
       paths: [/var/log/nginx/access.log*]
@@ -27,6 +29,8 @@ builtin_config:
       timestamp:
         layouts: ['2006/01/02 15:04:05']
       multiline: none
+      level:
+        regex: '^\S+ \S+ \[(?P<level>[a-z]+)\]'
   allowed_roots: [/var/log, /data/logs]
   max_files: 50
   max_scan: 256MB

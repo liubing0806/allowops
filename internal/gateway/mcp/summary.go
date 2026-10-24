@@ -30,6 +30,7 @@ var reasonHints = map[string]string{
 	"PATTERN_INVALID":    "The pattern is not valid RE2 syntax; fix the regular expression or use a fixed-string match.",
 	"CURSOR_INVALID":     "The cursor does not match this source or request parameters; repeat the previous parameters unchanged or restart without cursor.",
 	"CURSOR_EXPIRED":     "The cursor's file was rotated away; restart without cursor, using the last record time as the new until (desc) or since (asc).",
+	"LEVEL_UNSUPPORTED":  "The source declares no level rule; omit level, or match the level text with pattern.",
 }
 
 // G57: slice already-authorized P6 groups for transport; never group tasks or

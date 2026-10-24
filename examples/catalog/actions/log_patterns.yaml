@@ -1,0 +1,41 @@
+name: log_patterns
+description: Group the records of a named log source within a time range (default the last hour) into templates, with numbers, hex strings, UUIDs, IP addresses and timestamps replaced by <_>. Uses the first line of each record. Returns the top templates by count with first and last time and one redacted sample. Use it to find unknown errors when there is no keyword; then search a template's fixed text with log_search.
+risk: read
+run_as: root
+timeout: 30s
+builtin: log_query
+builtin_config:
+  mode: patterns
+  sources:
+    app:
+      type: file
+      paths: [/data/logs/app/*.log, /data/logs/app/*.log.*]
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+      level:
+        regex: '^\S+ \S+ \[[^\]]*\] (?P<level>[A-Z]+)'
+    nginx-access:
+      type: file
+      paths: [/var/log/nginx/access.log*]
+      timestamp:
+        layouts: ['02/Jan/2006:15:04:05 -0700']
+        bracketed: true
+      multiline: none
+    nginx-error:
+      type: file
+      paths: [/var/log/nginx/error.log*]
+      timestamp:
+        layouts: ['2006/01/02 15:04:05']
+      multiline: none
+      level:
+        regex: '^\S+ \S+ \[(?P<level>[a-z]+)\]'
+  allowed_roots: [/var/log, /data/logs]
+  max_files: 50
+  max_scan: 256MB
+  max_window: 24h
+max_output: 64KB
+filters: []
+redact:
+  builtin: [secrets, pii]

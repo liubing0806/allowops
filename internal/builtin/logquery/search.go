@@ -28,6 +28,11 @@ type Params struct {
 	Limit      int    `json:"limit,omitempty"`
 	Order      string `json:"order,omitempty"`
 	Cursor     string `json:"cursor,omitempty"`
+	// Level applies to search, stats and patterns; Bucket to stats; Top to
+	// patterns.
+	Level  []string `json:"level,omitempty"`
+	Bucket string   `json:"bucket,omitempty"`
+	Top    int      `json:"top,omitempty"`
 }
 
 // Run executes one log_query request. redact transforms each record's text
@@ -55,6 +60,10 @@ func Run(ctx context.Context, cfg Config, p Params, redact func(string) string, 
 		output, err = runSources(ctx, cfg, roots)
 	case ModeSearch:
 		output, r.Truncated, err = runSearch(ctx, cfg, roots, p, redact, maxOutput)
+	case ModeStats:
+		output, r.Truncated, err = runStats(ctx, cfg, roots, p)
+	case ModePatterns:
+		output, r.Truncated, err = runPatterns(ctx, cfg, roots, p, redact, maxOutput)
 	}
 	if err != nil {
 		return r, err
@@ -174,6 +183,9 @@ func runSearch(ctx context.Context, cfg Config, roots []string, p Params, redact
 	}
 	match, err := compilePatterns(p)
 	if err != nil {
+		return nil, false, err
+	}
+	if match, _, err = withLevels(source, p.Level, match); err != nil {
 		return nil, false, err
 	}
 	parser, err := newTimeParser(source.Timestamp)

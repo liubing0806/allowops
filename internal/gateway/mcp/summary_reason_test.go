@@ -38,7 +38,7 @@ func TestNativeSummaryReasonAndHint(t *testing.T) {
 
 func TestReasonHintsCoverDesignTable(t *testing.T) {
 	j := &v1.Job{JobId: "job-20261023-0001", Status: v1.JobStatus_JOB_STATUS_FAILED, TotalTasks: 1}
-	for _, code := range []string{"SOURCE_UNKNOWN", "SOURCE_NO_FILES", "SOURCE_UNSUPPORTED", "WINDOW_TOO_LARGE", "TIME_INVALID", "TIMESTAMP_UNPARSED", "PATTERN_INVALID", "CURSOR_INVALID", "CURSOR_EXPIRED"} {
+	for _, code := range []string{"SOURCE_UNKNOWN", "SOURCE_NO_FILES", "SOURCE_UNSUPPORTED", "WINDOW_TOO_LARGE", "TIME_INVALID", "TIMESTAMP_UNPARSED", "PATTERN_INVALID", "CURSOR_INVALID", "CURSOR_EXPIRED", "LEVEL_UNSUPPORTED"} {
 		summary := &v1.JobSummary{OutputTrust: v1.OutputTrust_OUTPUT_TRUST_UNTRUSTED, Groups: []*v1.OutputGroup{{ExitCode: proto.Int32(1), HostCount: 1, Hosts: []string{"a"}, Reason: code}}}
 		result, err := nativeSummaryResult("owner", j, summary, "concise", "")
 		if err != nil {

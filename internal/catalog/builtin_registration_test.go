@@ -92,7 +92,7 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 		{"log_query", "max_window", "1h", "25h"},
 		{"log_query", "max_page_records", 10, 201},
 		{"log_query", "max_record_bytes", "1KB", "65537"},
-		{"log_query", "mode", "sources", "stats"},
+		{"log_query", "mode", "stats", "export"},
 		{"http_get", "max_response_bytes", "1KB", fmt.Sprint(builtin.DefaultHTTPMaxResponseBytes + 1)},
 		{"redis_command", "max_response_bytes", Size(1024), fmt.Sprint(builtin.DefaultRedisMaxResponseBytes + 1)},
 		{"redis_command", "max_scan_count", 1, builtin.DefaultRedisMaxScanCount + 1},

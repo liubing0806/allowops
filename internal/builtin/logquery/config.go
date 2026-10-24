@@ -18,10 +18,12 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin"
 )
 
-// Modes. Phase 2 adds stats and patterns; each catalog action uses one mode.
+// Modes. Each catalog action uses one mode.
 const (
-	ModeSources = "sources"
-	ModeSearch  = "search"
+	ModeSources  = "sources"
+	ModeSearch   = "search"
+	ModeStats    = "stats"
+	ModePatterns = "patterns"
 )
 
 // Source types. Phase 3 adds container_stdout, container_file and k8s_pod.
@@ -63,6 +65,7 @@ type Source struct {
 	Paths     []string  `json:"paths"`
 	Timestamp Timestamp `json:"timestamp"`
 	Multiline string    `json:"multiline,omitempty"`
+	Level     *Level    `json:"level,omitempty"`
 }
 
 type Timestamp struct {
@@ -90,8 +93,8 @@ func globBase(glob string) string {
 // file system, so it can run where the catalog is signed. Run additionally
 // resolves allowed_roots and every matched path on the host.
 func (c Config) Validate() error {
-	if c.Mode != ModeSources && c.Mode != ModeSearch {
-		return fmt.Errorf("log_query mode allowed: %s, %s", ModeSources, ModeSearch)
+	if c.Mode != ModeSources && c.Mode != ModeSearch && c.Mode != ModeStats && c.Mode != ModePatterns {
+		return fmt.Errorf("log_query mode allowed: %s, %s, %s, %s", ModeSources, ModeSearch, ModeStats, ModePatterns)
 	}
 	if len(c.AllowedRoots) == 0 {
 		return errors.New("log_query allowed_roots required")
@@ -148,6 +151,11 @@ func (s Source) validate(roots []string) error {
 	case "", MultilineTimestampStart, MultilineNone:
 	default:
 		return fmt.Errorf("multiline allowed: %s, %s", MultilineTimestampStart, MultilineNone)
+	}
+	if s.Level != nil {
+		if _, err := s.Level.compile(); err != nil {
+			return fmt.Errorf("level: %w", err)
+		}
 	}
 	_, err := newTimeParser(s.Timestamp)
 	return err
