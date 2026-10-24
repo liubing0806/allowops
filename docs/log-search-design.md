@@ -479,7 +479,7 @@ sources:
 
 ### 8.6 第三阶段实现记录
 
-第三阶段已在 `internal/builtin/logquery` 实现（2026-10-24）。源类型 `container_stdout`、`container_file`、`k8s_pod` 分别在 `container.go`（经 `docker.go`）、`container.go`、`k8s.go`；`log_export` 是 `log_query` 的 `mode: export`，在 `export.go`。示例 catalog 增加 `log_search_containers`（三种新类型各一个源）和 `log_export`。8.4 第 1 项 `jobs_get encoding=text` 由另一项工作完成（`ebabcb9`），不在本包内。
+第三阶段已在 `internal/builtin/logquery` 实现（2026-10-24）。源类型 `container_stdout`、`container_file`、`k8s_pod` 分别在 `container.go`（经 `docker.go`）、`container.go`、`k8s.go`；`log_export` 是 `log_query` 的 `mode: export`，在 `export.go`。示例 catalog 增加 `log_search_containers`（三种新类型各一个源）和 `log_export`。8.4 第 1 项 `jobs_get encoding=text` 由另一项工作完成（`c982527`），不在本包内。
 
 与上文设计不一致之处：
 
