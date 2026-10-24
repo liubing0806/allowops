@@ -8,17 +8,17 @@ import (
 )
 
 type SearchOutput struct {
-	Source           string     `json:"source"`
-	Since            string     `json:"since"`
-	Until            string     `json:"until"`
-	Order            string     `json:"order"`
-	Records          []Record   `json:"records"`
-	Matched          int        `json:"matched"`
-	HasMore          bool       `json:"has_more"`
-	NextCursor       string     `json:"next_cursor,omitempty"`
-	Files            FileCounts `json:"files"`
-	ScannedBytes     int64      `json:"scanned_bytes"`
-	ScanLimitReached bool       `json:"scan_limit_reached"`
+	Source           string      `json:"source"`
+	Since            string      `json:"since"`
+	Until            string      `json:"until"`
+	Order            string      `json:"order"`
+	Records          []Record    `json:"records"`
+	Matched          int         `json:"matched"`
+	HasMore          bool        `json:"has_more"`
+	NextCursor       string      `json:"next_cursor,omitempty"`
+	Files            *FileCounts `json:"files,omitempty"`
+	ScannedBytes     int64       `json:"scanned_bytes"`
+	ScanLimitReached bool        `json:"scan_limit_reached"`
 	// ScannedSince (desc) or ScannedUntil (asc) bounds the part of the range
 	// actually scanned; it equals since or until unless a limit was reached.
 	ScannedSince string `json:"scanned_since,omitempty"`
@@ -27,12 +27,14 @@ type SearchOutput struct {
 
 // Record is one log record. Line is omitted when reading started at a bisected
 // offset, where the line number is unknown; Offset is the record's byte offset
-// in the (decompressed) file.
+// in the (decompressed) file. Records of a container output stream have no
+// file; Stream is stdout or stderr for container and Pod output.
 type Record struct {
 	Time            string `json:"time"`
-	File            string `json:"file"`
+	File            string `json:"file,omitempty"`
 	Line            int    `json:"line,omitempty"`
-	Offset          int64  `json:"offset"`
+	Offset          *int64 `json:"offset,omitempty"`
+	Stream          string `json:"stream,omitempty"`
 	Text            string `json:"text"`
 	RecordTruncated bool   `json:"record_truncated"`
 }
@@ -57,6 +59,7 @@ type SourceSummary struct {
 	Latest            string `json:"latest,omitempty"`
 	TimestampParsed   bool   `json:"timestamp_parsed"`
 	Status            string `json:"status"`
+	Reason            string `json:"reason,omitempty"`
 	SkippedNotRegular int    `json:"skipped_not_regular,omitempty"`
 }
 
@@ -68,7 +71,11 @@ func encodeSearch(out SearchOutput, hits []hit, limit int, location *time.Locati
 	records := make([]Record, min(limit, len(hits)))
 	for i := range records {
 		h := hits[i]
-		records[i] = Record{Time: formatTime(h.record.time, location), File: h.file.name, Line: h.record.line, Offset: h.record.offset, Text: redact(h.record.text), RecordTruncated: h.record.truncated}
+		records[i] = Record{Time: formatTime(h.record.time, location), Line: h.record.line, Stream: h.record.stream, Text: redact(h.record.text), RecordTruncated: h.record.truncated}
+		if h.file != nil {
+			offset := h.record.offset
+			records[i].File, records[i].Offset = h.file.name, &offset
+		}
 	}
 	encode := func(n int) ([]byte, error) {
 		page := out
@@ -136,15 +143,25 @@ func runSources(ctx context.Context, cfg Config, roots []string) ([]byte, error)
 	out := SourcesOutput{Sources: []SourceSummary{}}
 	for _, name := range cfg.SourceNames() {
 		source := cfg.Sources[name]
-		parser, err := newTimeParser(source.Timestamp)
+		parser, _, err := sourceParsers(source)
 		if err != nil {
 			return nil, err
 		}
+		if source.Type == TypeContainerStdout {
+			out.Sources = append(out.Sources, stdoutSummary(ctx, name, source, parser.location))
+			continue
+		}
+		summary := SourceSummary{Name: name, Type: source.Type, Status: "no_files"}
 		resolved, err := resolveFiles(ctx, source, roots)
+		if status, reason := sourceStatus(err); status != "" {
+			summary.Status, summary.Reason = status, reason
+			out.Sources = append(out.Sources, summary)
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
-		summary := SourceSummary{Name: name, Type: source.Type, Files: len(resolved.files), SkippedNotRegular: resolved.skippedNotRegular, Status: "no_files"}
+		summary.Files, summary.SkippedNotRegular = len(resolved.files), resolved.skippedNotRegular
 		var earliest, latest time.Time
 		for _, f := range resolved.files {
 			if err := f.readHeader(parser); err != nil {

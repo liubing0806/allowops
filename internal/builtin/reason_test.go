@@ -22,6 +22,7 @@ func TestReasonOf(t *testing.T) {
 		{fmt.Errorf("wrapped: %w", NewError(ReasonCursorExpired, "")), ReasonCursorExpired},
 		{errors.Join(errors.New("output"), customReason(ReasonSourceUnsupported)), ReasonSourceUnsupported},
 		{customReason("LEVEL_UNSUPPORTED"), "LEVEL_UNSUPPORTED"},
+		{customReason("SOURCE_UNAVAILABLE"), "SOURCE_UNAVAILABLE"},
 		{customReason("EXECUTION_FAILED"), ""},
 		{customReason("ROOT_REQUIRED"), ""},
 	} {

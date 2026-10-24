@@ -7,6 +7,8 @@ import "fmt"
 const (
 	CodeSourceUnknown     = "SOURCE_UNKNOWN"
 	CodeSourceNoFiles     = "SOURCE_NO_FILES"
+	CodeSourceUnsupported = "SOURCE_UNSUPPORTED"
+	CodeSourceUnavailable = "SOURCE_UNAVAILABLE"
 	CodePathOutsideRoots  = "PATH_OUTSIDE_ROOTS"
 	CodeWindowTooLarge    = "WINDOW_TOO_LARGE"
 	CodeTimeInvalid       = "TIME_INVALID"

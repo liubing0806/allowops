@@ -102,10 +102,12 @@ func chooseBucket(text string, since, until time.Time, location *time.Location) 
 }
 
 func runStats(ctx context.Context, cfg Config, roots []string, p Params) ([]byte, bool, error) {
-	s, tl, rule, err := prepareScan(ctx, cfg, roots, p)
+	q, err := prepareScan(ctx, cfg, roots, p)
 	if err != nil {
 		return nil, false, err
 	}
+	defer q.close()
+	s, rule := q.s, q.level
 	location := s.parser.location
 	width, err := chooseBucket(p.Bucket, s.since, s.until, location)
 	if err != nil {
@@ -122,7 +124,7 @@ func runStats(ctx context.Context, cfg Config, roots []string, p Params) ([]byte
 		byLevelOut = &byLevel
 	}
 	var first, last time.Time
-	err = s.walk(ctx, tl.files, func(file string, r record) {
+	err = q.walk(ctx, func(file string, r record) {
 		if !s.match(r.text) {
 			return
 		}
@@ -136,10 +138,12 @@ func runStats(ctx context.Context, cfg Config, roots []string, p Params) ([]byte
 			indexes = append(indexes, index)
 		}
 		counts[index]++
-		if n := len(byFile); n == 0 || byFile[n-1].File != file {
-			byFile = append(byFile, FileCount{File: file})
+		if file != "" {
+			if n := len(byFile); n == 0 || byFile[n-1].File != file {
+				byFile = append(byFile, FileCount{File: file})
+			}
+			byFile[len(byFile)-1].Count++
 		}
-		byFile[len(byFile)-1].Count++
 		if rule != nil {
 			byLevel[rule.of(r.text)]++
 		}
@@ -147,9 +151,8 @@ func runStats(ctx context.Context, cfg Config, roots []string, p Params) ([]byte
 	if err != nil {
 		return nil, false, err
 	}
-	tl.counts.Searched = s.searched
 	out := StatsOutput{Source: p.Source, Since: formatTime(s.since, location), Until: formatTime(s.until, location), Bucket: width.String(),
-		Matched: s.matched, Histogram: []HistogramBucket{}, ByLevel: byLevelOut, ByFile: []FileCount{}, Files: tl.counts,
+		Matched: s.matched, Histogram: []HistogramBucket{}, ByLevel: byLevelOut, ByFile: []FileCount{}, Files: q.fileCounts(),
 		ScannedBytes: s.scanned, ScanLimitReached: s.limited, ScannedUntil: formatTime(s.scannedUntil(), location)}
 	if !first.IsZero() {
 		out.FirstMatch, out.LastMatch = formatTime(first, location), formatTime(last, location)

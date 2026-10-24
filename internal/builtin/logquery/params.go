@@ -10,7 +10,7 @@ import (
 func Parameters(cfg Config) map[string]params.Definition {
 	cfg = cfg.withDefaults()
 	switch cfg.Mode {
-	case ModeSearch:
+	case ModeSearch, ModeExport:
 		names := cfg.SourceNames()
 		source := params.Definition{Type: params.Enum, Description: "Log source name from log_sources", Values: names}
 		if len(names) == 1 {
@@ -33,6 +33,13 @@ func Parameters(cfg Config) map[string]params.Definition {
 		if cfg.anyLevel() {
 			defs["level"] = params.Definition{Type: params.StringArray, Description: "Keep records whose first line has one of these levels (ERROR, WARN, INFO, DEBUG); only for sources with a level rule",
 				Regex: "^(" + strings.Join(Levels, "|") + ")$", MaxItems: len(Levels), MaxLen: 5, Optional: true}
+		}
+		if cfg.Mode == ModeExport {
+			// Export is oldest first; max_output usually ends a page first.
+			delete(defs, "order")
+			maxExport := int64(MaxExportRecords)
+			defs["limit"] = params.Definition{Type: params.Int, Description: "Records per page; the page also ends at max_output", Min: &one, Max: maxExport, Default: maxExport}
+			defs["cursor"] = params.Definition{Type: params.String, Description: "next_cursor from the trailer line of the previous page; other parameters must be unchanged", Regex: `^[A-Za-z0-9_-]+$`, MaxLen: 4096, Optional: true}
 		}
 		return defs
 	case ModeStats:

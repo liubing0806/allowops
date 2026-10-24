@@ -234,13 +234,15 @@ func runPatterns(ctx context.Context, cfg Config, roots []string, p Params, reda
 	if p.Top < 1 || p.Top > MaxPatternsTop {
 		return nil, false, fmt.Errorf("top allowed 1..%d", MaxPatternsTop)
 	}
-	s, tl, _, err := prepareScan(ctx, cfg, roots, p)
+	q, err := prepareScan(ctx, cfg, roots, p)
 	if err != nil {
 		return nil, false, err
 	}
+	defer q.close()
+	s := q.s
 	d := &drain{byLength: map[int]*drainNode{}}
 	records := 0
-	err = s.walk(ctx, tl.files, func(_ string, r record) {
+	err = q.walk(ctx, func(_ string, r record) {
 		if s.match(r.text) {
 			records++
 			d.add(firstLine(r.text), r.time)
@@ -249,10 +251,9 @@ func runPatterns(ctx context.Context, cfg Config, roots []string, p Params, reda
 	if err != nil {
 		return nil, false, err
 	}
-	tl.counts.Searched = s.searched
 	location := s.parser.location
 	out := PatternsOutput{Source: p.Source, Since: formatTime(s.since, location), Until: formatTime(s.until, location), Records: records, Clusters: len(d.clusters),
-		Unclustered: d.unclustered, Files: tl.counts, ScannedBytes: s.scanned, ScanLimitReached: s.limited, ScannedUntil: formatTime(s.scannedUntil(), location)}
+		Unclustered: d.unclustered, Files: q.fileCounts(), ScannedBytes: s.scanned, ScanLimitReached: s.limited, ScannedUntil: formatTime(s.scannedUntil(), location)}
 	top := d.top(p.Top)
 	patterns := make([]Pattern, len(top))
 	for i, c := range top {

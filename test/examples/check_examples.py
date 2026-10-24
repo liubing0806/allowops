@@ -20,7 +20,7 @@ def main():
         return result.stdout
 
     validated = run('validate', '--dir', str(catalog))
-    if validated.strip() != 'catalog generic-ops: 95 actions valid':
+    if validated.strip() != 'catalog generic-ops: 97 actions valid':
         raise RuntimeError('Unexpected catalog validation result: ' + validated)
     print(validated, end='')
 
@@ -92,10 +92,10 @@ def main():
             '2026-10-23 10:02:00.000 [main] ERROR c.y.App - update failed password=hunter3\n',
             encoding='utf-8',
         )
-        for name in ('log_sources', 'log_search', 'log_stats', 'log_patterns'):
+        for name in ('log_sources', 'log_search', 'log_stats', 'log_patterns', 'log_export'):
             action_file = local_catalog / 'actions' / f'{name}.yaml'
             action = action_file.read_text(encoding='utf-8')
-            original = '  allowed_roots: [/var/log, /data/logs]'
+            original = '  allowed_roots: [/data/logs]' if name == 'log_export' else '  allowed_roots: [/var/log, /data/logs]'
             if action.count(original) != 1 or action.count('/data/logs/app/') != 2:
                 raise RuntimeError(f'Expected one {name} allowed_roots declaration and two app paths')
             action_file.write_text(
@@ -127,6 +127,19 @@ def main():
         if grouped['records'] != 3 or top['count'] != 2 or top['template'] != '<_> [main] ERROR c.y.App - update failed <_>' \
                 or 'hunter' in json.dumps(grouped):
             raise RuntimeError(f'log_patterns: expected a redacted two-record template, got {grouped}')
+        # log_export: one line per record, oldest first, newlines escaped,
+        # then a trailer line; limit=1 leaves a next_cursor.
+        exported = smoke(local_catalog, 'log_export', *window)['stdout'].splitlines()
+        if len(exported) != 4 or not exported[0].startswith('2026-10-23T10:00:00+08:00 2026-10-23 10:00:00.000') \
+                or '\\njava.lang.IllegalStateException: boom\\n\tat com.example.Foo.bar' not in exported[0] \
+                or 'hunter' in '\n'.join(exported) or not exported[1].endswith('INFO  c.y.App - ok') \
+                or not exported[3].startswith('# matched=3 ') or 'next_cursor' in exported[3]:
+            raise RuntimeError(f'log_export: unexpected output {exported}')
+        first = smoke(local_catalog, 'log_export', *window, 'limit=1')['stdout'].splitlines()
+        cursor = next((f[len('next_cursor='):] for f in first[-1].split() if f.startswith('next_cursor=')), '')
+        rest = smoke(local_catalog, 'log_export', *window, 'limit=1', f'cursor={cursor}')['stdout'].splitlines()
+        if len(first) != 2 or not cursor or rest[:-1] != exported[1:2] or 'next_cursor=' not in rest[-1]:
+            raise RuntimeError(f'log_export: unexpected pages {first} {rest}')
 
         # app_config_view: structured credentials are redacted and the exit
         # code does not depend on the match filter.

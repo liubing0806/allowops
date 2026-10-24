@@ -20,9 +20,12 @@ type cursor struct {
 	Inode  uint64 `json:"ino"`
 	Offset int64  `json:"off"`
 	Time   string `json:"time"`
-	Since  string `json:"since"`
-	Until  string `json:"until"`
-	Hash   string `json:"hash"`
+	// Seq is the index of the record among the records of a container
+	// output stream with the same time; file records use Dev, Inode, Offset.
+	Seq   int    `json:"seq,omitempty"`
+	Since string `json:"since"`
+	Until string `json:"until"`
+	Hash  string `json:"hash"`
 }
 
 func (c cursor) encode() string {

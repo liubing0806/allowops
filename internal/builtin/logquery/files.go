@@ -20,11 +20,13 @@ import (
 // headerBytes bounds the decompressed prefix read for a file's first timestamp.
 const headerBytes = 256 << 10
 
-// logFile is one regular file of a file source. Name is the matched path; the
-// file is opened through os.Root at root/rel so later symlink changes cannot
-// leave the allowed root.
+// logFile is one regular file of a file-backed source. Name is the matched
+// path; the file is opened through os.Root at root, then inner (for
+// container and Pod files) and rel, so later symlink changes cannot leave the
+// allowed root.
 type logFile struct {
 	name, root, rel string
+	inner           string
 	dev, ino        uint64
 	size            int64
 	mtime           time.Time
@@ -38,10 +40,21 @@ type resolvedFiles struct {
 	skippedNotRegular int
 }
 
-// resolveFiles expands a file source's globs. Matches that are not regular
-// files are skipped and counted; a match that resolves outside every allowed
-// root fails the request.
+// resolveFiles expands the files of a file-backed source by its type.
 func resolveFiles(ctx context.Context, source Source, roots []string) (resolvedFiles, error) {
+	switch source.Type {
+	case TypeContainerFile:
+		return resolveContainerFiles(ctx, source)
+	case TypeK8sPod:
+		return resolvePodFiles(ctx, source)
+	}
+	return resolveHostFiles(ctx, source, roots)
+}
+
+// resolveHostFiles expands a file source's globs. Matches that are not
+// regular files are skipped and counted; a match that resolves outside every
+// allowed root fails the request.
+func resolveHostFiles(ctx context.Context, source Source, roots []string) (resolvedFiles, error) {
 	var result resolvedFiles
 	seen := map[[2]uint64]bool{}
 	for _, glob := range source.Paths {
@@ -96,14 +109,21 @@ func resolveFiles(ctx context.Context, source Source, roots []string) (resolvedF
 			result.files = append(result.files, &logFile{name: name, root: root, rel: rel, dev: key[0], ino: key[1], size: info.Size(), mtime: info.ModTime(), gz: strings.HasSuffix(name, ".gz")})
 		}
 	}
-	slices.SortFunc(result.files, func(a, b *logFile) int { return strings.Compare(a.name, b.name) })
+	sortFiles(result.files)
 	return result, nil
+}
+
+func sortFiles(files []*logFile) {
+	slices.SortFunc(files, func(a, b *logFile) int { return strings.Compare(a.name, b.name) })
 }
 
 // open opens the file inside its allowed root and checks that it is still the
 // regular file that was resolved.
 func (f *logFile) open() (*os.File, error) {
-	root, err := os.OpenRoot(f.root)
+	root, err := openRoot(f.root, f.inner)
+	if err == nil && root == nil {
+		err = fmt.Errorf("%s changed during the request", f.name)
+	}
 	if err != nil {
 		return nil, err
 	}

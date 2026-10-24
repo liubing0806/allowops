@@ -24,10 +24,18 @@ const (
 	ModeSearch   = "search"
 	ModeStats    = "stats"
 	ModePatterns = "patterns"
+	ModeExport   = "export"
 )
 
-// Source types. Phase 3 adds container_stdout, container_file and k8s_pod.
-const TypeFile = "file"
+// Source types: host log files, a container's output through the Docker
+// Engine API, log files inside a container, and Kubernetes Pod logs on the
+// node (docs/log-search-design.md section 8).
+const (
+	TypeFile            = "file"
+	TypeContainerStdout = "container_stdout"
+	TypeContainerFile   = "container_file"
+	TypeK8sPod          = "k8s_pod"
+)
 
 const (
 	MultilineTimestampStart = "timestamp_start"
@@ -39,11 +47,14 @@ const (
 	DefaultMaxFiles             = builtin.DefaultLogMaxFiles
 	DefaultMaxScan        int64 = builtin.DefaultLogMaxScan
 	DefaultMaxWindow            = 24 * time.Hour
-	DefaultMaxPageRecords       = 200
+	DefaultMaxPageRecords       = 500
 	DefaultMaxRecordBytes       = 64 << 10
 	DefaultLimit                = 50
 	DefaultRange                = time.Hour
 	MaxPatternLength            = 200
+	// MaxExportRecords bounds one export page; max_output usually ends it
+	// earlier.
+	MaxExportRecords = 100000
 )
 
 type Config struct {
@@ -58,14 +69,26 @@ type Config struct {
 	Timeout        time.Duration     `json:"timeout"`
 }
 
-// Source is one named log source. Type selects the reader; only file exists in
-// phase 1. Later types add their own fields and validation in validate().
+// Source is one named log source. Type selects the reader:
+//   - file: Paths on the host, inside Config.AllowedRoots.
+//   - container_stdout: the output of Container read through the Docker API.
+//   - container_file: Paths inside Container, inside the source's own
+//     AllowedRoots (container paths).
+//   - k8s_pod: CRI logs of Container in the Pods of Namespace whose names start
+//     with Pod, on this node.
+//
+// Container output and Pod logs carry the runtime's time on each line;
+// Timestamp.Layouts then only find record starts for timestamp_start.
 type Source struct {
-	Type      string    `json:"type"`
-	Paths     []string  `json:"paths"`
-	Timestamp Timestamp `json:"timestamp"`
-	Multiline string    `json:"multiline,omitempty"`
-	Level     *Level    `json:"level,omitempty"`
+	Type         string    `json:"type"`
+	Paths        []string  `json:"paths,omitempty"`
+	Timestamp    Timestamp `json:"timestamp"`
+	Multiline    string    `json:"multiline,omitempty"`
+	Level        *Level    `json:"level,omitempty"`
+	Container    string    `json:"container,omitempty"`
+	AllowedRoots []string  `json:"allowed_roots,omitempty"`
+	Namespace    string    `json:"namespace,omitempty"`
+	Pod          string    `json:"pod,omitempty"`
 }
 
 type Timestamp struct {
@@ -74,7 +97,16 @@ type Timestamp struct {
 	Bracketed bool     `json:"bracketed,omitempty"`
 }
 
-var sourceName = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
+var (
+	sourceName = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
+	// containerName follows Docker's rule for container names.
+	containerName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
+	// dnsLabel is a Kubernetes namespace or container name; podPrefix is the
+	// start of a Pod name. Neither contains '_', which separates the parts of
+	// a /var/log/pods directory name.
+	dnsLabel  = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	podPrefix = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,252}$`)
+)
 
 func within(root, path string) bool {
 	rel, err := filepath.Rel(root, path)
@@ -93,16 +125,20 @@ func globBase(glob string) string {
 // file system, so it can run where the catalog is signed. Run additionally
 // resolves allowed_roots and every matched path on the host.
 func (c Config) Validate() error {
-	if c.Mode != ModeSources && c.Mode != ModeSearch && c.Mode != ModeStats && c.Mode != ModePatterns {
-		return fmt.Errorf("log_query mode allowed: %s, %s, %s, %s", ModeSources, ModeSearch, ModeStats, ModePatterns)
+	switch c.Mode {
+	case ModeSources, ModeSearch, ModeStats, ModePatterns, ModeExport:
+	default:
+		return fmt.Errorf("log_query mode allowed: %s, %s, %s, %s, %s", ModeSources, ModeSearch, ModeStats, ModePatterns, ModeExport)
 	}
-	if len(c.AllowedRoots) == 0 {
-		return errors.New("log_query allowed_roots required")
+	files := false
+	for _, source := range c.Sources {
+		files = files || source.Type == TypeFile
 	}
-	for _, root := range c.AllowedRoots {
-		if !filepath.IsAbs(root) || strings.ContainsAny(root, "\x00\r\n") {
-			return errors.New("log_query allowed_roots must be absolute paths without NUL/newlines")
-		}
+	if files && len(c.AllowedRoots) == 0 {
+		return errors.New("log_query allowed_roots required for file sources")
+	}
+	if err := checkRoots(c.AllowedRoots); err != nil {
+		return fmt.Errorf("log_query %w", err)
 	}
 	if len(c.Sources) == 0 {
 		return errors.New("log_query sources required")
@@ -123,16 +159,114 @@ func (c Config) Validate() error {
 	return nil
 }
 
+func checkRoots(roots []string) error {
+	for _, root := range roots {
+		if !filepath.IsAbs(root) || strings.ContainsAny(root, "\x00\r\n") {
+			return errors.New("allowed_roots must be absolute paths without NUL/newlines")
+		}
+	}
+	return nil
+}
+
 func (s Source) validate(roots []string) error {
+	if s.Level != nil {
+		if _, err := s.Level.compile(); err != nil {
+			return fmt.Errorf("level: %w", err)
+		}
+	}
+	// Fields of other types are rejected so a misplaced field is not ignored.
+	unexpected := func(fields map[string]bool) error {
+		for name, set := range fields {
+			if set {
+				return fmt.Errorf("%s does not apply to type %s", name, s.Type)
+			}
+		}
+		return nil
+	}
 	switch s.Type {
 	case TypeFile:
+		if err := unexpected(map[string]bool{"container": s.Container != "", "allowed_roots": s.AllowedRoots != nil, "namespace": s.Namespace != "", "pod": s.Pod != ""}); err != nil {
+			return err
+		}
+		if err := checkPaths(s.Paths, roots); err != nil {
+			return err
+		}
+	case TypeContainerFile:
+		if err := unexpected(map[string]bool{"namespace": s.Namespace != "", "pod": s.Pod != ""}); err != nil {
+			return err
+		}
+		if !containerName.MatchString(s.Container) {
+			return fmt.Errorf("container must match %s", containerName)
+		}
+		if len(s.AllowedRoots) == 0 {
+			return errors.New("allowed_roots (paths inside the container) required")
+		}
+		if err := checkRoots(s.AllowedRoots); err != nil {
+			return err
+		}
+		if err := checkPaths(s.Paths, s.AllowedRoots); err != nil {
+			return err
+		}
+	case TypeContainerStdout:
+		if err := unexpected(map[string]bool{"paths": s.Paths != nil, "allowed_roots": s.AllowedRoots != nil, "namespace": s.Namespace != "", "pod": s.Pod != ""}); err != nil {
+			return err
+		}
+		if !containerName.MatchString(s.Container) {
+			return fmt.Errorf("container must match %s", containerName)
+		}
+		return s.validateStamped()
+	case TypeK8sPod:
+		if err := unexpected(map[string]bool{"paths": s.Paths != nil, "allowed_roots": s.AllowedRoots != nil}); err != nil {
+			return err
+		}
+		if !dnsLabel.MatchString(s.Namespace) || !dnsLabel.MatchString(s.Container) {
+			return fmt.Errorf("namespace and container must match %s", dnsLabel)
+		}
+		if !podPrefix.MatchString(s.Pod) {
+			return fmt.Errorf("pod (a Pod name prefix) must match %s", podPrefix)
+		}
+		return s.validateStamped()
 	default:
-		return fmt.Errorf("type allowed: %s", TypeFile)
+		return fmt.Errorf("type allowed: %s, %s, %s, %s", TypeFile, TypeContainerStdout, TypeContainerFile, TypeK8sPod)
 	}
-	if len(s.Paths) == 0 {
+	switch s.Multiline {
+	case "", MultilineTimestampStart, MultilineNone:
+	default:
+		return fmt.Errorf("multiline allowed: %s, %s", MultilineTimestampStart, MultilineNone)
+	}
+	_, err := newTimeParser(s.Timestamp)
+	return err
+}
+
+// validateStamped checks a source whose lines carry the runtime's time.
+// Layouts are needed only to find record starts for timestamp_start.
+func (s Source) validateStamped() error {
+	switch s.Multiline {
+	case "", MultilineNone:
+	case MultilineTimestampStart:
+		if len(s.Timestamp.Layouts) == 0 {
+			return errors.New("multiline timestamp_start requires timestamp.layouts to find record starts")
+		}
+	default:
+		return fmt.Errorf("multiline allowed: %s, %s", MultilineTimestampStart, MultilineNone)
+	}
+	if s.Timestamp.Bracketed && len(s.Timestamp.Layouts) == 0 {
+		return errors.New("timestamp.bracketed requires timestamp.layouts")
+	}
+	if len(s.Timestamp.Layouts) > 0 {
+		_, err := newTimeParser(s.Timestamp)
+		return err
+	}
+	_, err := loadLocation(s.Timestamp.Timezone)
+	return err
+}
+
+// checkPaths checks globs lexically against roots.
+func checkPaths(paths, roots []string) error {
+	if len(paths) == 0 {
 		return errors.New("paths required")
 	}
-	for _, glob := range s.Paths {
+	for _, glob := range paths {
 		if !filepath.IsAbs(glob) || strings.ContainsAny(glob, "\x00\r\n") {
 			return errors.New("paths must be absolute globs without NUL/newlines")
 		}
@@ -147,18 +281,44 @@ func (s Source) validate(roots []string) error {
 			return fmt.Errorf("path %q is outside allowed_roots", glob)
 		}
 	}
-	switch s.Multiline {
-	case "", MultilineTimestampStart, MultilineNone:
-	default:
-		return fmt.Errorf("multiline allowed: %s, %s", MultilineTimestampStart, MultilineNone)
+	return nil
+}
+
+// stamped reports whether the source's lines carry the runtime's time.
+func (s Source) stamped() bool {
+	return s.Type == TypeContainerStdout || s.Type == TypeK8sPod
+}
+
+// multiline returns the source's multiline rule with the default applied:
+// timestamp_start for files, none for stamped lines.
+func (s Source) multiline() string {
+	if s.Multiline == "" && s.stamped() {
+		return MultilineNone
 	}
-	if s.Level != nil {
-		if _, err := s.Level.compile(); err != nil {
-			return fmt.Errorf("level: %w", err)
+	if s.Multiline == "" {
+		return MultilineTimestampStart
+	}
+	return s.Multiline
+}
+
+// sourceParsers returns the parser of line timestamps, used for record times,
+// bisection and file headers, and the parser of record starts in the text of
+// stamped lines (nil when lines are not stamped or have no layouts).
+func sourceParsers(s Source) (parser, content *timeParser, err error) {
+	if !s.stamped() {
+		parser, err = newTimeParser(s.Timestamp)
+		return parser, nil, err
+	}
+	location, err := loadLocation(s.Timestamp.Timezone)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(s.Timestamp.Layouts) > 0 {
+		if content, err = newTimeParser(s.Timestamp); err != nil {
+			return nil, nil, err
 		}
 	}
-	_, err := newTimeParser(s.Timestamp)
-	return err
+	return runtimeParser(location), content, nil
 }
 
 func (c Config) withDefaults() Config {

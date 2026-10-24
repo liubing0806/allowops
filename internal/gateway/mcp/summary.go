@@ -23,7 +23,8 @@ type summaryItem struct{ group, host, offline int }
 var reasonHints = map[string]string{
 	"SOURCE_UNKNOWN":     "The source name is not in the catalog; call log_sources to list available source names.",
 	"SOURCE_NO_FILES":    "The source's glob matched no files on this host; call log_sources to check its files.",
-	"SOURCE_UNSUPPORTED": "The container log path is outside every mount and the storage driver is not overlay2; this source cannot be read on this host.",
+	"SOURCE_UNSUPPORTED": "This host cannot read the source: the container log path is outside every mount and the storage driver is not overlay2, or the container's logging driver does not support reading.",
+	"SOURCE_UNAVAILABLE": "The source's container is not found or the Docker API is unreachable on this host; call log_sources to check the source status.",
 	"WINDOW_TOO_LARGE":   "until - since exceeds the source's max_window; narrow the time range.",
 	"TIME_INVALID":       "since/until must be RFC 3339 (2026-10-23T14:45:00+08:00) or a relative duration (30m, 2h), and since must be earlier than until.",
 	"TIMESTAMP_UNPARSED": "No timestamp could be parsed in files within the time range; retry without since/until, or check the source's timestamp.layouts.",

@@ -64,6 +64,8 @@ func Run(ctx context.Context, cfg Config, p Params, redact func(string) string, 
 		output, r.Truncated, err = runStats(ctx, cfg, roots, p)
 	case ModePatterns:
 		output, r.Truncated, err = runPatterns(ctx, cfg, roots, p, redact, maxOutput)
+	case ModeExport:
+		output, r.Truncated, err = runExport(ctx, cfg, roots, p, redact, maxOutput)
 	}
 	if err != nil {
 		return r, err
@@ -116,14 +118,17 @@ func buildTimeline(ctx context.Context, source Source, roots []string, parser *t
 }
 
 type hit struct {
-	file   *logFile
+	file   *logFile // nil for records of a container output stream
 	record record
 }
 
 type searcher struct {
-	cfg          Config
-	source       Source
-	parser       *timeParser
+	cfg    Config
+	source Source
+	parser *timeParser
+	// content finds record starts in the text of stamped lines; nil for
+	// file sources, whose parser does that.
+	content      *timeParser
 	since, until time.Time
 	match        func(string) bool
 	scanned      int64
@@ -167,93 +172,148 @@ func compilePatterns(p Params) (func(string) bool, error) {
 	}, nil
 }
 
-func runSearch(ctx context.Context, cfg Config, roots []string, p Params, redact func(string) string, maxOutput int64) ([]byte, bool, error) {
+// query is a validated request: the resolved range, the source's segments
+// and the cursor position within them.
+type query struct {
+	p            Params
+	s            *searcher
+	segments     []segment
+	counts       *FileCounts
+	position     int
+	cursor       *cursor
+	since, until time.Time
+	docker       *dockerClient
+	level        *levelRule // nil when the source declares no level rule
+}
+
+func (q *query) close() {
+	if q.docker != nil {
+		q.docker.close()
+	}
+}
+
+// prepare validates the request parameters and resolves the source's
+// segments. maxLimit bounds p.Limit; defaultLimit replaces an omitted one.
+func prepare(ctx context.Context, cfg Config, roots []string, p Params, defaultLimit, maxLimit int) (*query, error) {
 	source, ok := cfg.Sources[p.Source]
 	if !ok {
-		return nil, false, codeError(CodeSourceUnknown, "source %q is not configured; available: %s", p.Source, strings.Join(cfg.SourceNames(), ", "))
+		return nil, codeError(CodeSourceUnknown, "source %q is not configured; available: %s", p.Source, strings.Join(cfg.SourceNames(), ", "))
 	}
 	if p.Limit == 0 {
-		p.Limit = min(DefaultLimit, cfg.MaxPageRecords)
+		p.Limit = defaultLimit
 	}
 	if p.Order == "" {
 		p.Order = "desc"
 	}
-	if p.Limit < 1 || p.Limit > cfg.MaxPageRecords || (p.Order != "desc" && p.Order != "asc") {
-		return nil, false, fmt.Errorf("limit allowed 1..%d, order allowed desc, asc", cfg.MaxPageRecords)
+	if p.Limit < 1 || p.Limit > maxLimit || (p.Order != "desc" && p.Order != "asc") {
+		return nil, fmt.Errorf("limit allowed 1..%d, order allowed desc, asc", maxLimit)
 	}
 	match, err := compilePatterns(p)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	if match, _, err = withLevels(source, p.Level, match); err != nil {
-		return nil, false, err
-	}
-	parser, err := newTimeParser(source.Timestamp)
+	match, rule, err := withLevels(source, p.Level, match)
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	var c *cursor
-	var since, until, cursorTime time.Time
+	parser, content, err := sourceParsers(source)
+	if err != nil {
+		return nil, err
+	}
+	q := &query{p: p, position: -1, level: rule}
+	var cursorTime time.Time
 	if p.Cursor != "" {
 		decoded, err := decodeCursor(p.Cursor)
 		if err != nil {
-			return nil, false, codeError(CodeCursorInvalid, "%v", err)
+			return nil, codeError(CodeCursorInvalid, "%v", err)
 		}
 		if decoded.Source != p.Source || decoded.Hash != paramsHash(p) {
-			return nil, false, codeError(CodeCursorInvalid, "cursor belongs to a request with other parameters; repeat the previous parameters with the cursor")
+			return nil, codeError(CodeCursorInvalid, "cursor belongs to a request with other parameters; repeat the previous parameters with the cursor")
 		}
-		if cursorTime, since, until, err = decoded.times(); err != nil {
-			return nil, false, codeError(CodeCursorInvalid, "cursor times: %v", err)
+		if cursorTime, q.since, q.until, err = decoded.times(); err != nil {
+			return nil, codeError(CodeCursorInvalid, "cursor times: %v", err)
 		}
-		if err := checkWindow(since, until, cfg.MaxWindow); err != nil || cursorTime.Before(since) || cursorTime.After(until) {
-			return nil, false, codeError(CodeCursorInvalid, "cursor range is invalid")
+		if err := checkWindow(q.since, q.until, cfg.MaxWindow); err != nil || cursorTime.Before(q.since) || cursorTime.After(q.until) {
+			return nil, codeError(CodeCursorInvalid, "cursor range is invalid")
 		}
-		c = &decoded
-	} else if since, until, err = parseTimeRange(p.Since, p.Until, now(), cfg.MaxWindow); err != nil {
-		return nil, false, err
+		q.cursor = &decoded
+	} else if q.since, q.until, err = parseTimeRange(p.Since, p.Until, now(), cfg.MaxWindow); err != nil {
+		return nil, err
 	}
-	tl, err := buildTimeline(ctx, source, roots, parser, since, until)
+	q.s = &searcher{cfg: cfg, source: source, parser: parser, content: content, since: q.since, until: q.until, match: match}
+	if source.Type == TypeContainerStdout {
+		q.docker = newDockerClient()
+		if q.segments, err = stdoutSegments(ctx, q.docker, source, q.since, q.until, p.Order, q.cursor); err != nil {
+			q.close()
+			return nil, err
+		}
+		return q, nil
+	}
+	tl, err := buildTimeline(ctx, source, roots, parser, q.since, q.until)
+	if err != nil {
+		return nil, err
+	}
+	q.counts = &tl.counts
+	for _, f := range tl.files {
+		q.segments = append(q.segments, f)
+	}
+	if q.cursor != nil {
+		if q.position, err = q.s.checkCursor(tl, *q.cursor, cursorTime); err != nil {
+			return nil, err
+		}
+	}
+	return q, nil
+}
+
+// next returns the cursor that resumes at h.
+func (q *query) next(h hit) string {
+	c := cursor{V: 1, Source: q.p.Source, Time: h.record.time.UTC().Format(time.RFC3339Nano),
+		Since: q.since.UTC().Format(time.RFC3339Nano), Until: q.until.UTC().Format(time.RFC3339Nano), Hash: paramsHash(q.p)}
+	if h.file != nil {
+		c.Dev, c.Inode, c.Offset = h.file.dev, h.file.ino, h.record.offset
+	} else {
+		c.Seq = h.record.seq
+	}
+	return c.encode()
+}
+
+func runSearch(ctx context.Context, cfg Config, roots []string, p Params, redact func(string) string, maxOutput int64) ([]byte, bool, error) {
+	q, err := prepare(ctx, cfg, roots, p, min(DefaultLimit, cfg.MaxPageRecords), cfg.MaxPageRecords)
 	if err != nil {
 		return nil, false, err
 	}
-	s := &searcher{cfg: cfg, source: source, parser: parser, since: since, until: until, match: match}
-	position := -1
-	if c != nil {
-		if position, err = s.checkCursor(tl, *c, cursorTime); err != nil {
-			return nil, false, err
-		}
-	}
+	defer q.close()
+	p, s := q.p, q.s
 	var hits []hit
 	if p.Order == "asc" {
-		hits, err = s.ascending(ctx, tl.files, p.Limit+1, position, c)
+		hits, err = s.ascending(ctx, q.segments, p.Limit+1, q.position, q.cursor)
 	} else {
-		hits, err = s.descending(ctx, tl.files, p.Limit+1, position, c)
+		hits, err = s.descending(ctx, q.segments, p.Limit+1, q.position, q.cursor)
 	}
 	if err != nil {
 		return nil, false, err
 	}
-	tl.counts.Searched = s.searched
-	out := SearchOutput{Source: p.Source, Since: formatTime(since, parser.location), Until: formatTime(until, parser.location), Order: p.Order,
-		Matched: s.matched, Files: tl.counts, ScannedBytes: s.scanned, ScanLimitReached: s.limited}
+	if q.counts != nil {
+		q.counts.Searched = s.searched
+	}
+	location := s.parser.location
+	out := SearchOutput{Source: p.Source, Since: formatTime(q.since, location), Until: formatTime(q.until, location), Order: p.Order,
+		Matched: s.matched, Files: q.counts, ScannedBytes: s.scanned, ScanLimitReached: s.limited}
 	if p.Order == "asc" {
 		out.ScannedUntil = out.Until
 		if s.limited {
-			out.ScannedUntil = formatTime(maxTime(s.last, since), parser.location)
+			out.ScannedUntil = formatTime(maxTime(s.last, q.since), location)
 		}
 	} else {
 		out.ScannedSince = out.Since
 		if s.limited {
 			out.ScannedSince = out.Until
 			if !s.first.IsZero() {
-				out.ScannedSince = formatTime(s.first, parser.location)
+				out.ScannedSince = formatTime(s.first, location)
 			}
 		}
 	}
-	next := func(h hit) string {
-		return cursor{V: 1, Source: p.Source, Dev: h.file.dev, Inode: h.file.ino, Offset: h.record.offset, Time: h.record.time.UTC().Format(time.RFC3339Nano),
-			Since: since.UTC().Format(time.RFC3339Nano), Until: until.UTC().Format(time.RFC3339Nano), Hash: paramsHash(p)}.encode()
-	}
-	output, err := encodeSearch(out, hits, p.Limit, parser.location, redact, maxOutput, next)
+	output, err := encodeSearch(out, hits, p.Limit, location, redact, maxOutput, q.next)
 	return output, s.limited, err
 }
 
@@ -349,7 +409,48 @@ func (s *searcher) scanFile(ctx context.Context, file *os.File, f *logFile, star
 			return false, err
 		}
 	}
-	records := newRecordReader(lines, s.parser, s.source.Multiline, s.cfg.MaxRecordBytes)
+	records := s.records(s.fileLines(lines), start > 0)
+	return s.scanRecords(records, func(r *record) verdict {
+		switch {
+		case !r.timed || r.time.Before(s.since):
+			return skipRecord
+		case r.time.After(s.until) || (end >= 0 && r.offset > end):
+			return stopScan
+		}
+		return keepRecord
+	}, emit)
+}
+
+// fileLines returns the line source for a file of the searched source:
+// Pod log files are in the CRI format.
+func (s *searcher) fileLines(lines *lineReader) lineSource {
+	if s.source.Type == TypeK8sPod {
+		return &criLines{lines: lines, max: s.cfg.MaxRecordBytes}
+	}
+	return lines
+}
+
+// records groups lines into records by the source's multiline rule.
+// midstream tells that reading began after the start of the data.
+func (s *searcher) records(lines lineSource, midstream bool) *recordReader {
+	records := newRecordReader(lines, s.parser, s.source.multiline(), s.cfg.MaxRecordBytes)
+	records.content, records.dropOrphans = s.content, midstream
+	return records
+}
+
+type verdict int
+
+const (
+	keepRecord verdict = iota
+	skipRecord
+	stopScan
+)
+
+// scanRecords passes records to emit until check returns stopScan or the
+// stream ends; skipRecord drops a record. It returns exceeded when the scan
+// budget ran out. Bytes read ahead for the next record do not count against
+// the current one.
+func (s *searcher) scanRecords(records *recordReader, check func(*record) verdict, emit func(record)) (bool, error) {
 	for {
 		r, err := records.next()
 		if err == io.EOF {
@@ -358,15 +459,14 @@ func (s *searcher) scanFile(ctx context.Context, file *os.File, f *logFile, star
 		if err != nil {
 			return false, err
 		}
-		// Bytes read ahead for the next record do not count against this one.
-		exceeded := s.scanned-(lines.offset-r.end) > s.cfg.MaxScan
-		if !r.timed || r.time.Before(s.since) {
+		exceeded := s.scanned-(records.lines.position()-r.end) > s.cfg.MaxScan
+		switch check(&r) {
+		case skipRecord:
 			if exceeded {
 				return true, nil
 			}
 			continue
-		}
-		if r.time.After(s.until) || (end >= 0 && r.offset > end) {
+		case stopScan:
 			return false, nil
 		}
 		if exceeded {
@@ -394,49 +494,68 @@ func (r contextReader) Read(p []byte) (int, error) {
 	return r.reader.Read(p)
 }
 
-// ascending scans oldest first and keeps the first want hits.
-func (s *searcher) ascending(ctx context.Context, files []*logFile, want, position int, c *cursor) ([]hit, error) {
-	var hits []hit
+// scanStop tells how a segment scan ended.
+type scanStop int
+
+const (
+	scanDone     scanStop = iota
+	scanExceeded          // the budget ran out inside the segment
+	scanPartial           // desc read only the end of the segment
+	scanSkipped           // desc did not read the segment: it cannot fit the budget
+)
+
+// segment is one part of a source's timeline, ordered oldest first: a log
+// file, or a time window of a container output stream. Hits of a segment
+// carry the position a cursor needs.
+type segment interface {
+	// ascend passes the in-range records oldest first, from the cursor c
+	// when it is not nil. It returns scanDone or scanExceeded.
+	ascend(ctx context.Context, s *searcher, c *cursor, emit func(hit)) (scanStop, error)
+	// descend passes the in-range records oldest first, up to the cursor c
+	// when it is not nil, reading at most remaining bytes.
+	descend(ctx context.Context, s *searcher, c *cursor, remaining int64, emit func(hit)) (scanStop, error)
+}
+
+// forward passes every in-range record oldest first, from segment position
+// (the cursor's segment when c is not nil) to the end of the range or the
+// first limit reached. Matching is up to emit. Modes that read the whole
+// range in time order, such as export, use it directly.
+func (s *searcher) forward(ctx context.Context, segments []segment, position int, c *cursor, emit func(hit)) error {
 	if position < 0 {
 		position = 0
 	}
-	for i := position; i < len(files); i++ {
+	for i := position; i < len(segments); i++ {
 		if s.searched == s.cfg.MaxFiles || s.scanned >= s.cfg.MaxScan {
 			s.limited = true
 			break
 		}
-		f := files[i]
-		file, err := f.open()
+		var from *cursor
+		if i == position {
+			from = c
+		}
+		stop, err := segments[i].ascend(ctx, s, from, emit)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		s.searched++
-		start := int64(0)
-		if c != nil && i == position {
-			start = c.Offset
-		} else if !f.gz {
-			if start, _, err = seekSince(file, f.size, s.parser, s.since); err != nil {
-				file.Close()
-				return nil, err
-			}
-		}
-		exceeded, err := s.scanFile(ctx, file, f, start, -1, false, func(r record) {
-			s.matchRecord(r, func() {
-				if len(hits) < want {
-					hits = append(hits, hit{f, r})
-				}
-			})
-		})
-		file.Close()
-		if err != nil {
-			return nil, err
-		}
-		if exceeded {
+		if stop == scanExceeded {
 			s.limited = true
 			break
 		}
 	}
-	return hits, nil
+	return nil
+}
+
+// ascending scans oldest first and keeps the first want hits.
+func (s *searcher) ascending(ctx context.Context, segments []segment, want, position int, c *cursor) ([]hit, error) {
+	var hits []hit
+	err := s.forward(ctx, segments, position, c, func(h hit) {
+		s.matchRecord(h.record, func() {
+			if len(hits) < want {
+				hits = append(hits, h)
+			}
+		})
+	})
+	return hits, err
 }
 
 func (s *searcher) matchRecord(r record, keep func()) {
@@ -446,74 +565,137 @@ func (s *searcher) matchRecord(r record, keep func()) {
 	}
 }
 
-// descending scans files newest first. Each file is read forward from its
-// start position, keeping the newest hits of that file in a ring buffer. The
-// scanned part is always a suffix of the range: when the budget runs out
-// inside a file, that file's hits are discarded.
-func (s *searcher) descending(ctx context.Context, files []*logFile, want, position int, c *cursor) ([]hit, error) {
+// maxSplits bounds how often desc splits segments that exceeded the budget;
+// the bytes read for discarded attempts are bounded by 4 * max_scan.
+const maxSplits = 32
+
+// splitter is a segment that desc can split in two by time when reading it
+// exceeds the budget: then the newer half is read first and the older half
+// after it.
+type splitter interface {
+	split() (older, newer segment, ok bool)
+}
+
+// descending scans segments newest first. Each segment is read forward,
+// keeping its newest hits in a ring buffer. The scanned part is always a
+// suffix of the range: when the budget runs out inside a segment, that
+// segment's hits are discarded; a segment that can be split is retried as
+// two halves.
+func (s *searcher) descending(ctx context.Context, segments []segment, want, position int, c *cursor) ([]hit, error) {
 	var hits []hit
 	if position < 0 {
-		position = len(files) - 1
+		position = len(segments) - 1
 	}
-	for i := position; i >= 0; i-- {
+	// Segments newest first; the cursor applies to the first one.
+	pending := slices.Clone(segments[:position+1])
+	slices.Reverse(pending)
+	from, splits, discarded := c, 0, int64(0)
+	for len(pending) > 0 {
 		remaining := s.cfg.MaxScan - s.scanned
 		if s.searched == s.cfg.MaxFiles || remaining <= 0 {
 			s.limited = true
 			break
 		}
-		f := files[i]
-		file, err := f.open()
-		if err != nil {
-			return nil, err
-		}
-		end := int64(-1)
-		if c != nil && i == position {
-			end = c.Offset
-		}
-		start, partial := int64(0), false
-		if f.gz {
-			if gzipSize(file, f.size) > remaining {
-				file.Close()
-				s.limited = true
-				break
-			}
-		} else {
-			if start, _, err = seekSince(file, f.size, s.parser, s.since); err != nil {
-				file.Close()
-				return nil, err
-			}
-			stop := f.size
-			if end >= 0 {
-				stop = min(f.size, end+int64(s.cfg.MaxRecordBytes)+1)
-			} else if f.size-start > remaining {
-				stop, _ = seekAfter(file, f.size, s.parser, s.until)
-			}
-			if stop-start > remaining {
-				start, partial = stop-remaining, true
-			}
-		}
-		s.searched++
+		current := pending[0]
 		ring := newRing(max(want-len(hits), 0))
-		matchedBefore, firstBefore := s.matched, s.first
-		exceeded, err := s.scanFile(ctx, file, f, start, end, partial, func(r record) {
-			s.matchRecord(r, func() { ring.push(hit{f, r}) })
+		matchedBefore, firstBefore, scannedBefore := s.matched, s.first, s.scanned
+		stop, err := current.descend(ctx, s, from, remaining, func(h hit) {
+			s.matchRecord(h.record, func() { ring.push(h) })
 		})
-		file.Close()
 		if err != nil {
 			return nil, err
 		}
-		if exceeded {
+		if stop == scanExceeded {
 			s.matched, s.first = matchedBefore, firstBefore
+			if sp, ok := current.(splitter); ok && splits < maxSplits && discarded+s.scanned-scannedBefore <= 4*s.cfg.MaxScan {
+				if older, newer, ok := sp.split(); ok {
+					// scanned_bytes counts the segments whose hits are kept.
+					splits++
+					discarded += s.scanned - scannedBefore
+					s.scanned = scannedBefore
+					pending = append([]segment{newer, older}, pending[1:]...)
+					continue
+				}
+			}
 			s.limited = true
 			break
 		}
+		if stop == scanSkipped {
+			s.limited = true
+			break
+		}
+		pending, from = pending[1:], nil
 		hits = append(hits, ring.newestFirst()...)
-		if partial {
+		if stop == scanPartial {
 			s.limited = true
 			break
 		}
 	}
 	return hits, nil
+}
+
+func (f *logFile) ascend(ctx context.Context, s *searcher, c *cursor, emit func(hit)) (scanStop, error) {
+	file, err := f.open()
+	if err != nil {
+		return scanDone, err
+	}
+	defer file.Close()
+	s.searched++
+	start := int64(0)
+	if c != nil {
+		start = c.Offset
+	} else if !f.gz {
+		if start, _, err = seekSince(file, f.size, s.parser, s.since); err != nil {
+			return scanDone, err
+		}
+	}
+	exceeded, err := s.scanFile(ctx, file, f, start, -1, false, func(r record) { emit(hit{f, r}) })
+	if err != nil || !exceeded {
+		return scanDone, err
+	}
+	return scanExceeded, nil
+}
+
+func (f *logFile) descend(ctx context.Context, s *searcher, c *cursor, remaining int64, emit func(hit)) (scanStop, error) {
+	file, err := f.open()
+	if err != nil {
+		return scanDone, err
+	}
+	defer file.Close()
+	end := int64(-1)
+	if c != nil {
+		end = c.Offset
+	}
+	start, partial := int64(0), false
+	if f.gz {
+		if gzipSize(file, f.size) > remaining {
+			return scanSkipped, nil
+		}
+	} else {
+		if start, _, err = seekSince(file, f.size, s.parser, s.since); err != nil {
+			return scanDone, err
+		}
+		stop := f.size
+		if end >= 0 {
+			stop = min(f.size, end+int64(s.cfg.MaxRecordBytes)+1)
+		} else if f.size-start > remaining {
+			stop, _ = seekAfter(file, f.size, s.parser, s.until)
+		}
+		if stop-start > remaining {
+			start, partial = stop-remaining, true
+		}
+	}
+	s.searched++
+	exceeded, err := s.scanFile(ctx, file, f, start, end, partial, func(r record) { emit(hit{f, r}) })
+	switch {
+	case err != nil:
+		return scanDone, err
+	case exceeded:
+		return scanExceeded, nil
+	case partial:
+		return scanPartial, nil
+	}
+	return scanDone, nil
 }
 
 // ring keeps the last n hits pushed.
