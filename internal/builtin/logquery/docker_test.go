@@ -14,8 +14,8 @@ import (
 	"time"
 )
 
-// testImage is a local image; tests never pull.
-const testImage = "alpine:latest"
+// testImage is pinned by version and digest; docker run pulls it when missing.
+const testImage = "alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a"
 
 // realDocker uses the local Docker daemon at socket. Without one the test is
 // skipped, unless ALLOWOPS_REQUIRE_DOCKER=1.
@@ -48,7 +48,7 @@ func startContainer(t *testing.T, docker func(...string) string, extra []string,
 	suffix := make([]byte, 4)
 	rand.Read(suffix)
 	name := "allowops-logquery-" + hex.EncodeToString(suffix)
-	args := append([]string{"run", "-d", "--pull", "never", "--network", "none", "--name", name}, extra...)
+	args := append([]string{"run", "-d", "--pull", "missing", "--network", "none", "--name", name}, extra...)
 	docker(append(args, testImage, "sh", "-c", script)...)
 	t.Cleanup(func() { exec.Command("docker", "-H", "unix://"+dockerSocket, "rm", "-f", name).Run() })
 	return name
