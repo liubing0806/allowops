@@ -308,7 +308,10 @@ const groups = [
   ['服务与定时任务', [
     ['systemd_service_status', '服务状态（systemctl）', '直接'], ['journal_view_log', '服务日志片段（journalctl）', 'root'], ['journal_grep', '服务日志检索（journalctl）', 'root'], ['crontab_list', '允许账号的 crontab', 'root'], ['nginx_test_config', '检查 nginx 配置，不重载', 'root'], ['nginx_access_stats', 'nginx 访问日志统计（签名脚本）', 'root'], ['agent_upgrade', '从软件源升级 allowops-agent 并重启（签名脚本）', 'root', 1]]],
   ['文件与日志', [
-    ['file_list', '列出允许的目录（ls）', 'root'], ['file_view', '读文件开头，限行数（head）', 'root'], ['log_tail_file', '读日志末尾（tail）', 'root'], ['log_grep_file', '单个日志文件检索（grep）', 'root'], ['log_grep_fixed', '单个日志文件检索，限匹配数', 'root'], ['log_search_dir', '目录递归检索（grep）', 'root'], ['log_search', '日志检索，支持 .gz 与通配（builtin）', 'root'], ['file_find', '按名称查找文件，限深度', 'root']]],
+    ['file_list', '列出允许的目录（ls）', 'root'], ['file_view', '读文件开头，限行数（head）', 'root'], ['log_tail_file', '读日志末尾（tail）', 'root'], ['log_grep_file', '单个日志文件检索（grep）', 'root'], ['log_grep_fixed', '单个日志文件检索，限匹配数', 'root'], ['log_search_dir', '目录递归检索（grep）', 'root'], ['log_grep', '日志检索，支持 .gz 与通配（builtin）', 'root'], ['file_find', '按名称查找文件，限深度', 'root']]],
+  ['日志查询（builtin log_query）', [
+    ['log_sources', '命名日志源、文件数与时间范围', 'root'], ['log_search', '按时间范围检索日志源，JSON 分页', 'root'], ['log_stats', '按时间范围统计记录数与级别', 'root'], ['log_patterns', '把记录归并为模板并计数', 'root'], ['log_search_containers', '容器与 Pod 日志检索', 'root'], ['log_export', '按时间顺序导出记录', 'root']
+  ]],
   ['应用配置（脱敏）', [
     ['app_config_keys', '只输出键名', 'root'], ['app_config_view', '读配置文件开头，值脱敏', 'root'], ['docker_app_config_view', '容器内配置文件，值脱敏', 'root'], ['k8s_configmap_keys', 'ConfigMap 键名', 'root'], ['k8s_configmap_view', 'ConfigMap 内容，值脱敏', 'root'], ['docker_inspect_config', '镜像、挂载、环境变量名', 'root']]],
   ['Docker', [
@@ -337,7 +340,7 @@ groups.forEach(([title, items]) => {
 });
 const footY = Math.max(...colY) + 12;
 canvas('actions', footY + 50);
-heading('5', '首批支持的命令（examples/catalog，98 个 action：97 个只读，1 个危险）', '依据 examples/catalog/actions/ 与 docs/action-catalog-requirements.md。右侧标签为执行身份：“直接”= agent 以 allowops 用户执行；root、app = 经 allowops-exec 以该用户执行。');
+heading('5', '首批支持的命令（examples/catalog，104 个 action：103 个只读，1 个危险）', '依据 examples/catalog/actions/ 与 docs/action-catalog-requirements.md。右侧标签为执行身份：“直接”= agent 以 allowops 用户执行；root、app = 经 allowops-exec 以该用户执行。');
 groups.forEach(([title, items], i) => {
   const [x, y, gh] = place[i];
   box(x, y, gw4, gh, C.host, `${title}（${items.length}）`, [], { ts: 14.5 });
@@ -352,7 +355,7 @@ groups.forEach(([title, items], i) => {
     label(who, x + gw4 - tw / 2 - 12, yy + 1, { fs: 11, color: tc.title, align: 'center' });
   });
 });
-label('执行方式：exec 68 个，steps 1 个（host_snapshot），script 2 个（nginx_access_stats、agent_upgrade），builtin 27 个。', 30, footY, { fs: 12.5 });
+label('执行方式：exec 68 个，steps 1 个（host_snapshot），script 2 个（nginx_access_stats、agent_upgrade），builtin 33 个。', 30, footY, { fs: 12.5 });
 label('这是公开示例目录，只用通用名称和路径。公司自己的目录放在单独的私有仓库，按同样格式编写并签名后发布。', 30, footY + 22, { fs: 12.5, color: '#6b7280' });
 </script>
 </body>
