@@ -658,15 +658,17 @@ func (x *GetJobResponse) GetSummary() *JobSummary {
 // G39: previews require view_output. Concise samples at most two hostnames;
 // detailed includes as many as the response byte budget permits.
 type OutputGroup struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ExitCode      *int32                 `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
-	StdoutSha256  []byte                 `protobuf:"bytes,2,opt,name=stdout_sha256,json=stdoutSha256,proto3" json:"stdout_sha256,omitempty"`
-	StderrSha256  []byte                 `protobuf:"bytes,3,opt,name=stderr_sha256,json=stderrSha256,proto3" json:"stderr_sha256,omitempty"`
-	HostCount     uint64                 `protobuf:"varint,4,opt,name=host_count,json=hostCount,proto3" json:"host_count,omitempty"`
-	Hosts         []string               `protobuf:"bytes,5,rep,name=hosts,proto3" json:"hosts,omitempty"`
-	Stdout        string                 `protobuf:"bytes,6,opt,name=stdout,proto3" json:"stdout,omitempty"`
-	Stderr        string                 `protobuf:"bytes,7,opt,name=stderr,proto3" json:"stderr,omitempty"`
-	Truncated     bool                   `protobuf:"varint,8,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ExitCode     *int32                 `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
+	StdoutSha256 []byte                 `protobuf:"bytes,2,opt,name=stdout_sha256,json=stdoutSha256,proto3" json:"stdout_sha256,omitempty"`
+	StderrSha256 []byte                 `protobuf:"bytes,3,opt,name=stderr_sha256,json=stderrSha256,proto3" json:"stderr_sha256,omitempty"`
+	HostCount    uint64                 `protobuf:"varint,4,opt,name=host_count,json=hostCount,proto3" json:"host_count,omitempty"`
+	Hosts        []string               `protobuf:"bytes,5,rep,name=hosts,proto3" json:"hosts,omitempty"`
+	Stdout       string                 `protobuf:"bytes,6,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr       string                 `protobuf:"bytes,7,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	Truncated    bool                   `protobuf:"varint,8,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// ExecutionResult.reason shared by the group; empty for success or old agents.
+	Reason        string `protobuf:"bytes,9,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -755,6 +757,13 @@ func (x *OutputGroup) GetTruncated() bool {
 		return x.Truncated
 	}
 	return false
+}
+
+func (x *OutputGroup) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
 }
 
 type JobSummary struct {
@@ -1528,7 +1537,7 @@ const file_allowops_v1_job_proto_rawDesc = "" +
 	"\r_wait_seconds\"g\n" +
 	"\x0eGetJobResponse\x12\"\n" +
 	"\x03job\x18\x01 \x01(\v2\x10.allowops.v1.JobR\x03job\x121\n" +
-	"\asummary\x18\x02 \x01(\v2\x17.allowops.v1.JobSummaryR\asummary\"\x8a\x02\n" +
+	"\asummary\x18\x02 \x01(\v2\x17.allowops.v1.JobSummaryR\asummary\"\xa2\x02\n" +
 	"\vOutputGroup\x12 \n" +
 	"\texit_code\x18\x01 \x01(\x05H\x00R\bexitCode\x88\x01\x01\x12#\n" +
 	"\rstdout_sha256\x18\x02 \x01(\fR\fstdoutSha256\x12#\n" +
@@ -1538,7 +1547,8 @@ const file_allowops_v1_job_proto_rawDesc = "" +
 	"\x05hosts\x18\x05 \x03(\tR\x05hosts\x12\x16\n" +
 	"\x06stdout\x18\x06 \x01(\tR\x06stdout\x12\x16\n" +
 	"\x06stderr\x18\a \x01(\tR\x06stderr\x12\x1c\n" +
-	"\ttruncated\x18\b \x01(\bR\ttruncatedB\f\n" +
+	"\ttruncated\x18\b \x01(\bR\ttruncated\x12\x16\n" +
+	"\x06reason\x18\t \x01(\tR\x06reasonB\f\n" +
 	"\n" +
 	"_exit_code\"\xbe\x01\n" +
 	"\n" +

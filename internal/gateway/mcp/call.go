@@ -238,7 +238,7 @@ func jobArgument(args map[string]json.RawMessage) (string, error) {
 }
 
 func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *callState) (*ToolResult, error) {
-	args, err := fixedArguments(r.Params.Arguments, "job_id", "host", "wait_seconds", "response_format", "next_cursor", "stream", "offset", "step_index")
+	args, err := fixedArguments(r.Params.Arguments, "job_id", "host", "wait_seconds", "response_format", "next_cursor", "stream", "offset", "step_index", "encoding")
 	if err != nil {
 		return nil, err
 	}
@@ -267,8 +267,8 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 	if err = decodeField(args, "next_cursor", &cursor, false); err != nil {
 		return nil, invalidArguments(err)
 	}
-	if host == "" && (args["offset"] != nil || args["stream"] != nil) {
-		return nil, accessError(connect.CodeInvalidArgument, "offset and stream require host")
+	if host == "" && (args["offset"] != nil || args["stream"] != nil || args["encoding"] != nil) {
+		return nil, accessError(connect.CodeInvalidArgument, "offset, stream and encoding require host")
 	}
 	if host != "" && cursor != "" {
 		return nil, accessError(connect.CodeInvalidArgument, "host output uses offset; next_cursor is for summary pages")
@@ -276,6 +276,10 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 	stream := "stdout"
 	if decodeField(args, "stream", &stream, false) != nil || !slices.Contains([]string{"stdout", "stderr"}, stream) {
 		return nil, accessError(connect.CodeInvalidArgument, "stream allowed: stdout, stderr")
+	}
+	encoding := "base64"
+	if decodeField(args, "encoding", &encoding, false) != nil || !slices.Contains([]string{"base64", "text"}, encoding) {
+		return nil, accessError(connect.CodeInvalidArgument, "encoding allowed: base64, text")
 	}
 	offset := uint64(0)
 	if err = decodeField(args, "offset", &offset, false); err != nil {
@@ -308,7 +312,7 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 	if err != nil {
 		return nil, outputStepError(step, err)
 	}
-	return outputPageResult(id, host, outputStream, offset, output, step)
+	return outputPageResult(id, host, outputStream, offset, output, step, encoding == "text")
 }
 
 func (s *Service) listJobs(ctx context.Context, raw json.RawMessage) (*ToolResult, error) {

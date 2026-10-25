@@ -19,6 +19,22 @@ type summaryCursor struct {
 
 type summaryItem struct{ group, host, offline int }
 
+// reasonHints are gateway-owned texts for builtin reason codes (log search
+// design 6.7). Hosts send only the code; PATH_OUTSIDE_ROOTS has no hint.
+var reasonHints = map[string]string{
+	"SOURCE_UNKNOWN":     "The source name is not in the catalog; call log_sources to list available source names.",
+	"SOURCE_NO_FILES":    "The source's glob matched no files on this host; call log_sources to check its files.",
+	"SOURCE_UNSUPPORTED": "This host cannot read the source: the container log path is outside every mount and the storage driver is not overlay2, or the container's logging driver does not support reading.",
+	"SOURCE_UNAVAILABLE": "The source's container is not found or the Docker API is unreachable on this host; call log_sources to check the source status.",
+	"WINDOW_TOO_LARGE":   "until - since exceeds the source's max_window; narrow the time range.",
+	"TIME_INVALID":       "since/until must be RFC 3339 (2026-10-23T14:45:00+08:00) or a relative duration (30m, 2h), and since must be earlier than until.",
+	"TIMESTAMP_UNPARSED": "No timestamp could be parsed in files within the time range; retry without since/until, or check the source's timestamp.layouts.",
+	"PATTERN_INVALID":    "The pattern is not valid RE2 syntax; fix the regular expression or use a fixed-string match.",
+	"CURSOR_INVALID":     "The cursor does not match this source or request parameters; repeat the previous parameters unchanged or restart without cursor.",
+	"CURSOR_EXPIRED":     "The cursor's file was rotated away; restart without cursor, using the last record time as the new until (desc) or since (asc).",
+	"LEVEL_UNSUPPORTED":  "The source declares no level rule; omit level, or match the level text with pattern.",
+}
+
 // Slice already-authorized job-summary groups for transport (design G57, P6); never group tasks or
 // read additional job data. Detailed pages may continue the hosts of one group.
 func nativeSummaryResult(scope string, j *v1.Job, summary *v1.JobSummary, format, cursor string) (*ToolResult, error) {
@@ -179,6 +195,12 @@ func (p *summaryPage) groupPreview(source *v1.OutputGroup, previewLimit int) (ma
 	g := map[string]any{"host_count": source.HostCount, "stdout": stdout, "stderr": stderr, "truncated": source.Truncated || shortened}
 	if source.ExitCode != nil {
 		g["exit_code"] = *source.ExitCode
+	}
+	if source.Reason != "" {
+		g["reason"] = source.Reason
+		if hint := reasonHints[source.Reason]; hint != "" {
+			g["hint"] = hint
+		}
 	}
 	if p.format == "detailed" {
 		g["hosts"] = []string{}
