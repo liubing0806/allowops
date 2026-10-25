@@ -4,13 +4,15 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 97 个 action：96 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-23 起原 `log_search` 改名 `log_grep`，新的 `log_search` 和新增的 `log_sources`、`log_stats`、`log_patterns`、`log_search_containers`、`log_export` 使用内置 log_query 处理器；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 104 个 action：103 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-23 起原 `log_search` 改名 `log_grep`，新的 `log_search` 和新增的 `log_sources`、`log_stats`、`log_patterns`、`log_search_containers`、`log_export` 使用内置 log_query 处理器；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90；2026-10-23 新增上述 6 个 log_query action，2026-10-24 新增第 6 节 `prometheus_query` 的 6 个 action 和 `alertmanager_alerts` 的 1 个 action，90 + 6 + 7 = 103 个 risk: read）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
 `disk_usage_paths` 查询路径所在文件系统容量，`disk_dir_size` 统计目录文件大小，两者保留。`log_search_dir` 使用固定 grep 检索未压缩目录，`log_grep` 使用内置 log_search 处理器按路径通配检索普通和 gzip 文件，`log_sources`、`log_search`、`log_stats`、`log_patterns` 使用内置 log_query 处理器按目录中声明的日志源和时间范围列出、检索、统计和聚类（设计见 `log-search-design.md` 第 6、7 节），`log_search_containers` 检索容器标准输出、容器内日志文件和 Pod 日志，`log_export` 按时间顺序导出日志文本（第 8 节），均保留。第 20 节 D3 已取代第 18 节“压缩日志不在 MVP”的旧限制；本目录包含 gzip 日志检索需求，不使用 zgrep。
 
 内置处理器的正式参数和配置 schema（字段结构及校验规则）由 `internal/catalog/builtin.go` 和 `builtin_adapters.go` 定义。P12D 已实现 G30 的 Redis/MySQL 收紧配置，语义见 `builtin-config.md`（含 G31、G34）；四个示例已恢复命令、键前缀、分区和库范围限制。内置参数默认值的剩余缺口见第 4 节。目录校验不检查目标主机的工具、凭据文件或外部服务，不据此宣称这些环境可执行全部 action。
+
+第 6 节记录 `prometheus_query`、`alertmanager_alerts` 内置处理器需求。两者均已实现：`prometheus_query` 的 6 个 action 和 `alertmanager_alerts` 的 1 个 action 计入上述 98 个。
 
 ## 2. 目录与通用规则
 
@@ -125,6 +127,31 @@ script:
   file: scripts/agent_upgrade.sh
   interpreter: /bin/sh
 args: ['{version}']
+```
+
+### `alertmanager_alerts`
+
+只读查询 Alertmanager 的当前告警（`GET /api/v2/alerts`）。参数、配置、输出格式和实现细节见 6.3。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 配置 credential 时为 root，否则省略；示例未配置 credential |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 执行限制 | timeout=15s；max_output=64KB |
+| CentOS 7 | 使用 Go 内置 HTTP 客户端，不依赖 curl；未验证 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: alertmanager_alerts
+builtin_config:
+  address: http://127.0.0.1:9093
+  timeout: 10s
+  max_alerts: 100
+  max_response_bytes: 4MB
 ```
 
 ### `app_config_keys`
@@ -3218,7 +3245,7 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 
 ## 5. 本地示例检查
 
-`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 97 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 104 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
 
 配置脱敏冒烟在同一临时目录中把 app_config_view、app_config_keys 的 allowed_roots 改为临时配置目录，写入 properties、JSON、XML 形式的凭据和 PEM 私钥：断言 app_config_view 输出不含凭据值、match 过滤命中与否都以退出码 0 返回，app_config_keys 只输出键名且不输出 PEM 内容。该检查依赖本机 grep 支持 -P 和 head。
 
@@ -3236,3 +3263,220 @@ make test lint
 ```
 
 本机依赖缓存只读时，可把 GOCACHE 和 STATICCHECK_CACHE 指向 /tmp 下的任务目录，并用已有模块下载缓存的 file:// 路径作为 GOPROXY。本节点的命令、被验证的提交 SHA、公开示例敏感字面值检查与剩余待确认项随交付报告提供。
+
+## 6. 待实现的内置处理器：Prometheus 与 Alertmanager
+
+状态：2026-10-23 需求已确认，2026-10-24 两个处理器均已实现。`prometheus_query`（6.2）：处理器提交 `f10ecff`，目录接入提交 `eb32cc8`，示例 YAML 为 `examples/catalog/actions/prometheus_*.yaml` 共 6 个；实现中确定的细节见 6.5。`alertmanager_alerts`（6.3）：示例 YAML 为 `examples/catalog/actions/alertmanager_alerts.yaml`。共 7 个 action，计入第 1 节的 98 个。
+
+### 6.1 范围与决定
+
+- 目的：让 AI agent 通过签名 action 只读查询客户已有的 Prometheus 和 Alertmanager，先定位异常的主机、服务和开始时间，再用第 3 节的主机 action 诊断原因。
+- allowops 不采集、不存储客户指标，不替代客户的监控体系。
+- 网关自身的 Prometheus 指标（`design.md` 第 3 节的选型）暂缓实现。网关继续提供 `/health/live`、`/health/ready`。
+- 查询由能访问客户 Prometheus/Alertmanager 的主机上的 agent 执行。网关不直接连接客户内网服务，执行路径与其他 action 相同。
+- 授权粒度：ABAC 判定的是执行 action 的主机，不是查询结果涉及的主机。一条 PromQL（Prometheus 查询语言）能读取该 Prometheus 账号可见的全部指标。第一阶段把每个 Prometheus/Alertmanager 当作一个整体数据源授权：给执行这些 action 的主机设置专用授权标签，为其单独编写策略规则。按主机限制查询范围见 6.4 第 2 项。
+- 实现之前的临时用法：现有 `http_get` 可以查询不需要认证的 Prometheus，例如 `allowed_prefixes: ['http://127.0.0.1:9090/api/v1/query']`，URL 参数携带 `?query=...`。依据：`internal/params/url.go` 的 `ParseURL` 只禁止前缀带查询串。限制：请求头只能写在签名目录中，需要 Bearer token 的 Prometheus 不应使用这种方式；响应体上限 64KB，没有序列数和数据点数限制，输出是原始 JSON。PromQL 编码后的查询串能否通过 `NormalizeURL` 的全部检查未做端到端验证。
+
+### 6.2 `prometheus_query`
+
+只读查询 Prometheus HTTP API v1。每个 action 通过 `builtin_config.api` 固定一个接口，处理器的 `Parameters` 按 api 返回对应的参数定义（与 `redisHandler.Parameters` 按配置收紧枚举的方式相同）。
+
+| api | 请求路径 | 用途 |
+|---|---|---|
+| `query` | `/api/v1/query` | 单个时间点的 PromQL 查询 |
+| `query_range` | `/api/v1/query_range` | 时间范围的 PromQL 查询 |
+| `series` | `/api/v1/series` | 按匹配器列出序列 |
+| `labels` | `/api/v1/labels` | 列出标签名 |
+| `label_values` | `/api/v1/label/<label>/values` | 列出标签值；`label=__name__` 列出指标名 |
+| `alerts` | `/api/v1/alerts` | 该 Prometheus 当前的告警 |
+| `rules` | `/api/v1/rules` | 告警规则和记录规则及其健康状态 |
+| `targets` | `/api/v1/targets` | 抓取目标及其健康状态 |
+
+- 处理器只请求上表路径。不请求 `/api/v1/admin/*`、`/api/v1/status/*`、`/api/v1/write`、`/federate`、`/-/reload`、`/-/quit`。`/api/v1/status/config` 会返回包含凭据的抓取配置，因此不支持。
+- 只发 GET，不跟随跳转，不使用代理。
+- `targets` 输出抓取地址和最近的抓取错误，会暴露内网地址；目录评审时单独决定是否提供。
+
+参数（处理器提供；YAML `params` 只能收紧正则或长度）：
+
+| 名称 | 类型 | 适用 api | 约束 | 用途 |
+|---|---|---|---|---|
+| `query` | string | query、query_range | 单行，`max_len: 2000`；必填。通用 string 检查拒绝以 `-` 开头的值，取负需写成 `0 - expr` 等形式 | PromQL 表达式 |
+| `time` | string | query | 时间格式见下文；可选，省略时为 `now` | 查询时间点 |
+| `start` | string | query_range、series、labels、label_values | 时间格式见下文；query_range 必填，其他可选，省略时为 `now-1h` | 起始时间 |
+| `end` | string | 同 `start` | 时间格式见下文；可选，省略时为 `now` | 结束时间 |
+| `step` | duration | query_range | 不小于 `min_step`；可选，省略时按 `max_points` 计算 | 采样间隔 |
+| `match` | string_array | series、labels、label_values | `max_items: 10`，每项 `max_len: 500`；series 必填，其他可选 | 序列选择器，例如 `up{job="api"}` |
+| `label` | string | label_values | `regex: ^[a-zA-Z_][a-zA-Z0-9_]*$`；必填 | 标签名 |
+| `summary` | bool | query_range | 可选，处理器默认 false | true 时每条序列只输出 min、avg、max、last，不输出逐点数据 |
+| `rule_type` | enum | rules | `alert`、`record`；可选 | 规则类型 |
+
+- 时间格式：`now`、`now-<整数><s|m|h|d>`，或 UTC 的 RFC 3339 时间（例如 `2026-10-23T03:12:00Z`）。主机按本机时钟解析 `now`，并在输出首行写出解析后的绝对时间。
+- `internal/params` 不支持跨参数约束。`start` 早于 `end`、范围不超过 `max_range`、点数不超过 `max_points` 由处理器检查，不满足时拒绝执行。
+
+`builtin_config`（只能收紧）：
+
+| 字段 | 默认值 / 上限 | 说明 |
+|---|---|---|
+| `api` | 必填 | 6.2 第一张表中的一个值 |
+| `address` | 必填 | http(s) 基础地址，可含反向代理路径前缀；按 `NormalizeURL` 规范化；拒绝用户信息、查询串、片段 |
+| `credential` | 可选 | 主机上 root 属主、0600 的 JSON 文件，最大 16KB；字段为 `bearer_token`，或 `username` 与 `password`，两种方式二选一。读取方式与 Redis/MySQL 凭据相同。配置 credential 的 action 须声明 `run_as: root`，由 allowops-exec 执行 |
+| `ca_file` | 可选 | PEM 格式 CA 文件的绝对路径。不提供跳过证书校验的选项 |
+| `timeout` | 10s / 30s | 客户端超时；同时作为 Prometheus 的 `timeout` 参数发送，让服务端停止超时的查询 |
+| `max_range` | 24h / 7d | `end - start` 的上限 |
+| `min_step` | 15s | `step` 的下限 |
+| `max_points` | 300 / 11000 | 每条序列的点数上限。11000 是 Prometheus 对 query_range 的服务端上限 |
+| `max_series` | 50 / 1000 | 返回的序列数、标签数或规则数上限，超出部分丢弃并标记截断 |
+| `max_response_bytes` | 4MB / 16MB | Prometheus 原始响应体上限，超出时停止读取并返回错误 |
+
+- series、labels、label_values 请求附带 `limit=max_series+1`，减少服务端返回量。该参数要求的最低 Prometheus 版本未核实，已在 v3.14.0 上验证有效；服务端不支持时由处理器在本地截断。
+
+输出（转为 TSV，降低 AI 的 token 消耗；先脱敏，再按 filters 过滤）：
+
+- 首行：`# api=<api> start=<UTC> end=<UTC> step=<间隔>`，各 api 只写适用的字段。
+- 标签集按 Prometheus 写法输出，标签名按字典序排列，例如 `up{instance="10.0.0.5:9100",job="node"}`。时间为 UTC 的 RFC 3339 秒级时间。值保留 Prometheus 返回的字符串，包括 `NaN`、`+Inf`。
+- 字段中的制表符、换行、回车和反斜线按反斜线转义，与 `mysql_query` 相同。
+
+| api | 每行字段 |
+|---|---|
+| query（vector） | 标签集、时间、值 |
+| query（scalar、string） | 时间、值 |
+| query（matrix，查询使用了范围选择器） | 标签集、时间、值，每个点一行 |
+| query_range | 标签集、时间、值，每个点一行；`summary=true` 时为标签集、min、avg、max、last |
+| series | 标签集 |
+| labels、label_values | 名称或值 |
+| alerts | alertname、state、active_at、value、标签集、annotations.summary |
+| rules | group、type、name、health、state、last_error、query |
+| targets | job、instance、health、last_scrape、last_error、scrape_url |
+
+- Prometheus 返回 `warnings` 时，每条写一行 `warning: ...` 到 stderr，退出码不变。
+- Prometheus 返回 `status: error` 或非 2xx 状态码时，退出码 1，stderr 写出 `errorType` 和 `error`。
+- 超出 `max_series` 时标记 truncated 和 resource_limit_reached，stderr 写出总数和返回数。
+- 原生直方图样本第一版只输出 count 和 sum，见 6.4 第 4 项。
+
+action 需求：
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 配置 credential 时为 root；否则省略 |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 执行限制 | timeout=15s；max_output=64KB |
+| CentOS 7 | 使用 Go 内置 HTTP 客户端，不依赖 curl；未验证 |
+| 兼容目标 | Prometheus 2.x、3.x 的 HTTP API v1；Thanos Query、VictoriaMetrics、Grafana Mimir 未验证 |
+
+计划提供的 action：
+
+| action | api | 说明 |
+|---|---|---|
+| `prometheus_query` | query | 单个时间点的查询 |
+| `prometheus_query_range` | query_range | 时间范围查询，配合 `summary` 使用 |
+| `prometheus_series` | series | 查找序列 |
+| `prometheus_label_values` | label_values | 查找标签值和指标名 |
+| `prometheus_alerts` | alerts | 单个 Prometheus 的当前告警 |
+| `prometheus_rules` | rules | 规则健康状态和最近错误 |
+
+示例（`examples/catalog/actions/prometheus_query_range.yaml` 与此一致，另有一行用法注释）：
+
+```yaml
+name: prometheus_query_range
+description: Run a bounded read-only PromQL range query against the configured Prometheus.
+risk: read
+run_as: root
+params: {}
+builtin: prometheus_query
+builtin_config:
+  api: query_range
+  address: http://127.0.0.1:9090
+  credential: /etc/allowops/credentials/prometheus-main.json
+  timeout: 10s
+  max_range: 24h
+  min_step: 15s
+  max_points: 300
+  max_series: 50
+  max_response_bytes: 4MB
+timeout: 15s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+redact:
+  builtin: [secrets, pii]
+```
+
+### 6.3 `alertmanager_alerts`
+
+只读查询 Alertmanager 当前的告警，只请求 `GET /api/v2/alerts`。
+
+- 与 `prometheus_alerts` 的区别：Alertmanager 汇总多个 Prometheus 的告警，去重后带有静默和抑制状态；`prometheus_alerts` 只包含单个 Prometheus 的告警。
+- 不发送 POST、DELETE，不访问 `/api/v2/silences`、`/api/v2/status`，不创建或修改静默。
+- 不支持 `/api/v1/*`。Alertmanager 0.27.0 起移除了 v1 API。依据：官方 CHANGELOG 的 0.27.0 / 2024-02-28 条目“[CHANGE] API: Removal of all `api/v1/` endpoints.”；2026-10-23 在本机用 `prom/alertmanager:v0.26.0` 和 `v0.27.0` 镜像各启动一次，`GET /api/v1/alerts` 分别返回 200 和 410，`GET /api/v2/alerts` 均返回 200。0.26.0 及更早版本仍提供 v2 API，可用；v1 API 的启用情况不影响本处理器。
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途 |
+|---|---|---|---|
+| `filter` | string_array | `max_items: 10`，每项 `max_len: 256`；可选 | Alertmanager 匹配器，例如 `alertname="HighLatency"`、`severity=~"critical\|warning"` |
+| `active` | bool | 可选，处理器默认 true | 包含活动告警 |
+| `silenced` | bool | 可选，处理器默认 false | 包含被静默的告警 |
+| `inhibited` | bool | 可选，处理器默认 false | 包含被抑制的告警 |
+
+`builtin_config`：`address`、`credential`、`ca_file` 与 `prometheus_query` 相同；`timeout` 默认 10s、上限 30s；`max_alerts` 默认 100、上限 1000；`max_response_bytes` 默认 4MB、上限 16MB。
+
+输出：按 `starts_at` 升序，每条告警一行，字段转义规则与 6.2 相同。
+
+| 字段 | 来源 |
+|---|---|
+| starts_at | `startsAt` |
+| state | `status.state`：active、suppressed、unprocessed |
+| alertname | `labels.alertname` |
+| severity | `labels.severity`，没有时为空 |
+| labels | 其余标签，按 Prometheus 标签集写法 |
+| summary | `annotations.summary` |
+| description | `annotations.description` |
+| silenced_by、inhibited_by | `status.silencedBy`、`status.inhibitedBy` |
+| expr | 从 `generatorURL` 的 `g0.expr` 参数解码出的 PromQL，没有时为空 |
+
+- `expr` 让 AI 可以直接把触发告警的表达式交给 `prometheus_query_range` 继续查询。
+- action 需求表与 6.2 相同；action 名为 `alertmanager_alerts`。
+
+实现状态与细节（2026-10-23，处理器 `internal/builtin/alertmanager` 在提交 `5c1ac5b`，目录接入 `internal/catalog/builtin_alertmanager.go` 在提交 `7914507`，均位于分支 `claude/prom-s2-alertmanager-3dd321`）：
+
+- 已实现。处理器经共享客户端 `internal/builtin/apiclient` 请求，凭据、CA、跳转和响应体上限按该包的规则处理。
+- 参数映射：`active`、`silenced`、`inhibited` 总是以 `true`/`false` 发送；`filter` 每项一个 `filter` 查询参数。不发送 `unprocessed`，沿用 Alertmanager 默认值（包含 unprocessed 状态的告警）。
+- 输出每行 10 个字段，顺序同上表，无表头；列顺序写在示例 YAML 的注释中。没有告警时输出为空，退出码 0。字段内容先经脱敏再转义；`labels` 字段逐个 `名称="值"` 脱敏后再拼接，避免一个标签触发行尾规则而吞掉其后的标签；转义规则同 `mysql_query`（`\`、制表符、换行、回车、NUL）。
+- `starts_at` 转为 UTC 的 RFC 3339 秒级时间，无法解析时保留原文。排序键为 `startsAt`，相同时按 `fingerprint`；`startsAt` 无法解析的告警排在所有合法时间之后（超过 `max_alerts` 时最先被丢弃），它们之间按原文排序。
+- `labels` 为去掉 `alertname`、`severity` 的标签集，按名称的字节序排列，值中的 `\`、换行、`"` 按 Prometheus 写法转义；不符合 `[a-zA-Z_][a-zA-Z0-9_]*` 的标签名加引号；没有其余标签时为 `{}`。
+- `expr` 取 `generatorURL` 查询串中第一个 `g0.expr` 并做 URL 解码（`+` 解码为空格）；`generatorURL` 缺失、无法解析、没有 `g0.expr` 或其值编码错误时为空。其他参数的编码错误不影响 `g0.expr`。
+- 响应体按元素逐个解码，只保留 `starts_at` 最早的 `max_alerts` 条，其余只计数，解码内存不随告警数增长。超过 `max_alerts` 时保留这些告警，标记 truncated 和 resource_limit_reached，stderr 写出 `truncated: returned N of M alerts (max_alerts=K)`。
+- 非 2xx 状态码：退出码 1，stdout 为空，stderr 为 `alertmanager returned HTTP <状态码> <状态文本>: <响应体前 512 字节，控制字符替换为空格>`。跳转、响应体超过 `max_response_bytes`、连接失败、超时、响应不是 JSON 数组按执行错误返回。
+- `credential` 与 `run_as`：目录校验时，配置了 `credential` 而 `run_as` 不是 `root` 的 action 被拒绝。未配置 `credential` 的 action 不要求 `run_as`，由 agent 直接执行。
+- 验证：`internal/builtin/alertmanager` 的单元测试用 httptest 覆盖参数映射、排序、转义、`expr`、截断和错误响应；集成测试用 testcontainers 启动 `prom/alertmanager:v0.34.1`，通过其 API 写入 3 条告警和 1 条静默（仅夹具写入，处理器只发 GET），验证 active/silenced 过滤、matcher、截断和 400/404 错误。Docker 不可用时集成测试 `t.Skip`。
+
+### 6.4 待确认项
+
+1. **PromQL 内部的时间范围（待确认）**：`max_range`、`max_points` 只约束请求参数。PromQL 中的范围选择器（`[30d]`）、子查询（`[30d:1m]`）和 `offset` 可以读取更长时间的数据，只受 `timeout` 和 Prometheus 服务端的 `--query.max-samples` 限制。第一版已实现为不解析 PromQL，依赖 `timeout`（同时作为 Prometheus 的 `timeout` 参数发送）和服务端限制；在 v3.14.0 上，覆盖全部序列的 `[1h:1ms]` 子查询在 1 秒超时内以 `errorType=timeout` 或客户端超时失败。是否引入 PromQL 解析器检查这些写法，参照 `builtin-mysql.md` 比较依赖体积后决定。
+2. **按主机限制查询范围（第一阶段不做）**：需要解析 PromQL，并在每个序列选择器上强制注入标签匹配器，把查询限制在策略允许的主机上。有客户提出需求时再评估。
+3. **兼容性与多租户请求头（未验证）**：Thanos Query、VictoriaMetrics、Grafana Mimir 的 API 兼容程度未验证。Mimir 需要 `X-Scope-OrgID` 请求头；第一版不提供自定义请求头。
+4. **原生直方图（第一版结论）**：每个直方图样本一行，值列写 `count=<count> sum=<sum>`，不输出桶；完整输出格式仍待确认。使用 httptest 响应验证，未在含原生直方图的 Prometheus 上验证。
+5. **DNS 解析后的地址检查**：与第 4 节第 3 项 `http_get` 的待确认项相同，按同一结论处理。`apiclient` 与 `http_get` 同样只对地址文本做 `NormalizeURL` 检查，不检查解析后的 IP。
+6. **实现时的验收**：增加示例 YAML 并更新第 1 节和第 5 节的 action 数量；参照 `builtin-mysql.md`，在本机 Docker 可用时用 testcontainers 启动 Prometheus 和 Alertmanager 验证查询、超时、截断和错误返回，Docker 不可用时明确跳过。`prometheus_query` 部分已完成（见 6.5），Alertmanager 部分待 `alertmanager_alerts` 实现。
+
+### 6.5 `prometheus_query` 实现说明
+
+以下是实现中对 6.2 未规定或有歧义之处的取舍。
+
+- 首行：`query` 写 `# api=query time=<UTC>`；`query_range` 写 `start`、`end`、`step`（如 `step=60s`）；`series`、`labels`、`label_values` 写 `start`、`end`；`alerts`、`rules`、`targets` 只写 `api`。首行不经过脱敏。
+- 请求参数：`query`、`query_range` 发送 `timeout`（秒，如 `10`、`2.5`）；`series`、`labels`、`label_values` 发送 `limit=max_series+1`，不发送 `timeout`；`rules` 发送 `exclude_alerts=true`，有 `rule_type` 时发送 `type=alert|record`；`targets` 发送 `state=active`，只输出 `activeTargets`。时间以 UTC RFC 3339 发送。
+- 时间：`now` 取整到秒；`now-<n><s|m|h|d>` 的 n 为 1 到 6 位整数且偏移不超过 100 年；绝对时间只接受 `YYYY-MM-DDTHH:MM:SSZ`，拒绝时区偏移和小数秒。
+- 默认起点：`start` 省略时为 `end` 之前 `min(1h, max_range)`。`max_range` 小于 1 小时时，规格的 `now-1h` 会使省略 `start` 的请求必然超出 `max_range`。
+- 显式给出的 `step` 为 `0s` 时拒绝（小于 `min_step`），不按省略处理。
+- `step` 省略时为 `ceil(范围秒数 / (max_points - 1))` 秒，不小于 `min_step`；点数按 `floor(范围 / step) + 1` 与 `max_points` 比较。`max_points` 不得小于 2，`min_step` 只能不小于 15s。`step` 参数的上限为 168h。
+- `max_series` 同样限制 `alerts`、`rules`、`targets` 的输出行数。超出时 stderr 写 `truncated: returned N of M results (max_series)`；`series`、`labels`、`label_values` 的总数受服务端 `limit` 影响，写 `returned N of at least M results (max_series)`。
+- `alerts` 的标签集列输出完整标签集（含 `alertname`）；`value` 保留 Prometheus 返回的字符串（如 `1e+00`）；`active_at`、`last_scrape` 转换为 UTC 秒级时间。`targets` 的 `job` 缺失时用 `scrapePool`。
+- `summary=true`：`min`、`avg`、`max` 不含 NaN 样本，`last` 保留最后一个样本的原始字符串；全部为 NaN 时四列均为 `NaN`；仅有原生直方图样本时前三列为空。
+- 脱敏：只有文本单元格经过 executor 的脱敏函数，之后做 TSV 转义；数值和时间列不脱敏（样本值、`summary` 的 min/avg/max/last、`alerts` 的 value，以及全部时间列），否则 11 位整数值会被 pii 规则当作手机号替换。不符合数字写法的样本值，以及 `resultType=string` 的值，仍然脱敏。标签集逐个 `name="value"` 脱敏后再拼接，指标名单独脱敏，使一个标签触发的“到行尾”规则不会吞掉后面的标签；同一序列的标签集只构造和脱敏一次。`label_values` 的每个值以 `<label>="<value>"` 交给脱敏函数，被替换时输出脱敏后的整段，否则输出原值。`mysql_query` 对整行做的第二遍脱敏在这里不做。
+- 名称写法（Prometheus 3）：标签名不匹配 `^[a-zA-Z_][a-zA-Z0-9_]*$` 时加双引号；指标名不匹配 `^[a-zA-Z_:][a-zA-Z0-9_:]*$` 时放进花括号首位并加引号，例如 `{"http.server.duration","service.name"="x"}`。与 `alertmanager_alerts` 的标签名写法一致。
+- 输出上限：格式化后的输出不超过 `max_response_bytes`（range 查询的每一行都重复标签集，输出可大于原始响应）。超出时在整行边界停止，标记 truncated 和 resource_limit_reached，stderr 写 `truncated: output reached max_response_bytes (N)`。依据：`http_get`、`redis_command` 同样把该字段作为资源上限并标记 resource_limit_reached；executor 的 `max_scan`（默认 256MB）对处理器不可见，不能作为处理器上限。每个结果循环在处理下一项前检查 context，超时或取消后不再继续格式化。
+- 错误：Prometheus 返回 `status: error`、非 2xx 或非 JSON 响应时，退出码 1，stderr 写 `error: HTTP <状态码> errorType=<类型> error=<信息>`，不复制非 JSON 响应体。重定向、响应体超过 `max_response_bytes` 和网络错误作为处理器错误返回，退出码 1。`warnings` 每条写一行 `warning: ...`，不改变退出码，也不输出 `infos`。
+- run_as：配置 `credential` 时目录校验要求 `run_as` 恰为 `root`（目录校验通过 `ActionBuiltinValidator` 接口，由处理器实现）。未配置 `credential` 时 `run_as` 可省略，此时 action 由 agent 用户直接执行，与 `http_get` 相同；与 `mysql_query`、`redis_command` 不同，后者即使省略 `run_as` 也经 allowops-exec 以 root 执行。
+- 集成测试：`internal/builtin/prometheus/integration_test.go` 用 testcontainers 启动 `prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0`，抓取自身（`127.0.0.1:9090`）并加载一条告警规则和一条记录规则。写法与 PostgreSQL、MySQL 测试一致：默认 bridge 网络、启用 Ryuk，端口只发布到 127.0.0.1 并通过 testcontainers 读取映射端口。Docker 不可用时 `t.Skip`。

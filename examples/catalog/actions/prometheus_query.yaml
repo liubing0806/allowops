@@ -1,0 +1,19 @@
+# Instant query usage: query="up{job=\"api\"}", optional time=now-5m.
+name: prometheus_query
+description: Run a read-only PromQL instant query against the configured Prometheus.
+risk: read
+run_as: root
+params: {}
+builtin: prometheus_query
+builtin_config:
+  api: query
+  address: http://127.0.0.1:9090
+  credential: /etc/allowops/credentials/prometheus-main.json
+  timeout: 10s
+  max_series: 50
+  max_response_bytes: 4MB
+timeout: 15s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+redact:
+  builtin: [secrets, pii]

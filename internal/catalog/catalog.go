@@ -373,6 +373,11 @@ func validateBody(a Action, defs map[string]params.Definition, unknownBuiltin bo
 		if err := Builtins[a.Builtin].ValidateConfig(a.BuiltinConfig); err != nil {
 			return err
 		}
+		if validator, ok := Builtins[a.Builtin].(ActionBuiltinValidator); ok {
+			if err := validator.ValidateActionFields(a); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
