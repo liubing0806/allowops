@@ -687,6 +687,13 @@ export type OutputGroupJson = {
    * @generated from field: bool truncated = 8;
    */
   truncated?: boolean;
+
+  /**
+   * ExecutionResult.reason shared by the group; empty for success or old agents.
+   *
+   * @generated from field: string reason = 9;
+   */
+  reason?: string;
 };
 
 /**
