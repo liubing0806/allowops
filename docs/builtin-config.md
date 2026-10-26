@@ -131,6 +131,22 @@ DESCRIBE 内部的 ShowColumns 不受 `show_types` 限制，DESCRIBE 有独立�
 `statement_types` 与 `show_types` 取交集：配置 `show_types` 不会自动允许 SHOW。
 `address` 只接受 `tcp://host:port`。其余规则和默认值见 [builtin-starrocks.md](builtin-starrocks.md)。
 
+## dremio_query
+
+Dremio 没有权限边界，`builtin_config` 没有 `databases` 之类限制读取范围的字段，也没有 `context` 参数。词法校验是 Dremio 一侧唯一的写入限制，范围见 `builtin-dremio.md` 的“安全边界”。
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `url` | 必填，`http://host:port` 或 `https://host:port`，不含用户信息、路径、查询和片段 |
+| `credential` | 必填，绝对路径，root 属主、0600 的 JSON 文件 |
+| `max_rows` | 0 到 500，省略为 500；Dremio 单次最多返回 500 行，因此是一页 |
+| `max_bytes` | 0 到 1 MiB，省略为 1 MiB；TSV 文本字节数，表头计入 |
+| `timeout` | 1ms 到 10s，省略为 10s |
+| `statement_types` | SELECT、SHOW、DESCRIBE、EXPLAIN 的非空子集；省略时允许全部。EXPLAIN 的目标语句也必须满足该限制（与 G31 相同），`EXPLAIN PLAN FOR SELECT ...` 需要同时列出 EXPLAIN 和 SELECT |
+| `show_types` | SCHEMAS、TABLES、VIEWS、PARTITIONS、FILES、CREATE TABLE、FUNCTIONS 的非空子集；省略时允许全部 |
+
+未知字段（包括 `address`、`databases`、`context`、`ca_file`）、`null`、空列表和非法成员均报错。收紧项只能在词法校验接受的范围内再缩小，不能放宽校验。动作参数只有 `sql`，最长 4000 字符。
+
 ## 本地目录校验配置
 
 以下 builtin_config 可用于两个独立 action。配置不包含凭据内容；目录校验不读取凭据或连接服务。
@@ -174,4 +190,16 @@ builtin_config:
   timeout: 10s
   statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
   show_types: [DATABASES, TABLES, COLUMNS, CREATE TABLE]
+```
+
+```yaml
+# builtin: dremio_query
+builtin_config:
+  url: http://127.0.0.1:9047
+  credential: /etc/allowops/credentials/dremio.json
+  max_rows: 500
+  max_bytes: 1MB
+  timeout: 10s
+  statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
+  show_types: [SCHEMAS, TABLES, VIEWS, PARTITIONS, FILES, CREATE TABLE, FUNCTIONS]
 ```

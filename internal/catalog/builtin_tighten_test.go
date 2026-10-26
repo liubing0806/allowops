@@ -24,6 +24,8 @@ func TestBuiltinConfigRestrictionLists(t *testing.T) {
 		{"starrocks_query", "show_types", []string{"TABLES", "DATABASES", "CREATE TABLE", "COLUMNS", "PARTITIONS"}, []string{"SELECT"}, "TABLES"},
 		// SHOW PROFILELIST belongs to a different handler and cannot be enabled.
 		{"starrocks_query", "show_types", []string{"TABLES"}, []string{"PROFILELIST"}, "PROFILELIST"},
+		{"dremio_query", "statement_types", []string{"SELECT", "SHOW", "DESCRIBE", "EXPLAIN"}, []string{"DELETE"}, "SELECT"},
+		{"dremio_query", "show_types", []string{"SCHEMAS", "TABLES", "VIEWS", "PARTITIONS", "FILES", "CREATE TABLE", "FUNCTIONS"}, []string{"DATABASES"}, "SCHEMAS"},
 	} {
 		t.Run(tc.builtin+"/"+tc.field, func(t *testing.T) {
 			a := registeredBuiltinAction(tc.builtin)
@@ -104,6 +106,9 @@ func TestBuiltinRunAppliesRestrictions(t *testing.T) {
 		{"starrocks_query", "statement_types", []string{"SHOW"}, map[string]any{"database": "fixture", "sql": "SELECT 1"}},
 		{"starrocks_query", "statement_types", []string{"EXPLAIN"}, map[string]any{"sql": "EXPLAIN SELECT 1"}},
 		{"starrocks_query", "show_types", []string{"TABLES"}, map[string]any{"database": "fixture", "sql": "SHOW DATABASES"}},
+		{"dremio_query", "statement_types", []string{"SHOW"}, map[string]any{"sql": "SELECT 1"}},
+		{"dremio_query", "statement_types", []string{"EXPLAIN"}, map[string]any{"sql": "EXPLAIN PLAN FOR SELECT 1"}},
+		{"dremio_query", "show_types", []string{"TABLES"}, map[string]any{"sql": "SHOW SCHEMAS"}},
 	} {
 		t.Run(tc.builtin+"/"+tc.field, func(t *testing.T) {
 			a := registeredBuiltinAction(tc.builtin)
@@ -172,6 +177,63 @@ func TestStarRocksQueryConfigFields(t *testing.T) {
 		{"databases", []string{"demo"}, false}, {"catalogs", []string{"default_catalog"}, false},
 	} {
 		a := registeredBuiltinAction("starrocks_query")
+		a.BuiltinConfig[tc.field] = tc.value
+		_, err := ValidateAction(a)
+		if tc.valid && err != nil || !tc.valid && err == nil {
+			t.Errorf("%s=%v: %v", tc.field, tc.value, err)
+		}
+	}
+}
+
+// The configuration tightens the handler; it never turns on what the guard
+// refuses, and the SQL is checked before the credential is read. Nothing here
+// reaches the network: the credential file does not exist.
+func TestDremioQueryRunChecksSQLBeforeCredential(t *testing.T) {
+	a := registeredBuiltinAction("dremio_query")
+	for _, tc := range []struct {
+		name   string
+		sql    string
+		reject string // empty: reaches the credential file
+	}{
+		{"select", `SELECT 1`, ""},
+		{"explain plan", `EXPLAIN PLAN FOR SELECT 1`, ""},
+		{"show", `SHOW SCHEMAS`, ""},
+		{"external_query", `SELECT * FROM TABLE(src.external_query('SELECT 1'))`, "sqlguard"},
+		{"external_query in explain", `EXPLAIN PLAN FOR SELECT * FROM TABLE(src.external_query('INSERT INTO t VALUES (1)'))`, "sqlguard"},
+		{"create view", `CREATE VIEW v AS SELECT 1`, "sqlguard"},
+		{"truncate", `TRUNCATE TABLE t`, "sqlguard"},
+		{"alter system", `ALTER SYSTEM SET "planner.slice_target" = 1`, "sqlguard"},
+		{"multiple statements", `SELECT 1; SELECT 2`, "sqlguard"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := Builtins["dremio_query"].Run(context.Background(), a.BuiltinConfig, map[string]any{"sql": tc.sql})
+			if result.ExitCode != 1 || err == nil {
+				t.Fatalf("%+v, %v", result, err)
+			}
+			if tc.reject == "" && !strings.Contains(err.Error(), "cannot open credential file") || tc.reject != "" && !strings.Contains(err.Error(), tc.reject) {
+				t.Fatalf("got %v; want %q", err, tc.reject)
+			}
+		})
+	}
+}
+
+func TestDremioQueryConfigFields(t *testing.T) {
+	for _, tc := range []struct {
+		field string
+		value any
+		valid bool
+	}{
+		{"max_rows", 500, true}, {"max_rows", "many", false}, {"max_rows", -1, false}, {"max_rows", 501, false},
+		{"max_bytes", "512KB", true}, {"max_bytes", 1048576, true}, {"max_bytes", "2MB", false}, {"max_bytes", "x", false},
+		{"timeout", "5s", true}, {"timeout", "11s", false}, {"timeout", 5, false},
+		{"credential", "relative", false},
+		{"url", "https://dremio.example.com:9047", true}, {"url", "http://127.0.0.1", false}, {"url", "http://127.0.0.1:9047/api", false},
+		{"url", "127.0.0.1:9047", false}, {"url", "tcp://127.0.0.1:9047", false}, {"url", "http://user:pw@127.0.0.1:9047", false},
+		// The address key of the database handlers is not accepted, and neither are per-source ranges.
+		{"address", "tcp://127.0.0.1:9047", false}, {"databases", []string{"demo"}, false}, {"context", []string{"src"}, false},
+		{"ca_file", "/etc/ssl/ca.pem", false}, {"insecure_skip_verify", true, false},
+	} {
+		a := registeredBuiltinAction("dremio_query")
 		a.BuiltinConfig[tc.field] = tc.value
 		_, err := ValidateAction(a)
 		if tc.valid && err != nil || !tc.valid && err == nil {

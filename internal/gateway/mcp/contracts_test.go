@@ -63,6 +63,54 @@ func TestStarRocksQueryToolSchemaAndRequest(t *testing.T) {
 	}
 }
 
+func dremioAction() catalog.Action {
+	a := testAction()
+	a.Exec = nil
+	a.Params = nil
+	a.Builtin = "dremio_query"
+	a.BuiltinConfig = map[string]any{"credential": "/etc/allowops/credentials/dremio.json", "url": "http://127.0.0.1:9047"}
+	return a
+}
+
+func TestDremioQueryToolSchemaAndRequest(t *testing.T) {
+	a := dremioAction()
+	tool, err := actionTool(a, job.DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(tool.InputSchema)
+	var schema map[string]any
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatal(err)
+	}
+	paramsSchema := schema["properties"].(map[string]any)["params"].(map[string]any)
+	properties := paramsSchema["properties"].(map[string]any)
+	if len(properties) != 1 || properties["sql"].(map[string]any)["maxLength"] != float64(4000) {
+		t.Fatalf("params schema: %s", data)
+	}
+	if required := paramsSchema["required"].([]any); len(required) != 1 || required[0] != "sql" {
+		t.Fatalf("sql is required: %v", required)
+	}
+	if !tool.Annotations.ReadOnlyHint {
+		t.Fatal("dremio_query must be a read action")
+	}
+	long, _ := json.Marshal(strings.Repeat("x", 4001))
+	for input, valid := range map[string]bool{
+		`{"targets":{"hosts":["web-01"]},"params":{"sql":"SELECT 1"},"reason":"inspect"}`:                   true,
+		`{"targets":{"hosts":["web-01"]},"params":{"sql":"SELECT 1","context":"src"},"reason":"inspect"}`:   false,
+		`{"targets":{"hosts":["web-01"]},"params":{"sql":"SELECT 1","database":"demo"},"reason":"inspect"}`: false,
+		`{"targets":{"hosts":["web-01"]},"params":{},"reason":"inspect"}`:                                   false,
+		`{"targets":{"hosts":["web-01"]},"reason":"inspect"}`:                                               false,
+		`{"targets":{"hosts":["web-01"]},"params":{"sql":"SELECT 1\nSELECT 2"},"reason":"inspect"}`:         false,
+		`{"targets":{"hosts":["web-01"]},"params":{"sql":` + string(long) + `},"reason":"inspect"}`:         false,
+	} {
+		_, _, err := actionRequest(a, json.RawMessage(input), job.DefaultConfig())
+		if (err == nil) != valid {
+			t.Errorf("%.100s: error=%v want valid=%v", input, err, valid)
+		}
+	}
+}
+
 func TestActionDefaultsAndNamespace(t *testing.T) {
 	r, format, err := actionRequest(testAction(), json.RawMessage(`{"targets":{"hosts":["web-01"]},"params":{"mode":"recent","reason":"app"},"reason":"investigation"}`), job.DefaultConfig())
 	if err != nil {
