@@ -147,6 +147,7 @@ sequenceDiagram
 - 非 steps 的 `TaskCompleted.result.stdout/stderr` 为其输出元数据；steps 的这两个字段缺省，避免再聚合一份重复输出。各步骤元数据由 `ListTaskSteps` 读取；task 的 truncated/scan_limit_reached 是各步骤对应标记的 OR，duration 为 action 总耗时。
 - 最终退出码取首个失败步骤的退出码，否则取 0；若失败无进程退出码则缺省。action 的 timeout/run_as 由所有步骤共用，max_output 为所有步骤 stdout+stderr 的总预算（A13）。过滤分别应用于每个步骤的 stdout；max_scan 按每个步骤 stdout 原始字节计，不能共用整个 action 的扫描预算（A17）。
 - `ExecutionResult.reason` 仅传稳定原因代码，例如 `ACTION_DIGEST_MISMATCH`、`CATALOG_EXPIRED`、`EXECUTABLE_MISSING`。stdout/stderr 不得放入 reason，避免通过 job 摘要绕过输出权限。
+- builtin 处理器返回错误且自身没有写 stderr 时，executor 把错误文本写入该任务的 stderr：折成单行可打印文本，经该 action 已配置的 stderr 脱敏（`redact`，未配置时启用默认的 secrets 规则），脱敏后截断到 1024 字节（超出时末尾加 `... [truncated]`）。该文本与其他 stderr 一样受 `view_output` 权限和 `max_output` 约束，只出现在 stderr 流、`OutputMetadata` 与 MCP 摘要的 stderr 预览中，`reason` 仍为 `EXECUTION_FAILED`。处理器已写 stderr 的（`prometheus_query`、`alertmanager_alerts`）保持原文本。
 
 `OutputMetadata.sha256` 对该逻辑输出的全部已脱敏、过滤、截断后的 bytes 计算。步骤任务的输出组可按有序步骤的退出码及 stdout/stderr 摘要比较；MCP 聚合逻辑在 P6 实现，不需要再定义可绕过权限的摘要输出字段。
 

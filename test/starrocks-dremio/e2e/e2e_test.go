@@ -321,7 +321,7 @@ type testCase struct {
 	name   string
 	kind   string // success or reject
 	params map[string]any
-	// contains is a substring that must appear in stdout (success) or in the error/stderr text (reject).
+	// contains is a substring that must appear in stdout (success) or in the MCP result summary and stderr (reject).
 	contains string
 	// server is a statement fragment: StarRocks FE audit log and Dremio job list must contain it
 	// for a success and must not contain it for a rejection.
@@ -358,8 +358,8 @@ func (h *runner) cases(srQueryID string) []testCase {
 	return []testCase{
 		{action: "starrocks_query_readonly", name: "select count", kind: "success", params: sr("SELECT count(*) FROM fact_orders"), contains: "500000", server: "SELECT count(*) FROM fact_orders"},
 		{action: "starrocks_query_readonly", name: "show tables", kind: "success", params: sr("SHOW TABLES"), contains: "fact_orders", server: "SHOW TABLES"},
-		{action: "starrocks_query_readonly", name: "DROP TABLE", kind: "reject", params: sr("DROP TABLE p6_e2e_denied"), server: "DROP TABLE p6_e2e_denied"},
-		{action: "starrocks_query_readonly", name: "INSERT", kind: "reject", params: sr("INSERT INTO p6_e2e_denied VALUES (987654321)"), server: "INSERT INTO p6_e2e_denied"},
+		{action: "starrocks_query_readonly", name: "DROP TABLE", kind: "reject", params: sr("DROP TABLE p6_e2e_denied"), contains: "sqlguard", server: "DROP TABLE p6_e2e_denied"},
+		{action: "starrocks_query_readonly", name: "INSERT", kind: "reject", params: sr("INSERT INTO p6_e2e_denied VALUES (987654321)"), contains: "sqlguard", server: "INSERT INTO p6_e2e_denied"},
 		{action: "starrocks_query_readonly", name: "row limit (max_rows 200)", kind: "success", params: sr("SELECT order_id FROM fact_orders ORDER BY order_id LIMIT 1000"), contains: "\n1\n", truncated: true, server: "ORDER BY order_id LIMIT 1000"},
 		{action: "starrocks_query_readonly", name: "redaction", kind: "success", params: sr("SELECT 'password=hunter2-p6' AS v"), contains: "REDACTED", absent: "hunter2-p6", server: "SELECT 'password=hunter2-p6'"},
 		{action: "starrocks_explain", name: "explain select", kind: "success", params: sr("EXPLAIN SELECT count(*) FROM fact_orders"), contains: "OlapScanNode", server: "EXPLAIN SELECT count(*) FROM fact_orders"},
@@ -376,8 +376,8 @@ func (h *runner) cases(srQueryID string) []testCase {
 		{action: "starrocks_profile_summary", name: "non-UUID query_id", kind: "reject", params: map[string]any{"op": "profile_summary", "query_id": nonUUID}},
 		{action: "starrocks_profile_summary", name: "quote in query_id", kind: "reject", params: map[string]any{"op": "profile_summary", "query_id": srQueryID + "' OR '1'='1"}, server: srQueryID + "' OR"},
 		{action: "dremio_query_readonly", name: "select count", kind: "success", params: dr("SELECT count(*) AS n FROM \"starrocks\".demo_dw.dim_user"), contains: "10000", server: "SELECT count(*) AS n FROM"},
-		{action: "dremio_query_readonly", name: "CREATE TABLE", kind: "reject", params: dr("CREATE TABLE \"starrocks-scratch\".scratch.p6_e2e_denied AS SELECT 1"), server: "p6_e2e_denied AS SELECT"},
-		{action: "dremio_query_readonly", name: "DROP TABLE", kind: "reject", params: dr("DROP TABLE \"starrocks-scratch\".scratch.p6_e2e_denied"), server: "DROP TABLE \"starrocks-scratch\".scratch.p6_e2e_denied"},
+		{action: "dremio_query_readonly", name: "CREATE TABLE", kind: "reject", params: dr("CREATE TABLE \"starrocks-scratch\".scratch.p6_e2e_denied AS SELECT 1"), contains: "sqlguard", server: "p6_e2e_denied AS SELECT"},
+		{action: "dremio_query_readonly", name: "DROP TABLE", kind: "reject", params: dr("DROP TABLE \"starrocks-scratch\".scratch.p6_e2e_denied"), contains: "sqlguard", server: "DROP TABLE \"starrocks-scratch\".scratch.p6_e2e_denied"},
 		{action: "dremio_query_readonly", name: "redaction", kind: "success", params: dr("SELECT 'password=hunter2-p6' AS v"), contains: "REDACTED", absent: "hunter2-p6", server: "SELECT 'password=hunter2-p6'"},
 		{action: "dremio_explain", name: "explain plan", kind: "success", params: dr("EXPLAIN PLAN FOR SELECT count(*) FROM \"starrocks\".demo_dw.dim_user"), contains: "Screen", server: "EXPLAIN PLAN FOR SELECT count(*)"},
 		{action: "dremio_explain", name: "not an EXPLAIN", kind: "reject", params: dr("SELECT 1")},
@@ -445,6 +445,10 @@ func (h *runner) call(c testCase) record {
 		rec.Pass = !succeeded
 		if !rec.Pass {
 			rec.Note = "call succeeded but was expected to be rejected"
+		} else if c.contains != "" && !(strings.Contains(rec.Stderr, c.contains) && strings.Contains(string(raw), c.contains)) {
+			// The handler's reason text must reach the caller, both in the job summary and in the stored stderr.
+			rec.Pass = false
+			rec.Note = fmt.Sprintf("rejected, but the reason text %q is missing from stderr %q or from the MCP result", c.contains, rec.Stderr)
 		}
 	}
 	return rec

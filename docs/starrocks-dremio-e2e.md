@@ -55,7 +55,7 @@ ALLOWOPS_SRDR_CREDENTIALS=test/starrocks-dremio/.state/credentials.json \
 
 时间为 MCP `tools/call` 从发出到收到结果的耗时（含网关调度、agent、sudo、处理器和数据库访问，不含之后读取完整输出的 `jobs_get`）。主机名在此处省略为 `<host>`。
 
-"拒绝层"：**网关**表示 MCP 在创建 job 之前按目录 `params` 校验拒绝，返回 `isError`，没有 job；**处理器**表示请求到达 agent 和处理器，job 状态为 `failed`，退出码 1，任务原因码 `EXECUTION_FAILED`，stdout 与 stderr 为空。
+"拒绝层"：**网关**表示 MCP 在创建 job 之前按目录 `params` 校验拒绝，返回 `isError`，没有 job；**处理器**表示请求到达 agent 和处理器，job 状态为 `failed`，退出码 1，任务原因码 `EXECUTION_FAILED`，stderr 为处理器的错误文本（问题 2 修复前为空），stdout 为空。
 
 ### 3.1 汇总
 
@@ -121,7 +121,7 @@ ALLOWOPS_SRDR_CREDENTIALS=test/starrocks-dremio/.state/credentials.json \
 | `dremio_jobs_recent` | `user: "x' OR '1'='1"` | 网关 | `parameter user: does not match regex` | 无请求 | 73 |
 | `dremio_job_profile` | `job_id: not-a-query-id` | 网关 | `parameter job_id: does not match regex`（UUID 正则） | 无请求 | 68 |
 
-处理器层的拒绝由数据库侧记录证明语句没有到达服务器；处理器的错误原因本身在 MCP 结果中不可见（见问题 2），因此不能仅凭 `failed` 区分"被 sqlguard 拒绝"和"到达服务器后被拒绝"，需要依靠数据库侧核对。
+处理器层的拒绝由数据库侧记录证明语句没有到达服务器。处理器的错误文本已经出现在 MCP 结果的 stderr 中（见问题 2），可以区分"被 sqlguard 拒绝"和"到达服务器后被拒绝"；数据库侧核对仍保留，用于证明语句没有到达服务器。
 
 ## 4. 另行观察到的行为
 
@@ -143,18 +143,17 @@ ALLOWOPS_SRDR_CREDENTIALS=test/starrocks-dremio/.state/credentials.json \
 - 失败测试：`internal/catalog/examples_sql_actions_test.go` 加载示例目录，对 5 个 SQL 示例 action 的合法和非法语句断言处理器在读取凭据之前的校验结果。
 - 修复：`starrocks_explain.yaml` 改为 `statement_types: [SELECT, EXPLAIN]`。`params.sql` 的正则 `^EXPLAIN …` 仍限制调用方只能提交 EXPLAIN 开头的语句。
 
-### 问题 2（未修复，需要决定）：处理器的错误原因不返回给 MCP 调用方
+### 问题 2（已修复）：处理器的错误原因不返回给 MCP 调用方
 
 现象：处理器拒绝或执行失败时，MCP 结果只有 `status: failed`、`exit_code: 1`，stdout 与 stderr 为空；任务结果中的原因码只有 `EXECUTION_FAILED`。AI 客户端无法得知语句被拒绝的原因。
 
-依据：
+原因：`internal/executor` 的 `runBuiltin` 收到处理器返回的错误后只把它作为运行错误返回，各处理器适配器不填 `Stderr`；`execd.ExecutionReason` 只把错误归为原因码。错误文本在 executor 这一层丢失，agent、gateway 和 MCP 对 stderr 的传递本身没有问题。`log_search`、`redis_command`、`mysql_query` 等已有处理器行为相同。
 
-- `internal/catalog/builtin_adapters.go` 的各处理器适配器在出错时返回 `BuiltinResult{ExitCode: ExitFailure}, err`，不填 `Stderr`；
-- `internal/execd/exec.go` 的 `ExecutionReason` 把任意错误归为 `EXECUTION_FAILED`，不传递错误文本。
+处理：
 
-范围：`log_search`、`redis_command`、`mysql_query` 等已有内置处理器使用同一适配器模式，行为相同；`docs/builtin-starrocks.md`、`docs/builtin-dremio.md` 中描述的错误文本（例如 `starrocks query failed (code 5203)`）在 MCP 结果里不可见，只在处理器的单元测试里可见。
-
-未修复原因：错误文本是否可以返回、返回哪些（处理器错误已按"不含 SQL 和凭据"设计）属于跨处理器的协议决定，不限于本次的四个处理器。
+- 失败测试：`internal/executor/builtin_error_text_test.go` 对 `starrocks_query`（DROP、statement_types 不允许）、`mysql_query`（DROP）、`log_search`（路径超出 allowed_roots）断言 `Result.Stderr` 含处理器错误文本；另有脱敏、长度和单行测试。
+- 修复：`runBuiltin` 在处理器返回错误且 `Stderr` 为空时，把错误文本折成单行写入 stderr，经该 action 的脱敏配置处理，脱敏之后截断到 1024 字节。处理器自己写了 stderr 的（`prometheus_query`、`alertmanager_alerts`）保持原文本。`reason` 仍是稳定原因码，协议不变；见 `docs/protocol.md`。
+- 端到端：`e2e_test.go` 对 `starrocks_query_readonly` 的 DROP、INSERT 和 `dremio_query_readonly` 的 CREATE、DROP 要求 MCP 结果摘要和 stored stderr 含 `sqlguard`。实际文本例如 `sqlguard: statement type is not allowed`、`sqlguard: EXPLAIN ANALYZE executes the target statement and is disabled`。
 
 ### 问题 3（未修复，需要决定）：`pii` 脱敏误改诊断输出中的数字
 
@@ -176,6 +175,7 @@ ALLOWOPS_SRDR_CREDENTIALS=test/starrocks-dremio/.state/credentials.json \
 | 端到端 | `test/starrocks-dremio/e2e.sh` | 问题 1 修复后 | 32 次调用，0 个与预期不符 |
 | 失败测试在修复前失败 | `go test ./internal/catalog -run TestSQLExampleActionsAcceptTheirOwnStatements` | 问题 1 修复前 | `starrocks_explain "EXPLAIN SELECT count(*) FROM demo_dw.fact_orders": accepted=false … statement_types allows only: EXPLAIN` |
 | 修复后 | 同上，`make examples-check` | 问题 1 修复后 | 通过 |
+| 问题 2 端到端 | `test/starrocks-dremio/e2e.sh` | 问题 2 修复后 | 32 次调用，0 个与预期不符；4 个处理器拒绝用例的 stderr 含 `sqlguard: …` |
 
 ## 7. 未验证项
 
