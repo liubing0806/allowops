@@ -192,7 +192,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 - 主机端在输出离开主机前脱敏，规则来自签名目录（全局 + action 覆盖）。不保留原始输出。
 - 内置规则：
   - `secrets`（默认开启）：PEM 私钥、阿里云 AccessKey、AWS Access Key、JWT、`Authorization: Bearer`、URL 中的用户名密码、`password=`/`secret=`/`token=` 等键值对、mysql 命令行 `-p<密码>`、`MYSQL_PWD=`、`REDISCLI_AUTH=`。
-  - `pii`（默认关闭）：手机号、18 位身份证号（校验码）、银行卡号（Luhn）。
+  - `pii`（默认关闭）：手机号、18 位身份证号（校验码）、银行卡号（Luhn）。身份证号和银行卡号只匹配独立数字串：紧邻字母、下划线或属于小数的数字不脱敏。
 - 自定义规则：`redact.custom: [{name, regex}]`，Go RE2。替换为 `[REDACTED:类型]`。可选字段 `before_builtin`（bool，默认 false）：为 true 时该规则在内置规则之前运行（多个此类规则保持配置顺序），其余自定义规则仍在内置规则之后；用于整体替换引号字符串的规则。
 - 文档写明局限：可能误伤；不能识别所有敏感内容。
 

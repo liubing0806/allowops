@@ -155,18 +155,22 @@ ALLOWOPS_SRDR_CREDENTIALS=test/starrocks-dremio/.state/credentials.json \
 - 修复：`runBuiltin` 在处理器返回错误且 `Stderr` 为空时，把错误文本折成单行写入 stderr，经该 action 的脱敏配置处理，脱敏之后截断到 1024 字节。处理器自己写了 stderr 的（`prometheus_query`、`alertmanager_alerts`）保持原文本。`reason` 仍是稳定原因码，协议不变；见 `docs/protocol.md`。
 - 端到端：`e2e_test.go` 对 `starrocks_query_readonly` 的 DROP、INSERT 和 `dremio_query_readonly` 的 CREATE、DROP 要求 MCP 结果摘要和 stored stderr 含 `sqlguard`。实际文本例如 `sqlguard: statement type is not allowed`、`sqlguard: EXPLAIN ANALYZE executes the target statement and is disabled`。
 
-### 问题 3（未修复，需要决定）：`pii` 脱敏误改诊断输出中的数字
+### 问题 3（已修复）：`pii` 脱敏误改诊断输出中的数字
 
 现象：
 
 - `starrocks_cluster_status` 的 FE 节点名 `sr-fe_9010_<13 位毫秒时间戳>` 显示为 `sr-fe_9010_[REDACTED:bank_card]`（本环境中每次调用都出现）；
 - `dremio_nodes` 的 `load` 列 `0.<16 位小数>` 显示为 `0.[REDACTED:bank_card]`（该列的值随时间变化，是否出现取决于当时的数值是否通过 Luhn 校验）。
 
-原因：`internal/redact/redact.go` 的 `bank_card` 规则匹配连续 13 至 19 位数字并做 Luhn 校验，约 10% 的随机数字串通过校验。11 个示例都配置 `redact.builtin: [secrets, pii]`。
+原因：`internal/redact/redact.go` 的 `bank_card` 规则匹配连续 13 至 19 位数字并做 Luhn 校验，约 10% 的随机数字串通过校验；规则只检查数字串前后不是数字，不检查字母、下划线和小数点。11 个示例都配置 `redact.builtin: [secrets, pii]`。
 
-影响：节点名被改写后，后续用节点名过滤其他输出会失败；`load` 等数值列不可读。查询类 action（`*_query_readonly`）输出用户数据，保留 `pii` 有依据；`starrocks_cluster_status`、`dremio_nodes` 的输出不含个人数据。
+修复（`internal/redact/pii_digits_test.go` 先于修复提交）：`bank_card` 和 `identity_card` 增加词元边界。数字串前后紧邻字母或下划线，或属于小数的整数部分、小数部分（紧邻的 `.` 另一侧是数字）时不脱敏。没有使用列名或 action 名白名单。`phone` 规则没有校验位，未改动。
 
-建议（待决定）：对 `starrocks_cluster_status`、`dremio_nodes` 去掉 `pii`，仅保留 `secrets`；或为 `bank_card` 规则增加数字边界（不匹配小数部分和以字母、下划线相连的数字）。
+修复后仍会改写的形式：
+
+- 独立的整数字段，如 TSV 中单独一列的 `4532015112830366`（字节数、纳秒数）或 13 位毫秒时间戳，约 10% 通过 Luhn 校验的值仍显示为 `[REDACTED:bank_card]`。这类文本与卡号无法区分，规则保持脱敏；需要保留数值的 action 可以不启用 `pii`，或输出时换用较小的单位；
+- 以连字符、斜杠、冒号等相连的数字，如 `sr-fe-9010-1729837261234`、`a/1729837261234`，仍按独立数字串处理；
+- 卡号写成带空格或连字符的分组形式（`4532 0151 1283 0366`、`4532-0151-1283-0366`）在修复前后都不会被 `bank_card` 匹配。
 
 ## 6. 复验与命令
 
@@ -176,6 +180,7 @@ ALLOWOPS_SRDR_CREDENTIALS=test/starrocks-dremio/.state/credentials.json \
 | 失败测试在修复前失败 | `go test ./internal/catalog -run TestSQLExampleActionsAcceptTheirOwnStatements` | 问题 1 修复前 | `starrocks_explain "EXPLAIN SELECT count(*) FROM demo_dw.fact_orders": accepted=false … statement_types allows only: EXPLAIN` |
 | 修复后 | 同上，`make examples-check` | 问题 1 修复后 | 通过 |
 | 问题 2 端到端 | `test/starrocks-dremio/e2e.sh` | 问题 2 修复后 | 32 次调用，0 个与预期不符；4 个处理器拒绝用例的 stderr 含 `sqlguard: …` |
+| pii 数字边界：修复后 | `test/starrocks-dremio/e2e.sh` | 问题 3 修复后 | 32 次调用，0 个与预期不符；`results.json` 中 FE 节点名为 `sr-fe_9010_1792856627121`，没有 `[REDACTED:bank_card]` |
 
 ## 7. 未验证项
 
