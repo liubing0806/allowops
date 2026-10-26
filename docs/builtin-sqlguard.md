@@ -52,7 +52,7 @@ st, err := sqlguard.Validate(sqlguard.StarRocks, "EXPLAIN VERBOSE SELECT * FROM 
 6. 禁用关键字：除 SHOW 种类名本身的关键字外，语句中任何未加引号的词法单元出现在名单内即拒绝。
 7. 禁用函数：未加引号或带引号的名称后面（跳过空白和注释）紧跟 `(` 时，按名称拒绝，包括 EXPLAIN 目标和子查询中的调用。
 8. Dremio 的 `TABLE(` 后必须是不带限定名的白名单表函数加 `(`。
-9. 拒绝 Hint、可执行注释、含 `set_var` 的注释、`:=`、`?`、`#`、`//`。
+9. 拒绝 Hint、可执行注释、含 `set_var` 的注释、`:=`、`?`、`#`、`//`。Dremio 方言还拒绝字符串和带引号标识符中的 `/*`，当它之后的语句文本含 `set_var` 时。
 
 ## 名单
 
@@ -117,6 +117,7 @@ st, err := sqlguard.Validate(sqlguard.StarRocks, "EXPLAIN VERBOSE SELECT * FROM 
 | `/*+ ... */` Hint | 可修改并行度和内存上限 |
 | `/*!`、`/*M!` 可执行注释 | 注释内容会被服务端执行 |
 | 任何注释中出现 `set_var`（不区分大小写） | 部分服务端把它当作会话参数设置 |
+| Dremio：字符串或带引号标识符中的 `/*`，且其后的语句文本（到输入末尾）含 `set_var`（不区分大小写） | Dremio 24.1 用正则从原始 SQL 文本提取 `/* */` 注释，不区分引号。注释可以跨多个字符串，例如 `'/*'` 与 `' set_var.x=1 */'`，其中的 `set_var.x=v` 被改写为 SET_VAR Hint。引号内的 `/*` 而其后没有 `set_var` 时允许 |
 | 未闭合的字符串、标识符或注释 | 服务端按各自规则报错或延伸到输入末尾，边界无法一致 |
 | Dremio 中的反引号、`@`、`{`、`}` | Dremio 对这些字符的处理未实测 |
 | 引号和标识符之外的非 ASCII 字符，包括 U+00A0、U+2003、U+3000、U+200B、全角字符、BOM | 服务端可能把它们当作空白、标识符字符或分隔符 |
@@ -167,7 +168,13 @@ st, err := sqlguard.Validate(sqlguard.StarRocks, "EXPLAIN VERBOSE SELECT * FROM 
 | Dremio 语句数 | 多条语句报错（只支持单条语句）；末尾分号可用 | 与实现一致 |
 | Dremio 权限 | 所有账号都是管理员，可以创建视图、`TRUNCATE`、`ALTER SYSTEM`、`ALTER SESSION`、`ALTER PDS ... REFRESH METADATA`、修改数据源配置 | 校验器是唯一写入边界：`CREATE`、`DROP`、`ALTER`、`TRUNCATE`、`INSERT`、`DELETE`、`UPDATE`、`GRANT`、`REFRESH` 等都在拒绝范围内 |
 | Dremio `external_query` | 以数据源账号的权限执行任意语句；`EXPLAIN PLAN FOR` 中的 `external_query` 在规划时就执行，作业状态是失败，数据已写入 | 任何位置的 `external_query(` 都拒绝，包括 EXPLAIN 目标 |
-| Dremio `set_var` 注释 | `/* set_var.x='v' */` 被改写为 StarRocks 的 SET_VAR Hint 并生效，位置可在语句开头或 SELECT 之后；直接写 `SET_VAR` Hint 是语法错误 | 任何注释中出现 `set_var` 都拒绝 |
+| Dremio `set_var` 注释 | `/* set_var.x='v' */` 被改写为 StarRocks 的 SET_VAR Hint 并生效，位置可在语句开头或 SELECT 之后；直接写 `SET_VAR` Hint 是语法错误 | 任何注释中出现 `set_var` 都拒绝。服务端从原始文本提取注释，不区分字符串和带引号标识符：`WHERE 'x' <> '/* set_var.pipeline_dop=2 */'` 和 `AS "/* set_var.pipeline_dop=3 */"` 都会生成 Hint（`EXPLAIN PLAN FOR` 的计划文本已确认；字符串版本的 SELECT 执行后，StarRocks 审计日志中也带有 Hint），`'/*' ... ' set_var.x=2 */'` 跨两个字符串也生成 Hint；`-- /*` 加字符串中的 `*/` 未生成 Hint。因此引号内的 `/*` 之后的语句文本含 `set_var` 时拒绝 |
+| Dremio 字符串 | 单引号字符串只有 `''` 转义，反斜线是普通字符（`SELECT 'a\' AS x` 返回 `a\`） | 与实现一致 |
+| Dremio 带引号标识符 | 双引号是标识符，只有 `""` 转义；反引号只在系统属性 `dremio.legacy.backticks_for_identifiers=true` 时是引号 | 与实现一致；反引号一律拒绝（比服务端严格） |
+| Dremio `--` | 后无空白也是注释（`SELECT 1 AS x--c\n, 2 AS y` 返回两列）；CR 结束行注释 | 只接受后跟空白的 `--`（比服务端严格）；CR、LF 都结束行注释 |
+| Dremio `//` | 是行注释 | 拒绝 |
+| Dremio 块注释 | 不嵌套（第二个 `*/` 处报语法错误）；`/**/` 正常跳过 | 嵌套、`/*+`、`/*!` 一律拒绝（比服务端严格） |
+| Dremio `#`、`[` | `#` 报词法错误；`[x]` 报语法错误，`[` 不是方括号标识符 | `#` 拒绝；`[` 作为标点 |
 | Dremio EXPLAIN | `PLAN FOR`、`PLAN WITH IMPLEMENTATION FOR`、`PLAN INCLUDING ALL ATTRIBUTES FOR`、`PLAN WITHOUT IMPLEMENTATION FOR` 可用；`EXPLAIN JSON FOR` 失败；`EXPLAIN PLAN FOR INSERT` 只规划 | 只放行前两种变体，其余拒绝 |
 | Dremio SHOW 与 DESCRIBE | `SHOW SCHEMAS`、`SHOW TABLES IN`、`SHOW PARTITIONS`、`SHOW CREATE TABLE`、`DESCRIBE`、`DESC`、`VALUES` 可用；`SHOW TABLES`、`SHOW VIEWS` 没有上下文时报错；`SHOW FILES` 只支持文件系统数据源；`SHOW CREATE VIEW`、`SHOW TBLPROPERTIES` 是语法错误 | 白名单不含 CREATE VIEW |
 | Dremio 表函数 | `table_history`、`table_snapshot`、`table_files` 存在，对 Iceberg 表的行为未验证 | `TABLE(...)` 只放行四个白名单表函数 |
@@ -178,9 +185,8 @@ st, err := sqlguard.Validate(sqlguard.StarRocks, "EXPLAIN VERBOSE SELECT * FROM 
 
 | 规则 | 当前行为 | 需要实测的内容 |
 | --- | --- | --- |
-| Dremio 字符串与标识符 | 单引号只有 `''`，双引号为标识符，反斜线是普通字符 | `\` 在字符串中的处理 |
-| Dremio 词法 | 拒绝 `//`、反引号、`@`、`{`、`}`、嵌套注释；`--` 需后跟空白 | `//` 是否为行注释；`--` 后无空白；注释是否嵌套；`{fn ...}` 转义；这些字符的实际处理 |
-| 行注释终点 | LF 或 CR | CR、U+0085、U+2028 是否结束行注释（两种服务端） |
+| Dremio 词法 | 拒绝反引号、`@`、`{`、`}`；`--` 需后跟空白 | `{fn ...}` 转义；这些字符的实际处理 |
+| 行注释终点 | LF 或 CR | U+0085、U+2028 是否结束行注释（两种服务端；Dremio 的 CR 已实测） |
 | StarRocks `//` | 拒绝 | 是否为注释（预期不是） |
 | StarRocks 未知字符 | 拒绝未列入的 ASCII 字符 | `#` 被丢弃说明词法器可能丢弃未识别的字符，其他字符是否同样被丢弃 |
 | 禁用函数 | StarRocks：`files`、`sleep`、`get_query_profile`；Dremio：`external_query` | 是否还有读取外部数据、阻塞或写入的函数和表函数 |

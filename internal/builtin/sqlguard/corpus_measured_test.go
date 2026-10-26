@@ -83,6 +83,18 @@ var attacksMeasuredStarRocks = map[string][]string{
 }
 
 var attacksMeasuredDremio = map[string][]string{
+	// Dremio cuts /* ... */ out of the raw text, quotes included, and the
+	// set_var entries in it become a SET_VAR hint (measured with EXPLAIN PLAN FOR).
+	"set_var_in_quotes": {
+		`SELECT 1 FROM t WHERE 'x' <> '/* set_var.pipeline_dop=2 */'`,
+		`SELECT 1 AS "/* set_var.pipeline_dop=3 */" FROM t`,
+		`SELECT 1 FROM t WHERE 'x' <> '/* SET_VAR.pipeline_dop=2 */'`,
+		`SELECT 1 AS "/* Set_Var.pipeline_dop=3 */" FROM t`,
+		`SELECT 1 FROM t WHERE 'x' <> 'a /* b /* set_var.pipeline_dop=2 */'`,
+		`SELECT 1 FROM t WHERE 'x' <> '/*' AND 'y' <> ' set_var.pipeline_dop=2 */'`,
+		`SELECT 1 AS "/*" FROM t WHERE 'y' <> ' set_var.pipeline_dop=2 */'`,
+		`SELECT 1 FROM t WHERE 'x' <> '/*' AND set_var.pipeline_dop = 2 AND 'y' <> '*/'`,
+	},
 	// Every Dremio account is an administrator, so the guard is the only write boundary.
 	"measured_writes": {
 		`CREATE VIEW "@user".v_probe AS SELECT user_id, city FROM "src-main".demo_db.dim_user`,
@@ -161,6 +173,10 @@ var allowMeasuredStarRocks = []allowCase{
 }
 
 var allowMeasuredDremio = []allowCase{
+	// "/*" in quotes is fine while set_var does not follow it; Dremio reads these as comments without a hint.
+	{`SELECT 'a/*b*/c', "x/*y" FROM t WHERE 'z' <> 'q'`, sel},
+	{`SELECT 1 FROM t WHERE 'set_var.a=1' <> 'x/*'`, sel},
+	{`SELECT 1 FROM t WHERE 'x' <> '/*' AND 'y' <> '*/'`, sel},
 	{`SHOW SCHEMAS LIKE '%demo%'`, show("SCHEMAS")},
 	{`SHOW TABLES IN "src-main".demo_db`, show("TABLES")},
 	{`SHOW FUNCTIONS LIKE '%sum%'`, show("FUNCTIONS")},

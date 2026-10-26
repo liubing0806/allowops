@@ -67,6 +67,9 @@ func lex(d Dialect, s string) ([]token, error) {
 			if !ok {
 				return nil, reject("unterminated string literal")
 			}
+			if err := blockOpenerInQuotes(d, s, i+1, raw); err != nil {
+				return nil, err
+			}
 			toks = append(toks, token{tString, raw})
 			i = next
 		case c == '"' || c == '`':
@@ -76,6 +79,9 @@ func lex(d Dialect, s string) ([]token, error) {
 			raw, next, ok := scanQuoted(s, i, false)
 			if !ok {
 				return nil, reject("unterminated quoted identifier")
+			}
+			if err := blockOpenerInQuotes(d, s, i+1, raw); err != nil {
+				return nil, err
 			}
 			q := string(c)
 			toks = append(toks, token{tQuoted, strings.ReplaceAll(raw, q+q, q)})
@@ -174,6 +180,24 @@ func blockComment(s string, i int) (int, error) {
 		return 0, reject("set_var in a comment is not allowed")
 	}
 	return i + 2 + k + 2, nil
+}
+
+// blockOpenerInQuotes rejects a "/*" inside a Dremio string or quoted
+// identifier when set_var occurs anywhere after it. Dremio 24.1 cuts "/* ... */"
+// comments out of the raw statement text with a regular expression that
+// ignores quoting and turns the set_var.x=v entries in them into a SET_VAR hint
+// of the pushed-down query. Such a comment can span several strings
+// ('/*' ... 'set_var.x=v */'), so the search for set_var covers the rest of the
+// statement and not only the quoted text. content starts at s[from].
+func blockOpenerInQuotes(d Dialect, s string, from int, content string) error {
+	if d != Dremio {
+		return nil
+	}
+	k := strings.Index(content, "/*")
+	if k >= 0 && hasSetVar(s[from+k+2:]) {
+		return reject("set_var after /* inside a quoted string or identifier is not allowed")
+	}
+	return nil
 }
 
 func hasSetVar(comment string) bool {
