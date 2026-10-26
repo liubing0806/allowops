@@ -139,8 +139,13 @@ redact:                                # 可选，覆盖全局脱敏规则
 | HTTP 探测 | `builtin: http_get`，参数类型 `url`（`allowed_prefixes` 必填） | 只发 GET，不跟随跳转，响应大小上限 |
 | Prometheus 只读查询 | `builtin: prometheus_query`，`builtin_config.api` 固定 query、query_range、series、labels、label_values、alerts、rules、targets 之一 | 只发 GET，不跟随跳转；可选凭据（bearer_token，或 username 与 password）在主机 `/etc/allowops/credentials/`（root，0600），配置凭据的 action 须声明 `run_as: root`；时间范围、步长、点数、序列数和响应大小受限；输出 TSV |
 | Alertmanager 只读查询 | `builtin: alertmanager_alerts` | 只发 `GET /api/v2/alerts`，不跟随跳转；可选凭据在主机 `/etc/allowops/credentials/`（root，0600），配置凭据的 action 须声明 `run_as: root`；告警数和响应大小限制；输出 TSV |
+| StarRocks 只读查询 | `builtin: starrocks_query` | 通过 MySQL 协议连接 FE（`address: tcp://host:port`）；凭据在主机 `/etc/allowops/credentials/`（root，0600）；调用方提供一条 SELECT、SHOW、DESC 或 EXPLAIN；始终需要 allowops-exec（`RequiresExec`）。只读边界由三层组成：只授予 SELECT 的数据库账号、sqlguard 词法校验、会话 `query_timeout` 与行数、字节上限（不使用只读事务，StarRocks 3.3 不支持）；可读库表只由账号授权决定 |
+| StarRocks 固定诊断 | `builtin: starrocks_diag` | 连接方式、凭据和 TSV 输出同 `starrocks_query`；调用方选择 `op`：集群状态、运行中查询、审计表慢查询、profile 列表、`ANALYZE PROFILE`、profile 摘要（含 SR-* 规则命中）；语句全部由处理器生成，账号需要 SYSTEM 级 OPERATE，与 query 账号分开；始终需要 allowops-exec。可选 `profile_run` 执行调用方的 SELECT 并返回摘要，默认关闭，先经 sqlguard |
+| Dremio 只读查询 | `builtin: dremio_query` | 通过 REST API v3 连接（`url: http(s)://host:port`），每次调用登录、提交作业、读取第一页结果（最多 500 行）、取消并注销；凭据在主机 `/etc/allowops/credentials/`（root，0600）；调用方提供一条 SELECT、SHOW、DESCRIBE 或 EXPLAIN PLAN FOR；始终需要 allowops-exec。Dremio 24.1 社区版没有权限边界（所有账号都是管理员），sqlguard 词法校验是 Dremio 一侧唯一的写入限制（决定 D6）；数据源一侧由数据源账号的只读权限限制；另有 `max_rows`、`max_bytes`、`timeout` 上限 |
+| Dremio 固定诊断 | `builtin: dremio_diag` | 连接方式和凭据同 `dremio_query`；调用方选择 `op`：节点与内存、作业列表、单个作业、作业 profile 摘要（含 DR-* 规则命中）、反射；请求由处理器生成，不接受 SQL、不经过 sqlguard，调用方的值只在通过固定格式或范围校验后进入请求；`builtin_config.ops` 可固定 op；始终需要 allowops-exec。同样没有权限边界，该处理器的写入限制是请求固定 |
 
 - 内置处理器的参数 schema 由 allowops 定义，目录只能通过 `builtin_config` 收紧。需要读取主机凭据或声明 `run_as` 的内置处理器在 allowops-exec 中执行。
+- `mysql_query`、`redis_command`、`starrocks_query`、`starrocks_diag`、`dremio_query`、`dremio_diag` 必须读取 root 凭据，`RequiresExec` 为真，未声明 `run_as` 时也经 allowops-exec 以 root 执行。`starrocks_*` 和 `dremio_*` 的 SQL 校验是词法级白名单（`internal/builtin/sqlguard`，规则见 `builtin-sqlguard.md`），不单独保证只读；各处理器的字段、默认值和上限见 `builtin-starrocks.md`、`builtin-dremio.md`、`builtin-config.md`。
 
 ## 5. 主机端
 

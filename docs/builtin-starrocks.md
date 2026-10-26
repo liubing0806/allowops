@@ -62,7 +62,7 @@ CREATE MATERIALIZED VIEW、CREATE DATABASE、PARTITIONS、TABLET、MATERIALIZED 
 STATUS、PROCESSLIST、FRONTENDS、BACKENDS、COMPUTE NODES。其中 FRONTENDS、BACKENDS、COMPUTE NODES 需要
 SELECT 之外的权限，只有 SELECT 的账号会得到权限错误。`PROCESSLIST` 对只有 SELECT 的账号只返回该账号自己的连接。
 
-显式 `null`、空列表、非字符串成员和未知字段均报错。拒绝信息列出可用成员，不回显 SQL。
+`statement_types`、`show_types` 的显式 `null`、空列表、非字符串成员，以及未知字段均报错；`max_bytes` 为 `null` 报错，`max_rows`、`timeout` 为 `null` 按省略处理。拒绝信息列出可用成员，不回显 SQL。
 
 目录对外的参数 schema：
 
@@ -185,7 +185,7 @@ go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./internal/builtin/... ./intern
 | --- | --- | --- |
 | `cluster` | `SHOW FRONTENDS`、`SHOW BACKENDS`、`SHOW COMPUTE NODES` | `component`：all（默认）、frontends、backends、compute_nodes。输出按 `# <component>` 分节，行数与字节上限由各节共用 |
 | `running` | `SHOW PROC '/current_queries'` | 无。实测该语句需要 OPERATE 权限 |
-| `slow_queries` | 对审计表的一条 SELECT，见下文 | `since_minutes`（1..10080，默认 60）、`min_duration_ms`（0..86400000，默认 0）、`state`（any、EOF、OK、ERR，默认 any）、`limit`（1..`max_rows`，默认 20） |
+| `slow_queries` | 对审计表的一条 SELECT，见下文 | `since_minutes`（1..10080，默认 60）、`min_duration_ms`（0..86400000，默认 0）、`state`（any、EOF、OK、ERR，默认 any）、`limit`（1..`max_rows`，默认 20 与 `max_rows` 中较小者） |
 | `profile_list` | `SHOW PROFILELIST LIMIT n` | `limit`（同上） |
 | `profile_analyze` | `ANALYZE PROFILE FROM '<query_id>'` | `query_id`（必填） |
 | `profile_summary` | `SELECT get_query_profile('<query_id>')`，主机端解析 | `query_id`（必填）、`top_n`（1..50，默认 10） |

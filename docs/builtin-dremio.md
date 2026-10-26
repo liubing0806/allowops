@@ -24,7 +24,7 @@ Dremio 24.1 社区版没有可用的权限边界。实测所有登录账号都�
 
 ## 配置
 
-`builtin_config` 的字段如下。未知字段、`null`、类型错误一律在目录校验和执行时报错。所有数值上限同时是默认值，配置只能收紧。
+`builtin_config` 的字段如下。未知字段、类型错误、`statement_types` 和 `show_types` 的 `null` 与空列表在目录校验和执行时报错；`max_bytes` 为 `null` 报错，`max_rows`、`timeout` 为 `null` 按省略处理。所有数值上限同时是默认值，配置只能收紧。
 
 | 字段 | 合法值与省略时的行为 |
 | --- | --- |
@@ -48,7 +48,7 @@ Dremio 24.1 社区版没有可用的权限边界。实测所有登录账号都�
 2. 读取凭据文件。
 3. 在 `timeout` 内依次执行：
    1. `POST /apiv2/login`，请求体 `userName`、`password`，得到会话 token。后续请求带 `Authorization: _dremio<token>`。
-   2. `POST /api/v3/sql`，请求体 `{"sql": ...}`，得到作业 id。作业 id 只接受字母、数字、`_`、`-`，最长 128 字符，防止它改变后续请求的路径。
+   2. `POST /api/v3/sql`，请求体 `{"sql": ...}`，得到作业 id。作业 id 以字母或数字开头，其余只接受字母、数字、`_`、`-`，最长 128 字符，防止它改变后续请求的路径。
    3. `GET /api/v3/job/{id}` 轮询。间隔从 25ms 起每次加倍，最长 500ms。状态 COMPLETED、FAILED、CANCELED、INVALID_STATE 结束轮询，其他状态继续轮询到超时。
    4. `GET /api/v3/job/{id}/results?offset=0&limit=N`，N 为 `min(max_rows+1, 500)`。
 4. 返回时，无论成功、失败、超时还是调用方取消，都在独立的 3 秒期限内执行清理：作业未到终止状态时 `POST /api/v3/job/{id}/cancel`，然后 `DELETE /apiv2/login` 注销会话。Dremio 的会话 token 有效期约 720 小时，不注销会长期保留可用 token。
@@ -170,7 +170,7 @@ Dremio 24.1 没有 `sys.jobs_recent`，`sys.jobs` 只含运行中的作业，因
 | `min_duration` | 时长，0 到 168h | 只列出耗时不小于该值的作业。大于 0 时按耗时降序，否则按开始时间降序 |
 | `state` | 枚举 `RUNNING`、`COMPLETED`、`FAILED`、`CANCELED`，不区分大小写 | 作业状态 |
 | `user` | 字符串，字母、数字和 `. _ @ -`，不以 `-` 开头，最长 128 字符 | 提交作业的用户 |
-| `limit` | 整数，1 到 `max_rows` | 作业条数，省略为 20 |
+| `limit` | 整数，1 到 `max_rows` | 作业条数，省略为 20 与 `max_rows` 中较小者 |
 | `top_n` | 整数，1 到 50 | 摘要中的算子数，省略为 10 |
 
 作业列表的过滤键只使用本地实测接受的 `st`（开始时间）、`jst`（状态）、`usr`（用户）、`dur`（耗时，毫秒）。过滤表达式形如 `(st=ge=<毫秒>;jst=="FAILED";usr=="name";dur=ge=<毫秒>)`，值只来自上述校验后的参数。其他过滤键（`qt` 之外的集合、`contains`）未验证，处理器不使用。`jobs` 多请求一条以判断是否还有更多结果，有则 `truncated` 为 true。作业的 SQL 文本折叠为单行并截断为 200 字符。
@@ -275,7 +275,7 @@ zip 来自网络，按不可信数据处理：
 
 ## 示例 action
 
-`examples/catalog/actions/` 中的 `dremio_nodes`、`dremio_jobs_recent`、`dremio_job_profile` 各固定一个 `op`（`ops: [nodes]` 等），`risk: read`、`run_as: root`，`params: {}`（参数由处理器提供，见“op 与参数”）。`test/examples/check_examples.py` 校验示例目录的动作数为 95。
+`examples/catalog/actions/` 中的 `dremio_nodes`、`dremio_jobs_recent`、`dremio_job_profile` 各固定一个 `op`（`ops: [nodes]` 等），`risk: read`、`run_as: root`，`params: {}`（参数由处理器提供，见“op 与参数”）。`test/examples/check_examples.py` 校验示例目录的动作数为 108。
 
 ## 测试与复现
 

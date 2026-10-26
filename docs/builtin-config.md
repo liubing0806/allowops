@@ -1,7 +1,8 @@
-# Redis、MySQL 与 StarRocks 的 builtin_config 收紧项
+# Redis、MySQL、StarRocks 与 Dremio 的 builtin_config 收紧项
 
 目录校验和执行均验证以下字段。执行时在读取凭据和建立连接前拒绝越界参数。
-所有字段省略时保留处理器默认行为。显式 `null`、空列表、非字符串列表和非法成员均报错。
+所有字段省略时保留处理器默认行为。列表字段的显式 `null`、空列表、非字符串列表和非法成员均报错。
+`starrocks_query`、`starrocks_diag`、`dremio_query`、`dremio_diag` 的数值字段中，`max_bytes` 与 `max_profile_bytes` 为 `null` 报错，`max_rows` 与 `timeout` 为 `null` 按省略处理。
 重复成员不扩大范围。命令名、分区名、语句类型和 SHOW 种类不区分大小写；
 键前缀与数据库名按大小写敏感的字节比较。拒绝信息列出可用成员或格式规则。
 
@@ -145,7 +146,7 @@ Dremio 没有权限边界，`builtin_config` 没有 `databases` 之类限制读�
 | `statement_types` | SELECT、SHOW、DESCRIBE、EXPLAIN 的非空子集；省略时允许全部。EXPLAIN 的目标语句也必须满足该限制（与 G31 相同），`EXPLAIN PLAN FOR SELECT ...` 需要同时列出 EXPLAIN 和 SELECT |
 | `show_types` | SCHEMAS、TABLES、VIEWS、PARTITIONS、FILES、CREATE TABLE、FUNCTIONS 的非空子集；省略时允许全部 |
 
-未知字段（包括 `address`、`databases`、`context`、`ca_file`）、`null`、空列表和非法成员均报错。收紧项只能在词法校验接受的范围内再缩小，不能放宽校验。动作参数只有 `sql`，最长 4000 字符。
+未知字段（包括 `address`、`databases`、`context`、`ca_file`）、列表字段的 `null`、空列表和非法成员均报错。收紧项只能在词法校验接受的范围内再缩小，不能放宽校验。动作参数只有 `sql`，最长 4000 字符。
 
 ## starrocks_diag
 
@@ -177,7 +178,7 @@ Dremio 没有权限边界，`builtin_config` 没有 `databases` 之类限制读�
 | `max_profile_bytes` | 0 到 32 MiB，省略为 32 MiB；解压后的 profile JSON 字节上限 |
 | `ops` | `nodes`、`jobs`、`job`、`job_profile`、`reflections` 的非空子集；省略时允许全部。只有一个值时，`op` 参数可省略 |
 
-未知字段（包括 `statement_types`、`show_types`、`databases`）、`null`、空列表和非法成员均报错。动作参数 `op`、`job_id`、`since`、`min_duration`、`state`、`user`、`limit`、`top_n` 由处理器声明，除 `op` 外都是可选的，不接受的组合在处理器内校验；目录中的参数覆盖只能增加 `regex` 或减小 `max_len`，不能限制枚举，固定 op 使用 `ops`。
+未知字段（包括 `statement_types`、`show_types`、`databases`）、`ops` 的 `null`、空列表和非法成员均报错。动作参数 `op`、`job_id`、`since`、`min_duration`、`state`、`user`、`limit`、`top_n` 由处理器声明，除 `op` 外都是可选的，不接受的组合在处理器内校验；目录中的参数覆盖只能增加 `regex` 或减小 `max_len`，不能限制枚举，固定 op 使用 `ops`。
 
 ## 本地目录校验配置
 

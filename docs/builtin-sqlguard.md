@@ -87,7 +87,7 @@ st, err := sqlguard.Validate(sqlguard.StarRocks, "EXPLAIN VERBOSE SELECT * FROM 
 | `SHOW PROFILELIST` | 仍识别，返回 `Kind` 为 `KindShow`、`ShowType` 为 `PROFILELIST` |
 | `ANALYZE PROFILE FROM '<id>'` | 仍识别，返回 `Kind` 为 `KindAnalyzeProfile` |
 
-`SHOW PROFILELIST` 和 `ANALYZE PROFILE` 的识别保留，供处理器按种类分流。`starrocks_query` 处理器默认通过 `statement_types`、`show_types` 排除这两种语句，它们归入使用固定语句的 diag 类处理器。仅靠词法校验无法阻止读取其他账号的 profile，查询类账号仍然需要按权限边界配置。
+`SHOW PROFILELIST` 和 `ANALYZE PROFILE` 的识别保留，供处理器按种类分流。`starrocks_query` 处理器在校验后无条件拒绝这两种语句，任何 `statement_types`、`show_types` 配置都不能开启（`PROFILELIST` 也不是合法的 `show_types` 成员），它们归入使用固定语句的 diag 类处理器。仅靠词法校验无法阻止读取其他账号的 profile，查询类账号仍然需要按权限边界配置。
 
 ## 方言差异
 
