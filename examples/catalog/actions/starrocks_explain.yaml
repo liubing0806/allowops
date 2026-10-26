@@ -19,7 +19,7 @@ builtin_config:
   max_rows: 500
   max_bytes: 64KB
   timeout: 10s
-  statement_types: [EXPLAIN]
+  statement_types: [SELECT, EXPLAIN]
   allow_explain_analyze: false
 max_output: 64KB
 filters: [match, exclude, tail, head, count]
