@@ -5,9 +5,63 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/job"
 	"github.com/liubing0806/allowops/internal/params"
 )
+
+func starRocksAction() catalog.Action {
+	a := testAction()
+	a.Exec = nil
+	a.Builtin = "starrocks_query"
+	a.BuiltinConfig = map[string]any{"credential": "/etc/allowops/credentials/starrocks.json", "address": "tcp://127.0.0.1:9030"}
+	a.Params = map[string]params.Definition{"database": {Type: params.String, Description: "Application database", Regex: "^demo$"}}
+	return a
+}
+
+func TestStarRocksQueryToolSchemaAndRequest(t *testing.T) {
+	a := starRocksAction()
+	tool, err := actionTool(a, job.DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(tool.InputSchema)
+	var schema map[string]any
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatal(err)
+	}
+	paramsSchema := schema["properties"].(map[string]any)["params"].(map[string]any)
+	properties := paramsSchema["properties"].(map[string]any)
+	if len(properties) != 2 || properties["sql"].(map[string]any)["maxLength"] != float64(4000) {
+		t.Fatalf("params schema: %s", data)
+	}
+	if required := paramsSchema["required"].([]any); len(required) != 1 || required[0] != "sql" {
+		t.Fatalf("only sql is required: %v", required)
+	}
+	if !strings.Contains(string(data), "^demo$") || !strings.Contains(string(data), "^[a-zA-Z0-9_]{1,64}$") {
+		t.Fatalf("database must keep the handler regex and add the signed one: %s", data)
+	}
+	if !tool.Annotations.ReadOnlyHint {
+		t.Fatal("starrocks_query must be a read action")
+	}
+	long, _ := json.Marshal(strings.Repeat("x", 4001))
+	for input, valid := range map[string]bool{
+		`{"targets":{"hosts":["web-01"]},"params":{"sql":"SELECT 1"},"reason":"inspect"}`:                       true,
+		`{"targets":{"hosts":["web-01"]},"params":{"sql":"SELECT 1","database":"demo"},"reason":"inspect"}`:     true,
+		`{"targets":{"hosts":["web-01"]},"params":{"database":"demo"},"reason":"inspect"}`:                      false,
+		`{"targets":{"hosts":["web-01"]},"reason":"inspect"}`:                                                   false,
+		`{"targets":{"hosts":["web-01"]},"params":{"sql":"SELECT 1","database":"other"},"reason":"inspect"}`:    false,
+		`{"targets":{"hosts":["web-01"]},"params":{"sql":"SELECT 1","database":"bad-name"},"reason":"inspect"}`: false,
+		`{"targets":{"hosts":["web-01"]},"params":{"sql":"SELECT 1","extra":1},"reason":"inspect"}`:             false,
+		`{"targets":{"hosts":["web-01"]},"params":{"sql":"SELECT 1\nSELECT 2"},"reason":"inspect"}`:             false,
+		`{"targets":{"hosts":["web-01"]},"params":{"sql":` + string(long) + `},"reason":"inspect"}`:             false,
+	} {
+		_, _, err := actionRequest(a, json.RawMessage(input), job.DefaultConfig())
+		if (err == nil) != valid {
+			t.Errorf("%.100s: error=%v want valid=%v", input, err, valid)
+		}
+	}
+}
 
 func TestActionDefaultsAndNamespace(t *testing.T) {
 	r, format, err := actionRequest(testAction(), json.RawMessage(`{"targets":{"hosts":["web-01"]},"params":{"mode":"recent","reason":"app"},"reason":"investigation"}`), job.DefaultConfig())

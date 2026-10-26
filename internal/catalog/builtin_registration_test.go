@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/liubing0806/allowops/internal/builtin"
@@ -18,9 +19,10 @@ func registeredBuiltinAction(name string) Action {
 		"log_query": {"mode": "search", "allowed_roots": []string{"/nonexistent/catalog-root"}, "sources": map[string]any{
 			"app": map[string]any{"type": "file", "paths": []string{"/nonexistent/catalog-root/app/*.log*"}, "timestamp": map[string]any{"layouts": []string{"2006-01-02 15:04:05.000"}, "timezone": "Asia/Shanghai"}},
 		}},
-		"http_get":      {"allowed_prefixes": []string{"http://127.0.0.1:12001/api"}},
-		"redis_command": {"address": "127.0.0.1:6379", "credential": "/etc/allowops/credentials/redis.json"},
-		"mysql_query":   {"address": "tcp://127.0.0.1:3306", "credential": "/etc/allowops/credentials/mysql.json"},
+		"http_get":        {"allowed_prefixes": []string{"http://127.0.0.1:12001/api"}},
+		"redis_command":   {"address": "127.0.0.1:6379", "credential": "/etc/allowops/credentials/redis.json"},
+		"mysql_query":     {"address": "tcp://127.0.0.1:3306", "credential": "/etc/allowops/credentials/mysql.json"},
+		"starrocks_query": {"address": "tcp://127.0.0.1:9030", "credential": "/etc/allowops/credentials/starrocks.json"},
 	}
 	return Action{Name: name, Description: name, Risk: "read", Builtin: name, BuiltinConfig: configs[name], Timeout: "1s", MaxOutput: 1024}
 }
@@ -30,10 +32,10 @@ func TestBuiltinCatalogSchemas(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "actions"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("schema_version: 1\ncatalog_id: four_builtins\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("schema_version: 1\ncatalog_id: six_builtins\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query"} {
 		a := registeredBuiltinAction(name)
 		data, err := json.Marshal(a)
 		if err != nil {
@@ -70,11 +72,17 @@ func TestBuiltinCatalogSchemas(t *testing.T) {
 			if properties["url"].(map[string]any)["format"] != "uri" {
 				t.Error("url must retain URL schema")
 			}
+		case "starrocks_query":
+			sqlSchema, database := properties["sql"].(map[string]any), properties["database"].(map[string]any)
+			required, _ := schema["required"].([]string)
+			if len(properties) != 2 || sqlSchema["maxLength"] != 4000 || database["pattern"] != `^[a-zA-Z0-9_]{1,64}$` || !slices.Equal(required, []string{"sql"}) {
+				t.Errorf("starrocks_query schema: sql required with maxLength 4000, database optional: %v", schema)
+			}
 		}
 	}
 	loaded, err := Load(dir)
-	if err != nil || len(loaded.Actions) != 5 {
-		t.Fatalf("five builtin catalog: %#v %v", loaded, err)
+	if err != nil || len(loaded.Actions) != 6 {
+		t.Fatalf("six builtin catalog: %#v %v", loaded, err)
 	}
 }
 
@@ -98,6 +106,8 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 		{"redis_command", "max_scan_count", 1, builtin.DefaultRedisMaxScanCount + 1},
 		{"mysql_query", "max_rows", 1, 501},
 		{"mysql_query", "max_response_bytes", Size(1024), fmt.Sprint(builtin.DefaultMySQLMaxResponseBytes + 1)},
+		{"starrocks_query", "max_rows", 1, 501},
+		{"starrocks_query", "max_bytes", "1KB", fmt.Sprint(1<<20 + 1)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name+"/"+tc.key, func(t *testing.T) {
@@ -113,7 +123,7 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 			}
 		})
 	}
-	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query"} {
 		a := registeredBuiltinAction(name)
 		a.BuiltinConfig["timeout"] = "20ms"
 		if _, err := ValidateAction(a); err != nil {
@@ -137,7 +147,7 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 }
 
 func TestBuiltinExecutionPlacement(t *testing.T) {
-	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query"} {
 		for _, runAs := range []string{"", "root"} {
 			a := registeredBuiltinAction(name)
 			a.RunAs = runAs
@@ -149,7 +159,7 @@ func TestBuiltinExecutionPlacement(t *testing.T) {
 			if err := json.Unmarshal(data, &metadata); err != nil {
 				t.Fatal(err)
 			}
-			want := runAs != "" || name == "redis_command" || name == "mysql_query"
+			want := runAs != "" || name == "redis_command" || name == "mysql_query" || name == "starrocks_query"
 			if metadata["requires_exec"] != want {
 				t.Errorf("%s run_as=%q metadata=%s; want requires_exec=%v", name, runAs, data, want)
 			}

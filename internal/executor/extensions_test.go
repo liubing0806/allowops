@@ -185,6 +185,34 @@ func TestMySQLBuiltinDispatchAndLimits(t *testing.T) {
 	}
 }
 
+func TestStarRocksBuiltinDispatchAndLimits(t *testing.T) {
+	a := catalog.Action{Name: "starrocks", Description: "starrocks", Risk: "read", Builtin: "starrocks_query", BuiltinConfig: map[string]any{"credential": "/nonexistent/credential.json", "address": "tcp://127.0.0.1:1"}, Timeout: "1s", MaxOutput: 1024}
+	r, err := Run(context.Background(), a, map[string]any{"sql": "SELECT 1"}, nil)
+	if err == nil || err.Error() != "cannot open credential file" || r.ExitCode != 1 {
+		t.Fatalf("got %#v %v", r, err)
+	}
+	// The SQL guard runs before the credential is read.
+	r, err = Run(context.Background(), a, map[string]any{"database": "demo", "sql": "SELECT 1; DROP TABLE t"}, nil)
+	if err == nil || !strings.Contains(err.Error(), "sqlguard") || r.ExitCode != 1 {
+		t.Fatalf("got %#v %v", r, err)
+	}
+	for _, config := range []map[string]any{
+		{"max_rows": 501}, {"max_bytes": "2MB"}, {"timeout": "11s"}, {"unknown": 1}, {"address": "unix:///var/run/starrocks.sock"},
+		{"show_types": []string{"PROFILELIST"}}, {"databases": []string{"demo"}},
+	} {
+		candidate := a
+		candidate.BuiltinConfig = maps.Clone(a.BuiltinConfig)
+		maps.Copy(candidate.BuiltinConfig, config)
+		if _, err := catalog.ValidateAction(candidate); err == nil {
+			t.Fatalf("accepted %v", config)
+		}
+	}
+	a.Params = map[string]params.Definition{"sql": {Type: params.String, Description: "short SQL", MaxLen: 8}}
+	if _, err := Run(context.Background(), a, map[string]any{"sql": "SELECT 100"}, nil); err == nil || !strings.Contains(err.Error(), "max_len") {
+		t.Fatalf("SQL restriction: %v", err)
+	}
+}
+
 func FuzzFilters(f *testing.F) {
 	f.Add("a", int64(2), int64(1), true)
 	f.Add("a", int64(1), int64(0), false)

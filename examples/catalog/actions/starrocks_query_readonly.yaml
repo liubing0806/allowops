@@ -1,0 +1,28 @@
+name: starrocks_query_readonly
+description: Run one bounded read-only StarRocks statement (SELECT, SHOW, DESC or EXPLAIN); table scope is controlled by the grants of the database account.
+risk: read
+run_as: root
+params:
+  database:
+    type: string
+    description: Optional default database for unqualified table names.
+  sql:
+    type: string
+    description: Single read-only SQL statement; no line breaks or multiple statements. SELECT, SHOW, DESC and EXPLAIN only.
+    regex: ^[^\r\n]+$
+    max_len: 4000
+timeout: 15s
+builtin: starrocks_query
+builtin_config:
+  credential: /etc/allowops/credentials/starrocks-query.json
+  address: tcp://127.0.0.1:9030
+  max_rows: 200
+  max_bytes: 64KB
+  timeout: 10s
+  statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
+  show_types: [DATABASES, TABLES, COLUMNS, "CREATE TABLE", PARTITIONS, VARIABLES]
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

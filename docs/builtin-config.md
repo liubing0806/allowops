@@ -1,4 +1,4 @@
-# Redis 与 MySQL 的 builtin_config 收紧项
+# Redis、MySQL 与 StarRocks 的 builtin_config 收紧项
 
 目录校验和执行均验证以下字段。执行时在读取凭据和建立连接前拒绝越界参数。
 所有字段省略时保留处理器默认行为。显式 `null`、空列表、非字符串列表和非法成员均报错。
@@ -111,6 +111,26 @@ TABLE STATUS、CREATE VIEW、CREATE DATABASE、INDEX 等不属于配置后的合
 DESCRIBE 内部的 ShowColumns 不受 `show_types` 限制，DESCRIBE 有独立语句类型限制。
 配置 `show_types` 不会自动允许 SHOW；它与 `statement_types` 取交集。
 
+## starrocks_query
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `max_rows` | 0..500；省略或 0 为 500，只能收紧 |
+| `max_bytes` | 0..1 MiB，可写 `64KB` 等 B/KB/MB/GB 形式；省略或 0 为 1 MiB，只能收紧；限制 TSV 文本（含表头）的字节数，放不下的整行不返回 |
+| `timeout` | 1ms..10s；省略为 10s，只能收紧；同时以向上取整的秒数设置会话 `query_timeout` |
+| `statement_types` | SELECT、SHOW、DESCRIBE、EXPLAIN 的非空子集；省略时允许这四类；EXPLAIN 的目标语句也必须满足该列表 |
+| `show_types` | DATABASES、TABLES、TABLE STATUS、COLUMNS、CATALOGS、CREATE TABLE、CREATE VIEW、CREATE MATERIALIZED VIEW、CREATE DATABASE、PARTITIONS、TABLET、MATERIALIZED VIEWS、FUNCTIONS、VARIABLES、STATUS、PROCESSLIST、FRONTENDS、BACKENDS、COMPUTE NODES 的非空子集；省略时不增加种类限制 |
+| `allow_explain_analyze` | 布尔值，默认 false；为 true 时允许 `EXPLAIN ANALYZE` 加 SELECT 或 WITH 查询 |
+
+`starrocks_query` 没有 `databases` 和 `catalogs` 收紧项。SQL 校验是词法级的，不提取库名和表名，
+可读取的库表只由数据库账号的授权决定。`database` 参数只是默认库，不是授权边界。
+
+`PROFILELIST` 不是合法的 `show_types` 成员；`SHOW PROFILELIST` 和 `ANALYZE PROFILE` 无论如何配置都拒绝，
+它们会返回其他账号的查询文本。`EXPLAIN ANALYZE` 会执行目标查询，只有 `allow_explain_analyze` 为 true 且目标是 SELECT 或 WITH 时允许，INSERT 目标始终拒绝。
+
+`statement_types` 与 `show_types` 取交集：配置 `show_types` 不会自动允许 SHOW。
+`address` 只接受 `tcp://host:port`。其余规则和默认值见 [builtin-starrocks.md](builtin-starrocks.md)。
+
 ## 本地目录校验配置
 
 以下 builtin_config 可用于两个独立 action。配置不包含凭据内容；目录校验不读取凭据或连接服务。
@@ -142,4 +162,16 @@ builtin_config:
   databases: [fixture]
   statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
   show_types: [TABLES, DATABASES, PROCESSLIST, VARIABLES, STATUS, CREATE TABLE, COLUMNS]
+```
+
+```yaml
+# builtin: starrocks_query
+builtin_config:
+  address: tcp://127.0.0.1:9030
+  credential: /etc/allowops/credentials/starrocks-query.json
+  max_rows: 200
+  max_bytes: 64KB
+  timeout: 10s
+  statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
+  show_types: [DATABASES, TABLES, COLUMNS, CREATE TABLE]
 ```

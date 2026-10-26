@@ -1,0 +1,28 @@
+name: starrocks_explain
+description: Show the query plan of one read-only StarRocks statement with EXPLAIN; the statement is not executed and EXPLAIN ANALYZE is not allowed.
+risk: read
+run_as: root
+params:
+  database:
+    type: string
+    description: Optional default database for unqualified table names.
+  sql:
+    type: string
+    description: A single EXPLAIN statement on a read-only query; no line breaks or multiple statements.
+    regex: ^EXPLAIN [^\r\n]+$
+    max_len: 4000
+timeout: 15s
+builtin: starrocks_query
+builtin_config:
+  credential: /etc/allowops/credentials/starrocks-query.json
+  address: tcp://127.0.0.1:9030
+  max_rows: 500
+  max_bytes: 64KB
+  timeout: 10s
+  statement_types: [EXPLAIN]
+  allow_explain_analyze: false
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

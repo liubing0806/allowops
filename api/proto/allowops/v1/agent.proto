@@ -70,7 +70,7 @@ message AgentCapabilities {
   repeated string parameter_types = 2;
   // exec,steps,script,builtin.
   repeated string execution_modes = 3;
-  // log_search,log_query,mysql_query,redis_command,http_get,prometheus_query,alertmanager_alerts.
+  // log_search,log_query,mysql_query,redis_command,http_get,prometheus_query,alertmanager_alerts,starrocks_query.
   repeated string builtins = 4;
   // match,exclude,tail,head,count.
   repeated string output_filters = 5;

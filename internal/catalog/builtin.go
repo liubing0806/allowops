@@ -51,7 +51,7 @@ type BudgetedBuiltinHandler interface {
 }
 
 // Builtins is the process-local registration table; registration occurs at startup.
-var Builtins = map[string]BuiltinHandler{"mysql_query": mysqlHandler{}, "log_search": logSearchHandler{}, "log_query": logQueryHandler{}, "http_get": httpGetHandler{}, "redis_command": redisHandler{}, "prometheus_query": prometheusHandler{}, "alertmanager_alerts": alertmanagerHandler{}}
+var Builtins = map[string]BuiltinHandler{"mysql_query": mysqlHandler{}, "log_search": logSearchHandler{}, "log_query": logQueryHandler{}, "http_get": httpGetHandler{}, "redis_command": redisHandler{}, "prometheus_query": prometheusHandler{}, "alertmanager_alerts": alertmanagerHandler{}, "starrocks_query": starRocksHandler{}}
 
 type mysqlHandler struct{}
 

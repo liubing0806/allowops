@@ -17,6 +17,8 @@ const (
 	DefaultMySQLMaxResponseBytes int64 = 64 << 10
 	DefaultRedisMaxScanCount           = 1000
 	DefaultRedisScanCount              = 100
+	DefaultStarRocksMaxRows            = 500
+	DefaultStarRocksMaxBytes     int64 = 1 << 20
 	ExitSuccess                        = 0
 	ExitFailure                        = 1
 )

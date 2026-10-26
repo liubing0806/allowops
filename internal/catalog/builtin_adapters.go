@@ -14,6 +14,7 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin/logquery"
 	"github.com/liubing0806/allowops/internal/builtin/logsearch"
 	redisbuiltin "github.com/liubing0806/allowops/internal/builtin/redis"
+	"github.com/liubing0806/allowops/internal/builtin/starrocks"
 	"github.com/liubing0806/allowops/internal/params"
 )
 
@@ -319,4 +320,69 @@ func (redisHandler) RunRedacted(ctx context.Context, input, values map[string]an
 	args, _ := values["args"].([]string)
 	r, err := redisbuiltin.RunRedacted(ctx, cfg, redisbuiltin.Params{Command: values["command"].(string), Args: args}, mask)
 	return adaptBuiltinResult(r), err
+}
+
+type starRocksHandler struct{}
+
+func starRocksConfig(input map[string]any) (starrocks.Config, error) {
+	var fields struct {
+		Credential          string   `json:"credential"`
+		Address             string   `json:"address"`
+		MaxRows             int      `json:"max_rows"`
+		MaxBytes            Size     `json:"max_bytes"`
+		Timeout             string   `json:"timeout"`
+		StatementTypes      []string `json:"statement_types"`
+		ShowTypes           []string `json:"show_types"`
+		AllowExplainAnalyze bool     `json:"allow_explain_analyze"`
+	}
+	if err := decodeBuiltinConfig(input, &fields); err != nil {
+		return starrocks.Config{}, err
+	}
+	for _, list := range []struct {
+		name   string
+		values []string
+	}{{"statement_types", fields.StatementTypes}, {"show_types", fields.ShowTypes}} {
+		if _, present := input[list.name]; present && list.values == nil {
+			return starrocks.Config{}, fmt.Errorf("builtin_config.%s requires a nonempty list of strings", list.name)
+		}
+	}
+	timeout, err := builtinTimeout(fields.Timeout)
+	if err != nil {
+		return starrocks.Config{}, err
+	}
+	cfg := starrocks.Config{
+		Credential: fields.Credential, Address: fields.Address, MaxRows: fields.MaxRows, MaxBytes: int64(fields.MaxBytes), Timeout: timeout,
+		StatementTypes: fields.StatementTypes, ShowTypes: fields.ShowTypes, AllowExplainAnalyze: fields.AllowExplainAnalyze,
+	}
+	return cfg, cfg.Validate()
+}
+
+func (starRocksHandler) ValidateConfig(input map[string]any) error {
+	_, err := starRocksConfig(input)
+	return err
+}
+
+func (starRocksHandler) Parameters(map[string]any) (map[string]params.Definition, error) {
+	return map[string]params.Definition{
+		"database": {Type: params.String, Description: "Default database for unqualified table names; optional", Regex: `^[a-zA-Z0-9_]{1,64}$`, MaxLen: 64, Optional: true},
+		"sql":      {Type: params.String, Description: "Read-only StarRocks SQL: one SELECT, SHOW, DESC or EXPLAIN statement", MaxLen: 4000},
+	}, nil
+}
+
+func (h starRocksHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
+	return h.RunRedacted(ctx, input, values, nil)
+}
+
+func (starRocksHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+	cfg, err := starRocksConfig(input)
+	if err != nil {
+		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
+	}
+	database, _ := values["database"].(string)
+	sql, _ := values["sql"].(string)
+	r, err := starrocks.RunRedacted(ctx, cfg, starrocks.Params{Database: database, SQL: sql}, mask)
+	if err != nil {
+		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
+	}
+	return BuiltinResult{Stdout: r.Output, ResourceLimited: r.Truncated}, nil
 }

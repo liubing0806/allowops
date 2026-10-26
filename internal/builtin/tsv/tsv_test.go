@@ -1,4 +1,4 @@
-package mysql
+package tsv
 
 import (
 	"database/sql"
@@ -18,7 +18,7 @@ func cells(values ...any) []sql.NullString {
 }
 
 func TestMaskRowKeepsCellsWhenNoRuleMatches(t *testing.T) {
-	got := maskRow(cells("max_connections", "151", nil, "a\tb"), func(s string) string { return s })
+	got := MaskRow(cells("max_connections", "151", nil, "a\tb"), func(s string) string { return s })
 	want := []string{"max_connections", "151", `\N`, `a\tb`}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
@@ -27,7 +27,7 @@ func TestMaskRowKeepsCellsWhenNoRuleMatches(t *testing.T) {
 
 func TestMaskRowAppliesRulesToEachCell(t *testing.T) {
 	mask := func(s string) string { return strings.ReplaceAll(s, "secret", "[R]") }
-	got := maskRow(cells("a", "my secret"), mask)
+	got := MaskRow(cells("a", "my secret"), mask)
 	if want := []string{"a", "my [R]"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -43,11 +43,11 @@ func TestMaskRowLetsRulesRelateNameToValue(t *testing.T) {
 		}
 		return s
 	}
-	got := maskRow(cells("report_password", "rp_s3cr3t"), mask)
+	got := MaskRow(cells("report_password", "rp_s3cr3t"), mask)
 	if want := []string{"[REDACTED:row]"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
-	got = maskRow(cells("max_connections", "151"), mask)
+	got = MaskRow(cells("max_connections", "151"), mask)
 	if want := []string{"max_connections", "151"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -56,7 +56,7 @@ func TestMaskRowLetsRulesRelateNameToValue(t *testing.T) {
 // A rule that keeps the tab structure replaces only the value cell.
 func TestMaskRowKeepsFieldsWhenRowRuleKeepsTabs(t *testing.T) {
 	mask := func(s string) string { return strings.Replace(s, "\tvalue", "\t[R]", 1) }
-	got := maskRow(cells("name", "value", nil), mask)
+	got := MaskRow(cells("name", "value", nil), mask)
 	if want := []string{"name", "[R]", `\N`}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -66,7 +66,7 @@ func TestMaskRowKeepsFieldsWhenRowRuleKeepsTabs(t *testing.T) {
 // row rule changes such a row, the row collapses instead of splitting wrongly.
 func TestMaskRowFailsClosedWhenFieldBoundariesAreAmbiguous(t *testing.T) {
 	mask := func(s string) string { return strings.ReplaceAll(s, "secret", "[R]") }
-	got := maskRow(cells("a\tb", "c"), func(s string) string {
+	got := MaskRow(cells("a\tb", "c"), func(s string) string {
 		if strings.Contains(s, "\t") {
 			return mask(s + "secret")
 		}
@@ -82,7 +82,7 @@ func TestMaskRowFailsClosedWhenFieldBoundariesAreAmbiguous(t *testing.T) {
 // embedded tab that a row rule changed must collapse into one field.
 func TestMaskRowCollapsesWhenRowRuleChangesRowWithEmbeddedTab(t *testing.T) {
 	mask := func(s string) string { return strings.ReplaceAll(s, "password=\tv", "[R]") }
-	got := maskRow(cells("a\tb", "password=", "v"), mask)
+	got := MaskRow(cells("a\tb", "password=", "v"), mask)
 	if len(got) != 1 || strings.Contains(got[0], "\t") || strings.Contains(got[0], "\tv") {
 		t.Fatalf("got %q, want one field without a raw tab", got)
 	}
