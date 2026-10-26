@@ -1,0 +1,3076 @@
+{
+ "jobs": [
+  {
+   "id": "152329a9-7101-0340-9ad3-40b9090af900",
+   "queryType": "REST",
+   "queryText": "SELECT * FROM TABLE(\"demo_src\".external_query('SELECT sleep(30) AS s'))",
+   "plannerEstimatedCost": 2112000201552.0,
+   "wlmQueue": "LARGE",
+   "queriedDatasets": [
+    {
+     "datasetType": "OTHERS",
+     "datasetName": "external_query",
+     "datasetPath": "demo_src.external_query",
+     "datasetPathsList": [
+      "demo_src",
+      "external_query"
+     ]
+    }
+   ],
+   "state": "CANCELED",
+   "startTime": 1792857686504,
+   "endTime": 1792857690524,
+   "duration": 4020,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857686504",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857686504",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857686507",
+     "phaseDuration": "8"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857686515",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857686515",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857686516",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857686517",
+     "phaseDuration": "4007"
+    }
+   ],
+   "rowsScanned": 0,
+   "enqueuedTime": "0",
+   "input": "0 B / 0 Records",
+   "output": "0 B / 0 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT * FROM TABLE(\"demo_src\".external_query('SELECT sleep(30) AS s'))",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 0,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329a8-fc37-5adf-8d2b-933dcc541d00",
+   "queryType": "UI_INTERNAL_RUN",
+   "queryText": "CREATE TABLE \"__support\".\"dcf29caa-c900-410c-bb56-0d95f96dd7b8\" \n  STORE AS (type => 'json', prettyPrint => false) \n  WITH SINGLE WRITER\n  AS\nSELECT * \nFROM \n  json\nWHERE\n  (\n    cast(\n      substr(timestamp,\n        0,\n        length(timestamp) - 4\n      ) as timestamp\n  ) between timestamp'2026-10-24 16:01:21.430' and timestamp'2026-10-24 16:01:36.438'\n    AND \n    levelValue >= 30000\n  )\n  OR\n  thread like '%152329a8-8383-5979-8a88-3f083a7fb900%'\n",
+   "plannerEstimatedCost": 1.0,
+   "queriedDatasets": [
+    {
+     "datasetType": "",
+     "datasetName": "Unavailable",
+     "datasetPath": "",
+     "versionContext": "",
+     "datasetPathsList": []
+    }
+   ],
+   "state": "FAILED",
+   "startTime": 1792857686478,
+   "endTime": 1792857686481,
+   "duration": 3,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857686478",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857686479",
+     "phaseDuration": "2"
+    }
+   ],
+   "rowsScanned": 0,
+   "input": "0 B / 0 Records",
+   "output": "0 B / 0 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "CREATE TABLE \"__support\".\"dcf29caa-c900-410c-bb56-0d95f96dd7b8\" \n  STORE AS (type => 'json', prettyPrint => false) \n  WITH SINGLE WRITER\n  AS\nSELECT * \nFROM \n  json\nWHERE\n  (\n    cast(\n      substr(timestamp,\n        0,\n        length(timestamp) - 4\n      ) as timestamp\n  ) between timestamp'2026-10-24 16:01:21.430' and timestamp'2026-10-24 16:01:36.438'\n    AND \n    levelValue >= 30000\n  )\n  OR\n  thread like '%152329a8-8383-5979-8a88-3f083a7fb900%'\n",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 0,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329a8-8383-5979-8a88-3f083a7fb900",
+   "queryType": "REST",
+   "queryText": "SELECT * FROM \"demo_src\".demo_dw.no_such_table",
+   "plannerEstimatedCost": 1.0,
+   "queriedDatasets": [
+    {
+     "datasetType": "",
+     "datasetName": "Unavailable",
+     "datasetPath": "",
+     "versionContext": "",
+     "datasetPathsList": []
+    }
+   ],
+   "state": "FAILED",
+   "startTime": 1792857686430,
+   "endTime": 1792857686438,
+   "duration": 8,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857686430",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857686430",
+     "phaseDuration": "8"
+    }
+   ],
+   "rowsScanned": 0,
+   "input": "0 B / 0 Records",
+   "output": "0 B / 0 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT * FROM \"demo_src\".demo_dw.no_such_table",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 0,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329ab-6312-f9a2-7240-1e8469e7bd00",
+   "queryType": "REST",
+   "queryText": "SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 0 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 1 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 2 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 3 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 4 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 5 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 6 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 7 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 8 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 9 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 10 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 11 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 12 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 13 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 14 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 15 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 16 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 17 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 18 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 19 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 20 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 21 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 22 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 23 AND u.level > 3 GROUP BY u.city, p.category",
+   "plannerEstimatedCost": 2.7308642774028667e+22,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "fact_orders",
+     "datasetPath": "demo_src.demo_dw.fact_orders",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "fact_orders"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_product",
+     "datasetPath": "demo_src.demo_dw.dim_product",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_product"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857684791,
+   "endTime": 1792857685884,
+   "duration": 1093,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857684791",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857684791",
+     "phaseDuration": "17"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857684808",
+     "phaseDuration": "278"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857685086",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857685086",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857685089",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857685091",
+     "phaseDuration": "793"
+    }
+   ],
+   "rowsScanned": 339000,
+   "enqueuedTime": "0",
+   "input": "6 MB / 339000 Records",
+   "output": "2 KB / 48 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 0 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 1 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 2 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 3 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 4 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 5 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 6 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 7 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 8 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 9 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 10 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 11 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 12 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 13 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 14 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 15 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 16 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 17 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 18 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 19 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 20 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 21 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 22 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 23 AND u.level > 3 GROUP BY u.city, p.category",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 48,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329aa-fe18-b288-55c3-ebf217d68700",
+   "queryType": "REST",
+   "queryText": "SELECT count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_product p ON u.user_id < p.product_id",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_product",
+     "datasetPath": "demo_scratch.demo_dw.dim_product",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_product"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857684203,
+   "endTime": 1792857684302,
+   "duration": 99,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857684203",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857684203",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857684205",
+     "phaseDuration": "4"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857684209",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857684209",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857684210",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857684210",
+     "phaseDuration": "92"
+    }
+   ],
+   "rowsScanned": 11000,
+   "enqueuedTime": "0",
+   "input": "44 KB / 11000 Records",
+   "output": "9 B / 1 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_product p ON u.user_id < p.product_id",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 1,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329ac-17d7-f8d1-666d-80536bc40500",
+   "queryType": "REST",
+   "queryText": "SELECT u.level, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.city = v.city GROUP BY u.level",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857683618,
+   "endTime": 1792857684084,
+   "duration": 466,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857683618",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857683618",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857683620",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857683623",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857683623",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857683624",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857683627",
+     "phaseDuration": "457"
+    }
+   ],
+   "rowsScanned": 20000,
+   "enqueuedTime": "0",
+   "input": "269 KB / 20000 Records",
+   "output": "56 B / 4 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.level, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.city = v.city GROUP BY u.level",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 4,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329ac-36d5-580e-0f49-5ff43ebecd00",
+   "queryType": "REST",
+   "queryText": "SELECT order_id, user_id, amount FROM \"demo_src\".demo_dw.fact_orders",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "fact_orders",
+     "datasetPath": "demo_src.demo_dw.fact_orders",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "fact_orders"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857683025,
+   "endTime": 1792857683117,
+   "duration": 92,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857683025",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857683025",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857683027",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857683030",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857683030",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857683031",
+     "phaseDuration": "4"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857683035",
+     "phaseDuration": "82"
+    }
+   ],
+   "rowsScanned": 500000,
+   "enqueuedTime": "0",
+   "input": "13 MB / 500000 Records",
+   "output": "13 MB / 500000 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT order_id, user_id, amount FROM \"demo_src\".demo_dw.fact_orders",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 500000,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329ac-fba4-1fb3-e672-f8e695658800",
+   "queryType": "REST",
+   "queryText": "SELECT u.city, count(*) AS c, sum(f.amount) AS total FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id GROUP BY u.city",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "fact_orders",
+     "datasetPath": "demo_src.demo_dw.fact_orders",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "fact_orders"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857682443,
+   "endTime": 1792857682559,
+   "duration": 116,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857682443",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857682443",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857682446",
+     "phaseDuration": "4"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857682450",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857682450",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857682451",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857682453",
+     "phaseDuration": "106"
+    }
+   ],
+   "rowsScanned": 510000,
+   "enqueuedTime": "0",
+   "input": "9 MB / 510000 Records",
+   "output": "213 B / 5 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.city, count(*) AS c, sum(f.amount) AS total FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id GROUP BY u.city",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 5,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329ad-adbe-2ad1-df34-c8b2b7bf5400",
+   "queryType": "REST",
+   "queryText": "SELECT u.city, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.user_id = v.user_id GROUP BY u.city",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857681861,
+   "endTime": 1792857681889,
+   "duration": 28,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857681861",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857681861",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857681863",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857681866",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857681866",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857681867",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857681868",
+     "phaseDuration": "21"
+    }
+   ],
+   "rowsScanned": 20000,
+   "enqueuedTime": "0",
+   "input": "195 KB / 20000 Records",
+   "output": "128 B / 5 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.city, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.user_id = v.user_id GROUP BY u.city",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 5,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329ad-80dd-e507-3792-f41fe119da00",
+   "queryType": "REST",
+   "queryText": "SELECT p.category, count(*) AS c, sum(f.amount) AS total FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id < 10 GROUP BY p.category",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "fact_orders",
+     "datasetPath": "demo_src.demo_dw.fact_orders",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "fact_orders"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_product",
+     "datasetPath": "demo_src.demo_dw.dim_product",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_product"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857681276,
+   "endTime": 1792857681306,
+   "duration": 30,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857681276",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857681276",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857681279",
+     "phaseDuration": "5"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857681284",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857681284",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857681285",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857681287",
+     "phaseDuration": "19"
+    }
+   ],
+   "rowsScanned": 8,
+   "enqueuedTime": "0",
+   "input": "265 B / 8 Records",
+   "output": "265 B / 8 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT p.category, count(*) AS c, sum(f.amount) AS total FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id < 10 GROUP BY p.category",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 8,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329af-702d-2347-b991-e9b76cb9ed00",
+   "queryType": "REST",
+   "queryText": "SELECT user_id, user_name, city FROM \"demo_src\".demo_dw.dim_user WHERE level = 2",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857680695,
+   "endTime": 1792857680715,
+   "duration": 20,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857680695",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857680695",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857680697",
+     "phaseDuration": "4"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857680701",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857680701",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857680702",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857680703",
+     "phaseDuration": "12"
+    }
+   ],
+   "rowsScanned": 2500,
+   "enqueuedTime": "0",
+   "input": "70 KB / 2500 Records",
+   "output": "70 KB / 2500 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT user_id, user_name, city FROM \"demo_src\".demo_dw.dim_user WHERE level = 2",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 2500,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329bf-08ae-8c59-3e01-34189ef6fb00",
+   "queryType": "REST",
+   "queryText": "SELECT * FROM sys.reflections",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "reflections",
+     "datasetPath": "sys.reflections",
+     "datasetPathsList": [
+      "sys",
+      "reflections"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857664827,
+   "endTime": 1792857664839,
+   "duration": 12,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857664827",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857664827",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857664829",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857664832",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857664832",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857664832",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857664834",
+     "phaseDuration": "5"
+    }
+   ],
+   "rowsScanned": 0,
+   "enqueuedTime": "0",
+   "input": "0 B / 0 Records",
+   "output": "0 B / 0 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT * FROM sys.reflections",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 0,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329be-dfdd-3d7c-30fc-c9940b2ef100",
+   "queryType": "REST",
+   "queryText": "SELECT * FROM sys.memory",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "memory",
+     "datasetPath": "sys.memory",
+     "datasetPathsList": [
+      "sys",
+      "memory"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857664778,
+   "endTime": 1792857664791,
+   "duration": 13,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857664778",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857664778",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857664780",
+     "phaseDuration": "4"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857664784",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857664784",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857664785",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857664786",
+     "phaseDuration": "5"
+    }
+   ],
+   "rowsScanned": 1,
+   "enqueuedTime": "0",
+   "input": "96 B / 1 Records",
+   "output": "96 B / 1 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT * FROM sys.memory",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 1,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329be-d4db-e1c7-b859-83db7d731600",
+   "queryType": "REST",
+   "queryText": "SELECT * FROM sys.nodes",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "nodes",
+     "datasetPath": "sys.nodes",
+     "datasetPathsList": [
+      "sys",
+      "nodes"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857664193,
+   "endTime": 1792857664244,
+   "duration": 51,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857664193",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857664193",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857664195",
+     "phaseDuration": "5"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857664200",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857664200",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857664202",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857664203",
+     "phaseDuration": "41"
+    }
+   ],
+   "rowsScanned": 1,
+   "enqueuedTime": "0",
+   "input": "188 B / 1 Records",
+   "output": "188 B / 1 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT * FROM sys.nodes",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 1,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329c3-9594-513d-78eb-702312c01700",
+   "queryType": "REST",
+   "queryText": "SELECT * FROM TABLE(\"demo_src\".external_query('SELECT sleep(30) AS s'))",
+   "plannerEstimatedCost": 2112000201552.0,
+   "wlmQueue": "LARGE",
+   "queriedDatasets": [
+    {
+     "datasetType": "OTHERS",
+     "datasetName": "external_query",
+     "datasetPath": "demo_src.external_query",
+     "datasetPathsList": [
+      "demo_src",
+      "external_query"
+     ]
+    }
+   ],
+   "state": "CANCELED",
+   "startTime": 1792857659048,
+   "endTime": 1792857663066,
+   "duration": 4018,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857659048",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857659048",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857659051",
+     "phaseDuration": "6"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857659057",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857659057",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857659058",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857659059",
+     "phaseDuration": "4007"
+    }
+   ],
+   "rowsScanned": 0,
+   "enqueuedTime": "0",
+   "input": "0 B / 0 Records",
+   "output": "0 B / 0 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT * FROM TABLE(\"demo_src\".external_query('SELECT sleep(30) AS s'))",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 0,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329c4-7fb6-2a93-705d-6ef338eb0500",
+   "queryType": "UI_INTERNAL_RUN",
+   "queryText": "CREATE TABLE \"__support\".\"8bd21b52-31da-4f9f-8e27-dbd6a1cb44ab\" \n  STORE AS (type => 'json', prettyPrint => false) \n  WITH SINGLE WRITER\n  AS\nSELECT * \nFROM \n  json\nWHERE\n  (\n    cast(\n      substr(timestamp,\n        0,\n        length(timestamp) - 4\n      ) as timestamp\n  ) between timestamp'2026-10-24 16:00:53.970' and timestamp'2026-10-24 16:01:08.977'\n    AND \n    levelValue >= 30000\n  )\n  OR\n  thread like '%152329c5-43cf-9db5-1873-2bf0549a3300%'\n",
+   "plannerEstimatedCost": 1.0,
+   "queriedDatasets": [
+    {
+     "datasetType": "",
+     "datasetName": "Unavailable",
+     "datasetPath": "",
+     "versionContext": "",
+     "datasetPathsList": []
+    }
+   ],
+   "state": "FAILED",
+   "startTime": 1792857659022,
+   "endTime": 1792857659025,
+   "duration": 3,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857659022",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857659022",
+     "phaseDuration": "3"
+    }
+   ],
+   "rowsScanned": 0,
+   "input": "0 B / 0 Records",
+   "output": "0 B / 0 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "CREATE TABLE \"__support\".\"8bd21b52-31da-4f9f-8e27-dbd6a1cb44ab\" \n  STORE AS (type => 'json', prettyPrint => false) \n  WITH SINGLE WRITER\n  AS\nSELECT * \nFROM \n  json\nWHERE\n  (\n    cast(\n      substr(timestamp,\n        0,\n        length(timestamp) - 4\n      ) as timestamp\n  ) between timestamp'2026-10-24 16:00:53.970' and timestamp'2026-10-24 16:01:08.977'\n    AND \n    levelValue >= 30000\n  )\n  OR\n  thread like '%152329c5-43cf-9db5-1873-2bf0549a3300%'\n",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 0,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329c5-43cf-9db5-1873-2bf0549a3300",
+   "queryType": "REST",
+   "queryText": "SELECT * FROM \"demo_src\".demo_dw.no_such_table",
+   "plannerEstimatedCost": 1.0,
+   "queriedDatasets": [
+    {
+     "datasetType": "",
+     "datasetName": "Unavailable",
+     "datasetPath": "",
+     "versionContext": "",
+     "datasetPathsList": []
+    }
+   ],
+   "state": "FAILED",
+   "startTime": 1792857658970,
+   "endTime": 1792857658977,
+   "duration": 7,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857658970",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857658970",
+     "phaseDuration": "7"
+    }
+   ],
+   "rowsScanned": 0,
+   "input": "0 B / 0 Records",
+   "output": "0 B / 0 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT * FROM \"demo_src\".demo_dw.no_such_table",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 0,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329c6-546d-a4bc-19fe-f846f2883a00",
+   "queryType": "REST",
+   "queryText": "SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 0 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 1 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 2 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 3 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 4 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 5 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 6 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 7 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 8 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 9 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 10 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 11 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 12 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 13 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 14 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 15 AND u.level > 0 GROUP BY u.city, p.category",
+   "plannerEstimatedCost": 4.1669681945031085e+17,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "fact_orders",
+     "datasetPath": "demo_src.demo_dw.fact_orders",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "fact_orders"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_product",
+     "datasetPath": "demo_src.demo_dw.dim_product",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_product"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857657850,
+   "endTime": 1792857658604,
+   "duration": 754,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857657850",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857657850",
+     "phaseDuration": "14"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857657864",
+     "phaseDuration": "174"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857658038",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857658038",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857658041",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857658043",
+     "phaseDuration": "561"
+    }
+   ],
+   "rowsScanned": 221000,
+   "enqueuedTime": "0",
+   "input": "4 MB / 221000 Records",
+   "output": "1 KB / 32 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 0 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 1 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 2 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 3 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 4 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 5 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 6 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 7 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 8 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 9 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 10 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 11 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 12 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 13 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 14 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 15 AND u.level > 0 GROUP BY u.city, p.category",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 32,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329c6-379e-9dad-5c98-52453ff11b00",
+   "queryType": "REST",
+   "queryText": "SELECT count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_product p ON u.user_id < p.product_id",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_product",
+     "datasetPath": "demo_scratch.demo_dw.dim_product",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_product"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857657256,
+   "endTime": 1792857657354,
+   "duration": 98,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857657256",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857657256",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857657258",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857657261",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857657261",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857657262",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857657264",
+     "phaseDuration": "90"
+    }
+   ],
+   "rowsScanned": 11000,
+   "enqueuedTime": "0",
+   "input": "44 KB / 11000 Records",
+   "output": "9 B / 1 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_product p ON u.user_id < p.product_id",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 1,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329c6-af7f-ac41-bb82-c3fa6a942900",
+   "queryType": "REST",
+   "queryText": "SELECT u.level, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.city = v.city GROUP BY u.level",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857656676,
+   "endTime": 1792857657146,
+   "duration": 470,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857656676",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857656677",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857656680",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857656683",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857656684",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857656684",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857656686",
+     "phaseDuration": "460"
+    }
+   ],
+   "rowsScanned": 20000,
+   "enqueuedTime": "1",
+   "input": "269 KB / 20000 Records",
+   "output": "56 B / 4 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.level, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.city = v.city GROUP BY u.level",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 4,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329c7-54dc-20b4-6bf8-c8e37727fa00",
+   "queryType": "REST",
+   "queryText": "SELECT order_id, user_id, amount FROM \"demo_src\".demo_dw.fact_orders",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "fact_orders",
+     "datasetPath": "demo_src.demo_dw.fact_orders",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "fact_orders"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857656091,
+   "endTime": 1792857656185,
+   "duration": 94,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857656091",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857656091",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857656093",
+     "phaseDuration": "4"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857656097",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857656097",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857656097",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857656098",
+     "phaseDuration": "87"
+    }
+   ],
+   "rowsScanned": 500000,
+   "enqueuedTime": "0",
+   "input": "13 MB / 500000 Records",
+   "output": "13 MB / 500000 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT order_id, user_id, amount FROM \"demo_src\".demo_dw.fact_orders",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 500000,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329c7-d74d-dd97-873f-91914768b700",
+   "queryType": "REST",
+   "queryText": "SELECT u.city, count(*) AS c, sum(f.amount) AS total FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id GROUP BY u.city",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "fact_orders",
+     "datasetPath": "demo_src.demo_dw.fact_orders",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "fact_orders"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857655509,
+   "endTime": 1792857655649,
+   "duration": 140,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857655509",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857655509",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857655511",
+     "phaseDuration": "5"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857655516",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857655516",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857655517",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857655519",
+     "phaseDuration": "130"
+    }
+   ],
+   "rowsScanned": 510000,
+   "enqueuedTime": "0",
+   "input": "9 MB / 510000 Records",
+   "output": "213 B / 5 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.city, count(*) AS c, sum(f.amount) AS total FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id GROUP BY u.city",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 5,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329c8-8df2-062e-f204-301d9690d400",
+   "queryType": "REST",
+   "queryText": "SELECT u.city, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.user_id = v.user_id GROUP BY u.city",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857654928,
+   "endTime": 1792857654961,
+   "duration": 33,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857654928",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857654928",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857654931",
+     "phaseDuration": "4"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857654935",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857654936",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857654936",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857654937",
+     "phaseDuration": "24"
+    }
+   ],
+   "rowsScanned": 20000,
+   "enqueuedTime": "1",
+   "input": "195 KB / 20000 Records",
+   "output": "128 B / 5 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.city, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.user_id = v.user_id GROUP BY u.city",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 5,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329c9-1b16-bbab-5530-1fba48b85d00",
+   "queryType": "REST",
+   "queryText": "SELECT p.category, count(*) AS c, sum(f.amount) AS total FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id < 10 GROUP BY p.category",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "fact_orders",
+     "datasetPath": "demo_src.demo_dw.fact_orders",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "fact_orders"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_product",
+     "datasetPath": "demo_src.demo_dw.dim_product",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_product"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857654346,
+   "endTime": 1792857654391,
+   "duration": 45,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857654346",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857654346",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857654349",
+     "phaseDuration": "5"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857654354",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857654354",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857654355",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857654356",
+     "phaseDuration": "35"
+    }
+   ],
+   "rowsScanned": 8,
+   "enqueuedTime": "0",
+   "input": "265 B / 8 Records",
+   "output": "265 B / 8 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT p.category, count(*) AS c, sum(f.amount) AS total FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id < 10 GROUP BY p.category",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 8,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "152329c9-edcf-bc07-2ab1-e696f2cb6600",
+   "queryType": "REST",
+   "queryText": "SELECT user_id, user_name, city FROM \"demo_src\".demo_dw.dim_user WHERE level = 2",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857653768,
+   "endTime": 1792857653791,
+   "duration": 23,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857653768",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857653768",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857653770",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857653773",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857653774",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857653774",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857653776",
+     "phaseDuration": "15"
+    }
+   ],
+   "rowsScanned": 2500,
+   "enqueuedTime": "1",
+   "input": "70 KB / 2500 Records",
+   "output": "70 KB / 2500 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT user_id, user_name, city FROM \"demo_src\".demo_dw.dim_user WHERE level = 2",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 2500,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a07-2d58-7499-8f4b-72738d33d500",
+   "queryType": "REST",
+   "queryText": "SELECT * FROM sys.reflections",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "reflections",
+     "datasetPath": "sys.reflections",
+     "datasetPathsList": [
+      "sys",
+      "reflections"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857592875,
+   "endTime": 1792857592888,
+   "duration": 13,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857592875",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857592875",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857592878",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857592881",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857592881",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857592882",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857592883",
+     "phaseDuration": "5"
+    }
+   ],
+   "rowsScanned": 0,
+   "enqueuedTime": "0",
+   "input": "0 B / 0 Records",
+   "output": "0 B / 0 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT * FROM sys.reflections",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 0,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a06-90c6-38d0-5c15-87222016e500",
+   "queryType": "REST",
+   "queryText": "SELECT * FROM sys.memory",
+   "plannerEstimatedCost": 558088800.032,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "memory",
+     "datasetPath": "sys.memory",
+     "datasetPathsList": [
+      "sys",
+      "memory"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857592312,
+   "endTime": 1792857592329,
+   "duration": 17,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857592312",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857592312",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857592315",
+     "phaseDuration": "6"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857592321",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857592321",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857592322",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857592324",
+     "phaseDuration": "5"
+    }
+   ],
+   "rowsScanned": 1,
+   "enqueuedTime": "0",
+   "input": "96 B / 1 Records",
+   "output": "96 B / 1 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT * FROM sys.memory",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 1,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a08-0ee3-bf85-df31-36acc8580300",
+   "queryType": "REST",
+   "queryText": "SELECT * FROM sys.nodes",
+   "plannerEstimatedCost": 1255688800.072,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "nodes",
+     "datasetPath": "sys.nodes",
+     "datasetPathsList": [
+      "sys",
+      "nodes"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857591743,
+   "endTime": 1792857591864,
+   "duration": 121,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857591743",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857591743",
+     "phaseDuration": "6"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857591749",
+     "phaseDuration": "13"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857591762",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857591762",
+     "phaseDuration": "29"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857591791",
+     "phaseDuration": "8"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857591799",
+     "phaseDuration": "65"
+    }
+   ],
+   "rowsScanned": 1,
+   "enqueuedTime": "0",
+   "input": "188 B / 1 Records",
+   "output": "188 B / 1 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT * FROM sys.nodes",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 1,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a0d-0603-8829-9492-21b8ace72900",
+   "queryType": "REST",
+   "queryText": "SELECT * FROM TABLE(\"demo_src\".external_query('SELECT sleep(30) AS s'))",
+   "plannerEstimatedCost": 2112000201552.0,
+   "wlmQueue": "LARGE",
+   "queriedDatasets": [
+    {
+     "datasetType": "OTHERS",
+     "datasetName": "external_query",
+     "datasetPath": "demo_src.external_query",
+     "datasetPathsList": [
+      "demo_src",
+      "external_query"
+     ]
+    }
+   ],
+   "state": "CANCELED",
+   "startTime": 1792857586614,
+   "endTime": 1792857590633,
+   "duration": 4019,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857586614",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857586614",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857586617",
+     "phaseDuration": "6"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857586623",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857586623",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857586624",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857586625",
+     "phaseDuration": "4008"
+    }
+   ],
+   "rowsScanned": 0,
+   "enqueuedTime": "0",
+   "input": "0 B / 0 Records",
+   "output": "0 B / 0 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT * FROM TABLE(\"demo_src\".external_query('SELECT sleep(30) AS s'))",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 0,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a0c-e247-ceec-3396-d8f568555b00",
+   "queryType": "UI_INTERNAL_RUN",
+   "queryText": "CREATE TABLE \"__support\".\"8059ce11-4371-4b07-9718-879f67f61e44\" \n  STORE AS (type => 'json', prettyPrint => false) \n  WITH SINGLE WRITER\n  AS\nSELECT * \nFROM \n  json\nWHERE\n  (\n    cast(\n      substr(timestamp,\n        0,\n        length(timestamp) - 4\n      ) as timestamp\n  ) between timestamp'2026-10-24 15:59:41.029' and timestamp'2026-10-24 15:59:56.066'\n    AND \n    levelValue >= 30000\n  )\n  OR\n  thread like '%15232a0c-c4ea-a7e9-a504-891455eb4400%'\n",
+   "plannerEstimatedCost": 1.0,
+   "queriedDatasets": [
+    {
+     "datasetType": "",
+     "datasetName": "Unavailable",
+     "datasetPath": "",
+     "versionContext": "",
+     "datasetPathsList": []
+    }
+   ],
+   "state": "FAILED",
+   "startTime": 1792857586588,
+   "endTime": 1792857586591,
+   "duration": 3,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857586588",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857586588",
+     "phaseDuration": "3"
+    }
+   ],
+   "rowsScanned": 0,
+   "input": "0 B / 0 Records",
+   "output": "0 B / 0 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "CREATE TABLE \"__support\".\"8059ce11-4371-4b07-9718-879f67f61e44\" \n  STORE AS (type => 'json', prettyPrint => false) \n  WITH SINGLE WRITER\n  AS\nSELECT * \nFROM \n  json\nWHERE\n  (\n    cast(\n      substr(timestamp,\n        0,\n        length(timestamp) - 4\n      ) as timestamp\n  ) between timestamp'2026-10-24 15:59:41.029' and timestamp'2026-10-24 15:59:56.066'\n    AND \n    levelValue >= 30000\n  )\n  OR\n  thread like '%15232a0c-c4ea-a7e9-a504-891455eb4400%'\n",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 0,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a0c-c4ea-a7e9-a504-891455eb4400",
+   "queryType": "REST",
+   "queryText": "SELECT * FROM \"demo_src\".demo_dw.no_such_table",
+   "plannerEstimatedCost": 1.0,
+   "queriedDatasets": [
+    {
+     "datasetType": "",
+     "datasetName": "Unavailable",
+     "datasetPath": "",
+     "versionContext": "",
+     "datasetPathsList": []
+    }
+   ],
+   "state": "FAILED",
+   "startTime": 1792857586029,
+   "endTime": 1792857586066,
+   "duration": 37,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857586029",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857586029",
+     "phaseDuration": "37"
+    }
+   ],
+   "rowsScanned": 0,
+   "input": "0 B / 0 Records",
+   "output": "0 B / 0 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT * FROM \"demo_src\".demo_dw.no_such_table",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 0,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a0e-a45f-3164-6e0a-e2200fbc7b00",
+   "queryType": "REST",
+   "queryText": "SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 0 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 1 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 2 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 3 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 4 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 5 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 6 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 7 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 8 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 9 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 10 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 11 AND u.level > 1 GROUP BY u.city, p.category",
+   "plannerEstimatedCost": 1627721730083235.5,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "fact_orders",
+     "datasetPath": "demo_src.demo_dw.fact_orders",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "fact_orders"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_product",
+     "datasetPath": "demo_src.demo_dw.dim_product",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_product"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857584918,
+   "endTime": 1792857585655,
+   "duration": 737,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857584918",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857584918",
+     "phaseDuration": "17"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857584935",
+     "phaseDuration": "205"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857585140",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857585140",
+     "phaseDuration": "5"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857585145",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857585148",
+     "phaseDuration": "507"
+    }
+   ],
+   "rowsScanned": 169500,
+   "enqueuedTime": "0",
+   "input": "3 MB / 169500 Records",
+   "output": "1 KB / 24 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 0 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 1 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 2 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 3 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 4 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 5 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 6 AND u.level > 1 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 7 AND u.level > 2 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 8 AND u.level > 3 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 9 AND u.level > 4 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 10 AND u.level > 0 GROUP BY u.city, p.category UNION ALL SELECT u.city, p.category, sum(f.amount) AS s FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id = 11 AND u.level > 1 GROUP BY u.city, p.category",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 24,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a0f-563a-9fcc-d797-d37439607800",
+   "queryType": "REST",
+   "queryText": "SELECT count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_product p ON u.user_id < p.product_id",
+   "plannerEstimatedCost": 467700.8,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_product",
+     "datasetPath": "demo_scratch.demo_dw.dim_product",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_product"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857584321,
+   "endTime": 1792857584468,
+   "duration": 147,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857584321",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857584321",
+     "phaseDuration": "5"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857584326",
+     "phaseDuration": "27"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857584353",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857584353",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857584355",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857584357",
+     "phaseDuration": "111"
+    }
+   ],
+   "rowsScanned": 11000,
+   "enqueuedTime": "0",
+   "input": "44 KB / 11000 Records",
+   "output": "9 B / 1 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_product p ON u.user_id < p.product_id",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 1,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a10-4d4a-686a-6999-b54083483900",
+   "queryType": "REST",
+   "queryText": "SELECT u.level, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.city = v.city GROUP BY u.level",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857583720,
+   "endTime": 1792857584189,
+   "duration": 469,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857583720",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857583720",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857583723",
+     "phaseDuration": "5"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857583728",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857583728",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857583728",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857583730",
+     "phaseDuration": "459"
+    }
+   ],
+   "rowsScanned": 20000,
+   "enqueuedTime": "0",
+   "input": "269 KB / 20000 Records",
+   "output": "56 B / 4 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.level, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.city = v.city GROUP BY u.level",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 4,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a0f-9667-eb83-87af-aa53bf650e00",
+   "queryType": "REST",
+   "queryText": "SELECT order_id, user_id, amount FROM \"demo_src\".demo_dw.fact_orders",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "fact_orders",
+     "datasetPath": "demo_src.demo_dw.fact_orders",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "fact_orders"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857583133,
+   "endTime": 1792857583246,
+   "duration": 113,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857583133",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857583133",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857583135",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857583138",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857583138",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857583139",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857583140",
+     "phaseDuration": "106"
+    }
+   ],
+   "rowsScanned": 500000,
+   "enqueuedTime": "0",
+   "input": "13 MB / 500000 Records",
+   "output": "13 MB / 500000 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT order_id, user_id, amount FROM \"demo_src\".demo_dw.fact_orders",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 500000,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a11-535d-04d9-8b72-0da668a0f200",
+   "queryType": "REST",
+   "queryText": "SELECT u.city, count(*) AS c, sum(f.amount) AS total FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id GROUP BY u.city",
+   "plannerEstimatedCost": 1.0,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "fact_orders",
+     "datasetPath": "demo_src.demo_dw.fact_orders",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "fact_orders"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857582544,
+   "endTime": 1792857582682,
+   "duration": 138,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857582544",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857582544",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857582547",
+     "phaseDuration": "5"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857582552",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857582552",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857582553",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857582554",
+     "phaseDuration": "128"
+    }
+   ],
+   "rowsScanned": 510000,
+   "enqueuedTime": "0",
+   "input": "9 MB / 510000 Records",
+   "output": "213 B / 5 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.city, count(*) AS c, sum(f.amount) AS total FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_scratch\".demo_dw.dim_user u ON f.user_id = u.user_id GROUP BY u.city",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 5,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a12-014c-e8fe-779e-4038e5618600",
+   "queryType": "REST",
+   "queryText": "SELECT u.city, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.user_id = v.user_id GROUP BY u.city",
+   "plannerEstimatedCost": 473089.60016,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857581947,
+   "endTime": 1792857581989,
+   "duration": 42,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857581947",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857581947",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857581950",
+     "phaseDuration": "11"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857581961",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857581961",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857581962",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857581963",
+     "phaseDuration": "26"
+    }
+   ],
+   "rowsScanned": 20000,
+   "enqueuedTime": "0",
+   "input": "195 KB / 20000 Records",
+   "output": "128 B / 5 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.city, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.user_id = v.user_id GROUP BY u.city",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 5,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a11-af33-e14e-9ee7-685de5544800",
+   "queryType": "REST",
+   "queryText": "SELECT p.category, count(*) AS c, sum(f.amount) AS total FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id < 10 GROUP BY p.category",
+   "plannerEstimatedCost": 6376729.61056,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "fact_orders",
+     "datasetPath": "demo_src.demo_dw.fact_orders",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "fact_orders"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_product",
+     "datasetPath": "demo_src.demo_dw.dim_product",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_product"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857581360,
+   "endTime": 1792857581450,
+   "duration": 90,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857581360",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857581360",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857581363",
+     "phaseDuration": "15"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857581378",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857581378",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857581380",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857581383",
+     "phaseDuration": "67"
+    }
+   ],
+   "rowsScanned": 8,
+   "enqueuedTime": "0",
+   "input": "265 B / 8 Records",
+   "output": "265 B / 8 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT p.category, count(*) AS c, sum(f.amount) AS total FROM \"demo_src\".demo_dw.fact_orders f JOIN \"demo_src\".demo_dw.dim_product p ON f.product_id = p.product_id WHERE f.store_id < 10 GROUP BY p.category",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 8,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a13-0543-88bb-c40a-d3963d993e00",
+   "queryType": "REST",
+   "queryText": "SELECT user_id, user_name, city FROM \"demo_src\".demo_dw.dim_user WHERE level = 2",
+   "plannerEstimatedCost": 79110.40012,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857580770,
+   "endTime": 1792857580799,
+   "duration": 29,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857580770",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857580770",
+     "phaseDuration": "3"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857580773",
+     "phaseDuration": "6"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857580779",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857580779",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857580780",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857580781",
+     "phaseDuration": "18"
+    }
+   ],
+   "rowsScanned": 2500,
+   "enqueuedTime": "0",
+   "input": "70 KB / 2500 Records",
+   "output": "70 KB / 2500 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT user_id, user_name, city FROM \"demo_src\".demo_dw.dim_user WHERE level = 2",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 2500,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  },
+  {
+   "id": "15232a9b-bbc3-4cf0-fa5a-84949ca6b100",
+   "queryType": "REST",
+   "queryText": "SELECT u.level, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.city = v.city GROUP BY u.level",
+   "plannerEstimatedCost": 473089.60016,
+   "wlmQueue": "SMALL",
+   "queriedDatasets": [
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_src.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_src",
+      "demo_dw",
+      "dim_user"
+     ]
+    },
+    {
+     "datasetType": "PHYSICAL_DATASET",
+     "datasetName": "dim_user",
+     "datasetPath": "demo_scratch.demo_dw.dim_user",
+     "datasetPathsList": [
+      "demo_scratch",
+      "demo_dw",
+      "dim_user"
+     ]
+    }
+   ],
+   "state": "COMPLETED",
+   "startTime": 1792857443244,
+   "endTime": 1792857443793,
+   "duration": 549,
+   "durationDetails": [
+    {
+     "phaseName": "PENDING",
+     "phaseStartTime": "1792857443244",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "METADATA_RETRIEVAL",
+     "phaseStartTime": "1792857443244",
+     "phaseDuration": "4"
+    },
+    {
+     "phaseName": "PLANNING",
+     "phaseStartTime": "1792857443248",
+     "phaseDuration": "15"
+    },
+    {
+     "phaseName": "QUEUED",
+     "phaseStartTime": "1792857443263",
+     "phaseDuration": "0"
+    },
+    {
+     "phaseName": "EXECUTION_PLANNING",
+     "phaseStartTime": "1792857443263",
+     "phaseDuration": "2"
+    },
+    {
+     "phaseName": "STARTING",
+     "phaseStartTime": "1792857443265",
+     "phaseDuration": "1"
+    },
+    {
+     "phaseName": "RUNNING",
+     "phaseStartTime": "1792857443266",
+     "phaseDuration": "527"
+    }
+   ],
+   "rowsScanned": 20000,
+   "enqueuedTime": "0",
+   "input": "269 KB / 20000 Records",
+   "output": "56 B / 4 Records",
+   "spilled": false,
+   "totalAttempts": 1,
+   "requestType": "RUN_SQL",
+   "description": "SELECT u.level, count(*) AS c FROM \"demo_src\".demo_dw.dim_user u JOIN \"demo_scratch\".demo_dw.dim_user v ON u.city = v.city GROUP BY u.level",
+   "isComplete": true,
+   "datasetVersion": "UNKNOWN",
+   "outputLimited": false,
+   "user": "allowops_reader",
+   "outputRecords": 4,
+   "waitInClient": 0,
+   "accelerated": false,
+   "starFlakeAccelerated": false
+  }
+ ],
+ "next": "/apiv2/jobs-listing/v1.0/?offset=40&limit=40&level=0&sort=st&order=DESCENDING"
+}

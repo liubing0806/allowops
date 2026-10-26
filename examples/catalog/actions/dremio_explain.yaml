@@ -1,0 +1,24 @@
+name: dremio_explain
+description: Show the plan of one read-only Dremio query with EXPLAIN PLAN FOR, without running it. The plan shows whether a filter or join is pushed down to the data source.
+risk: read
+run_as: root
+params:
+  sql:
+    type: string
+    description: EXPLAIN PLAN FOR or EXPLAIN PLAN WITH IMPLEMENTATION FOR followed by one SELECT with complete object paths; no line breaks or multiple statements.
+    regex: ^EXPLAIN PLAN (WITH IMPLEMENTATION )?FOR [^\r\n]+$
+    max_len: 4000
+timeout: 15s
+builtin: dremio_query
+builtin_config:
+  credential: /etc/allowops/credentials/dremio.json
+  url: http://127.0.0.1:9047
+  max_rows: 500
+  max_bytes: 1MB
+  timeout: 10s
+  statement_types: [SELECT, EXPLAIN]
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

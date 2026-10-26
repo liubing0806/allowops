@@ -412,7 +412,7 @@ export type AgentCapabilities = Message<"allowops.v1.AgentCapabilities"> & {
   executionModes: string[];
 
   /**
-   * log_search,log_query,mysql_query,redis_command,http_get,prometheus_query,alertmanager_alerts.
+   * log_search,log_query,mysql_query,redis_command,http_get,prometheus_query,alertmanager_alerts,starrocks_query,dremio_query,starrocks_diag,dremio_diag.
    *
    * @generated from field: repeated string builtins = 4;
    */
@@ -457,7 +457,7 @@ export type AgentCapabilitiesJson = {
   executionModes?: string[];
 
   /**
-   * log_search,log_query,mysql_query,redis_command,http_get,prometheus_query,alertmanager_alerts.
+   * log_search,log_query,mysql_query,redis_command,http_get,prometheus_query,alertmanager_alerts,starrocks_query,dremio_query,starrocks_diag,dremio_diag.
    *
    * @generated from field: repeated string builtins = 4;
    */

@@ -1,9 +1,12 @@
-# Redis 与 MySQL 的 builtin_config 收紧项
+# Redis、MySQL、StarRocks 与 Dremio 的 builtin_config 收紧项
 
 目录校验和执行均验证以下字段。执行时在读取凭据和建立连接前拒绝越界参数。
-所有字段省略时保留处理器默认行为。显式 `null`、空列表、非字符串列表和非法成员均报错。
+所有字段省略时保留处理器默认行为。列表字段的显式 `null`、空列表、非字符串列表和非法成员均报错。
+`starrocks_query`、`starrocks_diag`、`dremio_query`、`dremio_diag` 的数值字段中，`max_bytes` 与 `max_profile_bytes` 为 `null` 报错，`max_rows` 与 `timeout` 为 `null` 按省略处理。
 重复成员不扩大范围。命令名、分区名、语句类型和 SHOW 种类不区分大小写；
 键前缀与数据库名按大小写敏感的字节比较。拒绝信息列出可用成员或格式规则。
+
+执行时处理器返回的错误（例如 sqlguard 拒绝、`statement_types` 不允许、路径超出 `allowed_roots`）经 executor 写入该任务的 stderr，调用方通过 `jobs_get` 和 MCP 摘要读取。文本为单行，经 action 的 `redact` 配置脱敏后截断到 1024 字节。处理器错误文本按设计不含 SQL、服务端原始消息和凭据，脱敏与长度上限是对这一设计的额外保护。
 
 ## redis_command
 
@@ -111,6 +114,74 @@ TABLE STATUS、CREATE VIEW、CREATE DATABASE、INDEX 等不属于配置后的合
 DESCRIBE 内部的 ShowColumns 不受 `show_types` 限制，DESCRIBE 有独立语句类型限制。
 配置 `show_types` 不会自动允许 SHOW；它与 `statement_types` 取交集。
 
+## starrocks_query
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `max_rows` | 0..500；省略或 0 为 500，只能收紧 |
+| `max_bytes` | 0..1 MiB，可写 `64KB` 等 B/KB/MB/GB 形式；省略或 0 为 1 MiB，只能收紧；限制 TSV 文本（含表头）的字节数，放不下的整行不返回 |
+| `timeout` | 1ms..10s；省略为 10s，只能收紧；同时以向上取整的秒数设置会话 `query_timeout` |
+| `statement_types` | SELECT、SHOW、DESCRIBE、EXPLAIN 的非空子集；省略时允许这四类；EXPLAIN 的目标语句也必须满足该列表 |
+| `show_types` | DATABASES、TABLES、TABLE STATUS、COLUMNS、CATALOGS、CREATE TABLE、CREATE VIEW、CREATE MATERIALIZED VIEW、CREATE DATABASE、PARTITIONS、TABLET、MATERIALIZED VIEWS、FUNCTIONS、VARIABLES、STATUS、PROCESSLIST、FRONTENDS、BACKENDS、COMPUTE NODES 的非空子集；省略时不增加种类限制 |
+| `allow_explain_analyze` | 布尔值，默认 false；为 true 时允许 `EXPLAIN ANALYZE` 加 SELECT 或 WITH 查询 |
+
+`starrocks_query` 没有 `databases` 和 `catalogs` 收紧项。SQL 校验是词法级的，不提取库名和表名，
+可读取的库表只由数据库账号的授权决定。`database` 参数只是默认库，不是授权边界。
+
+`PROFILELIST` 不是合法的 `show_types` 成员；`SHOW PROFILELIST` 和 `ANALYZE PROFILE` 无论如何配置都拒绝，
+它们会返回其他账号的查询文本。`EXPLAIN ANALYZE` 会执行目标查询，只有 `allow_explain_analyze` 为 true 且目标是 SELECT 或 WITH 时允许，INSERT 目标始终拒绝。
+
+`statement_types` 与 `show_types` 取交集：配置 `show_types` 不会自动允许 SHOW。
+`address` 只接受 `tcp://host:port`。其余规则和默认值见 [builtin-starrocks.md](builtin-starrocks.md)。
+
+## dremio_query
+
+Dremio 没有权限边界，`builtin_config` 没有 `databases` 之类限制读取范围的字段，也没有 `context` 参数。词法校验是 Dremio 一侧唯一的写入限制，范围见 `builtin-dremio.md` 的“安全边界”。
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `url` | 必填，`http://host:port` 或 `https://host:port`，不含用户信息、路径、查询和片段 |
+| `credential` | 必填，绝对路径，root 属主、0600 的 JSON 文件 |
+| `max_rows` | 0 到 500，省略为 500；Dremio 单次最多返回 500 行，因此是一页 |
+| `max_bytes` | 0 到 1 MiB，省略为 1 MiB；TSV 文本字节数，表头计入 |
+| `timeout` | 1ms 到 10s，省略为 10s |
+| `statement_types` | SELECT、SHOW、DESCRIBE、EXPLAIN 的非空子集；省略时允许全部。EXPLAIN 的目标语句也必须满足该限制（与 G31 相同），`EXPLAIN PLAN FOR SELECT ...` 需要同时列出 EXPLAIN 和 SELECT |
+| `show_types` | SCHEMAS、TABLES、VIEWS、PARTITIONS、FILES、CREATE TABLE、FUNCTIONS 的非空子集；省略时允许全部 |
+
+未知字段（包括 `address`、`databases`、`context`、`ca_file`）、列表字段的 `null`、空列表和非法成员均报错。收紧项只能在词法校验接受的范围内再缩小，不能放宽校验。动作参数只有 `sql`，最长 4000 字符。
+
+## starrocks_diag
+
+`starrocks_diag` 执行固定语句，没有 `statement_types`、`show_types`、`allow_explain_analyze`，出现这些字段报错。
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `max_rows` | 0..500；省略或 0 为 500，只能收紧；同时是 `limit` 参数的上限 |
+| `max_bytes` | 0..1 MiB，可写 `64KB` 等形式；省略或 0 为 1 MiB，只能收紧；限制 TSV 文本或摘要 JSON 的字节数 |
+| `max_profile_bytes` | 0..16 MiB；省略或 0 为 16 MiB，只能收紧；超过的 profile 文本不解析 |
+| `timeout` | 1ms..10s；省略为 10s，只能收紧；`profile_run` 的执行和轮询共用该时限 |
+| `audit_table` | `table` 或 `database.table`，各段匹配 `^[A-Za-z_][A-Za-z0-9_]{0,63}$`；省略为 `starrocks_audit_db__.starrocks_audit_tbl__` |
+| `audit_columns` | 逻辑列名到实际列名的映射，实际列名为标识符；逻辑列名为 `query_id`、`timestamp`、`user`、`db`、`state`、`query_time`、`scan_bytes`、`scan_rows`、`return_rows`、`cpu_cost_ns`、`mem_cost_bytes`、`stmt` |
+| `allow_profile_run` | 布尔值，默认 false；true 时 `op` 枚举增加 `profile_run`，并出现 `sql`、`database` 参数 |
+
+表名和列名只来自这里，调用方参数不能指定。`credential` 和 `address` 的规则同 `starrocks_query`。详见 [builtin-starrocks.md](builtin-starrocks.md) 的 starrocks_diag 一节。
+
+## dremio_diag
+
+固定请求的诊断处理器，不接受 SQL。凭据、网络和脱敏规则与 `dremio_query` 相同，说明见 `builtin-dremio.md` 的“dremio_diag 诊断”。
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `url` | 必填，规则同 `dremio_query` |
+| `credential` | 必填，绝对路径，root 属主、0600 的 JSON 文件 |
+| `max_rows` | 0 到 500，省略为 500；限制 sys 表行数和作业列表条数 |
+| `max_bytes` | 0 到 1 MiB，省略为 1 MiB；一次返回的文本字节数，profile 摘要计入 |
+| `timeout` | 1ms 到 10s，省略为 10s |
+| `max_profile_bytes` | 0 到 32 MiB，省略为 32 MiB；解压后的 profile JSON 字节上限 |
+| `ops` | `nodes`、`jobs`、`job`、`job_profile`、`reflections` 的非空子集；省略时允许全部。只有一个值时，`op` 参数可省略 |
+
+未知字段（包括 `statement_types`、`show_types`、`databases`）、`ops` 的 `null`、空列表和非法成员均报错。动作参数 `op`、`job_id`、`since`、`min_duration`、`state`、`user`、`limit`、`top_n` 由处理器声明，除 `op` 外都是可选的，不接受的组合在处理器内校验；目录中的参数覆盖只能增加 `regex` 或减小 `max_len`，不能限制枚举，固定 op 使用 `ops`。
+
 ## 本地目录校验配置
 
 以下 builtin_config 可用于两个独立 action。配置不包含凭据内容；目录校验不读取凭据或连接服务。
@@ -142,4 +213,53 @@ builtin_config:
   databases: [fixture]
   statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
   show_types: [TABLES, DATABASES, PROCESSLIST, VARIABLES, STATUS, CREATE TABLE, COLUMNS]
+```
+
+```yaml
+# builtin: starrocks_query
+builtin_config:
+  address: tcp://127.0.0.1:9030
+  credential: /etc/allowops/credentials/starrocks-query.json
+  max_rows: 200
+  max_bytes: 64KB
+  timeout: 10s
+  statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
+  show_types: [DATABASES, TABLES, COLUMNS, CREATE TABLE]
+```
+
+```yaml
+# builtin: dremio_query
+builtin_config:
+  url: http://127.0.0.1:9047
+  credential: /etc/allowops/credentials/dremio.json
+  max_rows: 500
+  max_bytes: 1MB
+  timeout: 10s
+  statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
+  show_types: [SCHEMAS, TABLES, VIEWS, PARTITIONS, FILES, CREATE TABLE, FUNCTIONS]
+```
+
+```yaml
+# builtin: starrocks_diag
+builtin_config:
+  address: tcp://127.0.0.1:9030
+  credential: /etc/allowops/credentials/starrocks-diag.json
+  max_rows: 200
+  max_bytes: 64KB
+  max_profile_bytes: 8MB
+  timeout: 10s
+  audit_table: starrocks_audit_db__.starrocks_audit_tbl__
+  allow_profile_run: false
+```
+
+```yaml
+# builtin: dremio_diag（固定一个 op）
+builtin_config:
+  ops: [job_profile]
+  url: http://127.0.0.1:9047
+  credential: /etc/allowops/credentials/dremio.json
+  max_rows: 100
+  max_bytes: 256KB
+  timeout: 10s
+  max_profile_bytes: 16MB
 ```

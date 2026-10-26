@@ -14,7 +14,7 @@ import (
 
 // RequiresExec is derived from signed action fields, never from caller input.
 func (a Action) RequiresExec() bool {
-	return a.RunAs != "" || a.Builtin == "mysql_query" || a.Builtin == "redis_command"
+	return a.RunAs != "" || a.Builtin == "mysql_query" || a.Builtin == "redis_command" || a.Builtin == "starrocks_query" || a.Builtin == "dremio_query" || a.Builtin == "starrocks_diag" || a.Builtin == "dremio_diag"
 }
 
 type HostSupport struct {

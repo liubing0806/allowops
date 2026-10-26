@@ -31,6 +31,9 @@ type compiledRule struct {
 	name  string
 	re    *regexp.Regexp
 	valid func(string) bool
+	// token, set for a checksum rule, rejects a match that is part of a longer
+	// token or of a decimal number (see insideToken).
+	token bool
 	// keep reports that a matched text is known not to be a secret and must stay.
 	keep func(string) bool
 	// skip returns the length of a leading part of a matched text that is
@@ -255,8 +258,8 @@ func New(config *Config) (*Redactor, error) {
 	if slices.Contains(builtins, "pii") {
 		// A digit boundary is checked separately, since Go RE2 has no lookbehind.
 		r.rules = append(r.rules,
-			compiledRule{name: "identity_card", re: regexp.MustCompile(`[0-9]{17}[0-9Xx]`), valid: validIdentity},
-			compiledRule{name: "bank_card", re: regexp.MustCompile(`[0-9]{13,19}`), valid: validLuhn},
+			compiledRule{name: "identity_card", re: regexp.MustCompile(`[0-9]{17}[0-9Xx]`), valid: validIdentity, token: true},
+			compiledRule{name: "bank_card", re: regexp.MustCompile(`[0-9]{13,19}`), valid: validLuhn, token: true},
 			compiledRule{name: "phone", re: regexp.MustCompile(`1[3-9][0-9]{9}`), valid: func(string) bool { return true }},
 		)
 	}
@@ -379,7 +382,7 @@ func applyRule(line string, rule compiledRule) string {
 			continue
 		}
 		if rule.valid != nil {
-			if (start > 0 && digit(line[start-1])) || (end < len(line) && digit(line[end])) || !rule.valid(line[start:end]) {
+			if (start > 0 && digit(line[start-1])) || (end < len(line) && digit(line[end])) || !rule.valid(line[start:end]) || (rule.token && insideToken(line, start, end)) {
 				continue
 			}
 		}
@@ -523,6 +526,27 @@ func (r *Redactor) Stream(input io.Reader, output io.Writer, maxLine int) error 
 			return nil
 		}
 	}
+}
+
+// insideToken reports that line[start:end] is not a standalone number: it
+// touches a letter or underscore (a node name such as sr-fe_9010_1729837261234,
+// a unit such as 1729837261234ms), or it is the integer or fraction part of a
+// decimal number (0.1234567890123452, 4532015112830366.25). A full stop that
+// ends a sentence, a comma, a quote, a colon and a space do not count.
+func insideToken(line string, start, end int) bool {
+	if start > 0 {
+		c := line[start-1]
+		if letter(c) || c == '_' || (c == '.' && start > 1 && digit(line[start-2])) {
+			return true
+		}
+	}
+	if end < len(line) {
+		c := line[end]
+		if letter(c) || c == '_' || (c == '.' && end+1 < len(line) && digit(line[end+1])) {
+			return true
+		}
+	}
+	return false
 }
 
 func validIdentity(s string) bool {

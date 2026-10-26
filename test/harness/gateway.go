@@ -1,4 +1,4 @@
-//go:build scale || vm
+//go:build scale || vm || srdr
 
 // Package harness starts the unchanged gateway binary and disposable local dependencies.
 package harness
@@ -39,6 +39,7 @@ import (
 )
 
 type Gateway struct {
+	Token                        string
 	DB                           *store.Store
 	Dir, Address, Pin, JoinToken string
 	Roots                        *x509.CertPool
@@ -60,6 +61,16 @@ func Check(t testing.TB, err error) {
 	}
 }
 
+// Options customizes New. The zero value is the P10A fixture.
+type Options struct {
+	// Repo is the path to the repository root; it defaults to ../.. (test/scale, test/vm).
+	Repo string
+	// Catalog replaces the fixture catalog when set.
+	Catalog *catalog.Catalog
+	// Actions adds extra actions to the fixture catalog; it is ignored when Catalog is set.
+	Actions map[string]catalog.Action
+}
+
 func New(t *testing.T, hosts int) *Gateway {
 	t.Helper()
 	return NewWithActions(t, hosts, nil)
@@ -68,6 +79,14 @@ func New(t *testing.T, hosts int) *Gateway {
 // NewWithActions adds extra actions to the signed fixture catalog.
 func NewWithActions(t *testing.T, hosts int, extra map[string]catalog.Action) *Gateway {
 	t.Helper()
+	return NewWith(t, hosts, Options{Actions: extra})
+}
+
+func NewWith(t *testing.T, hosts int, o Options) *Gateway {
+	t.Helper()
+	if o.Repo == "" {
+		o.Repo = "../.."
+	}
 	ctx := context.Background()
 	dsn := testpg.Start(t)
 	Check(t, store.Migrate(ctx, dsn))
@@ -76,7 +95,7 @@ func NewWithActions(t *testing.T, hosts int, extra map[string]catalog.Action) *G
 	t.Cleanup(db.Close)
 	objects := testseaweedfs.Start(t)
 	g := &Gateway{DB: db, Dir: t.TempDir()}
-	g.binary, err = filepath.Abs("../../bin/allowops-gateway")
+	g.binary, err = filepath.Abs(filepath.Join(o.Repo, "bin/allowops-gateway"))
 	Check(t, err)
 	_, err = hostconn.OpenCA(filepath.Join(g.Dir, "host-ca.pem"), filepath.Join(g.Dir, "host-ca.key"))
 	Check(t, err)
@@ -109,17 +128,21 @@ func NewWithActions(t *testing.T, hosts int, extra map[string]catalog.Action) *G
 	Check(t, err)
 	Check(t, os.Mkdir(filepath.Join(g.Dir, "keys"), 0700))
 	Check(t, os.WriteFile(filepath.Join(g.Dir, "keys", "catalog.pem"), keyPEM, 0644))
-	examples, err := catalog.Load("../../examples/catalog")
-	Check(t, err)
-	actions := map[string]catalog.Action{
-		"noop":          {Name: "noop", Description: "Protocol-only zero-duration result", Risk: "read", Exec: []any{"/usr/bin/true"}, Timeout: "10s", MaxOutput: 1024},
-		"system_load":   examples.Actions["system_load"],
-		"root_identity": {Name: "root_identity", Description: "Verify the packaged sudo helper", Risk: "write", RunAs: "root", Exec: []any{"/usr/bin/id", "-u"}, Timeout: "10s", MaxOutput: 1024},
+	fixture := o.Catalog
+	if fixture == nil {
+		examples, err := catalog.Load(filepath.Join(o.Repo, "examples/catalog"))
+		Check(t, err)
+		actions := map[string]catalog.Action{
+			"noop":          {Name: "noop", Description: "Protocol-only zero-duration result", Risk: "read", Exec: []any{"/usr/bin/true"}, Timeout: "10s", MaxOutput: 1024},
+			"system_load":   examples.Actions["system_load"],
+			"root_identity": {Name: "root_identity", Description: "Verify the packaged sudo helper", Risk: "write", RunAs: "root", Exec: []any{"/usr/bin/id", "-u"}, Timeout: "10s", MaxOutput: 1024},
+		}
+		for name, action := range o.Actions {
+			actions[name] = action
+		}
+		fixture = &catalog.Catalog{Config: catalog.Config{SchemaVersion: 1, CatalogID: "p10a"}, Actions: actions}
 	}
-	for name, action := range extra {
-		actions[name] = action
-	}
-	g.Catalog, err = catalog.Build(&catalog.Catalog{Config: catalog.Config{SchemaVersion: 1, CatalogID: "p10a"}, Actions: actions}, catalog.BuildOptions{Now: time.Now(), TTL: 2 * time.Hour})
+	g.Catalog, err = catalog.Build(fixture, catalog.BuildOptions{Now: time.Now(), TTL: 2 * time.Hour})
 	Check(t, err)
 	payload, err := catalog.CanonicalJSON(g.Catalog)
 	Check(t, err)
@@ -134,6 +157,7 @@ func NewWithActions(t *testing.T, hosts int, extra map[string]catalog.Action) *G
 	Check(t, err)
 	token, _, err := authn.GenerateServiceToken(time.Now(), 1)
 	Check(t, err)
+	g.Token = token
 	tokenHash := sha256.Sum256([]byte(token))
 	_, err = db.Pool.Exec(ctx, "INSERT INTO service_account_tokens(token_id,account_id,token_hash,expires_at) VALUES ('token','sa',$1,now()+interval '2 hours')", tokenHash[:])
 	Check(t, err)

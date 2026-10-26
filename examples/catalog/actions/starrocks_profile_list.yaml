@@ -1,0 +1,17 @@
+name: starrocks_profile_list
+description: "List the query profiles that the StarRocks frontend still holds (op profile_list; limit bounds the rows). Profiles exist only for queries that ran with enable_profile or exceeded big_query_profile_threshold."
+risk: read
+run_as: root
+timeout: 15s
+builtin: starrocks_diag
+builtin_config:
+  credential: /etc/allowops/credentials/starrocks-diag.json
+  address: tcp://127.0.0.1:9030
+  max_rows: 200
+  max_bytes: 64KB
+  timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

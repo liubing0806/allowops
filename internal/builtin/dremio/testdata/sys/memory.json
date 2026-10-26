@@ -1,0 +1,65 @@
+{
+ "rowCount": 1,
+ "schema": [
+  {
+   "name": "node_id",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "hostname",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "peer_port",
+   "type": {
+    "name": "BIGINT"
+   }
+  },
+  {
+   "name": "heap_current",
+   "type": {
+    "name": "BIGINT"
+   }
+  },
+  {
+   "name": "heap_max",
+   "type": {
+    "name": "BIGINT"
+   }
+  },
+  {
+   "name": "direct_current",
+   "type": {
+    "name": "BIGINT"
+   }
+  },
+  {
+   "name": "jvm_direct_current",
+   "type": {
+    "name": "BIGINT"
+   }
+  },
+  {
+   "name": "direct_max",
+   "type": {
+    "name": "BIGINT"
+   }
+  }
+ ],
+ "rows": [
+  {
+   "node_id": "127.0.0.1:45678",
+   "hostname": "127.0.0.1",
+   "peer_port": 45678,
+   "heap_current": 1389166592,
+   "heap_max": 4294967296,
+   "direct_current": 114906176,
+   "jvm_direct_current": 337101388,
+   "direct_max": 2147483648
+  }
+ ]
+}

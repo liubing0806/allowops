@@ -1,0 +1,18 @@
+name: starrocks_profile_summary
+description: "Summarize the profile of one StarRocks query (op profile_summary with query_id): slowest operators, skew and rule findings as JSON. op profile_analyze returns the built-in ANALYZE PROFILE text instead. profile_run is not enabled."
+risk: read
+run_as: root
+timeout: 15s
+builtin: starrocks_diag
+builtin_config:
+  credential: /etc/allowops/credentials/starrocks-diag.json
+  address: tcp://127.0.0.1:9030
+  max_rows: 200
+  max_bytes: 64KB
+  timeout: 10s
+  max_profile_bytes: 8MB
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

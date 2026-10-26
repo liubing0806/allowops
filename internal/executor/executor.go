@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/params"
@@ -309,12 +310,37 @@ func runBuiltin(ctx context.Context, plan *runPlan, onStart func() error) (Resul
 	} else {
 		raw, runErr = handler.Run(ctx, a.BuiltinConfig, plan.values)
 	}
+	// A handler that reports its failure only through the error leaves Stderr
+	// empty; the text then goes through the same stderr redaction as any other
+	// diagnostic and is cut to errorTextLimit afterwards, so the cut cannot
+	// split a secret before the rules see it.
+	errorText := raw.Stderr == "" && runErr != nil
+	if errorText {
+		raw.Stderr = oneLine(runErr.Error()) + "\n"
+	}
 	out, outputErr := processOutput(strings.NewReader(raw.Stdout), strings.NewReader(raw.Stderr), stdoutRedactor, plan.redactor, plan.filters, plan.limit, plan.scan, nil)
+	if errorText && len(out.Stderr) > errorTextLimit {
+		out.Stderr = strings.ToValidUTF8(out.Stderr[:errorTextLimit], "") + "... [truncated]\n"
+	}
 	out.ExitCode = raw.ExitCode
 	out.StatusCode = raw.StatusCode
 	out.ResourceLimitReached = raw.ResourceLimited
 	out.Truncated = out.Truncated || raw.ResourceLimited
 	return out, errors.Join(runErr, outputErr)
+}
+
+// errorTextLimit bounds the handler error text returned in Stderr.
+const errorTextLimit = 1024
+
+// oneLine replaces control characters, including line breaks, with spaces and
+// drops invalid UTF-8, so an error text is a single line of printable text.
+func oneLine(text string) string {
+	return strings.Join(strings.Fields(strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, strings.ToValidUTF8(text, ""))), " ")
 }
 
 // runScript reports ExitCode -1 for errors before the process starts.

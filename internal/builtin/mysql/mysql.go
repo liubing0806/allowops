@@ -4,24 +4,22 @@ package mysql
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	driver "github.com/go-sql-driver/mysql"
 
 	"github.com/liubing0806/allowops/internal/builtin"
+	"github.com/liubing0806/allowops/internal/builtin/credfile"
+	"github.com/liubing0806/allowops/internal/builtin/tsv"
 )
 
 const (
@@ -117,49 +115,7 @@ func ParamsSchema() map[string]any {
 	}
 }
 
-type credential struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-func readCredential(path string) (credential, error) {
-	var c credential
-	// O_NONBLOCK prevents a FIFO/device path from blocking before fstat rejects it.
-	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
-	if err != nil {
-		return c, errors.New("cannot open credential file")
-	}
-	f := os.NewFile(uintptr(fd), path)
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return c, errors.New("cannot inspect credential file")
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid != 0 || !info.Mode().IsRegular() || info.Mode() != 0600 {
-		return c, errors.New("credential file must be a regular root-owned file with mode 0600")
-	}
-	if info.Size() > 16384 {
-		return c, errors.New("credential file is too large")
-	}
-	return decodeCredential(io.LimitReader(f, 16385))
-}
-
-func decodeCredential(r io.Reader) (credential, error) {
-	var fields struct {
-		Username *string `json:"username"`
-		Password *string `json:"password"`
-	}
-	d := json.NewDecoder(r)
-	d.DisallowUnknownFields()
-	if err := d.Decode(&fields); err != nil || fields.Username == nil || *fields.Username == "" || fields.Password == nil {
-		return credential{}, errors.New("credential must contain JSON username and password strings")
-	}
-	if d.Decode(new(any)) != io.EOF {
-		return credential{}, errors.New("credential must contain exactly one JSON object")
-	}
-	return credential{Username: *fields.Username, Password: *fields.Password}, nil
-}
+type credential = credfile.Credential
 
 func Run(ctx context.Context, cfg Config, p Params) (result Result, err error) {
 	return RunRedacted(ctx, cfg, p, nil)
@@ -193,7 +149,7 @@ func RunRedacted(ctx context.Context, cfg Config, p Params, mask func(string) st
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
-	cred, err := readCredential(cfg.Credential)
+	cred, err := credfile.Read(cfg.Credential)
 	if err != nil {
 		return result, err
 	}
@@ -298,7 +254,7 @@ func readRowsRedacted(rows *sql.Rows, maxRows int, maxBytes int64, mask func(str
 	for i, column := range columns {
 		columns[i] = mask(column)
 	}
-	writeTSV(&out, columns)
+	tsv.WriteRow(&out, columns)
 	result := Result{}
 	values := make([]sql.NullString, len(columns))
 	dest := make([]any, len(columns))
@@ -315,7 +271,7 @@ func readRowsRedacted(rows *sql.Rows, maxRows int, maxBytes int64, mask func(str
 			return Result{}, err
 		}
 		line.Reset()
-		for i, field := range maskRow(values, mask) {
+		for i, field := range tsv.MaskRow(values, mask) {
 			if i > 0 {
 				line.WriteByte('\t')
 			}
@@ -337,58 +293,4 @@ func readRowsRedacted(rows *sql.Rows, maxRows int, maxBytes int64, mask func(str
 	}
 	result.Output = out.String()
 	return result, nil
-}
-
-// maskRow returns the TSV fields of one row. Every cell is masked on its own
-// first. The tab-joined row is then masked again so that a rule can relate a
-// name cell to its value cell, as SHOW VARIABLES needs. When that pass changes
-// the row, the fields are taken from the result only when no cell contains a
-// tab and the tab count still matches; otherwise the row collapses into one
-// field. An embedded tab makes the boundaries ambiguous, because a rule that
-// removes as many tabs as a cell holds leaves the count unchanged but shifts
-// every field.
-func maskRow(values []sql.NullString, mask func(string) string) []string {
-	cells := make([]string, len(values))
-	for i, v := range values {
-		if v.Valid {
-			cells[i] = mask(v.String)
-		}
-	}
-	if len(cells) > 1 {
-		joined := strings.Join(cells, "\t")
-		if masked := mask(joined); masked != joined {
-			parts := strings.Split(masked, "\t")
-			if len(parts) != len(cells) || slices.ContainsFunc(cells, func(c string) bool { return strings.Contains(c, "\t") }) {
-				return []string{escapeTSV(masked)}
-			}
-			for i, v := range values {
-				if v.Valid {
-					cells[i] = parts[i]
-				}
-			}
-		}
-	}
-	fields := make([]string, len(cells))
-	for i, v := range values {
-		if v.Valid {
-			fields[i] = escapeTSV(cells[i])
-		} else {
-			fields[i] = `\N`
-		}
-	}
-	return fields
-}
-
-var tsvEscaper = strings.NewReplacer("\\", "\\\\", "\t", `\t`, "\n", `\n`, "\r", `\r`, "\x00", `\0`)
-
-func escapeTSV(s string) string { return tsvEscaper.Replace(s) }
-
-func writeTSV(out *strings.Builder, fields []string) {
-	for i, field := range fields {
-		if i > 0 {
-			out.WriteByte('\t')
-		}
-		out.WriteString(escapeTSV(field))
-	}
-	out.WriteByte('\n')
 }

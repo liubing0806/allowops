@@ -147,6 +147,7 @@ sequenceDiagram
 - 非 steps 的 `TaskCompleted.result.stdout/stderr` 为其输出元数据；steps 的这两个字段缺省，避免再聚合一份重复输出。各步骤元数据由 `ListTaskSteps` 读取；task 的 truncated/scan_limit_reached 是各步骤对应标记的 OR，duration 为 action 总耗时。
 - 最终退出码取首个失败步骤的退出码，否则取 0；若失败无进程退出码则缺省。action 的 timeout/run_as 由所有步骤共用，max_output 为所有步骤 stdout+stderr 的总预算（A13）。过滤分别应用于每个步骤的 stdout；max_scan 按每个步骤 stdout 原始字节计，不能共用整个 action 的扫描预算（A17）。
 - `ExecutionResult.reason` 仅传稳定原因代码，例如 `ACTION_DIGEST_MISMATCH`、`CATALOG_EXPIRED`、`EXECUTABLE_MISSING`。stdout/stderr 不得放入 reason，避免通过 job 摘要绕过输出权限。
+- builtin 处理器返回错误且自身没有写 stderr 时，executor 把错误文本写入该任务的 stderr：折成单行可打印文本，经该 action 已配置的 stderr 脱敏（`redact`，未配置时启用默认的 secrets 规则），脱敏后截断到 1024 字节（超出时末尾加 `... [truncated]`）。该文本与其他 stderr 一样受 `view_output` 权限和 `max_output` 约束，只出现在 stderr 流、`OutputMetadata` 与 MCP 摘要的 stderr 预览中，`reason` 仍为 `EXECUTION_FAILED`。处理器已写 stderr 的（`prometheus_query`、`alertmanager_alerts`）保持原文本。
 
 `OutputMetadata.sha256` 对该逻辑输出的全部已脱敏、过滤、截断后的 bytes 计算。步骤任务的输出组可按有序步骤的退出码及 stdout/stderr 摘要比较；MCP 聚合逻辑在 P6 实现，不需要再定义可绕过权限的摘要输出字段。
 
@@ -336,7 +337,7 @@ SystemStatus 的计数按调用者权限返回；不允许通过 overview 泄露
 
 ## 10. allowops-agent 与 allowops-exec 的本地协议（P3）
 
-agent 对声明 `run_as` 的 action 调用 `/usr/bin/sudo -n /usr/libexec/allowops/allowops-exec`，不传命令行参数。sudoers 中的 `""` 表示禁止参数。按签名 action 的 `RequiresExec()` 判断执行位置：mysql_query 和 redis_command 需要读取 root 凭据，即使未声明 run_as 也使用辅助程序，此时以 root 执行。log_search、http_get，以及未配置 credential 的 prometheus_query 和 alertmanager_alerts，未声明 run_as 时直接调用执行器；配置 credential 的 prometheus_query 和 alertmanager_alerts 在目录校验阶段要求 run_as: root，因此经辅助程序执行。辅助程序忽略环境变量，程序和目录路径固定，不能由请求指定。
+agent 对声明 `run_as` 的 action 调用 `/usr/bin/sudo -n /usr/libexec/allowops/allowops-exec`，不传命令行参数。sudoers 中的 `""` 表示禁止参数。按签名 action 的 `RequiresExec()` 判断执行位置：mysql_query、redis_command、starrocks_query、starrocks_diag、dremio_query 和 dremio_diag 需要读取 root 凭据，即使未声明 run_as 也使用辅助程序，此时以 root 执行。log_search、http_get，以及未配置 credential 的 prometheus_query 和 alertmanager_alerts，未声明 run_as 时直接调用执行器；配置 credential 的 prometheus_query 和 alertmanager_alerts 在目录校验阶段要求 run_as: root，因此经辅助程序执行。辅助程序忽略环境变量，程序和目录路径固定，不能由请求指定。
 
 stdin 是单个 UTF-8 JSON 对象，最多 128 KiB。参数对象最多 64 KiB，最大深度 32，保留整数精度；拒绝重复键、未知请求字段、尾随内容和非对象参数。filters 与 action 参数分开校验，不能覆盖参数定义。
 

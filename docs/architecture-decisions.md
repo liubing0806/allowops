@@ -538,7 +538,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 - 实现：Go RE2 正则，匹配耗时与输入长度成线性关系。匹配内容替换为 `[REDACTED:类型]`。
 - 内置规则：
   - `secrets`（默认开启）：PEM 私钥、阿里云 AccessKey（`LTAI` 开头）、AWS Access Key（`AKIA` 开头）、JWT、`Authorization: Bearer` 头、URL 中的用户名密码、`password=`/`secret=`/`token=` 等键值对。
-  - `pii`（默认关闭，按 action 开启）：手机号（`1[3-9]` 开头 11 位）、18 位身份证号（校验码）、银行卡号（Luhn 校验）。
+  - `pii`（默认关闭，按 action 开启）：手机号（`1[3-9]` 开头 11 位）、18 位身份证号（校验码）、银行卡号（Luhn 校验）。身份证号和银行卡号只匹配独立数字串：紧邻字母、下划线或属于小数的数字不脱敏。
   - IP 地址和主机名不脱敏。
 - 写法：
 

@@ -1,0 +1,21 @@
+# Usage: params={"job_id": "<job id>", "top_n": 10}; top_n is optional.
+name: dremio_job_profile
+description: Summarize the profile of one Dremio job as JSON - planning time, time per state, the slowest operators, peak memory, skew between instances, the SQL pushed down to data sources, reflection use and the rules that matched (DR-*) with cause and advice.
+risk: read
+run_as: root
+params: {}
+builtin: dremio_diag
+builtin_config:
+  ops: [job_profile]
+  credential: /etc/allowops/credentials/dremio.json
+  url: http://127.0.0.1:9047
+  max_rows: 100
+  max_bytes: 256KB
+  timeout: 10s
+  max_profile_bytes: 16MB
+timeout: 15s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]
