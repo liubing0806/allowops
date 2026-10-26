@@ -1,0 +1,12 @@
+{
+ "id": "152329a9-7101-0340-9ad3-40b9090af900",
+ "jobState": "RUNNING",
+ "errorMessage": "",
+ "startedAt": "2026-10-24T16:01:26.504Z",
+ "queryType": "REST",
+ "queueName": "LARGE",
+ "queueId": "LARGE",
+ "resourceSchedulingStartedAt": "2026-10-24T16:01:26.515Z",
+ "resourceSchedulingEndedAt": "2026-10-24T16:01:26.515Z",
+ "cancellationReason": ""
+}

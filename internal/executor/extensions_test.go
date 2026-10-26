@@ -273,6 +273,33 @@ func TestStarRocksDiagBuiltinDispatchAndLimits(t *testing.T) {
 	}
 }
 
+func TestDremioDiagBuiltinDispatchAndLimits(t *testing.T) {
+	a := catalog.Action{Name: "dremio_diag_test", Description: "dremio diag", Risk: "read", Builtin: "dremio_diag", BuiltinConfig: map[string]any{"credential": "/nonexistent/credential.json", "url": "http://127.0.0.1:1"}, Timeout: "1s", MaxOutput: 1024}
+	r, err := Run(context.Background(), a, map[string]any{"op": "nodes"}, nil)
+	if err == nil || err.Error() != "cannot open credential file" || r.ExitCode != 1 {
+		t.Fatalf("got %#v %v", r, err)
+	}
+	// A job id that is not a UUID fails parameter parsing before the handler runs.
+	if r, err = Run(context.Background(), a, map[string]any{"op": "job", "job_id": "../../x"}, nil); err == nil || !strings.Contains(err.Error(), "job_id") {
+		t.Fatalf("got %#v %v", r, err)
+	}
+	// A parameter of another op fails in the handler, before the credential is read.
+	if r, err = Run(context.Background(), a, map[string]any{"op": "nodes", "limit": int64(3)}, nil); err == nil || !strings.Contains(err.Error(), "does not take") || r.ExitCode != 1 {
+		t.Fatalf("got %#v %v", r, err)
+	}
+	for _, config := range []map[string]any{
+		{"max_rows": 501}, {"max_bytes": "2MB"}, {"max_profile_bytes": "33MB"}, {"timeout": "11s"}, {"unknown": 1}, {"url": "http://127.0.0.1:9047/api"},
+		{"statement_types": []string{"SELECT"}},
+	} {
+		candidate := a
+		candidate.BuiltinConfig = maps.Clone(a.BuiltinConfig)
+		maps.Copy(candidate.BuiltinConfig, config)
+		if _, err := catalog.ValidateAction(candidate); err == nil {
+			t.Fatalf("accepted %v", config)
+		}
+	}
+}
+
 func FuzzFilters(f *testing.F) {
 	f.Add("a", int64(2), int64(1), true)
 	f.Add("a", int64(1), int64(0), false)

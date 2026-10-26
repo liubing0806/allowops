@@ -285,3 +285,62 @@ func TestHostSearchSelectionA27(t *testing.T) {
 		t.Fatal("accepted both query conditions")
 	}
 }
+
+func dremioDiagAction() catalog.Action {
+	a := dremioAction()
+	a.Builtin = "dremio_diag"
+	return a
+}
+
+// The cross-field rules of dremio_diag (which parameter belongs to which op)
+// are not in the tool schema: a root allOf makes some MCP clients skip the tool.
+func TestDremioDiagToolSchemaAndRequest(t *testing.T) {
+	a := dremioDiagAction()
+	tool, err := actionTool(a, job.DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(tool.InputSchema)
+	var schema map[string]any
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"allOf", "anyOf", "oneOf", "not", "if"} {
+		if _, ok := schema[key]; ok {
+			t.Errorf("root %s in %s", key, data)
+		}
+	}
+	paramsSchema := schema["properties"].(map[string]any)["params"].(map[string]any)
+	properties := paramsSchema["properties"].(map[string]any)
+	if len(properties) != 8 {
+		t.Fatalf("params schema: %s", data)
+	}
+	if enum := properties["op"].(map[string]any)["enum"].([]any); len(enum) != 5 {
+		t.Errorf("op enum: %v", enum)
+	}
+	if required := paramsSchema["required"].([]any); len(required) != 1 || required[0] != "op" {
+		t.Errorf("only op is required: %v", required)
+	}
+	if !tool.Annotations.ReadOnlyHint {
+		t.Fatal("dremio_diag must be a read action")
+	}
+	for input, valid := range map[string]bool{
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"nodes"},"reason":"inspect"}`:                                                                 true,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"jobs","since":"2h","state":"FAILED","limit":5},"reason":"inspect"}`:                          true,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"job","job_id":"152329ab-6312-f9a2-7240-1e8469e7bd00"},"reason":"inspect"}`:                   true,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"job_profile","job_id":"152329ab-6312-f9a2-7240-1e8469e7bd00","top_n":5},"reason":"inspect"}`: true,
+		`{"targets":{"hosts":["web-01"]},"params":{},"reason":"inspect"}`:                                                                             false,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"kill"},"reason":"inspect"}`:                                                                  false,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"job","job_id":"../x"},"reason":"inspect"}`:                                                   false,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"jobs","state":"QUEUED"},"reason":"inspect"}`:                                                 false,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"jobs","since":"169h"},"reason":"inspect"}`:                                                   false,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"jobs","limit":501},"reason":"inspect"}`:                                                      false,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"jobs","user":"a\" or 1=1"},"reason":"inspect"}`:                                              false,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"nodes","sql":"SELECT 1"},"reason":"inspect"}`:                                                false,
+	} {
+		_, _, err := actionRequest(a, json.RawMessage(input), job.DefaultConfig())
+		if (err == nil) != valid {
+			t.Errorf("%.120s: error=%v want valid=%v", input, err, valid)
+		}
+	}
+}

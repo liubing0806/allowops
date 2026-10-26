@@ -163,6 +163,22 @@ Dremio 没有权限边界，`builtin_config` 没有 `databases` 之类限制读�
 
 表名和列名只来自这里，调用方参数不能指定。`credential` 和 `address` 的规则同 `starrocks_query`。详见 [builtin-starrocks.md](builtin-starrocks.md) 的 starrocks_diag 一节。
 
+## dremio_diag
+
+固定请求的诊断处理器，不接受 SQL。凭据、网络和脱敏规则与 `dremio_query` 相同，说明见 `builtin-dremio.md` 的“dremio_diag 诊断”。
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `url` | 必填，规则同 `dremio_query` |
+| `credential` | 必填，绝对路径，root 属主、0600 的 JSON 文件 |
+| `max_rows` | 0 到 500，省略为 500；限制 sys 表行数和作业列表条数 |
+| `max_bytes` | 0 到 1 MiB，省略为 1 MiB；一次返回的文本字节数，profile 摘要计入 |
+| `timeout` | 1ms 到 10s，省略为 10s |
+| `max_profile_bytes` | 0 到 32 MiB，省略为 32 MiB；解压后的 profile JSON 字节上限 |
+| `ops` | `nodes`、`jobs`、`job`、`job_profile`、`reflections` 的非空子集；省略时允许全部。只有一个值时，`op` 参数可省略 |
+
+未知字段（包括 `statement_types`、`show_types`、`databases`）、`null`、空列表和非法成员均报错。动作参数 `op`、`job_id`、`since`、`min_duration`、`state`、`user`、`limit`、`top_n` 由处理器声明，除 `op` 外都是可选的，不接受的组合在处理器内校验；目录中的参数覆盖只能增加 `regex` 或减小 `max_len`，不能限制枚举，固定 op 使用 `ops`。
+
 ## 本地目录校验配置
 
 以下 builtin_config 可用于两个独立 action。配置不包含凭据内容；目录校验不读取凭据或连接服务。
@@ -231,4 +247,16 @@ builtin_config:
   timeout: 10s
   audit_table: starrocks_audit_db__.starrocks_audit_tbl__
   allow_profile_run: false
+```
+
+```yaml
+# builtin: dremio_diag（固定一个 op）
+builtin_config:
+  ops: [job_profile]
+  url: http://127.0.0.1:9047
+  credential: /etc/allowops/credentials/dremio.json
+  max_rows: 100
+  max_bytes: 256KB
+  timeout: 10s
+  max_profile_bytes: 16MB
 ```

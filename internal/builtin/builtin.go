@@ -15,6 +15,7 @@ const (
 	DefaultHTTPMaxHeaderBytes    int64 = 64 << 10
 	DefaultDremioMaxRows               = 500
 	DefaultDremioMaxBytes        int64 = 1 << 20
+	DefaultDremioMaxProfileBytes int64 = 32 << 20
 	DefaultRedisMaxResponseBytes int64 = 64 << 10
 	DefaultMySQLMaxResponseBytes int64 = 64 << 10
 	DefaultRedisMaxScanCount           = 1000

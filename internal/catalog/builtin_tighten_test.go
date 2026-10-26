@@ -3,8 +3,12 @@ package catalog
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/liubing0806/allowops/internal/params"
 )
 
 func TestBuiltinConfigRestrictionLists(t *testing.T) {
@@ -307,6 +311,129 @@ func TestStarRocksDiagConfigFields(t *testing.T) {
 		_, err := ValidateAction(a)
 		if tc.valid && err != nil || !tc.valid && err == nil {
 			t.Errorf("%s=%v: %v", tc.field, tc.value, err)
+		}
+	}
+}
+
+func TestDremioDiagParametersAndConfigFields(t *testing.T) {
+	for _, tc := range []struct {
+		field string
+		value any
+		valid bool
+	}{
+		{"max_rows", 500, true}, {"max_rows", 501, false}, {"max_rows", -1, false},
+		{"max_bytes", "512KB", true}, {"max_bytes", "2MB", false},
+		{"ops", []string{"nodes", "jobs"}, true}, {"ops", []string{"kill"}, false}, {"ops", []string{}, false}, {"ops", "nodes", false},
+		{"max_profile_bytes", "8MB", true}, {"max_profile_bytes", "33MB", false}, {"max_profile_bytes", "x", false},
+		{"timeout", "5s", true}, {"timeout", "11s", false},
+		{"url", "http://127.0.0.1:9047/api", false}, {"credential", "relative", false},
+		// The fields of dremio_query that select SQL do not exist here.
+		{"statement_types", []string{"SELECT"}, false}, {"show_types", []string{"SCHEMAS"}, false}, {"context", []string{"src"}, false},
+	} {
+		a := registeredBuiltinAction("dremio_diag")
+		a.BuiltinConfig[tc.field] = tc.value
+		_, err := ValidateAction(a)
+		if tc.valid && err != nil || !tc.valid && err == nil {
+			t.Errorf("%s=%v: %v", tc.field, tc.value, err)
+		}
+	}
+	a := registeredBuiltinAction("dremio_diag")
+	a.BuiltinConfig["max_rows"] = 50
+	defs, err := ParameterDefinitions(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := defs["limit"].Max; got != 50 {
+		t.Errorf("limit follows max_rows: %v", got)
+	}
+	for name, d := range defs {
+		if name != "op" && !d.Optional {
+			t.Errorf("%s must be optional: the required parameters depend on the op", name)
+		}
+		if d.Default != nil {
+			t.Errorf("%s has a default %v: the handler applies it, so that a parameter of another op is noticed", name, d.Default)
+		}
+	}
+	if !slices.Equal(defs["op"].Values, []string{"nodes", "jobs", "job", "job_profile", "reflections"}) {
+		t.Errorf("op values: %v", defs["op"].Values)
+	}
+	// ops narrows the enum; a single op becomes the default, so the caller can omit it.
+	a.BuiltinConfig["ops"] = []string{"jobs", "job"}
+	defs, err = ParameterDefinitions(a)
+	if err != nil || !slices.Equal(defs["op"].Values, []string{"jobs", "job"}) || defs["op"].Default != nil || defs["op"].Optional {
+		t.Errorf("two ops: %+v %v", defs["op"], err)
+	}
+	a.BuiltinConfig["ops"] = []string{"nodes"}
+	defs, err = ParameterDefinitions(a)
+	if err != nil || !slices.Equal(defs["op"].Values, []string{"nodes"}) || defs["op"].Default != "nodes" {
+		t.Errorf("one op: %+v %v", defs["op"], err)
+	}
+	// With the default, a call without op reaches the handler as op=nodes.
+	parsed, err := params.Parse(defs, map[string]any{})
+	if err != nil || parsed["op"] != "nodes" {
+		t.Errorf("parse without op: %v %v", parsed, err)
+	}
+}
+
+// The parameters of the op are checked before the credential file is read.
+func TestDremioDiagRunChecksParametersBeforeCredential(t *testing.T) {
+	a := registeredBuiltinAction("dremio_diag")
+	a.BuiltinConfig["ops"] = []string{"nodes", "jobs", "job"}
+	for _, tc := range []struct {
+		name   string
+		values map[string]any
+		reject string // empty: reaches the credential file
+	}{
+		{"nodes", map[string]any{"op": "nodes"}, ""},
+		{"job", map[string]any{"op": "job", "job_id": "152329ab-6312-f9a2-7240-1e8469e7bd00"}, ""},
+		{"jobs filters", map[string]any{"op": "jobs", "since": 2 * time.Hour, "state": "FAILED", "limit": int64(5)}, ""},
+		{"job without id", map[string]any{"op": "job"}, "job_id"},
+		{"nodes with job_id", map[string]any{"op": "nodes", "job_id": "152329ab-6312-f9a2-7240-1e8469e7bd00"}, "does not take"},
+		{"unknown op", map[string]any{"op": "kill"}, "op must be"},
+		{"op outside ops", map[string]any{"op": "reflections"}, "ops allows only"},
+		{"jobs with top_n", map[string]any{"op": "jobs", "top_n": int64(3)}, "does not take"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := Builtins["dremio_diag"].Run(context.Background(), a.BuiltinConfig, tc.values)
+			if result.ExitCode != 1 || err == nil {
+				t.Fatalf("%+v, %v", result, err)
+			}
+			if tc.reject == "" && !strings.Contains(err.Error(), "cannot open credential file") || tc.reject != "" && !strings.Contains(err.Error(), tc.reject) {
+				t.Fatalf("got %v; want %q", err, tc.reject)
+			}
+		})
+	}
+}
+
+// Each dremio_diag example fixes its op, so the caller supplies only the
+// parameters of that op, and no SQL.
+func TestDremioDiagExamplesFixTheirOp(t *testing.T) {
+	c := loadExamples(t)
+	for name, tc := range map[string]struct{ op string }{
+		"dremio_nodes": {"nodes"}, "dremio_jobs_recent": {"jobs"}, "dremio_job_profile": {"job_profile"},
+	} {
+		a, ok := c.Actions[name]
+		if !ok {
+			t.Errorf("example %s is missing", name)
+			continue
+		}
+		if a.Builtin != "dremio_diag" || a.Risk != "read" || a.RunAs != "root" || !CheckHost(a).RequiresExec {
+			t.Errorf("%s: %+v", name, a)
+		}
+		defs, err := ParameterDefinitions(a)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if !slices.Equal(defs["op"].Values, []string{tc.op}) || defs["op"].Default != tc.op {
+			t.Errorf("%s: op %+v", name, defs["op"])
+		}
+		parsed, err := params.Parse(defs, map[string]any{})
+		if err != nil || parsed["op"] != tc.op {
+			t.Errorf("%s: %v %v", name, parsed, err)
+		}
+		if _, ok := defs["sql"]; ok {
+			t.Errorf("%s accepts SQL", name)
 		}
 	}
 }

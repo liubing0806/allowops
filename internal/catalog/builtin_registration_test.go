@@ -25,6 +25,7 @@ func registeredBuiltinAction(name string) Action {
 		"starrocks_query": {"address": "tcp://127.0.0.1:9030", "credential": "/etc/allowops/credentials/starrocks.json"},
 		"dremio_query":    {"url": "http://127.0.0.1:9047", "credential": "/etc/allowops/credentials/dremio.json"},
 		"starrocks_diag":  {"address": "tcp://127.0.0.1:9030", "credential": "/etc/allowops/credentials/starrocks-diag.json"},
+		"dremio_diag":     {"url": "http://127.0.0.1:9047", "credential": "/etc/allowops/credentials/dremio.json"},
 	}
 	return Action{Name: name, Description: name, Risk: "read", Builtin: name, BuiltinConfig: configs[name], Timeout: "1s", MaxOutput: 1024}
 }
@@ -34,10 +35,10 @@ func TestBuiltinCatalogSchemas(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "actions"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("schema_version: 1\ncatalog_id: eight_builtins\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("schema_version: 1\ncatalog_id: nine_builtins\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query", "dremio_query", "starrocks_diag"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query", "dremio_query", "starrocks_diag", "dremio_diag"} {
 		a := registeredBuiltinAction(name)
 		data, err := json.Marshal(a)
 		if err != nil {
@@ -80,6 +81,17 @@ func TestBuiltinCatalogSchemas(t *testing.T) {
 			if len(properties) != 2 || sqlSchema["maxLength"] != 4000 || database["pattern"] != `^[a-zA-Z0-9_]{1,64}$` || !slices.Equal(required, []string{"sql"}) {
 				t.Errorf("starrocks_query schema: sql required with maxLength 4000, database optional: %v", schema)
 			}
+		case "dremio_diag":
+			// No cross-field rule at the root of the schema: the handler checks them.
+			required, _ := schema["required"].([]string)
+			if len(properties) != 8 || !slices.Equal(required, []string{"op"}) || properties["op"].(map[string]any)["type"] != "string" {
+				t.Errorf("dremio_diag schema: eight parameters, only op required: %v", schema)
+			}
+			for _, root := range []string{"allOf", "anyOf", "oneOf", "not", "if"} {
+				if _, ok := schema[root]; ok {
+					t.Errorf("dremio_diag schema has %s at the root", root)
+				}
+			}
 		case "dremio_query":
 			sqlSchema := properties["sql"].(map[string]any)
 			required, _ := schema["required"].([]string)
@@ -106,8 +118,8 @@ func TestBuiltinCatalogSchemas(t *testing.T) {
 		}
 	}
 	loaded, err := Load(dir)
-	if err != nil || len(loaded.Actions) != 8 {
-		t.Fatalf("eight builtin catalog: %#v %v", loaded, err)
+	if err != nil || len(loaded.Actions) != 9 {
+		t.Fatalf("nine builtin catalog: %#v %v", loaded, err)
 	}
 }
 
@@ -138,6 +150,9 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 		{"starrocks_diag", "max_rows", 1, 501},
 		{"starrocks_diag", "max_bytes", "1KB", fmt.Sprint(1<<20 + 1)},
 		{"starrocks_diag", "max_profile_bytes", "1KB", fmt.Sprint(16<<20 + 1)},
+		{"dremio_diag", "max_rows", 1, 501},
+		{"dremio_diag", "max_bytes", "1KB", fmt.Sprint(1<<20 + 1)},
+		{"dremio_diag", "max_profile_bytes", "1MB", fmt.Sprint(builtin.DefaultDremioMaxProfileBytes + 1)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name+"/"+tc.key, func(t *testing.T) {
@@ -153,7 +168,7 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 			}
 		})
 	}
-	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query", "dremio_query", "starrocks_diag"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query", "dremio_query", "starrocks_diag", "dremio_diag"} {
 		a := registeredBuiltinAction(name)
 		a.BuiltinConfig["timeout"] = "20ms"
 		if _, err := ValidateAction(a); err != nil {
@@ -177,7 +192,7 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 }
 
 func TestBuiltinExecutionPlacement(t *testing.T) {
-	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query", "dremio_query", "starrocks_diag"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query", "dremio_query", "starrocks_diag", "dremio_diag"} {
 		for _, runAs := range []string{"", "root"} {
 			a := registeredBuiltinAction(name)
 			a.RunAs = runAs
@@ -189,7 +204,7 @@ func TestBuiltinExecutionPlacement(t *testing.T) {
 			if err := json.Unmarshal(data, &metadata); err != nil {
 				t.Fatal(err)
 			}
-			want := runAs != "" || name == "redis_command" || name == "mysql_query" || name == "starrocks_query" || name == "dremio_query" || name == "starrocks_diag"
+			want := runAs != "" || name == "redis_command" || name == "mysql_query" || name == "starrocks_query" || name == "dremio_query" || name == "starrocks_diag" || name == "dremio_diag"
 			if metadata["requires_exec"] != want {
 				t.Errorf("%s run_as=%q metadata=%s; want requires_exec=%v", name, runAs, data, want)
 			}
