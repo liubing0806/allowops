@@ -1,0 +1,106 @@
+# allowops 的 StarRocks + Dremio 本地集成测试环境（项目名 allowops-srdr）。
+# 镜像由 up.sh 从 images.env 注入；端口只绑定 127.0.0.1。
+name: allowops-srdr
+
+services:
+  sr-fe:
+    image: ${SR_FE_IMAGE:?}
+    container_name: allowops-srdr-sr-fe
+    hostname: sr-fe
+    command: ["/bin/bash", "/opt/starrocks/fe/bin/start_fe.sh", "--host_type", "FQDN"]
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:29030:9030"
+      - "127.0.0.1:28030:8030"
+    mem_limit: 6g
+    ulimits:
+      nofile: { soft: 655350, hard: 655350 }
+    volumes:
+      - sr-fe-meta:/opt/starrocks/fe/meta
+      - sr-fe-log:/opt/starrocks/fe/log
+      - ./conf/fe.conf:/opt/starrocks/fe/conf/fe.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8030/api/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 15s
+
+  sr-be:
+    image: ${SR_BE_IMAGE:?}
+    container_name: allowops-srdr-sr-be
+    hostname: sr-be
+    command: ["/bin/bash", "/opt/starrocks/be/bin/start_be.sh"]
+    environment:
+      TZ: Asia/Shanghai
+    depends_on:
+      sr-fe:
+        condition: service_healthy
+    mem_limit: 10g
+    ulimits:
+      nofile: { soft: 655350, hard: 655350 }
+    volumes:
+      - sr-be-storage:/opt/starrocks/be/storage
+      - sr-be-log:/opt/starrocks/be/log
+      - sr-be-spill:/opt/starrocks/be/spill
+      - ./conf/be.conf:/opt/starrocks/be/conf/be.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8040/api/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 15s
+
+  # 该 Dremio 构建不会启动内置 ZooKeeper（日志停在 ZKClusterClient.start），
+  # 因此用同一镜像自带的 zookeeper-3.7.2.jar 单独起一个单节点 ZooKeeper，不引入其他镜像。
+  dremio-zk:
+    image: ${DREMIO_IMAGE:?}
+    container_name: allowops-srdr-dremio-zk
+    hostname: dremio-zk
+    entrypoint: ["/opt/java/openjdk/bin/java", "-Xms64m", "-Xmx256m", "-cp", "/opt/dremio/jars/3rdparty/*", "org.apache.zookeeper.server.ZooKeeperServerMain", "/opt/zk/zoo.cfg"]
+    mem_limit: 1g
+    volumes:
+      - ./conf/zoo.cfg:/opt/zk/zoo.cfg:ro
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2181"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  dremio:
+    image: ${DREMIO_IMAGE:?}
+    depends_on:
+      dremio-zk:
+        condition: service_healthy
+    container_name: allowops-srdr-dremio
+    hostname: dremio
+    environment:
+      TZ: Asia/Shanghai
+      DREMIO_MAX_HEAP_MEMORY_SIZE_MB: "4096"
+      DREMIO_MAX_DIRECT_MEMORY_SIZE_MB: "2048"
+      DREMIO_LOG_TO_CONSOLE: "1"
+    ports:
+      - "127.0.0.1:29047:9047"
+    mem_limit: 8g
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    volumes:
+      - dremio-data:/opt/dremio/data
+      - dremio-log:/opt/dremio/log
+      - ./conf/dremio.conf:/opt/dremio/conf/dremio.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9047/apiv2/server_status | grep -q OK"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+
+volumes:
+  sr-fe-meta:
+  sr-fe-log:
+  sr-be-storage:
+  sr-be-log:
+  sr-be-spill:
+  dremio-data:
+  dremio-log:
