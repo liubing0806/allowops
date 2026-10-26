@@ -15,6 +15,8 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin/logsearch"
 	redisbuiltin "github.com/liubing0806/allowops/internal/builtin/redis"
 	"github.com/liubing0806/allowops/internal/builtin/starrocks"
+	"github.com/liubing0806/allowops/internal/builtin/starrocksdiag"
+	"github.com/liubing0806/allowops/internal/builtin/starrocksprofile"
 	"github.com/liubing0806/allowops/internal/params"
 )
 
@@ -381,6 +383,86 @@ func (starRocksHandler) RunRedacted(ctx context.Context, input, values map[strin
 	database, _ := values["database"].(string)
 	sql, _ := values["sql"].(string)
 	r, err := starrocks.RunRedacted(ctx, cfg, starrocks.Params{Database: database, SQL: sql}, mask)
+	if err != nil {
+		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
+	}
+	return BuiltinResult{Stdout: r.Output, ResourceLimited: r.Truncated}, nil
+}
+
+type starRocksDiagHandler struct{}
+
+func starRocksDiagConfig(input map[string]any) (starrocksdiag.Config, error) {
+	var fields struct {
+		Credential      string            `json:"credential"`
+		Address         string            `json:"address"`
+		MaxRows         int               `json:"max_rows"`
+		MaxBytes        Size              `json:"max_bytes"`
+		MaxProfileBytes Size              `json:"max_profile_bytes"`
+		Timeout         string            `json:"timeout"`
+		AuditTable      string            `json:"audit_table"`
+		AuditColumns    map[string]string `json:"audit_columns"`
+		AllowProfileRun bool              `json:"allow_profile_run"`
+	}
+	if err := decodeBuiltinConfig(input, &fields); err != nil {
+		return starrocksdiag.Config{}, err
+	}
+	timeout, err := builtinTimeout(fields.Timeout)
+	if err != nil {
+		return starrocksdiag.Config{}, err
+	}
+	cfg := starrocksdiag.Config{
+		Credential: fields.Credential, Address: fields.Address, MaxRows: fields.MaxRows, MaxBytes: int64(fields.MaxBytes), MaxProfileBytes: int64(fields.MaxProfileBytes),
+		Timeout: timeout, AuditTable: fields.AuditTable, AuditColumns: fields.AuditColumns, AllowProfileRun: fields.AllowProfileRun,
+	}
+	return cfg, cfg.Validate()
+}
+
+func (starRocksDiagHandler) ValidateConfig(input map[string]any) error {
+	_, err := starRocksDiagConfig(input)
+	return err
+}
+
+// Parameters lists every parameter of the enabled ops. Which ones apply to an
+// op is checked by the handler, not by the tool schema.
+func (starRocksDiagHandler) Parameters(input map[string]any) (map[string]params.Definition, error) {
+	cfg, err := starRocksDiagConfig(input)
+	if err != nil {
+		return nil, err
+	}
+	maxRows := positiveBound(cfg.MaxRows, builtin.DefaultStarRocksMaxRows)
+	definitions := map[string]params.Definition{
+		"op":              {Type: params.Enum, Description: "Diagnostic operation", Values: starrocksdiag.Ops(cfg)},
+		"component":       {Type: params.Enum, Description: "cluster: node type to list", Values: []string{"all", "frontends", "backends", "compute_nodes"}, Default: "all"},
+		"since_minutes":   integerDefinition("slow_queries: time window in minutes", 1, starrocksdiag.MaxSinceMinutes, starrocksdiag.DefaultSinceMinute),
+		"min_duration_ms": integerDefinition("slow_queries: minimum query time in milliseconds", 0, starrocksdiag.MaxMinDurationMs, 0),
+		"state":           {Type: params.Enum, Description: "slow_queries: audit state filter", Values: starrocksdiag.States, Default: "any"},
+		"limit":           integerDefinition("slow_queries and profile_list: maximum rows", 1, maxRows, min(starrocksdiag.DefaultLimit, maxRows)),
+		"query_id":        {Type: params.String, Description: "profile_analyze and profile_summary: query ID in UUID format", Regex: starrocksdiag.QueryIDPattern, MaxLen: 36, Optional: true},
+		"top_n":           integerDefinition("Summary ops: number of slowest operators to list", 1, starrocksprofile.MaxTopN, starrocksprofile.DefaultTopN),
+	}
+	if cfg.AllowProfileRun {
+		definitions["sql"] = params.Definition{Type: params.String, Description: "profile_run: one read-only StarRocks SELECT statement; its rows are not returned", MaxLen: 4000, Optional: true}
+		definitions["database"] = params.Definition{Type: params.String, Description: "profile_run: default database for unqualified table names", Regex: `^[a-zA-Z0-9_]{1,64}$`, MaxLen: 64, Optional: true}
+	}
+	return definitions, nil
+}
+
+func (h starRocksDiagHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
+	return h.RunRedacted(ctx, input, values, nil)
+}
+
+func (starRocksDiagHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+	cfg, err := starRocksDiagConfig(input)
+	if err != nil {
+		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
+	}
+	text := func(name string) string { s, _ := values[name].(string); return s }
+	number := func(name string) int { n, _ := values[name].(int64); return int(n) }
+	p := starrocksdiag.Params{
+		Op: text("op"), Component: text("component"), SinceMinutes: number("since_minutes"), MinDurationMs: number("min_duration_ms"),
+		State: text("state"), Limit: number("limit"), QueryID: text("query_id"), TopN: number("top_n"), SQL: text("sql"), Database: text("database"),
+	}
+	r, err := starrocksdiag.RunRedacted(ctx, cfg, p, mask)
 	if err != nil {
 		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
 	}

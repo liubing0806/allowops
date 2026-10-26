@@ -111,6 +111,68 @@ func TestDremioQueryToolSchemaAndRequest(t *testing.T) {
 	}
 }
 
+func starRocksDiagAction(allowRun bool) catalog.Action {
+	a := testAction()
+	a.Exec = nil
+	a.Builtin = "starrocks_diag"
+	a.BuiltinConfig = map[string]any{"credential": "/etc/allowops/credentials/starrocks-diag.json", "address": "tcp://127.0.0.1:9030"}
+	if allowRun {
+		a.BuiltinConfig["allow_profile_run"] = true
+	}
+	a.Params = nil
+	return a
+}
+
+func TestStarRocksDiagToolSchemaAndRequest(t *testing.T) {
+	a := starRocksDiagAction(false)
+	tool, err := actionTool(a, job.DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(tool.InputSchema)
+	var schema map[string]any
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatal(err)
+	}
+	paramsSchema := schema["properties"].(map[string]any)["params"].(map[string]any)
+	for _, root := range []string{"oneOf", "anyOf", "allOf", "not", "if", "dependentRequired"} {
+		if _, present := paramsSchema[root]; present {
+			t.Errorf("root combinator %s in the params schema: %s", root, data)
+		}
+	}
+	if required := paramsSchema["required"].([]any); len(required) != 1 || required[0] != "op" {
+		t.Fatalf("only op is required: %v", required)
+	}
+	if strings.Contains(string(data), "profile_run") || strings.Contains(string(data), `"sql"`) {
+		t.Fatalf("profile_run must not be exposed by default: %s", data)
+	}
+	if !tool.Annotations.ReadOnlyHint {
+		t.Fatal("starrocks_diag must be a read action")
+	}
+	for input, valid := range map[string]bool{
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"cluster"},"reason":"inspect"}`:                                                                  true,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"running"},"reason":"inspect"}`:                                                                  true,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"slow_queries","since_minutes":30,"min_duration_ms":2000,"state":"ERR","limit":5},"reason":"x"}`: true,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"profile_summary","query_id":"b6e3e384-ced5-11f1-b155-5ee444682bc1"},"reason":"x"}`:              true,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"profile_summary","query_id":"x"},"reason":"x"}`:                                                 false,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"profile_run","sql":"SELECT 1"},"reason":"x"}`:                                                   false,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"drop"},"reason":"x"}`:                                                                           false,
+		`{"targets":{"hosts":["web-01"]},"params":{},"reason":"x"}`:                                                                                      false,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"cluster","extra":1},"reason":"x"}`:                                                              false,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"slow_queries","limit":501},"reason":"x"}`:                                                       false,
+		`{"targets":{"hosts":["web-01"]},"params":{"op":"profile_summary","query_id":"b6e3e384-ced5-11f1-b155-5ee444682bc1","top_n":51},"reason":"x"}`:   false,
+	} {
+		_, _, err := actionRequest(a, json.RawMessage(input), job.DefaultConfig())
+		if (err == nil) != valid {
+			t.Errorf("%.120s: error=%v want valid=%v", input, err, valid)
+		}
+	}
+	enabled := starRocksDiagAction(true)
+	if _, _, err := actionRequest(enabled, json.RawMessage(`{"targets":{"hosts":["web-01"]},"params":{"op":"profile_run","sql":"SELECT 1"},"reason":"x"}`), job.DefaultConfig()); err != nil {
+		t.Errorf("profile_run with allow_profile_run: %v", err)
+	}
+}
+
 func TestActionDefaultsAndNamespace(t *testing.T) {
 	r, format, err := actionRequest(testAction(), json.RawMessage(`{"targets":{"hosts":["web-01"]},"params":{"mode":"recent","reason":"app"},"reason":"investigation"}`), job.DefaultConfig())
 	if err != nil {

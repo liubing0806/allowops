@@ -4,7 +4,7 @@
 
 `starrocks_query` 通过 MySQL 协议向 StarRocks FE（Frontend，前端节点）发送一条只读 SQL。
 实现位于 `internal/builtin/starrocks`，注册在 `internal/catalog` 的 `Builtins`。
-`starrocks_diag`（诊断）和 Dremio 处理器不在本文范围内。
+`starrocks_diag`（诊断）见本文末尾的“starrocks_diag”一节，Dremio 处理器不在本文范围内。
 
 完成条件：配置与参数校验、SQL 校验先于凭据读取、凭据文件检查、TSV 与 NULL、截断、超时、错误码、
 panic 恢复的单元测试通过；设置 `ALLOWOPS_STARROCKS_ADDR` 后，对本地 StarRocks 3.3 的集成测试通过；
@@ -170,3 +170,187 @@ go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./internal/builtin/... ./intern
 - 查询在客户端截断后，服务端可能继续执行到自己的 `query_timeout`；连接关闭后服务端是否立即取消查询未验证。
 - 超时错误按 context 是否到期判断，只有调用方 context 长于配置超时时才能观察到服务端的 5024。
 - 校验针对 StarRocks 3.3 设计，其他版本未验证。
+
+# starrocks_diag 诊断
+
+## 范围
+
+`starrocks_diag` 通过 MySQL 协议向 StarRocks FE 发送 allowops 生成的固定语句，读取集群状态、运行中查询、审计表中的慢查询和查询 profile。
+实现位于 `internal/builtin/starrocksdiag`（处理器）、`internal/builtin/starrocksprofile`（profile 解析、摘要和规则）和 `internal/builtin/srconn`（与 `starrocks_query` 共用的连接和结果读取）。
+连接地址、凭据文件检查、TSV 编码和错误处理与 `starrocks_query` 相同。除 `profile_run` 外，调用方不能提供任何 SQL 文本。
+
+## op 与固定语句
+
+| op | 固定语句 | 参数 |
+| --- | --- | --- |
+| `cluster` | `SHOW FRONTENDS`、`SHOW BACKENDS`、`SHOW COMPUTE NODES` | `component`：all（默认）、frontends、backends、compute_nodes。输出按 `# <component>` 分节，行数与字节上限由各节共用 |
+| `running` | `SHOW PROC '/current_queries'` | 无。实测该语句需要 OPERATE 权限 |
+| `slow_queries` | 对审计表的一条 SELECT，见下文 | `since_minutes`（1..10080，默认 60）、`min_duration_ms`（0..86400000，默认 0）、`state`（any、EOF、OK、ERR，默认 any）、`limit`（1..`max_rows`，默认 20） |
+| `profile_list` | `SHOW PROFILELIST LIMIT n` | `limit`（同上） |
+| `profile_analyze` | `ANALYZE PROFILE FROM '<query_id>'` | `query_id`（必填） |
+| `profile_summary` | `SELECT get_query_profile('<query_id>')`，主机端解析 | `query_id`（必填）、`top_n`（1..50，默认 10） |
+| `profile_run` | 见下文 | `sql`（必填）、`database`、`top_n`；默认关闭 |
+
+规则：
+
+- 参数按 op 在处理器内校验，不使用工具 schema 根部的 `oneOf` 等组合关键字。schema 列出已启用 op 的全部参数，只有 `op` 必填。
+  其他 op 的参数被忽略的情形见下一条；`query_id` 用于不接受它的 op、`sql` 和 `database` 用于 `profile_run` 以外的 op 时返回错误。
+- 带默认值的参数（`component`、`since_minutes`、`min_duration_ms`、`state`、`limit`、`top_n`）在目录层始终有值，不适用的 op 不使用它们。
+- `query_id` 只接受 UUID（`^[0-9a-fA-F]{8}-…-[0-9a-fA-F]{12}$`），拼入 SQL 前按 StarRocks 字面量规则转义（`\`、`'`、NUL、换行）。
+- 参数校验和配置校验先于凭据读取。被拒绝的请求不读取凭据，也不连接。
+- `profile_analyze` 的输出含终端颜色转义序列（`ESC[…m`），处理器在脱敏前去掉它们。
+
+## slow_queries 与审计表
+
+固定语句的形式：
+
+```sql
+SELECT `queryId` AS `query_id`, `timestamp` AS `timestamp`, `user` AS `user`, `db` AS `db`, `state` AS `state`,
+       `queryTime` AS `query_time`, `scanBytes` AS `scan_bytes`, `scanRows` AS `scan_rows`, `returnRows` AS `return_rows`,
+       `cpuCostNs` AS `cpu_cost_ns`, `memCostBytes` AS `mem_cost_bytes`, LEFT(`stmt`, 1000) AS `stmt`
+FROM `starrocks_audit_db__`.`starrocks_audit_tbl__`
+WHERE `timestamp` >= DATE_SUB(NOW(), INTERVAL <since_minutes*60> SECOND) AND `queryTime` >= <min_duration_ms>
+  [AND `state` = '<state>'] ORDER BY `queryTime` DESC LIMIT <limit>
+```
+
+- 默认表名是 AuditLoader 插件的默认表 `starrocks_audit_db__.starrocks_audit_tbl__`。`builtin_config.audit_table` 可以改为 `table` 或 `database.table`。
+- 列名默认取 AuditLoader 的列名（上式）。`builtin_config.audit_columns` 按逻辑名（`query_id`、`timestamp`、`user`、`db`、`state`、`query_time`、`scan_bytes`、`scan_rows`、`return_rows`、`cpu_cost_ns`、`mem_cost_bytes`、`stmt`）改名。
+- 表名和列名只来自 `builtin_config`，必须匹配 `^[A-Za-z_][A-Za-z0-9_]{0,63}$`；调用方的参数只以整数和固定集合中的 `state` 进入语句。
+- `stmt` 截取前 1000 个字符；SQL 文本中的密码、令牌等由 `redact` 处理。
+- 未验证：本地环境没有 AuditLoader 插件，集成测试使用按同一结构手工创建的合成审计表，列名取自 AuditLoader 的文档。真实插件的列类型和 `queryTime` 单位（毫秒）未在本地验证。
+
+## profile_summary 与 profile_run
+
+`profile_summary` 读取 `get_query_profile` 的合并文本，在主机端解析，输出一个 JSON 对象：
+
+- `query`：查询状态、总耗时、`QueryPeakMemoryUsagePerNode`、`QuerySpillBytes`、扫描行数和字节等查询级指标。
+- `top_operators`：按算子时间（OperatorTotalTime，扫描算子另加 ScanTime）排序的前 `top_n` 个算子：fragment、算子名、plan node id、耗时占比、输入输出行数、峰值内存、spill 字节，以及多实例时的最大值与平均值之比。
+- `findings`：规则命中项，含规则编号、算子、证据（指标名、数值、单位）、可能原因和建议。
+- `operator_count`、`operators_omitted`（为适应 `max_bytes` 去掉的算子数）。
+- `profile_run` 另有 `result_rows`（被丢弃的结果行数）。
+
+摘要不含 SQL 文本，只含指标和算子名；字符串在输出前经脱敏函数处理，JSON 超过 `max_bytes` 时从排序靠后的算子开始删除，规则命中项保留。
+
+约束：
+
+- profile 文本不得超过 `max_profile_bytes`（默认和上限 16 MiB），否则报错，不解析。解析器还限制行数（400000 行）。
+- `get_query_profile` 对未知 `query_id` 返回空字符串，返回 `the profile of the query was not found …`。profile 在查询结束后异步登记（实测最长约 8 秒），已结束的查询可以稍后重试。
+- 只有 `enable_profile` 开启或超过 `big_query_profile_threshold` 的查询才有 profile，FE 只保留最近的一批。
+
+`profile_run`：默认关闭，`builtin_config.allow_profile_run: true` 才出现在 `op` 枚举和 `sql`、`database` 参数中。
+
+1. 调用方的 SQL 先经 sqlguard（StarRocks 方言）。只接受 SELECT 和 WITH 查询；`EXPLAIN`、`SHOW`、`ANALYZE PROFILE`、`get_query_profile`、多语句等被拒绝。校验先于凭据读取。
+2. 同一连接上执行 `SET enable_profile = true`，执行 SQL，读取并丢弃所有结果行，只统计行数。
+3. 执行 `SELECT last_query_id()` 得到 query id，以 200 ms 间隔轮询 `get_query_profile`，直到 profile 登记或整个超时（默认 10 s）到期，再生成摘要。
+4. 查询由 `query_timeout` 和客户端截止时间限制。SQL 在服务器上真实执行，可能消耗大量资源；这是默认关闭的原因。
+
+## builtin_config
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `credential`、`address`、`timeout` | 同 `starrocks_query` |
+| `max_rows` | 0..500；省略或 0 为 500。限制 `cluster`、`running`、`slow_queries`、`profile_list`、`profile_analyze` 的行数，也是 `limit` 的上限 |
+| `max_bytes` | 0..1 MiB；省略或 0 为 1 MiB。限制 TSV 文本或摘要 JSON 的字节数 |
+| `max_profile_bytes` | 0..16 MiB，可写 `8MB` 等形式；省略或 0 为 16 MiB。限制可解析的 profile 文本 |
+| `audit_table` | `table` 或 `database.table`，各段为标识符；省略为 AuditLoader 默认表 |
+| `audit_columns` | 逻辑名到列名的映射，列名为标识符；未知逻辑名报错 |
+| `allow_profile_run` | 默认 false；true 时启用 `profile_run` |
+
+`statement_types`、`show_types`、`allow_explain_analyze` 不适用于 diag，出现即报错（语句固定）。
+
+## 账号
+
+diag 账号与 query 账号分开配置，凭据文件格式相同，示例路径为 `/etc/allowops/credentials/starrocks-diag.json`。授予 SELECT 加 SYSTEM 级 OPERATE：
+
+```sql
+CREATE USER 'allowops_diag'@'%' IDENTIFIED BY '<在主机上生成的密码>';
+GRANT OPERATE ON SYSTEM TO USER 'allowops_diag'@'%';
+GRANT SELECT ON ALL TABLES IN DATABASE starrocks_audit_db__ TO USER 'allowops_diag'@'%';
+```
+
+OPERATE 权限同时允许 KILL 和修改配置。本处理器的语句固定，调用方无法使用这部分权限；该账号不得配置给 `starrocks_query`。
+`profile_run` 执行调用方的 SELECT，因此启用它的 action 应使用只有 SELECT 的 query 账号，而不是 diag 账号。
+
+## profile 规则与阈值
+
+算子名和指标名取自本地 StarRocks 3.3.22 的真实 profile。
+时间占比的分母是所有算子 `effectiveTime` 之和；`effectiveTime` 为 OperatorTotalTime，扫描算子另加 ScanTime（扫描的 IO 时间不计入 OperatorTotalTime）。
+
+| 编号 | 条件（默认阈值） | 阈值说明 |
+| --- | --- | --- |
+| SR-SCAN-1 | OLAP_SCAN 时间占比 ≥ 30%，且 RawRowsRead ≥ 1 亿或 BytesRead ≥ 10 GiB | 无 |
+| SR-PROJ-1 | PROJECT 时间占比 ≥ 30%，且算子时间 ≥ 10 ms | 增加 10 ms 下限，避免毫秒级查询误报 |
+| SR-AGG-1 | 聚合算子 spill 字节 > 0，或 HashTableMemoryUsage ≥ 128 MiB 且 ≥ 查询峰值内存的 50% | 真实 profile 的算子级内存指标是 HashTableMemoryUsage；增加 128 MiB 下限 |
+| SR-SORT-1 | LOCAL_SORT_SINK、SPILLABLE_LOCAL_SORT_SINK、LOCAL_PARTITION_TOPN_SINK、ANALYTIC_SINK、ANALYTIC_SOURCE 的时间占比之和 ≥ 30% | 真实窗口查询的占比分散在排序与窗口算子，单个均低于 30%，因此合并计算 |
+| SR-JOIN-1 | 出现 NESTLOOP_JOIN_PROBE | 无 |
+| SR-JOIN-2 | HASH_JOIN_PROBE 的 PullRowNum ≥ PushRowNum × 10 且 PullRowNum ≥ 10 万 | 增加 10 万行下限 |
+| SR-XCHG-1 | EXCHANGE_SINK 的 BytesSent ≥ 10 GiB | 无 |
+| SR-SKEW-1 | 非扫描算子的 `__MAX_OF_OperatorTotalTime` / 平均 ≥ 3 且最大值 ≥ 10 ms | 排除 `*_SCAN` 算子：扫描各实例的时间由 tablet 大小和 IO 调度决定，在样本中比值经常超过 3 而没有数据倾斜 |
+| SR-MEM-1 | QueryPeakMemoryUsagePerNode ≥ `query_mem_limit` 的 90%，或 ErrorMsg 含内存超限信息 | “接近上限”取 90% |
+
+阈值定义在 `starrocksprofile.DefaultThresholds()`，`TestThresholdsAreConfigurable` 覆盖修改。阈值未经生产数据校准；交付后按实际环境调整，改动需同步更新测试表 `TestRulesOnRealProfiles`。
+
+### 测试样本
+
+`internal/builtin/starrocksprofile/testdata/` 有 14 个来自本地 StarRocks 3.3.22 的真实 profile（合成库 `demo_dw.fact_orders`，50 万行）。
+`TestRulesOnRealProfiles` 固定每个样本命中的规则；下表列出各规则的命中与未命中样本。
+
+| 规则 | 命中（真实） | 未命中（真实） |
+| --- | --- | --- |
+| SR-SCAN-1 | 无 | scan_agg、scan_heavy 等全部样本 |
+| SR-PROJ-1 | project_expr、mem_limit_ok | project_json、hash_join、window 等 |
+| SR-AGG-1（内存） | agg_memory、mem_limit_ok | scan_agg、hash_join 等 |
+| SR-AGG-1（spill） | 无 | 全部样本 |
+| SR-SORT-1 | window_multi、window_topn | window、scan_agg 等 |
+| SR-JOIN-1 | nestloop_join | hash_join、join_expand |
+| SR-JOIN-2 | join_expand | hash_join、nestloop_join |
+| SR-XCHG-1 | 无 | 全部样本 |
+| SR-SKEW-1 | skew_window | window、hash_join 等 |
+| SR-MEM-1 | mem_limit_exceeded | mem_limit_ok 等 |
+
+生成样本的查询（`SET enable_profile = true` 后执行，用 `SELECT last_query_id()` 取 id，再 `SELECT get_query_profile(id)`）：
+
+| 样本 | 查询要点 |
+| --- | --- |
+| join_expand | `SELECT count(*) FROM demo_dw.fact_orders a JOIN demo_dw.fact_orders b ON a.store_id = b.store_id WHERE a.order_id < 2000` |
+| project_expr | 对 `origin_data` 做 `regexp_replace`、`get_json_string` 后 `ORDER BY order_id LIMIT 400000`，外层 `WHERE length(x) > 0` |
+| skew_window | `row_number() OVER (PARTITION BY k ORDER BY order_id)`，其中 `k = if(order_id % 100 < 97, 1, order_id)` |
+| mem_limit_exceeded | `SET query_mem_limit = 50000000` 后对 `order_id, origin_data` 分组聚合 |
+| 其他 | 单表聚合、哈希连接、窗口函数、`TopN` 窗口、笛卡尔连接 |
+
+### 未用真实 profile 验证的规则
+
+本地合成数据量小，以下条件无法由真实查询触发，对应测试用改写的样本（在真实 profile 上修改指标值，行数不变）：
+
+- SR-SCAN-1：RawRowsRead 或 BytesRead 达到阈值（`TestScanRuleOnRewrittenProfiles`）。
+- SR-AGG-1 spill 分支：本地查询未产生 spill。判断方式是算子的任何名称含 `Spill` 且为字节量的指标之和大于 0，具体指标名**未用真实 profile 验证**（`TestAggregateSpillOnRewrittenProfile`）。
+- SR-XCHG-1：BytesSent 达到 10 GiB（`TestExchangeRuleOnRewrittenProfile`）。
+- SR-MEM-1 的峰值内存与限制比值分支（`TestMemoryRuleOnRewrittenProfile`）；错误信息分支有真实样本 mem_limit_exceeded。
+
+这些规则只验证了判断逻辑，没有验证真实环境中指标的取值范围，使用时需要结合实际 profile 复核。
+
+## 其他 BE 构建的差异（未验证）
+
+样本全部来自本地 StarRocks 3.3.22 的 AVX2 构建。其他构建（例如 AVX-512 构建）的 profile 指标名和文本结构是否相同未验证。
+解析器只读取需要的指标，缺失或格式未知的指标视为未上报，不当作问题证据；算子名和指标名变化时，对应规则不命中。
+
+## 测试
+
+单元测试使用固定驱动，覆盖配置与参数校验、每个 op 的固定语句（驱动记录的 `exec:` 与 `query:`）、`quoteLiteral`、`slowQuerySQL`、参数先于凭据校验、脱敏、截断、ANSI 转义、profile 未登记时的轮询、摘要收缩。
+集成测试由 `ALLOWOPS_STARROCKS_ADDR` 和 `ALLOWOPS_STARROCKS_STATE` 启用，使用独立的 diag 账号：
+
+- `cluster`、`running`、`profile_list`、`profile_analyze`、`profile_summary` 对本地 StarRocks 的真实输出。
+- `slow_queries` 对合成审计表。
+- `profile_run` 的 SELECT 在服务器上执行且结果行不返回。
+- 通过 `unshare -Ur` 以 root 属主的凭据文件调用公开入口。
+
+验收命令：
+
+```sh
+gofmt -l internal
+go vet ./...
+go test -race ./internal/builtin/srconn ./internal/builtin/starrocks ./internal/builtin/starrocksprofile ./internal/builtin/starrocksdiag ./internal/catalog ./internal/executor ./internal/agent ./internal/gateway/mcp
+ALLOWOPS_STARROCKS_ADDR=127.0.0.1:29030 ALLOWOPS_STARROCKS_STATE=<环境凭据目录> go test -race -count=1 ./internal/builtin/starrocksdiag
+make examples-check
+go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./internal/builtin/... ./internal/catalog/... ./internal/agent/...
+```

@@ -336,7 +336,7 @@ SystemStatus 的计数按调用者权限返回；不允许通过 overview 泄露
 
 ## 10. allowops-agent 与 allowops-exec 的本地协议（P3）
 
-agent 对声明 `run_as` 的 action 调用 `/usr/bin/sudo -n /usr/libexec/allowops/allowops-exec`，不传命令行参数。sudoers 中的 `""` 表示禁止参数。按签名 action 的 `RequiresExec()` 判断执行位置：mysql_query、redis_command、starrocks_query 和 dremio_query 需要读取 root 凭据，即使未声明 run_as 也使用辅助程序，此时以 root 执行。log_search、http_get，以及未配置 credential 的 prometheus_query 和 alertmanager_alerts，未声明 run_as 时直接调用执行器；配置 credential 的 prometheus_query 和 alertmanager_alerts 在目录校验阶段要求 run_as: root，因此经辅助程序执行。辅助程序忽略环境变量，程序和目录路径固定，不能由请求指定。
+agent 对声明 `run_as` 的 action 调用 `/usr/bin/sudo -n /usr/libexec/allowops/allowops-exec`，不传命令行参数。sudoers 中的 `""` 表示禁止参数。按签名 action 的 `RequiresExec()` 判断执行位置：mysql_query、redis_command、starrocks_query、dremio_query 和 starrocks_diag 需要读取 root 凭据，即使未声明 run_as 也使用辅助程序，此时以 root 执行。log_search、http_get，以及未配置 credential 的 prometheus_query 和 alertmanager_alerts，未声明 run_as 时直接调用执行器；配置 credential 的 prometheus_query 和 alertmanager_alerts 在目录校验阶段要求 run_as: root，因此经辅助程序执行。辅助程序忽略环境变量，程序和目录路径固定，不能由请求指定。
 
 stdin 是单个 UTF-8 JSON 对象，最多 128 KiB。参数对象最多 64 KiB，最大深度 32，保留整数精度；拒绝重复键、未知请求字段、尾随内容和非对象参数。filters 与 action 参数分开校验，不能覆盖参数定义。
 

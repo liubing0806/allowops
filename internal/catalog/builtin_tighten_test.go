@@ -241,3 +241,72 @@ func TestDremioQueryConfigFields(t *testing.T) {
 		}
 	}
 }
+
+// The diag handler runs fixed statements; the configuration cannot widen them,
+// and the parameters are checked before the credential is read.
+func TestStarRocksDiagRunChecksParametersBeforeCredential(t *testing.T) {
+	a := registeredBuiltinAction("starrocks_diag")
+	const id = "b6e3e384-ced5-11f1-b155-5ee444682bc1"
+	for _, tc := range []struct {
+		name   string
+		config map[string]any
+		values map[string]any
+		reject string // empty: reaches the credential file
+	}{
+		{"cluster", nil, map[string]any{"op": "cluster"}, ""},
+		{"summary", nil, map[string]any{"op": "profile_summary", "query_id": id}, ""},
+		{"summary without id", nil, map[string]any{"op": "profile_summary"}, "query_id"},
+		{"analyze with a bad id", nil, map[string]any{"op": "profile_analyze", "query_id": "x' OR '1'='1"}, "query_id"},
+		{"unknown op", nil, map[string]any{"op": "kill"}, "op"},
+		{"id on cluster", nil, map[string]any{"op": "cluster", "query_id": id}, "query_id"},
+		{"profile_run default", nil, map[string]any{"op": "profile_run", "sql": "SELECT 1"}, "allow_profile_run"},
+		{"profile_run enabled", map[string]any{"allow_profile_run": true}, map[string]any{"op": "profile_run", "sql": "SELECT 1"}, ""},
+		{"profile_run enabled, write", map[string]any{"allow_profile_run": true}, map[string]any{"op": "profile_run", "sql": "INSERT INTO t VALUES (1)"}, "sqlguard"},
+		{"profile_run enabled, two statements", map[string]any{"allow_profile_run": true}, map[string]any{"op": "profile_run", "sql": "SELECT 1; SELECT 2"}, "sqlguard"},
+		{"profile_run enabled, profile function", map[string]any{"allow_profile_run": true}, map[string]any{"op": "profile_run", "sql": "SELECT get_query_profile('" + id + "')"}, "sqlguard"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := map[string]any{}
+			for k, v := range a.BuiltinConfig {
+				config[k] = v
+			}
+			for k, v := range tc.config {
+				config[k] = v
+			}
+			result, err := Builtins["starrocks_diag"].Run(context.Background(), config, tc.values)
+			if result.ExitCode != 1 || err == nil {
+				t.Fatalf("%+v, %v", result, err)
+			}
+			if tc.reject == "" && !strings.Contains(err.Error(), "cannot open credential file") || tc.reject != "" && !strings.Contains(err.Error(), tc.reject) {
+				t.Fatalf("got %v; want %q", err, tc.reject)
+			}
+		})
+	}
+}
+
+func TestStarRocksDiagConfigFields(t *testing.T) {
+	for _, tc := range []struct {
+		field string
+		value any
+		valid bool
+	}{
+		{"allow_profile_run", true, true}, {"allow_profile_run", false, true}, {"allow_profile_run", "yes", false},
+		{"audit_table", "starrocks_audit_db__.starrocks_audit_tbl__", true}, {"audit_table", "audit_tbl", true},
+		{"audit_table", "a.b.c", false}, {"audit_table", "x; DROP TABLE y", false}, {"audit_table", "`a`", false}, {"audit_table", 7, false},
+		{"audit_columns", map[string]any{"query_time": "latency_ms"}, true}, {"audit_columns", map[string]any{"query_time": "a b"}, false},
+		{"audit_columns", map[string]any{"nope": "x"}, false}, {"audit_columns", "queryTime", false},
+		{"max_rows", 500, true}, {"max_rows", 501, false}, {"max_bytes", "512KB", true}, {"max_bytes", "2MB", false},
+		{"max_profile_bytes", "8MB", true}, {"max_profile_bytes", "17MB", false},
+		{"timeout", "5s", true}, {"timeout", "11s", false},
+		{"credential", "relative", false}, {"address", "127.0.0.1:9030", false},
+		// The diag handler takes no SQL restrictions; its statements are fixed.
+		{"statement_types", []string{"SELECT"}, false}, {"show_types", []string{"TABLES"}, false}, {"allow_explain_analyze", true, false},
+	} {
+		a := registeredBuiltinAction("starrocks_diag")
+		a.BuiltinConfig[tc.field] = tc.value
+		_, err := ValidateAction(a)
+		if tc.valid && err != nil || !tc.valid && err == nil {
+			t.Errorf("%s=%v: %v", tc.field, tc.value, err)
+		}
+	}
+}

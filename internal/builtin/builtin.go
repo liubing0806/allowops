@@ -21,6 +21,7 @@ const (
 	DefaultRedisScanCount              = 100
 	DefaultStarRocksMaxRows            = 500
 	DefaultStarRocksMaxBytes     int64 = 1 << 20
+	DefaultStarRocksProfileBytes int64 = 16 << 20
 	ExitSuccess                        = 0
 	ExitFailure                        = 1
 )

@@ -1,0 +1,18 @@
+name: starrocks_slow_queries
+description: "List the slowest recent StarRocks queries from the audit table (op slow_queries; since_minutes, min_duration_ms, state and limit narrow the result). The audit table is the AuditLoader table unless builtin_config.audit_table names another one."
+risk: read
+run_as: root
+timeout: 15s
+builtin: starrocks_diag
+builtin_config:
+  credential: /etc/allowops/credentials/starrocks-diag.json
+  address: tcp://127.0.0.1:9030
+  max_rows: 200
+  max_bytes: 64KB
+  timeout: 10s
+  audit_table: starrocks_audit_db__.starrocks_audit_tbl__
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

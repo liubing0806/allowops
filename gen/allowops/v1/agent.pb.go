@@ -598,7 +598,7 @@ type AgentCapabilities struct {
 	ParameterTypes []string `protobuf:"bytes,2,rep,name=parameter_types,json=parameterTypes,proto3" json:"parameter_types,omitempty"`
 	// exec,steps,script,builtin.
 	ExecutionModes []string `protobuf:"bytes,3,rep,name=execution_modes,json=executionModes,proto3" json:"execution_modes,omitempty"`
-	// log_search,log_query,mysql_query,redis_command,http_get,prometheus_query,alertmanager_alerts,starrocks_query,dremio_query.
+	// log_search,log_query,mysql_query,redis_command,http_get,prometheus_query,alertmanager_alerts,starrocks_query,dremio_query,starrocks_diag.
 	Builtins []string `protobuf:"bytes,4,rep,name=builtins,proto3" json:"builtins,omitempty"`
 	// match,exclude,tail,head,count.
 	OutputFilters []string `protobuf:"bytes,5,rep,name=output_filters,json=outputFilters,proto3" json:"output_filters,omitempty"`

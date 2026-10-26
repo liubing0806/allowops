@@ -51,7 +51,7 @@ func TestAgentBuiltinCapabilitiesAndCatalogUnsupported(t *testing.T) {
 	g, _, config := startGateway(t, false)
 	a, _ := startAgent(t, config)
 	c := connection(t, g)
-	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "prometheus_query", "alertmanager_alerts", "starrocks_query", "dremio_query"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "prometheus_query", "alertmanager_alerts", "starrocks_query", "dremio_query", "starrocks_diag"} {
 		if !slices.Contains(c.hello.Capabilities.Builtins, name) {
 			t.Fatalf("missing builtin %s: %v", name, c.hello)
 		}

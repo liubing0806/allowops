@@ -24,6 +24,7 @@ func registeredBuiltinAction(name string) Action {
 		"mysql_query":     {"address": "tcp://127.0.0.1:3306", "credential": "/etc/allowops/credentials/mysql.json"},
 		"starrocks_query": {"address": "tcp://127.0.0.1:9030", "credential": "/etc/allowops/credentials/starrocks.json"},
 		"dremio_query":    {"url": "http://127.0.0.1:9047", "credential": "/etc/allowops/credentials/dremio.json"},
+		"starrocks_diag":  {"address": "tcp://127.0.0.1:9030", "credential": "/etc/allowops/credentials/starrocks-diag.json"},
 	}
 	return Action{Name: name, Description: name, Risk: "read", Builtin: name, BuiltinConfig: configs[name], Timeout: "1s", MaxOutput: 1024}
 }
@@ -33,10 +34,10 @@ func TestBuiltinCatalogSchemas(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dir, "actions"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("schema_version: 1\ncatalog_id: seven_builtins\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("schema_version: 1\ncatalog_id: eight_builtins\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query", "dremio_query"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query", "dremio_query", "starrocks_diag"} {
 		a := registeredBuiltinAction(name)
 		data, err := json.Marshal(a)
 		if err != nil {
@@ -85,11 +86,28 @@ func TestBuiltinCatalogSchemas(t *testing.T) {
 			if len(properties) != 1 || sqlSchema["maxLength"] != 4000 || !slices.Equal(required, []string{"sql"}) {
 				t.Errorf("dremio_query schema: only sql, required, maxLength 4000: %v", schema)
 			}
+		case "starrocks_diag":
+			// The cross-field rules are checked by the handler; the schema lists every
+			// parameter of the enabled ops, and only op is required. profile_run, sql and
+			// database appear only when builtin_config.allow_profile_run is true.
+			required, _ := schema["required"].([]string)
+			op := properties["op"].(map[string]any)
+			if len(properties) != 8 || !slices.Equal(required, []string{"op"}) || !slices.Equal(op["enum"].([]string), []string{"cluster", "running", "slow_queries", "profile_list", "profile_analyze", "profile_summary"}) {
+				t.Errorf("starrocks_diag schema: %v", schema)
+			}
+			if properties["query_id"].(map[string]any)["pattern"] != `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$` {
+				t.Errorf("query_id must be restricted to UUIDs: %v", properties["query_id"])
+			}
+			for _, root := range []string{"oneOf", "anyOf", "allOf", "not", "if"} {
+				if _, present := schema[root]; present {
+					t.Errorf("root combinator %s in the tool schema", root)
+				}
+			}
 		}
 	}
 	loaded, err := Load(dir)
-	if err != nil || len(loaded.Actions) != 7 {
-		t.Fatalf("seven builtin catalog: %#v %v", loaded, err)
+	if err != nil || len(loaded.Actions) != 8 {
+		t.Fatalf("eight builtin catalog: %#v %v", loaded, err)
 	}
 }
 
@@ -117,6 +135,9 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 		{"starrocks_query", "max_bytes", "1KB", fmt.Sprint(1<<20 + 1)},
 		{"dremio_query", "max_rows", 1, 501},
 		{"dremio_query", "max_bytes", "1KB", fmt.Sprint(1<<20 + 1)},
+		{"starrocks_diag", "max_rows", 1, 501},
+		{"starrocks_diag", "max_bytes", "1KB", fmt.Sprint(1<<20 + 1)},
+		{"starrocks_diag", "max_profile_bytes", "1KB", fmt.Sprint(16<<20 + 1)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name+"/"+tc.key, func(t *testing.T) {
@@ -132,7 +153,7 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 			}
 		})
 	}
-	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query", "dremio_query"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query", "dremio_query", "starrocks_diag"} {
 		a := registeredBuiltinAction(name)
 		a.BuiltinConfig["timeout"] = "20ms"
 		if _, err := ValidateAction(a); err != nil {
@@ -156,7 +177,7 @@ func TestBuiltinConfigOnlyTightensDefaults(t *testing.T) {
 }
 
 func TestBuiltinExecutionPlacement(t *testing.T) {
-	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query", "dremio_query"} {
+	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "starrocks_query", "dremio_query", "starrocks_diag"} {
 		for _, runAs := range []string{"", "root"} {
 			a := registeredBuiltinAction(name)
 			a.RunAs = runAs
@@ -168,7 +189,7 @@ func TestBuiltinExecutionPlacement(t *testing.T) {
 			if err := json.Unmarshal(data, &metadata); err != nil {
 				t.Fatal(err)
 			}
-			want := runAs != "" || name == "redis_command" || name == "mysql_query" || name == "starrocks_query" || name == "dremio_query"
+			want := runAs != "" || name == "redis_command" || name == "mysql_query" || name == "starrocks_query" || name == "dremio_query" || name == "starrocks_diag"
 			if metadata["requires_exec"] != want {
 				t.Errorf("%s run_as=%q metadata=%s; want requires_exec=%v", name, runAs, data, want)
 			}
@@ -193,5 +214,24 @@ func TestMySQLMaxResponseBytesRejectsInvalidValues(t *testing.T) {
 		if _, err := ValidateAction(a); err != nil {
 			t.Errorf("max_response_bytes=%#v: %v", value, err)
 		}
+	}
+}
+
+func TestStarRocksDiagProfileRunIsOffUnlessConfigured(t *testing.T) {
+	a := registeredBuiltinAction("starrocks_diag")
+	defs, err := ParameterDefinitions(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, present := defs["sql"]; present || slices.Contains(defs["op"].Values, "profile_run") {
+		t.Errorf("profile_run exposed by default: %v", defs)
+	}
+	a.BuiltinConfig["allow_profile_run"] = true
+	defs, err = ParameterDefinitions(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(defs["op"].Values, "profile_run") || defs["sql"].MaxLen != 4000 || defs["database"].Regex != `^[a-zA-Z0-9_]{1,64}$` || !defs["database"].Optional {
+		t.Errorf("profile_run parameters: %v", defs)
 	}
 }

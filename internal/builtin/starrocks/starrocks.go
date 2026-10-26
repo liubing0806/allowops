@@ -15,12 +15,9 @@ import (
 	sqldriver "database/sql/driver"
 	"errors"
 	"fmt"
-	"net"
-	"net/url"
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -29,7 +26,7 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/liubing0806/allowops/internal/builtin/credfile"
 	"github.com/liubing0806/allowops/internal/builtin/sqlguard"
-	"github.com/liubing0806/allowops/internal/builtin/tsv"
+	"github.com/liubing0806/allowops/internal/builtin/srconn"
 )
 
 const databasePattern = `^[a-zA-Z0-9_]{1,64}$`
@@ -139,20 +136,7 @@ func (c Config) normalized() Config {
 	return c
 }
 
-// parseAddress accepts only tcp://host:port and returns host:port.
-func parseAddress(address string) (string, error) {
-	invalid := errors.New("address must be tcp://host:port without credentials or options")
-	u, err := url.Parse(address)
-	if err != nil || u.Scheme != "tcp" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || u.Path != "" {
-		return "", invalid
-	}
-	host, port, err := net.SplitHostPort(u.Host)
-	n, parseErr := strconv.Atoi(port)
-	if err != nil || host == "" || parseErr != nil || n < 1 || n > 65535 {
-		return "", invalid
-	}
-	return u.Host, nil
-}
+func parseAddress(address string) (string, error) { return srconn.ParseAddress(address) }
 
 // validate is replaceable so that a test can make the guard panic.
 var validate = sqlguard.Validate
@@ -243,19 +227,9 @@ func runQuery(ctx context.Context, cfg Config, p Params, cred credfile.Credentia
 	return execute(ctx, connector, cfg, p.SQL, mask)
 }
 
-// driverConfig builds the connection from structured fields only. NewConfig
-// leaves multi-statements, LOCAL INFILE, parameter interpolation and TLS off.
-// The context, not a read timeout, bounds the query.
+// driverConfig builds the connection from structured fields only.
 func driverConfig(cfg Config, p Params, cred credfile.Credential) (*mysqldriver.Config, error) {
-	address, err := parseAddress(cfg.Address)
-	if err != nil {
-		return nil, err
-	}
-	dc := mysqldriver.NewConfig()
-	dc.User, dc.Passwd, dc.DBName = cred.Username, cred.Password, p.Database
-	dc.Net, dc.Addr = "tcp", address
-	dc.Timeout = cfg.Timeout
-	return dc, nil
+	return srconn.DriverConfig(cfg.Address, cfg.Timeout, p.Database, cred)
 }
 
 func execute(ctx context.Context, connector sqldriver.Connector, cfg Config, query string, mask func(string) string) (Result, error) {
@@ -295,70 +269,15 @@ func execute(ctx context.Context, connector sqldriver.Connector, cfg Config, que
 	return result, nil
 }
 
-// initSession sets query_timeout, the only session variable. It counts whole
-// seconds and must be at least 1, so the timeout is rounded up. The statement
-// must succeed: without it the server limit would be its default of 300 s.
 func initSession(ctx context.Context, conn *sql.Conn, timeout time.Duration) error {
-	seconds := int64((timeout + time.Second - 1) / time.Second)
-	if _, err := conn.ExecContext(ctx, fmt.Sprintf("SET query_timeout = %d", seconds)); err != nil {
-		return queryError(ctx, "initialize session", err)
-	}
-	return nil
+	return srconn.SetQueryTimeout(ctx, conn, timeout)
 }
 
-// Server error messages can contain SQL literals and credentials; expose codes only.
 func queryError(ctx context.Context, stage string, err error) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	var server *mysqldriver.MySQLError
-	if errors.As(err, &server) {
-		return fmt.Errorf("starrocks %s failed (code %d)", stage, server.Number)
-	}
-	return fmt.Errorf("starrocks %s failed", stage)
+	return srconn.QueryError(ctx, stage, err)
 }
 
-// readRows reads at most maxRows rows and maxBytes bytes of TSV, header
-// included. It reads one row more than it returns to find out whether the
-// result is truncated.
 func readRows(rows *sql.Rows, maxRows int, maxBytes int64, mask func(string) string) (Result, error) {
-	if mask == nil {
-		mask = func(s string) string { return s }
-	}
-	columns, err := rows.Columns()
-	if err != nil {
-		return Result{}, err
-	}
-	for i, column := range columns {
-		columns[i] = mask(column)
-	}
-	var out strings.Builder
-	tsv.WriteRow(&out, columns)
-	result := Result{}
-	values := make([]sql.NullString, len(columns))
-	dest := make([]any, len(columns))
-	for i := range values {
-		dest[i] = &values[i]
-	}
-	for rows.Next() {
-		if result.Rows == maxRows {
-			result.Truncated = true
-			break
-		}
-		if err := rows.Scan(dest...); err != nil {
-			return Result{}, err
-		}
-		line := strings.Join(tsv.MaskRow(values, mask), "\t") + "\n"
-		if int64(out.Len()+len(line)) > maxBytes {
-			result.Truncated = true
-			break
-		}
-		out.WriteString(line)
-		result.Rows++
-	}
-	if err := rows.Err(); err != nil {
-		return Result{}, err
-	}
-	result.Output = out.String()
-	return result, nil
+	r, err := srconn.ReadRows(rows, maxRows, maxBytes, mask)
+	return Result{Output: r.Output, Rows: r.Rows, Truncated: r.Truncated}, err
 }

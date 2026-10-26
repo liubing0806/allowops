@@ -147,6 +147,22 @@ Dremio 没有权限边界，`builtin_config` 没有 `databases` 之类限制读�
 
 未知字段（包括 `address`、`databases`、`context`、`ca_file`）、`null`、空列表和非法成员均报错。收紧项只能在词法校验接受的范围内再缩小，不能放宽校验。动作参数只有 `sql`，最长 4000 字符。
 
+## starrocks_diag
+
+`starrocks_diag` 执行固定语句，没有 `statement_types`、`show_types`、`allow_explain_analyze`，出现这些字段报错。
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `max_rows` | 0..500；省略或 0 为 500，只能收紧；同时是 `limit` 参数的上限 |
+| `max_bytes` | 0..1 MiB，可写 `64KB` 等形式；省略或 0 为 1 MiB，只能收紧；限制 TSV 文本或摘要 JSON 的字节数 |
+| `max_profile_bytes` | 0..16 MiB；省略或 0 为 16 MiB，只能收紧；超过的 profile 文本不解析 |
+| `timeout` | 1ms..10s；省略为 10s，只能收紧；`profile_run` 的执行和轮询共用该时限 |
+| `audit_table` | `table` 或 `database.table`，各段匹配 `^[A-Za-z_][A-Za-z0-9_]{0,63}$`；省略为 `starrocks_audit_db__.starrocks_audit_tbl__` |
+| `audit_columns` | 逻辑列名到实际列名的映射，实际列名为标识符；逻辑列名为 `query_id`、`timestamp`、`user`、`db`、`state`、`query_time`、`scan_bytes`、`scan_rows`、`return_rows`、`cpu_cost_ns`、`mem_cost_bytes`、`stmt` |
+| `allow_profile_run` | 布尔值，默认 false；true 时 `op` 枚举增加 `profile_run`，并出现 `sql`、`database` 参数 |
+
+表名和列名只来自这里，调用方参数不能指定。`credential` 和 `address` 的规则同 `starrocks_query`。详见 [builtin-starrocks.md](builtin-starrocks.md) 的 starrocks_diag 一节。
+
 ## 本地目录校验配置
 
 以下 builtin_config 可用于两个独立 action。配置不包含凭据内容；目录校验不读取凭据或连接服务。
@@ -202,4 +218,17 @@ builtin_config:
   timeout: 10s
   statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
   show_types: [SCHEMAS, TABLES, VIEWS, PARTITIONS, FILES, CREATE TABLE, FUNCTIONS]
+```
+
+```yaml
+# builtin: starrocks_diag
+builtin_config:
+  address: tcp://127.0.0.1:9030
+  credential: /etc/allowops/credentials/starrocks-diag.json
+  max_rows: 200
+  max_bytes: 64KB
+  max_profile_bytes: 8MB
+  timeout: 10s
+  audit_table: starrocks_audit_db__.starrocks_audit_tbl__
+  allow_profile_run: false
 ```
