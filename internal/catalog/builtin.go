@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"time"
 
@@ -52,6 +54,11 @@ type BudgetedBuiltinHandler interface {
 
 // Builtins is the process-local registration table; registration occurs at startup.
 var Builtins = map[string]BuiltinHandler{"mysql_query": mysqlHandler{}, "log_search": logSearchHandler{}, "log_query": logQueryHandler{}, "http_get": httpGetHandler{}, "redis_command": redisHandler{}, "prometheus_query": prometheusHandler{}, "alertmanager_alerts": alertmanagerHandler{}, "starrocks_query": starRocksHandler{}, "dremio_query": dremioHandler{}, "starrocks_diag": starRocksDiagHandler{}, "dremio_diag": dremioDiagHandler{}}
+
+// BuiltinNames returns the registered builtin names in alphabetical order.
+func BuiltinNames() []string {
+	return slices.Sorted(maps.Keys(Builtins))
+}
 
 type mysqlHandler struct{}
 
