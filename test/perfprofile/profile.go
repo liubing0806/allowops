@@ -40,6 +40,7 @@ func (Tracer) TraceAcquireStart(ctx context.Context, _ *pgxpool.Pool, _ pgxpool.
 	}
 	return context.WithValue(ctx, acquireKey{}, time.Now())
 }
+
 func (Tracer) TraceAcquireEnd(ctx context.Context, _ *pgxpool.Pool, _ pgxpool.TraceAcquireEndData) {
 	start, ok := ctx.Value(acquireKey{}).(time.Time)
 	if !ok {
@@ -69,6 +70,7 @@ func (Tracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d pgx.TraceQuery
 	}
 	return context.WithValue(ctx, queryKey{}, query{d.SQL, time.Now()})
 }
+
 func (Tracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
 	q, ok := ctx.Value(queryKey{}).(query)
 	if !ok {
@@ -83,16 +85,19 @@ func (Tracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryEn
 	s.MaxNS = max(s.MaxNS, elapsed)
 	queries[q.sql] = s
 }
+
 func must(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
+
 func writeJSON(dir, name string, v any) {
 	b, err := json.MarshalIndent(v, "", "  ")
 	must(err)
 	must(os.WriteFile(filepath.Join(dir, name), b, 0600))
 }
+
 func snapshot(dir, name string) {
 	b, err := os.ReadFile("/proc/loadavg")
 	must(err)
@@ -158,6 +163,7 @@ func Serve() {
 		}
 	}()
 }
+
 func Command(name string) {
 	dir := os.Getenv("ALLOWOPS_PROFILE_DIR")
 	must(os.WriteFile(filepath.Join(dir, "pending"), []byte(name), 0600))

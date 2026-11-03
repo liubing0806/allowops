@@ -1,0 +1,135 @@
+{
+ "rowCount": 1,
+ "schema": [
+  {
+   "name": "name",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "hostname",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "ip",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "user_port",
+   "type": {
+    "name": "INTEGER"
+   }
+  },
+  {
+   "name": "peer_port",
+   "type": {
+    "name": "INTEGER"
+   }
+  },
+  {
+   "name": "cpu",
+   "type": {
+    "name": "DOUBLE"
+   }
+  },
+  {
+   "name": "memory",
+   "type": {
+    "name": "DOUBLE"
+   }
+  },
+  {
+   "name": "status",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "is_master",
+   "type": {
+    "name": "BOOLEAN"
+   }
+  },
+  {
+   "name": "is_coordinator",
+   "type": {
+    "name": "BOOLEAN"
+   }
+  },
+  {
+   "name": "is_executor",
+   "type": {
+    "name": "BOOLEAN"
+   }
+  },
+  {
+   "name": "node_tag",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "version",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "load",
+   "type": {
+    "name": "DOUBLE"
+   }
+  },
+  {
+   "name": "configured_max_width",
+   "type": {
+    "name": "INTEGER"
+   }
+  },
+  {
+   "name": "actual_max_width",
+   "type": {
+    "name": "INTEGER"
+   }
+  },
+  {
+   "name": "current",
+   "type": {
+    "name": "BOOLEAN"
+   }
+  },
+  {
+   "name": "start",
+   "type": {
+    "name": "TIMESTAMP"
+   }
+  }
+ ],
+ "rows": [
+  {
+   "name": "127.0.0.1",
+   "hostname": "127.0.0.1",
+   "ip": "192.168.144.4",
+   "user_port": 31010,
+   "peer_port": 45678,
+   "cpu": 0.0,
+   "memory": 5.350735783576965,
+   "status": "green",
+   "is_master": true,
+   "is_coordinator": true,
+   "is_executor": true,
+   "node_tag": "",
+   "version": "24.1.0-202306130653310132-d30779f6",
+   "load": 0.13333334028720856,
+   "configured_max_width": 15,
+   "actual_max_width": 15,
+   "current": false,
+   "start": "2026-10-24 15:43:54.767"
+  }
+ ]
+}

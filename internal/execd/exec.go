@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/executor"
 	"github.com/liubing0806/allowops/internal/params"
@@ -132,6 +133,9 @@ func ExecuteWithCallbacks(ctx context.Context, input io.Reader, callbacks execut
 		response.Reason = "ROOT_REQUIRED"
 		return response
 	}
+	if request.Operation == OperationArthasRecover {
+		return runArthasRecover(ctx, callbacks)
+	}
 	a, err := Prepare(DefaultCache(), request)
 	if err != nil {
 		response.Reason = "REQUEST_REJECTED"
@@ -161,6 +165,8 @@ func ExecutionReason(err error) string {
 		return "TIMEOUT"
 	case errors.Is(err, params.ErrPathNotTrusted):
 		return "PATH_NOT_TRUSTED"
+	case builtin.ReasonOf(err) != "":
+		return builtin.ReasonOf(err)
 	default:
 		return "EXECUTION_FAILED"
 	}

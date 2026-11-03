@@ -685,4 +685,5 @@ func (b *auditLogBuffer) Write(p []byte) (int, error) {
 	defer b.mu.Unlock()
 	return b.data.Write(p)
 }
+
 func (b *auditLogBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return b.data.String() }

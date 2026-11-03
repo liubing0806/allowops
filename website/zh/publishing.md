@@ -30,6 +30,12 @@ allowops catalog publish -f catalog.dsse.json \
 
 发布过程使用分阶段、带摘要校验的上传，以及原子发布。网关通知主机，主机拉取并校验签名后的字节内容，然后才上报加载结果。发布后，请在控制台中检查目录分发情况和不支持的动作。仅凭发布响应不能证明每台主机都已加载该目录。
 
+## 主机必须认识的字段 {#fields-that-hosts-must-understand}
+
+agent 严格解析目录包。只要某个动作含有 agent 不认识的字段，agent 就拒绝整个目录包（`CATALOG_REJECTED`）并保留已加载的旧版本。此后在 agent 升级之前，新版本的每个动作在该主机上都返回 `unsupported`；主机保持连接，之后它认识的版本可以正常加载。
+
+agent 连接时在 `features` 中上报它认识的可选动作字段，`max_targets` 是其中之一。发布使用新字段的目录之前，先升级 agent，并确认目标主机的 `features` 包含该字段。网关接受发布时不做这项检查。
+
 ## CI 边界 {#ci-boundary}
 
 GitHub Actions、Jenkins 和 Flow 可参考[流水线示例](https://github.com/liubing0806/allowops/tree/main/examples/pipelines)。通过评审保护发布分支。通过 CI 平台的权限设置把凭据访问限制在该分支，不要只依赖仓库代码中的条件判断。fork 和 pull request 不能获得签名凭据。固定所安装的 CLI 版本，并校验其制品。使用隔离的 runner，并让每个目录的发布任务串行执行，以避免版本冲突。不要在日志中输出环境变量，也不要归档私钥文件。

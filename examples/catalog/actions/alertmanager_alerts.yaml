@@ -1,0 +1,21 @@
+# Columns: starts_at, state, alertname, severity, labels, summary, description, silenced_by, inhibited_by, expr.
+# Rows are sorted by starts_at. state is active, suppressed or unprocessed. expr is the PromQL expression
+# decoded from generatorURL, empty when absent.
+# For an Alertmanager that needs authentication, add `credential: /etc/allowops/credentials/alertmanager.json`
+# (root-owned, mode 0600, bearer_token or username and password) and `run_as: root`; the catalog is rejected
+# when a credential is configured without run_as: root.
+name: alertmanager_alerts
+description: List the alerts of the configured Alertmanager (GET /api/v2/alerts), optionally including silenced and inhibited ones.
+risk: read
+params: {}
+builtin: alertmanager_alerts
+builtin_config:
+  address: http://127.0.0.1:9093
+  timeout: 10s
+  max_alerts: 100
+  max_response_bytes: 4MB
+timeout: 15s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+redact:
+  builtin: [secrets, pii]

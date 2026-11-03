@@ -23,6 +23,7 @@ func (c *ConnectService) RunJob(ctx context.Context, r *connect.Request[v1.RunJo
 	}
 	return connect.NewResponse(v), nil
 }
+
 func (c *ConnectService) GetJob(ctx context.Context, r *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error) {
 	v, e := c.Client.GetJob(ctx, r.Msg)
 	if e != nil {
@@ -30,6 +31,7 @@ func (c *ConnectService) GetJob(ctx context.Context, r *connect.Request[v1.GetJo
 	}
 	return connect.NewResponse(v), nil
 }
+
 func (c *ConnectService) ListJobs(ctx context.Context, r *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error) {
 	v, e := c.Client.ListJobs(ctx, r.Msg)
 	if e != nil {
@@ -37,6 +39,7 @@ func (c *ConnectService) ListJobs(ctx context.Context, r *connect.Request[v1.Lis
 	}
 	return connect.NewResponse(v), nil
 }
+
 func (c *ConnectService) ListTasks(ctx context.Context, r *connect.Request[v1.ListTasksRequest]) (*connect.Response[v1.ListTasksResponse], error) {
 	v, e := c.Client.ListTasks(ctx, r.Msg)
 	if e != nil {
@@ -44,6 +47,7 @@ func (c *ConnectService) ListTasks(ctx context.Context, r *connect.Request[v1.Li
 	}
 	return connect.NewResponse(v), nil
 }
+
 func (c *ConnectService) ListTaskSteps(ctx context.Context, r *connect.Request[v1.ListTaskStepsRequest]) (*connect.Response[v1.ListTaskStepsResponse], error) {
 	v, e := c.Client.ListTaskSteps(ctx, r.Msg)
 	if e != nil {
@@ -51,6 +55,7 @@ func (c *ConnectService) ListTaskSteps(ctx context.Context, r *connect.Request[v
 	}
 	return connect.NewResponse(v), nil
 }
+
 func (c *ConnectService) CancelJob(ctx context.Context, r *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error) {
 	v, e := c.Client.CancelJob(ctx, r.Msg)
 	if e != nil {
@@ -58,6 +63,7 @@ func (c *ConnectService) CancelJob(ctx context.Context, r *connect.Request[v1.Ca
 	}
 	return connect.NewResponse(v), nil
 }
+
 func (c *ConnectService) GetJobOutput(ctx context.Context, r *connect.Request[v1.GetJobOutputRequest]) (*connect.Response[v1.GetJobOutputResponse], error) {
 	v, e := c.Client.GetJobOutput(ctx, r.Msg)
 	if e != nil {

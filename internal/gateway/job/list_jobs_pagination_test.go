@@ -39,17 +39,21 @@ func (c *statementCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, dat
 	c.sql = append(c.sql, data.SQL)
 	return ctx
 }
+
 func (*statementCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
 func (c *statementCounter) reset() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.sql = nil
 }
+
 func (c *statementCounter) count() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.sql)
 }
+
 func (c *statementCounter) summary() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()

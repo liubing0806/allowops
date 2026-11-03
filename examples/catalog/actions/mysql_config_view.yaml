@@ -1,0 +1,25 @@
+name: mysql_config_view
+description: Read a line-bounded prefix of a MySQL or MariaDB option file with secrets redacted.
+risk: read
+run_as: root
+params:
+  path:
+    type: path
+    description: Existing option file within the signed allowed roots.
+    allowed_roots: [/etc/my.cnf, /etc/mysql, /etc/my.cnf.d]
+  lines:
+    type: int
+    description: Maximum number of output lines.
+    min: 1
+    max: 500
+    default: 200
+exec: [/usr/bin/head, -n, '{lines}', --, '{path}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]
+  custom:
+    - name: mysql_option_password
+      regex: (?i)^\s*#*\s*[A-Za-z0-9_.-]*(?:(?:password|passwd|pwd|secret|token|wsrep[_-]sst[_-]auth)[A-Za-z0-9_.-]*\s*=\s*\S|\[REDACTED:credential\]).*$

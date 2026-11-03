@@ -19,7 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Access is supplied by P5. It authenticates the request and authorizes
+// Access is supplied by the identity module (design P5). It authenticates the request and authorizes
 // view_audit on EVERY call, returning the stable subject bound to API cursors.
 // A nil implementation denies access. Middleware may also add context values.
 type Access interface {
@@ -158,15 +158,15 @@ func (s *Service) ListAuditEvents(ctx context.Context, r *connect.Request[v1.Lis
 			return nil, rpcError(err)
 		}
 	} else {
-		var max *uint64
-		if err := s.Store.Pool.QueryRow(ctx, "SELECT max(seq) FROM audit_events").Scan(&max); err != nil {
+		max, err := maxSeq(ctx, s.Store.Pool)
+		if err != nil {
 			return nil, rpcError(err)
 		}
 		if max != nil {
 			c.Last = *max
 		}
 	}
-	rows, err := s.Store.Pool.Query(ctx, `SELECT `+columns+` FROM audit_events WHERE seq >= $1 AND seq <= $2 AND ($3::timestamptz IS NULL OR at >= $3) AND ($4::timestamptz IS NULL OR at < $4) AND ($5='' OR subject_id=$5) AND ($6='' OR hostname=$6) AND ($7='' OR action=$7) AND ($8='' OR job_id=$8) AND ($9='' OR operation=$9) ORDER BY seq,at LIMIT $10`, c.Next, c.Last, from, to, q.SubjectId, q.Hostname, q.Action, q.JobId, q.Operation, limit+1)
+	rows, err := eventsFiltered(ctx, s.Store.Pool, eventFilter{next: c.Next, last: c.Last, from: from, to: to, subject: q.SubjectId, hostname: q.Hostname, action: q.Action, job: q.JobId, oper: q.Operation, limit: limit + 1})
 	if err != nil {
 		return nil, rpcError(err)
 	}

@@ -1,0 +1,18 @@
+# thread
+id	2
+name	Reference Handler
+state	RUNNABLE
+daemon	true
+priority	10
+in_native	false
+suspended	false
+blocked_count	0
+blocked_time_ms	-1
+waited_count	0
+waited_time_ms	-1
+lock_owner_id	-1
+
+# stack 2 Reference Handler
+at java.lang.ref.Reference.waitForReferencePendingList(Native Method)
+at java.lang.ref.Reference.processPendingReferences(Reference.java:253)
+at java.lang.ref.Reference$ReferenceHandler.run(Reference.java:215)

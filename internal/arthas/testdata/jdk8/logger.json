@@ -1,0 +1,42 @@
+{
+  "body": {
+    "command": "logger",
+    "jobId": 8,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "jobId": 8,
+        "loggerInfoMap": {
+          "ROOT": {
+            "name": "ROOT",
+            "class": "ch.qos.logback.classic.Logger",
+            "codeSource": "jar:file:/app/app.jar!/BOOT-INF/lib/logback-classic-1.2.12.jar!/",
+            "additivity": true,
+            "level": "INFO",
+            "effectiveLevel": "INFO",
+            "appenders": [
+              {
+                "name": "CONSOLE",
+                "class": "ch.qos.logback.core.ConsoleAppender",
+                "target": "System.out",
+                "classLoader": "org.springframework.boot.loader.LaunchedURLClassLoader@31cefde0",
+                "classLoaderHash": "31cefde0"
+              }
+            ],
+            "classLoader": "org.springframework.boot.loader.LaunchedURLClassLoader@31cefde0",
+            "classLoaderHash": "31cefde0"
+          }
+        },
+        "type": "logger"
+      },
+      {
+        "jobId": 8,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "01bce553-e289-4d1e-842a-62b724e54896",
+  "state": "SUCCEEDED"
+}

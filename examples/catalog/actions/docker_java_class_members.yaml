@@ -1,0 +1,26 @@
+name: docker_java_class_members
+description: List declared members of one Java class with javap -p inside an allowed container.
+risk: read
+run_as: root
+params:
+  container:
+    type: enum
+    description: Container selected from the signed allowlist.
+    values: [api, app]
+  classpath:
+    type: string
+    description: One jar or one library directory wildcard under an application directory; no colon-separated lists.
+    regex: '^/(app|opt/app|data/app)(/[A-Za-z0-9_][A-Za-z0-9._-]*)*/(\*|[A-Za-z0-9_][A-Za-z0-9._-]*\.jar)$'
+    max_len: 200
+  class_name:
+    type: string
+    description: Fully qualified Java class name; nested classes use a dollar sign; a final segment named class is rejected.
+    regex: '^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)*(?:[A-Za-bd-z_$][A-Za-z0-9_$]*|c(?:[A-Za-km-z0-9_$][A-Za-z0-9_$]*)?|cl(?:[A-Zb-z0-9_$][A-Za-z0-9_$]*)?|cla(?:[A-Za-rt-z0-9_$][A-Za-z0-9_$]*)?|clas(?:[A-Za-rt-z0-9_$][A-Za-z0-9_$]*)?|class[A-Za-z0-9_$]+)$'
+    max_len: 200
+exec: [/usr/bin/docker, exec, '{container}', javap, -p, -classpath, '{classpath}', '{class_name}']
+timeout: 20s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

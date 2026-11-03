@@ -10,13 +10,16 @@ import (
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	rpc "github.com/liubing0806/allowops/gen/allowops/v1/allowopsv1connect"
 	"github.com/liubing0806/allowops/internal/gateway/audit"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
 type cancelAuditKey struct{}
+
 type cancelAuditRequest struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 }
+
 type cancelledResultAudit struct {
 	delegate Auditor
 	t        *testing.T
@@ -96,7 +99,7 @@ func (a boundedResultAudit) Append(ctx context.Context, e AuditEvent) error {
 		if !ok || time.Until(deadline) <= 0 || time.Until(deadline) > 5*time.Second {
 			a.t.Errorf("result context deadline=%v present=%t; want independent timeout <=5s", deadline, ok)
 		}
-		if info := RequestAuditInfo(ctx); info.ActorID != e.ActorID || info.ActorID == "" {
+		if info := reqctx.RequestAuditInfo(ctx); info.ActorID != e.ActorID || info.ActorID == "" {
 			a.t.Errorf("identity lost: info=%+v event=%+v", info, e)
 		}
 	}

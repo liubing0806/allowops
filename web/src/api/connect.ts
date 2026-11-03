@@ -85,7 +85,7 @@ function apiError(error: unknown, method: keyof ConsoleApi) {
   return new ApiError(key, rpc.code, reason || undefined, retryAfterMs)
 }
 
-// P8A pages use ProtoJSON (uint64 strings, Base64 bytes, symbolic enums).
+// Console pages use ProtoJSON (uint64 strings, Base64 bytes, symbolic enums).
 // Generated descriptors validate requests and preserve those encodings.
 function bind<K extends keyof ConsoleApi>(
   name: K,
@@ -130,7 +130,9 @@ function bind<K extends keyof ConsoleApi>(
       throw apiError(error, name)
     }
   }
-  // This boundary adapts the generated wire schema to the existing page models.
+  // The cast is the only link between the untyped JsonObject above and the
+  // console models in ./types. wire.check.ts verifies those models against the
+  // generated *Json types at compile time.
   return call as unknown as ConsoleApi[K]
 }
 

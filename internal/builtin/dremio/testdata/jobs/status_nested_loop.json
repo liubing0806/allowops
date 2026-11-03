@@ -1,0 +1,14 @@
+{
+ "id": "152329aa-fe18-b288-55c3-ebf217d68700",
+ "jobState": "COMPLETED",
+ "rowCount": 1,
+ "errorMessage": "",
+ "startedAt": "2026-10-24T16:01:24.203Z",
+ "endedAt": "2026-10-24T16:01:24.302Z",
+ "queryType": "REST",
+ "queueName": "SMALL",
+ "queueId": "SMALL",
+ "resourceSchedulingStartedAt": "2026-10-24T16:01:24.209Z",
+ "resourceSchedulingEndedAt": "2026-10-24T16:01:24.209Z",
+ "cancellationReason": ""
+}

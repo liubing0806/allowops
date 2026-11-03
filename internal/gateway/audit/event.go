@@ -66,7 +66,7 @@ type Event struct {
 type Config struct {
 	PayloadBytes, VerifyRows, ExportBytes, MaxExportBytes int
 	PageSize, MaxPageSize, ResponseBytes                  int
-	CursorKey                                             []byte // P5 supplies the same secret to each API instance.
+	CursorKey                                             []byte // The identity module supplies the same secret to each API instance (design P5).
 	Now                                                   func() time.Time
 }
 

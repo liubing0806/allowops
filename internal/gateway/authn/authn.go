@@ -43,7 +43,7 @@ type LDAPConfig struct {
 	GroupMemberAttribute string // Defaults to member (user DN).
 	GroupNameAttribute   string // Defaults to cn.
 	RoleMappings         map[string]string
-	RateLimit            RateLimit     // Zero value uses 5 credential failures per 5 minutes (A8, G21, G23).
+	RateLimit            RateLimit     // Zero value uses 5 credential failures per 5 minutes (design A8, G21, G23).
 	Timeout              time.Duration // Zero value uses 10 seconds.
 }
 

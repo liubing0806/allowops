@@ -14,6 +14,7 @@ func TestSelectorDoesNotDiscardConflictingConditions(t *testing.T) {
 		t.Fatalf("conflicting conjunction selected %d hosts; want none or invalid argument", len(hosts))
 	}
 }
+
 func TestPolicyTrialReportedSelectorUsesAuthorizationLabelsForRules(t *testing.T) {
 	f := newFixture(t)
 	populateResources(t, f)

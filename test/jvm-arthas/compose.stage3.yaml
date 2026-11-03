@@ -1,0 +1,47 @@
+# Overlay for the stage-3 measurements (docs/arthas-stage3-acceptance-report.md), used with
+#   COMPOSE_FILE=compose.yaml:compose.stage3.yaml COMPOSE_PROJECT_NAME=jvm-arthas-s3m JA_PORT_PREFIX=27
+# It applies items 1 to 3 of section 7 of docs/arthas-jvm-pause-report.md to the four JDK services, so that a slow journal
+# commit of the host's file systems does not stop the JVM:
+#   - the JVM writes its log files (safepoint.log, gc.log, redefine.log; JDK 8: gc.log) to /logs-tmpfs, a tmpfs inside the
+#     container. JDK 8 prints the safepoint statistics to stdout, a pipe to Docker, as before;
+#   - JDK 17 and 21 log through -Xlog:async;
+#   - /tmp is a tmpfs, and with it the performance data file /tmp/hsperfdata_app/<pid>, the attach file and the attach socket.
+# Files written to a tmpfs count to the memory of the container's cgroup.
+# The images have tags of their own (jvmarthas/app-s3:<jdk>), so that rebuilding here does not replace the images other
+# copies of the environment use. Knobs:
+#   JA_JAVA_EXTRA  extra JVM flags (JAVA_EXTRA of entrypoint.sh), for example -XX:MaxMetaspaceSize=150m
+#   JA_GC          garbage collector flags (GC of entrypoint.sh), default -XX:+UseG1GC
+x-s3: &s3
+  tmpfs:
+    - /logs-tmpfs:mode=1777,size=64m
+    - /tmp:exec,mode=1777,size=256m
+
+services:
+  jdk8:
+    <<: *s3
+    image: jvmarthas/app-s3:jdk8
+    environment:
+      LOGDIR: /logs-tmpfs
+      GC: ${JA_GC:--XX:+UseG1GC}
+      JAVA_EXTRA: ${JA_JAVA_EXTRA:-}
+  jdk11:
+    <<: *s3
+    image: jvmarthas/app-s3:jdk11
+    environment:
+      LOGDIR: /logs-tmpfs
+      GC: ${JA_GC:--XX:+UseG1GC}
+      JAVA_EXTRA: ${JA_JAVA_EXTRA:-}
+  jdk17:
+    <<: *s3
+    image: jvmarthas/app-s3:jdk17
+    environment:
+      LOGDIR: /logs-tmpfs
+      GC: ${JA_GC:--XX:+UseG1GC}
+      JAVA_EXTRA: -Xlog:async ${JA_JAVA_EXTRA:-}
+  jdk21:
+    <<: *s3
+    image: jvmarthas/app-s3:jdk21
+    environment:
+      LOGDIR: /logs-tmpfs
+      GC: ${JA_GC:--XX:+UseG1GC}
+      JAVA_EXTRA: -Xlog:async ${JA_JAVA_EXTRA:-}

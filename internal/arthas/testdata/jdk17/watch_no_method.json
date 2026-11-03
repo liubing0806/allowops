@@ -1,0 +1,35 @@
+{
+  "body": {
+    "jobId": 34,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "command": "watch demo.ItemRepository findById {params} -n 1 -x 1 -m 1 --timeout 5",
+        "jobId": 34,
+        "state": "SCHEDULED",
+        "type": "command"
+      },
+      {
+        "effect": {
+          "classCount": 1,
+          "cost": 50,
+          "listenerId": 8,
+          "methodCount": 0
+        },
+        "jobId": 34,
+        "message": "No class or method is affected",
+        "success": false,
+        "type": "enhancer"
+      },
+      {
+        "jobId": 34,
+        "message": "No class or method is affected, try:\n1. Execute `\u001b[32msm CLASS_NAME METHOD_NAME\u001b[m` to make sure the method you are tracing actually exists (it might be in your parent class).\n2. Execute `\u001b[32moptions unsafe true\u001b[m`, if you want to enhance the classes under the `\u001b[32mjava.*\u001b[m` package.\n3. Execute `\u001b[32mreset CLASS_NAME\u001b[m` and try again, your method body might be too large.\n4. Match the constructor, use `\u003cinit\u003e`, for example: `watch demo.MathGame \u003cinit\u003e`\n5. Check arthas log: \u001b[32m/home/app/logs/arthas/arthas.log\u001b[m\n6. Visit \u001b[32mhttps://github.com/alibaba/arthas/issues/47\u001b[m for more details.\n7. If the class is not loaded yet, try to use `--lazy` or `-L` option to enable lazy mode.",
+        "statusCode": -1,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "db514780-edea-4443-88fd-6fc601bfdd58",
+  "state": "SUCCEEDED"
+}

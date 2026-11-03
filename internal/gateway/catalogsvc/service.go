@@ -43,7 +43,7 @@ func actionNames(p *catalog.Package) []string {
 	return names
 }
 
-// Verify is shared by completed P4B uploads and direct P4 publication.
+// Verify is shared by completed management API uploads (design P4B) and direct publication (design P4).
 func (s *Service) Verify(raw []byte) (*catalog.Package, error) {
 	if len(raw) == 0 || len(raw) > s.MaxEnvelopeBytes {
 		return nil, fmt.Errorf("DSSE size limit exceeded")

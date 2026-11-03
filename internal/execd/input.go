@@ -11,7 +11,13 @@ import (
 const MaxRequestBytes = 128 * 1024
 const MaxParameterBytes = 64 * 1024
 
+// OperationArthasRecover asks the helper to end the Arthas servers that earlier
+// jvm_arthas calls left behind. A request with an operation carries no other field.
+const OperationArthasRecover = "arthas_recover"
+
 type Request struct {
+	// Operation is empty for an action request.
+	Operation      string         `json:"operation,omitempty"`
 	CatalogID      string         `json:"catalog_id"`
 	CatalogVersion int64          `json:"catalog_version"`
 	Action         string         `json:"action"`
@@ -109,6 +115,12 @@ func ReadRequest(input io.Reader) (Request, error) {
 	}
 	if err := DecodeJSON(data, &request); err != nil {
 		return request, err
+	}
+	if request.Operation != "" {
+		if request.Operation != OperationArthasRecover || request.CatalogID != "" || request.CatalogVersion != 0 || request.Action != "" || request.Params != nil || request.Filters != nil {
+			return request, errors.New("INVALID_REQUEST")
+		}
+		return request, nil
 	}
 	if request.CatalogID == "" || request.CatalogVersion <= 0 || request.Action == "" || request.Params == nil {
 		return request, errors.New("INVALID_REQUEST")

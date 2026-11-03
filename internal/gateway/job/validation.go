@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"google.golang.org/protobuf/encoding/protojson"
 	"slices"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/liubing0806/allowops/internal/executor"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/params"
+	"google.golang.org/protobuf/proto"
 )
 
 func failure(code connect.Code, reason string) error {
@@ -48,6 +50,16 @@ func detailError(code connect.Code, d *v1.ErrorDetail) error {
 		e.AddDetail(x)
 	}
 	return e
+}
+
+// maxTargetsExceeded rejects a job whose target count is above the action's
+// signed max_targets. The shape follows the expected_count mismatch error.
+func maxTargetsExceeded(a catalog.Action, actual int) error {
+	return detailError(connect.CodeFailedPrecondition, &v1.ErrorDetail{
+		Reason:      "MAX_TARGETS_EXCEEDED",
+		ActualCount: proto.Uint64(uint64(actual)),
+		Violations:  []*v1.FieldViolation{{Field: "targets", Description: fmt.Sprintf("action %s allows %s; the request resolves to %d", a.Name, a.TargetLimit(), actual)}},
+	})
 }
 
 func format(value string) (string, error) {

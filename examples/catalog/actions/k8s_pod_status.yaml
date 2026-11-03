@@ -1,0 +1,23 @@
+name: k8s_pod_status
+description: Read one pod phase, node name, and per-container image ID and restart count.
+risk: read
+run_as: root
+params:
+  namespace:
+    type: enum
+    description: Namespace selected from the signed allowlist.
+    values: [default, app]
+  pod:
+    type: string
+    description: Pod name limited to 63 lowercase DNS characters.
+    regex: ^[a-z0-9]([a-z0-9.-]{0,61}[a-z0-9])?$
+    max_len: 63
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, pod, '{pod}', -n, '{namespace}',
+  -o, 'jsonpath=phase={.status.phase}{"\n"}node={.spec.nodeName}{"\n"}{range .status.containerStatuses[*]}container={.name} imageID={.imageID} restartCount={.restartCount}{"\n"}{end}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

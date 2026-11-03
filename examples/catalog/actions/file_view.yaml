@@ -20,3 +20,18 @@ filters: [match, exclude, tail, head, count]
 max_scan: 256MB
 redact:
   builtin: [secrets, pii]
+  custom:
+    - name: sensitive_property
+      regex: '(?i)[A-Za-z0-9_.-]*(?:pass|secret|token|key|credential)[A-Za-z0-9_.-]*\s*[=:].*|\b(?:[A-Za-z0-9_.-]{1,2}|[A-Za-z0-9_.-]{4,}|[0-9A-NP-Za-np-z_.-][A-Za-z0-9_.-]{2}|[Oo][0-9A-KM-Za-km-z_.-][A-Za-z0-9_.-]|[Oo][Ll][0-9A-CE-Za-ce-z_.-])pwd[A-Za-z0-9_.-]*\s*[=:].*|\b(?:old)?pwd[A-Za-z0-9_.-]+\s*[=:].*|\b(?:old)?pwd\s*[=:]\s*[^/~\s].*'
+    - name: json_credential
+      regex: '(?i)["''][A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*["'']\s*:\s*(?:"(?:[^"\\]|\\.)*"|''[^'']*''|[^\s,}\]]+)'
+    - name: auth_header
+      regex: '(?i)\b(?:proxy-)?authorization["'']?\s*:\s*(?:"[^"\r\n]*"|''[^''\r\n]*''|[^\r\n]*)|\b(?:proxy_set_header|add_header|more_set_headers|set_header)\s+["'']?(?:proxy-)?authorization["'']?\s+[^;\r\n]*'
+    - name: api_key_header
+      regex: '(?i)\bx-[A-Za-z0-9-]*(?:key|token|secret|auth|pass|pwd|credential)[A-Za-z0-9-]*["'']?\s*:\s*(?:"[^"\r\n]*"|''[^''\r\n]*''|[^\r\n]*)|\b(?:proxy_set_header|add_header|more_set_headers|set_header)\s+["'']?[A-Za-z0-9_-]*(?:key|token|secret|pass|pwd|credential)[A-Za-z0-9_-]*["'']?\s+[^;\r\n]*'
+    - name: htpasswd_hash
+      regex: '\$(?:apr1|1|5|6|2[abxy]|y|7)\$(?:[./0-9A-Za-z,=]+\$)+[./0-9A-Za-z]{20,}|\{S?SHA(?:256|512)?\}[A-Za-z0-9+/=]{20,}'
+    - name: nginx_param_credential
+      regex: '(?i)\b(?:[a-z0-9_]+_param|[a-z0-9_]*set_header|more_set_input_headers|add_trailer)\s+["'']?[A-Za-z0-9_.-]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_.-]*["'']?\s+[^;\r\n]*|\bset\s+\$[A-Za-z0-9_]*(?:pass|pwd|secret|token|key|credential)[A-Za-z0-9_]*\s+[^;\r\n]*'
+    - name: nginx_secret_directive
+      regex: '(?i)^\s*(?:#+\s*)?(?:[A-Za-z0-9_]*(?:passwd|password|pwd|secret|credentials?|passphrase)[A-Za-z0-9_]*|[A-Za-z0-9_]*_token)\s+(?:"(?:[^"\\\r\n]|\\.)*"|''[^''\r\n]*''|[^;\r\n]*)'

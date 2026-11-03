@@ -1,0 +1,24 @@
+# SLOWLOG usage: command=SLOWLOG, args=["GET","20"] or args=["LEN"].
+name: redis_slowlog
+description: Read recent Redis slow log entry metadata or the slow log length; the log cannot be reset. With GET, each entry is [id, unix time, duration in microseconds, command name, argument count, client address]; command arguments are not returned.
+risk: read
+run_as: root
+params:
+  args:
+    type: string_array
+    description: GET with an optional entry count from 1 to 128, or LEN.
+    regex: ^(GET|LEN|[1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$
+    max_len: 8
+builtin: redis_command
+builtin_config:
+  credential: /etc/allowops/credentials/redis-main.json
+  address: unix:///var/run/redis/redis.sock
+  timeout: 5s
+  max_response_bytes: 64KB
+  commands: [SLOWLOG]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

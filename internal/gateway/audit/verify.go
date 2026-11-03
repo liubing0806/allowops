@@ -109,15 +109,7 @@ func preceding(ctx context.Context, tx pgx.Tx, from uint64) ([]byte, error) {
 	if from == 1 {
 		return make([]byte, 32), nil
 	}
-	var hash []byte
-	err := tx.QueryRow(ctx, "SELECT hash FROM audit_events WHERE seq=$1 ORDER BY at LIMIT 1", from-1).Scan(&hash)
-	if errors.Is(err, pgx.ErrNoRows) {
-		err = tx.QueryRow(ctx, "SELECT hash FROM audit_boundary WHERE seq=$1", from-1).Scan(&hash)
-	}
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	return hash, err
+	return precedingHash(ctx, tx, from-1)
 }
 
 func (s *Store) Verify(ctx context.Context, o VerifyOptions) (Verification, error) {
@@ -133,7 +125,7 @@ func (s *Store) Verify(ctx context.Context, o VerifyOptions) (Verification, erro
 	if err != nil {
 		return Verification{}, err
 	}
-	rows, err := tx.Query(ctx, "SELECT "+columns+" FROM audit_events WHERE seq>=$1 AND seq<=$2 ORDER BY seq,at", o.From, o.To)
+	rows, err := eventsBetween(ctx, tx, o.From, o.To)
 	if err != nil {
 		return Verification{}, err
 	}

@@ -1,0 +1,23 @@
+name: k8s_configmap_keys
+description: List only the data key names of one ConfigMap.
+risk: read
+run_as: root
+params:
+  namespace:
+    type: enum
+    description: Namespace selected from the signed allowlist.
+    values: [default, app]
+  name:
+    type: string
+    description: ConfigMap name limited to lowercase DNS characters.
+    regex: ^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$
+    max_len: 253
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, configmap, '{name}', -n, '{namespace}',
+  -o, 'go-template={{range $key, $value := .data}}{{$key}}{{"\n"}}{{end}}']
+exec_fallbacks: [/usr/local/bin/kubectl]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

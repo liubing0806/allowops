@@ -69,6 +69,7 @@ func TestP4BSystemVisibilityAndUnavailableStatistics(t *testing.T) {
 		t.Fatal("version distribution exposed unauthorized hosts", err)
 	}
 }
+
 func TestP4BTLSCAPinAndMissingPin(t *testing.T) {
 	pub, key, _ := ed25519.GenerateKey(rand.Reader)
 	now := time.Now()

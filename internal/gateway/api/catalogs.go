@@ -13,10 +13,10 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
 	"github.com/liubing0806/allowops/internal/store/db"
 )
@@ -34,6 +34,7 @@ func catalogMeta(p *catalog.Package, raw []byte, published time.Time, current bo
 	}
 	return meta
 }
+
 func storedPackage(raw []byte) (*catalog.Package, error) {
 	e, err := catalog.ParseEnvelope(raw)
 	if err != nil {
@@ -46,53 +47,29 @@ func storedPackage(raw []byte) (*catalog.Package, error) {
 	return catalog.ParsePackage(payload)
 }
 
-// catalogQuery selects catalog rows in SQL so only the rows a caller returns are
-// decoded: one corrupt historical envelope must not fail reads of other
-// versions. version 0 matches every version; limit 0 means no limit.
-type catalogQuery struct {
-	id      string
-	version int64
-	current bool
-	offset  int
-	limit   int
-}
-
 // storedCatalogs decodes at most q.limit rows. The row after them is never
-// decoded; it only reports whether more rows follow.
+// decoded; it only reports whether more rows follow. Only the rows a caller
+// returns are decoded, so one corrupt historical envelope does not fail reads of
+// other versions.
 func (s *Service) storedCatalogs(ctx context.Context, q catalogQuery) ([]storedCatalog, bool, error) {
-	sql := `SELECT c.dsse,c.published_at,c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id) FROM catalog_versions c WHERE ($1='' OR c.catalog_id=$1) AND ($2::bigint=0 OR c.version=$2::bigint)`
-	if q.current {
-		sql += ` AND c.version=(SELECT max(version) FROM catalog_versions WHERE catalog_id=c.catalog_id)`
-	}
-	sql += " ORDER BY c.catalog_id,c.version DESC OFFSET $3::bigint LIMIT $4::bigint"
-	var limit *int
-	if q.limit > 0 {
-		limit = new(q.limit + 1)
-	}
-	rows, err := s.Store.Pool.Query(ctx, sql, q.id, q.version, q.offset, limit)
+	rows, err := storedCatalogRows(ctx, s.Store.Pool, q)
 	if err != nil {
 		return nil, false, dbError(err)
 	}
-	defer rows.Close()
 	out := []storedCatalog{}
-	for rows.Next() {
+	for _, r := range rows {
 		if q.limit > 0 && len(out) == q.limit {
 			return out, true, nil
 		}
-		var raw []byte
-		var published pgtype.Timestamptz
-		var isCurrent bool
-		if err = rows.Scan(&raw, &published, &isCurrent); err != nil {
-			return nil, false, dbError(err)
-		}
-		p, err := storedPackage(raw)
+		p, err := storedPackage(r.raw)
 		if err != nil {
 			return nil, false, failure(connect.CodeInternal, "stored catalog invalid")
 		}
-		out = append(out, storedCatalog{catalogMeta(p, raw, published.Time, isCurrent), p, raw})
+		out = append(out, storedCatalog{catalogMeta(p, r.raw, r.published.Time, r.current), p, r.raw})
 	}
-	return out, false, dbError(rows.Err())
+	return out, false, nil
 }
+
 func (s *Service) getCatalog(ctx context.Context, ref *v1.CatalogRef) (storedCatalog, error) {
 	if ref == nil || ref.CatalogId == "" || ref.Version > 1<<63-1 {
 		return storedCatalog{}, failure(connect.CodeInvalidArgument, "catalog reference required")
@@ -106,6 +83,7 @@ func (s *Service) getCatalog(ctx context.Context, ref *v1.CatalogRef) (storedCat
 	}
 	return all[0], nil
 }
+
 func (s *Service) BeginCatalogUpload(ctx context.Context, req *connect.Request[v1.BeginCatalogUploadRequest]) (*connect.Response[v1.BeginCatalogUploadResponse], error) {
 	cfg := s.gatewayConfig()
 	if req.Msg.EnvelopeSizeBytes == 0 || len(req.Msg.EnvelopeSha256) != 32 {
@@ -121,10 +99,10 @@ func (s *Service) BeginCatalogUpload(ctx context.Context, req *connect.Request[v
 		return nil, dbError(err)
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, "DELETE FROM catalog_uploads WHERE expires_at<=now()"); err != nil {
+	if err = purgeCatalogUploads(ctx, tx); err != nil {
 		return nil, dbError(err)
 	}
-	if _, err = tx.Exec(ctx, "INSERT INTO catalog_uploads(upload_id,actor_id,envelope_size,envelope_sha256,expires_at) VALUES ($1,$2,$3,$4,$5)", id, actorID(ctx), req.Msg.EnvelopeSizeBytes, req.Msg.EnvelopeSha256, expires); err != nil {
+	if err = insertCatalogUpload(ctx, tx, id, reqctx.ActorID(ctx), req.Msg.EnvelopeSizeBytes, req.Msg.EnvelopeSha256, expires); err != nil {
 		return nil, dbError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -159,21 +137,20 @@ func (u *upload) repeatedChunk(offset uint64, data []byte) bool {
 }
 
 func (s *Service) upload(ctx context.Context, tx pgx.Tx, id string) (*upload, error) {
-	u := &upload{}
-	var actor string
-	var expires time.Time
-	err := tx.QueryRow(ctx, "SELECT actor_id,envelope_size,envelope_sha256,data,expires_at,published_catalog,chunk_ends FROM catalog_uploads WHERE upload_id=$1 FOR UPDATE", id).Scan(&actor, &u.size, &u.digest, &u.data, &expires, &u.published, &u.chunkEnds)
+	r, err := lockCatalogUpload(ctx, tx, id)
 	if err != nil {
 		return nil, dbError(err)
 	}
-	if actor != actorID(ctx) {
+	u := &upload{size: r.size, digest: r.digest, data: r.data, published: r.published, chunkEnds: r.chunkEnds}
+	if r.actor != reqctx.ActorID(ctx) {
 		return nil, failure(connect.CodePermissionDenied, "upload belongs to another caller")
 	}
-	if !time.Now().Before(expires) {
+	if !time.Now().Before(r.expires) {
 		return nil, failure(connect.CodeFailedPrecondition, "upload expired; begin again")
 	}
 	return u, nil
 }
+
 func (s *Service) UploadCatalogChunk(ctx context.Context, req *connect.Request[v1.UploadCatalogChunkRequest]) (*connect.Response[v1.UploadCatalogChunkResponse], error) {
 	if len(req.Msg.Data) == 0 {
 		return nil, failure(connect.CodeInvalidArgument, "chunk data required")
@@ -201,7 +178,7 @@ func (s *Service) UploadCatalogChunk(ctx context.Context, req *connect.Request[v
 	if next+uint64(len(req.Msg.Data)) > u.size {
 		return nil, failure(connect.CodeInvalidArgument, "chunk exceeds declared envelope size")
 	}
-	if _, err = tx.Exec(ctx, "UPDATE catalog_uploads SET data=data||$2::bytea,chunk_ends=$3 WHERE upload_id=$1", req.Msg.UploadId, req.Msg.Data, binary.BigEndian.AppendUint32(u.chunkEnds, uint32(next+uint64(len(req.Msg.Data))))); err != nil {
+	if err = appendCatalogChunk(ctx, tx, req.Msg.UploadId, req.Msg.Data, binary.BigEndian.AppendUint32(u.chunkEnds, uint32(next+uint64(len(req.Msg.Data))))); err != nil {
 		return nil, dbError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -209,6 +186,7 @@ func (s *Service) UploadCatalogChunk(ctx context.Context, req *connect.Request[v
 	}
 	return connect.NewResponse(&v1.UploadCatalogChunkResponse{NextOffset: next + uint64(len(req.Msg.Data))}), nil
 }
+
 func (s *Service) PublishCatalog(ctx context.Context, req *connect.Request[v1.PublishCatalogRequest]) (*connect.Response[v1.PublishCatalogResponse], error) {
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {
@@ -248,8 +226,8 @@ func (s *Service) PublishCatalog(ctx context.Context, req *connect.Request[v1.Pu
 	if err != nil {
 		return nil, dbError(err)
 	}
-	var published time.Time
-	if err = tx.QueryRow(ctx, "SELECT published_at FROM catalog_versions WHERE catalog_id=$1 AND version=$2", p.CatalogID, p.Version).Scan(&published); err != nil {
+	published, err := catalogPublishedAt(ctx, tx, p.CatalogID, p.Version)
+	if err != nil {
 		return nil, dbError(err)
 	}
 	meta := catalogMeta(p, u.data, published, true)
@@ -257,7 +235,7 @@ func (s *Service) PublishCatalog(ctx context.Context, req *connect.Request[v1.Pu
 	if err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(ctx, "UPDATE catalog_uploads SET published_catalog=$2 WHERE upload_id=$1", req.Msg.UploadId, b); err != nil {
+	if err = setCatalogUploadPublished(ctx, tx, req.Msg.UploadId, b); err != nil {
 		return nil, dbError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -265,6 +243,7 @@ func (s *Service) PublishCatalog(ctx context.Context, req *connect.Request[v1.Pu
 	}
 	return connect.NewResponse(&v1.PublishCatalogResponse{Catalog: meta}), nil
 }
+
 func (s *Service) ListCatalogs(ctx context.Context, req *connect.Request[v1.ListCatalogsRequest]) (*connect.Response[v1.ListCatalogsResponse], error) {
 	size, offset, binding, err := pageCursor(ctx, s.Config, "catalogs:"+req.Msg.CatalogId, req.Msg.Page)
 	if err != nil {
@@ -275,8 +254,8 @@ func (s *Service) ListCatalogs(ctx context.Context, req *connect.Request[v1.List
 		return nil, err
 	}
 	if len(all) == 0 && offset > 0 {
-		var total int
-		if err = s.Store.Pool.QueryRow(ctx, "SELECT count(*) FROM catalog_versions WHERE ($1='' OR catalog_id=$1)", req.Msg.CatalogId).Scan(&total); err != nil {
+		total, err := countCatalogVersions(ctx, s.Store.Pool, req.Msg.CatalogId)
+		if err != nil {
 			return nil, dbError(err)
 		}
 		if offset > total {
@@ -293,6 +272,7 @@ func (s *Service) ListCatalogs(ctx context.Context, req *connect.Request[v1.List
 	}
 	return connect.NewResponse(&v1.ListCatalogsResponse{Catalogs: items, Page: cursor}), nil
 }
+
 func (s *Service) GetCatalog(ctx context.Context, req *connect.Request[v1.GetCatalogRequest]) (*connect.Response[v1.GetCatalogResponse], error) {
 	c, err := s.getCatalog(ctx, req.Msg.Catalog)
 	if err != nil {
@@ -300,6 +280,7 @@ func (s *Service) GetCatalog(ctx context.Context, req *connect.Request[v1.GetCat
 	}
 	return connect.NewResponse(&v1.GetCatalogResponse{Catalog: c.meta}), nil
 }
+
 func actionSummary(a catalog.Action, digest string) *v1.ActionSummary {
 	sum, _ := hex.DecodeString(digest)
 	mode := "exec"
@@ -314,6 +295,7 @@ func actionSummary(a catalog.Action, digest string) *v1.ActionSummary {
 	}
 	return &v1.ActionSummary{Name: a.Name, Description: a.Description, Risk: a.Risk, Idempotent: a.Idempotent != nil && *a.Idempotent, ExecutionMode: mode, Builtin: a.Builtin, ActionSha256: sum}
 }
+
 func (s *Service) actionCatalogs(ctx context.Context, ref *v1.CatalogRef) ([]storedCatalog, error) {
 	if ref == nil {
 		all, _, err := s.storedCatalogs(ctx, catalogQuery{current: true})
@@ -325,6 +307,7 @@ func (s *Service) actionCatalogs(ctx context.Context, ref *v1.CatalogRef) ([]sto
 	}
 	return []storedCatalog{c}, nil
 }
+
 func (s *Service) ListActions(ctx context.Context, req *connect.Request[v1.ListActionsRequest]) (*connect.Response[v1.ListActionsResponse], error) {
 	all, err := s.actionCatalogs(ctx, req.Msg.Catalog)
 	if err != nil {
@@ -363,6 +346,7 @@ func (s *Service) ListActions(ctx context.Context, req *connect.Request[v1.ListA
 	}
 	return connect.NewResponse(&v1.ListActionsResponse{Actions: items, Page: cursor}), nil
 }
+
 func (s *Service) GetAction(ctx context.Context, req *connect.Request[v1.GetActionRequest]) (*connect.Response[v1.GetActionResponse], error) {
 	if req.Msg.Action == "" {
 		return nil, failure(connect.CodeInvalidArgument, "action name required")
@@ -387,6 +371,7 @@ func (s *Service) GetAction(ctx context.Context, req *connect.Request[v1.GetActi
 	}
 	return nil, failure(connect.CodeNotFound, "action not found")
 }
+
 func (s *Service) GetCatalogDistribution(ctx context.Context, req *connect.Request[v1.GetCatalogDistributionRequest]) (*connect.Response[v1.GetCatalogDistributionResponse], error) {
 	if req.Msg.CatalogId == "" {
 		return nil, failure(connect.CodeInvalidArgument, "catalog ID required")

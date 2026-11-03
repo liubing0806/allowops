@@ -1,0 +1,28 @@
+name: mysql_slow_log
+description: Read the last lines of a MySQL or MariaDB slow query log with SQL literals redacted.
+risk: read
+run_as: root
+params:
+  path:
+    type: path
+    description: Existing slow log file within the signed database log directories.
+    allowed_roots: [/var/log/mysql, /var/log/mariadb]
+  lines:
+    type: int
+    description: Number of trailing log lines to read.
+    min: 1
+    max: 500
+    default: 200
+exec: [/usr/bin/tail, -n, '{lines}', --, '{path}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]
+  custom:
+    - name: sql_text
+      before_builtin: true
+      regex: '(?s)/\*.*?(?:\*/|$)|--(?:[ \t\r\f\v][^\n]*|$)|''(?:[^''\\]|\\.|'''')*(?:''|\\?$)|"(?:[^"\\]|\\.|"")*(?:"|\\?$)|`(?:[^`]|``)*(?:`|$)'
+    - name: sql_hex_literal
+      regex: '(?i)\b0x[0-9a-f]+\b'

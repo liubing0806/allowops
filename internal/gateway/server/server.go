@@ -28,15 +28,34 @@ const AgentALPN = "allowops-agent/1"
 const JoinALPN = "allowops-join/1"
 const MCPALPN = "allowops-mcp/1"
 
-// UseIdentity mounts P5B without changing host ALPN or catalog synchronization.
+// Option supplies a dependency to New. Options are applied together before
+// the handlers are assembled, so their order does not matter.
+type Option func(*options)
+
+type options struct {
+	identity *api.Service
+	audit    *audit.Service
+	mcp      http.Handler
+}
+
+// WithIdentity mounts the identity API (design P5B) without changing host ALPN or catalog synchronization.
 // Future MCP handlers use the same context and api.Service.Require for ABAC.
-func (s *Server) UseIdentity(identity *api.Service) {
-	s.identity = identity
-	if s.Audit != nil {
-		s.Audit.Access = identity
-	}
-	s.API = identity.Handler()
-	s.MCP = identity.Middleware(s.MCP)
+// The service must be fully configured (for example ConfigureManagement)
+// before New, because its API handler is built there.
+func WithIdentity(identity *api.Service) Option {
+	return func(o *options) { o.identity = identity }
+}
+
+// WithAudit serves the audit service. With WithIdentity it authenticates and
+// authorizes through the identity service.
+func WithAudit(a *audit.Service) Option {
+	return func(o *options) { o.audit = a }
+}
+
+// WithMCP serves the MCP endpoint with an already authenticating handler.
+// Without it, WithIdentity wraps the placeholder in the identity middleware.
+func WithMCP(h http.Handler) Option {
+	return func(o *options) { o.mcp = h }
 }
 
 type Server struct {
@@ -56,7 +75,11 @@ type Server struct {
 	closed      bool
 }
 
-func New(agent *hostconn.Service, certificate tls.Certificate) *Server {
+func New(agent *hostconn.Service, certificate tls.Certificate, opts ...Option) *Server {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	roots := x509.NewCertPool()
 	roots.AppendCertsFromPEM(agent.CA.PEM)
 	base := &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{certificate}}
@@ -97,6 +120,18 @@ func New(agent *hostconn.Service, certificate tls.Certificate) *Server {
 	s.API = placeholder
 	s.MCP = placeholder
 	s.Console = console.Handler()
+	s.Audit = o.audit
+	if o.identity != nil {
+		s.identity = o.identity
+		if s.Audit != nil {
+			s.Audit.Access = o.identity
+		}
+		s.API = o.identity.Handler()
+		s.MCP = o.identity.Middleware(s.MCP)
+	}
+	if o.mcp != nil {
+		s.MCP = o.mcp
+	}
 	return s
 }
 
@@ -261,6 +296,7 @@ func (l *singleListener) Accept() (net.Conn, error) {
 	<-l.done
 	return nil, net.ErrClosed
 }
+
 func (l *singleListener) Close() error   { l.once.Do(func() { close(l.done) }); return nil }
 func (l *singleListener) Addr() net.Addr { return l.conn.LocalAddr() }
 

@@ -1,0 +1,13 @@
+# Second overlay for the JVM pause measurements, used after compose.pause.yaml: mounts JA_TMP_HOST at /tmp of jdk11, jdk17 and
+# jdk21, so that the JVM's performance data file (/tmp/hsperfdata_app/<pid>, memory-mapped) lives on a file system of the test's
+# choice (exp_logstall.py --case hsperf).
+services:
+  jdk11:
+    volumes:
+      - ${JA_TMP_HOST:?set JA_TMP_HOST}:/tmp
+  jdk17:
+    volumes:
+      - ${JA_TMP_HOST:?set JA_TMP_HOST}:/tmp
+  jdk21:
+    volumes:
+      - ${JA_TMP_HOST:?set JA_TMP_HOST}:/tmp

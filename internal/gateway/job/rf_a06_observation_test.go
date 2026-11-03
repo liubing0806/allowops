@@ -43,6 +43,7 @@ func (o *rfA06Observation) mark(stage string, err error) {
 	defer o.mu.Unlock()
 	o.stages = append(o.stages, fmt.Sprintf("A06 phase=%s elapsed_us=%d error_type=%T code=%q", stage, time.Since(o.start).Microseconds(), err, code))
 }
+
 func (o *rfA06Observation) dump(t *testing.T) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -68,6 +69,7 @@ func (c *rfA06HTTP) Do(r *http.Request) (*http.Response, error) {
 	c.observation.mark(fmt.Sprintf("s3_http_%d_return_status_%d", n, status), err)
 	return response, err
 }
+
 func rfA06ObserveS3(original *output.S3, o *rfA06Observation) *output.S3 {
 	options := original.Client.Options()
 	options.HTTPClient = &rfA06HTTP{base: options.HTTPClient, observation: o}

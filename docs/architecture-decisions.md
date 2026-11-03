@@ -89,7 +89,7 @@
 |---|---|---|
 | 主体 | agent 服务账号、控制台用户 | 角色、团队、负责人 |
 | 资源 | 主机、action | 主机授权标签；action 的 risk、分类 |
-| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和授权标签、创建 join token、管理用户角色、发布目录、查看 job、查看输出（`view_output`）、查看审计 | — |
+| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和授权标签、创建 join token、管理用户角色、发布目录、查看资源清单（`view_inventory`）、查看 job、查看输出（`view_output`）、查看审计 | — |
 | 环境 | 请求上下文 | 请求时间、来源 IP |
 
 - 判定结果：`allow`、`deny`。deny 优先于 allow。未匹配任何规则时 deny。
@@ -503,10 +503,10 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 
 | 角色 | 默认权限 |
 |---|---|
-| admin | 全部：策略、服务账号、主机、join token、用户角色 |
-| operator | 管理主机（授权标签、删除）、创建 join token、查看 job |
+| admin | 全部：策略、服务账号、主机、join token、用户角色、资源清单（`view_inventory`） |
+| operator | 管理主机（授权标签、删除）、创建 join token、查看 job 和资源清单（`view_inventory`） |
 | auditor | 查看审计、job 和命令输出 |
-| viewer | 查看主机、目录和 job 摘要，不能查看命令输出 |
+| viewer | 查看主机、目录、job 摘要和资源清单（`view_inventory`），不能查看命令输出 |
 | publisher | 只能发布目录（供 CI 使用） |
 
 - 防锁死：保存策略前检查，保存后若没有任何主体能修改策略则拒绝保存。
@@ -538,7 +538,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 - 实现：Go RE2 正则，匹配耗时与输入长度成线性关系。匹配内容替换为 `[REDACTED:类型]`。
 - 内置规则：
   - `secrets`（默认开启）：PEM 私钥、阿里云 AccessKey（`LTAI` 开头）、AWS Access Key（`AKIA` 开头）、JWT、`Authorization: Bearer` 头、URL 中的用户名密码、`password=`/`secret=`/`token=` 等键值对。
-  - `pii`（默认关闭，按 action 开启）：手机号（`1[3-9]` 开头 11 位）、18 位身份证号（校验码）、银行卡号（Luhn 校验）。
+  - `pii`（默认关闭，按 action 开启）：手机号（`1[3-9]` 开头 11 位）、18 位身份证号（校验码）、银行卡号（Luhn 校验）。身份证号和银行卡号只匹配独立数字串：紧邻字母、下划线或属于小数的数字不脱敏。
   - IP 地址和主机名不脱敏。
 - 写法：
 
@@ -657,6 +657,7 @@ agent 评估：MVP 不做，列入 Roadmap。
 - 第三方许可证合规：
   - 用 `go-licenses` 和 `license-checker` 生成 Go 和前端依赖清单，随发布物提供 `THIRD_PARTY_NOTICES`。
   - CI 只允许 MIT、BSD、Apache-2.0、ISC、MPL-2.0 许可的依赖；GPL、AGPL 依赖直接拒绝。
+  - 例外（A68，2026-10-24）：可选安装包 allowops-arthas 原样分发 `arthas-core.jar`，其中内嵌的 logback 1.2.13 按 EPL-1.0 分发。该例外只适用于这个包，不适用于 allowops 的 Go 和前端依赖。
 
 ## 18. 示例与文档
 
@@ -947,5 +948,27 @@ params:
 | A40 | 控制台视觉风格（2026-10-20） | 控制台前端重写（UI2）：shadcn/ui Nova 样式（radix-nova）+ neutral 默认主题，不再使用 magpie 色值（A39 作废）；图标 Lucide、动画 Motion、分栏 react-resizable-panels、拖拽 dnd-kit、客户端状态 Zustand；每类能力只用一个库 |
 | A41 | 前端重写与发布顺序 | UI2 及其验证 V-UI2 完成后才进行 V-MVP 和 REL-MVP |
 | A58 | 项目许可（2026-10-21） | 改为 MIT，版权人 liubing；不再使用 PolyForm 二选一与商业许可（A36 作废） |
+| A66 | Arthas 引入（2026-10-23） | 按 `java-diagnostics-arthas-plan.md` 分阶段引入，取代 2026-10-22 的不集成决定。在 allowops-exec 中实现内置处理器 `jvm_arthas`，不采用在容器内运行 arthas-boot 的目录 action；Arthas action 的 risk 用 write，按 action 名授权；容器内的 Arthas 文件以预装为准，注入在安全路径解析验证后再开放；新增 action 字段 `max_targets`；首批目标为主机 JVM 和 Docker 容器，Kubernetes 以后评估；验收阈值在阶段 0 实测后确认 |
+| A67 | Arthas 验收阈值（2026-10-24） | 采纳 `arthas-stage0-report.md` 第 5 节的建议值，写入 `java-diagnostics-arthas-plan.md` 第 1 节和 3.2 节。状态为“估算”或“未验证”的项在阶段 2D 验收时核对 |
+| A68 | allowops-arthas 的第三方许可证（2026-10-24） | logback 1.2.13（EPL-1.0 或 LGPL-2.1）选 EPL-1.0，作为该包的许可证白名单例外，声明中附 EPL-1.0 全文和源码获取方式；javassist（MPL-1.1、LGPL-2.1、Apache-2.0 三选一）选 Apache-2.0；Arthas Web UI 文件（含 0BSD 许可的 tslib）和 JSON Schema 文件按上游条款写入声明；包元数据 License 字段使用复合表达式 |
+| A69 | Arthas 阶段 2 验收后的调整（2026-10-25） | 采纳 `arthas-stage2-acceptance-report.md` 第 6 节的建议：第 1 节阈值不变；`logger` 在类加载器不卸载的原因查明前暂停（内置处理器拒绝该命令，示例目录不提供 `jvm_arthas_logger`），50 次 attach 的元空间项按不含 `logger` 的 L1 命令判定；老年代检查默认启用（使用率 < 85%，60 秒内没有 Full GC）；`thread -b` 的线程数上限改为 1000；内存余量 256 MiB、元空间余量 64 MiB、attach 次数 < 5、间隔 60 秒保持，间隔的作用写为限制调用频率；元空间检查补偿 hsperfdata 计数器的滞后：自上次 attach 以来 GC 次数没有变化时，此后每次 attach 按 20 MiB 计入已用量；拒绝信息的内存单位写作 MiB。L1 延迟、`thread -b`、老年代的待定项在阶段 3 负载测试中复核。安全审阅的待定项（配置的 JVM 未运行时，同一容器或 unit 内主类相同的其他进程会被 attach）在阶段 2 作为残余风险保留，阶段 3 修改目标配置时处理 |
+| A70 | Arthas 阶段 3 验收后的处理（2026-11-03） | 采纳 `arthas-stage3-l2-report.md` 第 7 节的建议：`java-diagnostics-arthas-plan.md` 第 1 节的 L2 阈值和 3.2 节 L2 CPU 检查 50% 不变；L2 风险说明把增强开始后的影响分为每个 JVM 的第一次增强和后续增强，并写明第一次增强和 JDK 8 的稳态增幅；运行期监测的不评估期保持 5 秒，配置说明写明 `guard.max_cpu_percent` 低于第一次增强的 CPU 时会中止每个 JVM 的第一次 L2 调用；第一次增强的原因调查和补充测量列为阶段 3 的后续工作。同时采纳 `arthas-stage3-acceptance-report.md` 第 8 节的建议：L1 阈值不变，`thread -b` 线程数上限保持 1000；风险说明写明 JDK 17 上 `thread -b` 第一次调用约 100 ms、JDK 8 Parallel 和 Serial 上 attach 可能触发 70~120 ms 的 `Metadata GC Threshold` Full GC、CMS 的并发周期按 Full GC 计而使调用常被拒绝；L1 其余秒 ±5% 的判定同时给出没有调用的对照运行。`logger` 类加载器不卸载的问题暂不向 Arthas 上游报告，`logger` 继续暂停 |
 
 总指挥在实施中按规则自行决定的实现细节（G7~G18）记录在计划库，不改变上表和 design.md 的行为。
+
+## 22. 插件架构（PL1~PL10）
+
+2026-11-03 讨论确定，设计见 `plugin-architecture.md`。讨论起点：评估 allowops 作为 AI 运维 agent 还缺少的只读能力时，负责人认为自建 CMDB 过重，提出借鉴 dsh-superagent（DeepSeek Harness 的 bundle，基于 cordis 插件框架）“一切皆插件”的开发方式。
+
+| 编号 | 问题 | 决定 |
+|---|---|---|
+| PL1 | 插件机制 | 参照 Caddy 模块：编译期在 `init()` 中注册，网关 `main` 空白导入决定包含哪些插件；第三方插件通过自定义构建加入。不用 Go 标准库 `plugin` 包（要求相同工具链和依赖版本，只支持 Linux 和 macOS） |
+| PL2 | 插件 API 的位置与稳定性 | 公开包 `plugin/`（`internal/` 不能被其他 module 导入）；1.0 之前标为实验性，允许不兼容修改，修改时在 CHANGELOG 中说明 |
+| PL3 | 插件能注册什么 | 只能实现第 6 节的扩展点接口。不能注册 MCP 工具，不能调用 job 服务，不能注册在主机上执行的能力；网关按扩展点提供固定 MCP 工具，并新增对应的授权操作 |
+| PL4 | 网关出站访问 | 网关仍然不主动连接被管主机；网关插件只能访问其配置 `egress` 中声明的外部地址。修改 `design.md` 第 2 节的原表述“网关不主动连接任何主机” |
+| PL5 | 首批扩展点 | Inventory、Changes、Knowledge、Trigger；`auditsink`、`notifier` 以后按需增加。新增扩展点要记录决定，新增扩展点的实现不需要 |
+| PL6 | 主机端 builtin | 保留 `BuiltinHandler` 接口，改为注册表；`AgentHello.Capabilities.Builtins` 从注册表生成，不再单独列出名称 |
+| PL7 | CMDB | 不自建。服务拓扑由 Inventory 插件从已有系统读取（静态 YAML、主机标签、K8s、Prometheus、Nacos、CMDB HTTP API），网关合并结果，属性冲突时同时返回各来源的值 |
+| PL8 | 进程外插件 | 以后再做。扩展点接口只用 `context.Context` 和可序列化类型，以便加 gRPC 适配器时接口不变 |
+| PL9 | 编排层边界 | 待定：触发事件之后由谁启动排查、排查会话保存在哪里。Trigger 扩展点在此之前只定义接口 |
+| PL10 | 是否用 TypeScript 重写 | 不重写。主机端需要 `CGO_ENABLED=0` 和 CentOS 7（glibc 2.17）支持，Node.js 18 起官方二进制要求 glibc 2.28；root 辅助程序加载 JS 运行时会扩大攻击面。Caddy 风格的插件在 Go 中即可实现 |

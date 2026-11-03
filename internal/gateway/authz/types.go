@@ -13,6 +13,7 @@ const (
 	ManageUserRoles       Operation = "manage_user_roles"
 	PublishCatalog        Operation = "publish_catalog"
 	ViewHosts             Operation = "view_hosts"
+	ViewInventory         Operation = "view_inventory"
 	ViewCatalog           Operation = "view_catalog"
 	ViewJobs              Operation = "view_jobs"
 	ViewOutput            Operation = "view_output"
@@ -55,7 +56,7 @@ type Input struct {
 }
 
 // Hours is a half-open interval in an IANA timezone. Empty timezone retains
-// Asia/Shanghai for existing P5A callers. Overnight intervals are not supported.
+// Asia/Shanghai for callers written before timezones were added (authn/authz module, design P5A). Overnight intervals are not supported.
 type Hours struct {
 	From     int    `json:"from"`
 	To       int    `json:"to"`

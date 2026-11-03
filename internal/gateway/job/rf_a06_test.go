@@ -66,6 +66,7 @@ func (s *rfA06Storage) Put(ctx context.Context, key string, data []byte) (err er
 
 type rfA06Commit struct{}
 type rfA06Query struct{}
+
 type rfA06Tracer struct {
 	mu                 sync.Mutex
 	terminal           map[uint32]bool
@@ -94,6 +95,7 @@ func (p *rfA06Tracer) TraceQueryStart(ctx context.Context, c *pgx.Conn, d pgx.Tr
 	}
 	return ctx
 }
+
 func (p *rfA06Tracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, d pgx.TraceQueryEndData) {
 	if phase, ok := ctx.Value(rfA06Query{}).(string); ok {
 		p.observation.mark(phase+"_return", d.Err)

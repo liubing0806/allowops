@@ -13,3 +13,8 @@ coverage.*
 .idea/
 .vscode/
 .DS_Store
+
+# Local StarRocks/Dremio test environment credentials
+/test/starrocks-dremio/.state/
+/test/starrocks-dremio/images.env
+/test/starrocks-dremio/samples/

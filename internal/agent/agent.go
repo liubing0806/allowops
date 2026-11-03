@@ -3,16 +3,19 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"syscall"
 	"time"
 
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
+	"github.com/liubing0806/allowops/internal/builtin/jvmarthas"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/execd"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -26,6 +29,12 @@ type Options struct {
 	Runner   Runner
 	// Sleep is injectable so retry timing can be tested without waiting 30s.
 	Sleep func(context.Context, time.Duration) error
+	// ArthasInstalled reports whether the Arthas package is on this host.
+	ArthasInstalled func() bool
+	// RecoverArthas ends the Arthas servers that earlier calls left behind.
+	RecoverArthas func(context.Context) (string, error)
+	// Logf writes one line to the log of the service.
+	Logf func(format string, args ...any)
 }
 
 type Agent struct {
@@ -54,6 +63,15 @@ func New(config Config, options Options) (*Agent, error) {
 	}
 	if options.Sleep == nil {
 		options.Sleep = sleep
+	}
+	if options.ArthasInstalled == nil {
+		options.ArthasInstalled = func() bool { return jvmarthas.CheckInstalled(jvmarthas.DefaultDir) == nil }
+	}
+	if options.RecoverArthas == nil {
+		options.RecoverArthas = RecoverArthas
+	}
+	if options.Logf == nil {
+		options.Logf = func(format string, args ...any) { fmt.Fprintf(os.Stderr, "allowops-agent: "+format+"\n", args...) }
 	}
 	value, err := LoadIdentity(options.DataDir)
 	if err != nil {
@@ -104,11 +122,36 @@ func (a *Agent) backoff(attempt uint) time.Duration {
 }
 
 func (a *Agent) hello() *v1.AgentHello {
+	// jvm_arthas is reported only where the Arthas package is installed.
+	installed := a.options.ArthasInstalled()
+	builtins := slices.DeleteFunc(catalog.BuiltinNames(), func(name string) bool { return name == "jvm_arthas" && !installed })
 	labels := map[string]string{"os": runtime.GOOS, "arch": runtime.GOARCH, "hostname": a.identity.get().Hostname}
 	for key, value := range a.config.ReportedLabels {
 		labels[key] = value
 	}
-	return &v1.AgentHello{AgentVersion: a.options.Version, Capabilities: &v1.AgentCapabilities{CatalogSchemaVersions: []uint32{1}, ParameterTypes: []string{"enum", "int", "string", "duration", "path", "url", "bool", "string_array"}, ExecutionModes: []string{"exec", "steps", "script", "builtin"}, Builtins: []string{"log_search", "http_get", "redis_command", "mysql_query"}, OutputFilters: []string{"match", "exclude", "tail", "head", "count"}, Features: []string{"allow_interpreter", "exec_fallbacks"}}, ReportedLabels: labels, LoadedCatalogs: a.catalogs.refs(), MaxConcurrentTasks: uint32(a.config.Limits.ConcurrentTasks)}
+	return &v1.AgentHello{AgentVersion: a.options.Version, Capabilities: &v1.AgentCapabilities{CatalogSchemaVersions: []uint32{1}, ParameterTypes: []string{"enum", "int", "string", "duration", "path", "url", "bool", "string_array"}, ExecutionModes: []string{"exec", "steps", "script", "builtin"}, Builtins: builtins, OutputFilters: []string{"match", "exclude", "tail", "head", "count"}, Features: []string{"allow_interpreter", "exec_fallbacks", "max_targets"}}, ReportedLabels: labels, LoadedCatalogs: a.catalogs.refs(), MaxConcurrentTasks: uint32(a.config.Limits.ConcurrentTasks)}
+}
+
+// arthasRecoveryTimeout bounds the recovery at start.
+const arthasRecoveryTimeout = 5 * time.Minute
+
+// recoverArthas ends the Arthas servers that calls left behind before the agent was stopped or the
+// host restarted. It only runs where the Arthas package is installed and does not delay the connection.
+func (a *Agent) recoverArthas(ctx context.Context) {
+	if !a.options.ArthasInstalled() {
+		return
+	}
+	run, cancel := context.WithTimeout(ctx, arthasRecoveryTimeout)
+	defer cancel()
+	summary, err := a.options.RecoverArthas(run)
+	switch {
+	case ctx.Err() != nil:
+		// The agent is stopping; the next start recovers what is left.
+	case err != nil:
+		a.options.Logf("recovery of the Arthas sessions failed: %v", err)
+	case summary != "":
+		a.options.Logf("%s", summary)
+	}
 }
 
 func (a *Agent) Run(parent context.Context) error {
@@ -127,6 +170,13 @@ func (a *Agent) Run(parent context.Context) error {
 	defer a.writeStatus("", false)
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
+	recovered := make(chan struct{})
+	go func() {
+		defer close(recovered)
+		a.recoverArthas(ctx)
+	}()
+	// The recovery ends with the agent: the helper gets the signal and finishes its clean-up first.
+	defer func() { cancel(); <-recovered }()
 	client, transport, err := newClient(a.config, a.identity)
 	if err != nil {
 		return err

@@ -1,0 +1,53 @@
+{
+  "body": {
+    "jobId": 8,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "command": "watch demo.DiagController threadNames {returnObj} -n 1 -x 2 -m 1 --timeout 5",
+        "jobId": 8,
+        "state": "SCHEDULED",
+        "type": "command"
+      },
+      {
+        "effect": {
+          "classCount": 1,
+          "cost": 53,
+          "listenerId": 2,
+          "methodCount": 1
+        },
+        "jobId": 8,
+        "success": true,
+        "type": "enhancer"
+      },
+      {
+        "accessPoint": "AtExit",
+        "className": "demo.DiagController",
+        "cost": 0.097205,
+        "jobId": 8,
+        "methodName": "threadNames",
+        "ts": "2026-10-26 04:30:24.995",
+        "type": "watch",
+        "value": "@ArrayList[\n    @ArrayList[\n        @String[Reference Handler],\n        @String[Finalizer],\n        @String[Signal Dispatcher],\n        @String[Attach Listener],\n        @String[arthas-timer],\n        @String[Keep-Alive-Timer],\n        @String[arthas-Netty Object size exceeds size limit: 256, try to use `options object-size-limit \u003cbytes\u003e` to increase the limit."
+      },
+      {
+        "accessPoint": "AtExit",
+        "className": "demo.DiagController",
+        "cost": 0.097218,
+        "jobId": 8,
+        "methodName": "threadNames",
+        "ts": "2026-10-26 04:30:24.995",
+        "type": "watch",
+        "value": "@ArrayList[\n    @ArrayList[\n        @String[Reference Handler],\n        @String[Finalizer],\n        @String[Signal Dispatcher],\n        @String[Attach Listener],\n        @String[arthas-timer],\n        @String[Keep-Alive-Timer],\n        @String[arthas-Netty Object size exceeds size limit: 256, try to use `options object-size-limit \u003cbytes\u003e` to increase the limit."
+      },
+      {
+        "jobId": 8,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "36730af1-7c7c-400c-aee6-352db90fbc22",
+  "state": "SUCCEEDED"
+}

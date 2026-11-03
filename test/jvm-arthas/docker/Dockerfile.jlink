@@ -1,0 +1,21 @@
+# A trimmed runtime that has no java.instrument module (what a jlink-built image can look like).
+# 3.2 of the plan requires java.instrument; the check has to find it missing here.
+# The Spring Boot sample cannot run on this runtime (Tomcat needs java.lang.instrument), so it runs MiniServer.
+FROM eclipse-temurin:17-jdk AS jlink
+RUN jlink --add-modules java.base,java.logging,java.management,java.naming,java.sql,java.xml,java.desktop,jdk.httpserver,jdk.unsupported \
+      --strip-debug --no-man-pages --no-header-files --output /runtime
+COPY docker/mini/MiniServer.java /src/MiniServer.java
+RUN mkdir /mini && javac -d /mini /src/MiniServer.java
+
+FROM eclipse-temurin:17-jre
+RUN rm -rf /opt/java/openjdk
+COPY --from=jlink /runtime /opt/java/openjdk
+COPY --from=jlink /mini /app/mini
+ARG APP_UID=10001
+RUN useradd -u ${APP_UID} -m -s /usr/sbin/nologin app
+COPY app/target/app.jar /app/app.jar
+COPY probe/probe.jar /app/probe.jar
+COPY docker/entrypoint.sh /app/entrypoint.sh
+WORKDIR /app
+USER app
+ENTRYPOINT ["/app/entrypoint.sh"]

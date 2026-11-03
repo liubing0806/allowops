@@ -1,0 +1,23 @@
+# blocking lock
+lock_identity_hash	7e10dd5c
+blocked_thread_count	3
+
+# lock holder thread
+id	22
+name	lock-holder
+state	TIMED_WAITING
+daemon	false
+priority	5
+in_native	false
+suspended	false
+blocked_count	0
+blocked_time_ms	-1
+waited_count	1
+waited_time_ms	-1
+lock_owner_id	-1
+
+# stack 22 lock-holder
+at java.lang.Thread.sleep(Native Method)
+at Blocker$1.run(Blocker.java:10)
+at java.lang.Thread.run(Thread.java:840)
+locked monitor java.lang.Object@7e10dd5c at frame 1

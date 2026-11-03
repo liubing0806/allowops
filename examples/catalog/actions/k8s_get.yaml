@@ -1,0 +1,22 @@
+name: k8s_get
+description: List namespaced workload, network, or configuration resources in an allowed namespace with wide output.
+risk: read
+run_as: root
+params:
+  namespace:
+    type: enum
+    description: Namespace selected from the signed allowlist.
+    values: [default, app]
+  resource:
+    type: enum
+    description: Resource type to list; configmaps list names and entry counts only, secrets are not offered.
+    values: [deployments, services, endpoints, ingresses, hpa, jobs, cronjobs, statefulsets, replicasets, configmaps]
+exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, '{resource}', -n, '{namespace}',
+  -o, wide]
+exec_fallbacks: [/usr/local/bin/kubectl]
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

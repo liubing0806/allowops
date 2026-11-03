@@ -20,6 +20,7 @@ import (
 )
 
 type rfP6Value struct{}
+
 type rfP6Audit struct {
 	audit.Appender
 	pool                                *pgxpool.Pool
@@ -70,6 +71,7 @@ func (s *rfP6Audit) Append(ctx context.Context, p audit.Payload) (audit.Event, e
 	}
 	return s.Appender.Append(ctx, p)
 }
+
 func TestRFB01P6CancelledResultsPersist(t *testing.T) {
 	for _, mode := range []string{"committed_write", "read", "deny", "bounded_result_failure", "authorized_failure"} {
 		t.Run(mode, func(t *testing.T) {

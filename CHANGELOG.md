@@ -87,6 +87,125 @@ jobs list, and fixes from two external code reviews.
 
 - The limitations listed for v0.1.0 still apply.
 - The console still reads every page of the hosts and audit lists.
+## Unreleased
+
+Changes on `main` since v0.1.0. They are not in a release yet.
+
+### Upgrade notes
+
+- Run `allowops-gateway migrate` before starting the new gateway; `serve`
+  exits when the schema is older than the binary requires. The Helm chart runs
+  the migration in its pre-upgrade hook. Three migrations are added:
+  `00007_jobs_created_index`, `00008_task_output_instance` and
+  `00009_gateway_update_check`.
+- Set `gateway.version` in `gateway.yaml` to the new version or remove it;
+  without the key the gateway uses its build version. The gateway refuses
+  agents newer than this value, so with `gateway.version: '0.1.0'` an agent
+  upgraded by `agent_upgrade` is refused with `agent version unsupported`.
+- With a separate runtime database role, grant it `SELECT`, `INSERT` and
+  `UPDATE` on `gateway_update_check` before enabling `update_check`.
+- Building from source needs Go 1.27.3 (GO-2026-6809).
+- Command runners are treated as interpreters. A catalog action that passes
+  caller-supplied program text to a command runner is refused; the program
+  text must be fixed in the signed catalog.
+- The example actions `docker_stop` and `process_signal` are removed.
+- `k8s_configmap_view` prints each key as `### <key>=<value>` instead of a
+  `### <key>` line followed by the value.
+- Grant `view_inventory` to the roles that need `entities_search`. Defaults
+  include admin, operator and viewer only on first initialization. Upgrades do
+  not change stored policies. Export the current policy with
+  `allowops policy get > rules.yaml`, add the operation to the appropriate rules,
+  retain the other rules, then run `allowops policy test -f rules.yaml` and
+  `allowops policy apply -f rules.yaml --reason 'grant inventory access'`.
+  You can also edit, simulate and save the policy in the console.
+- Rename any catalog action named `entities_search`, then sign and publish the
+  updated catalog. This name is now reserved and catalog validation rejects it.
+- Configure inventory instances and restart the gateway. Without an available
+  inventory instance, the MCP tool list is unchanged.
+
+### Gateway plugins
+
+- Add the experimental gateway plugin API in `plugin/` and the Inventory
+  extension point. Before 1.0, API changes may be incompatible and will be
+  recorded here.
+- Add `inventory.static` for a local topology YAML file and
+  `inventory.host_labels` for entities derived from active host labels.
+  Configure instances in `gateway.yaml` under `plugins`; see
+  [the configuration example](examples/gateway.yaml) and
+  [the topology example](examples/topology.yaml). Configuration and static file
+  changes require a gateway restart.
+- Add the read-only MCP tool `entities_search` when at least one inventory
+  instance is available. Results include source IDs, visible hosts and selectors.
+  The gateway redacts secrets and limits the complete tool result to 32KB.
+- Show configured plugin provisioning health in system dependencies. An optional
+  plugin that fails provisioning makes system status DEGRADED. A required plugin
+  that fails provisioning prevents startup. The readiness check is unchanged.
+
+### Gateway and console
+
+- Gateway update notice: with `update_check.enabled` (default `false`) the
+  gateway reads a release manifest once every 24 hours, and the console shows a
+  newer release in the sidebar, the overview and the system page. The sidebar
+  shows the gateway build version.
+- The jobs list is paged on the server.
+- Authorization labels are edited one `key=value` per line. Labels that this
+  format cannot represent are refused instead of being changed.
+- The job output dialog stays bound to the job it was opened for.
+- MCP job options that the caller omits take the defaults and limits of the
+  gateway jobs configuration. Tool input schemas no longer use root-level
+  combinators.
+- A database failure during authentication is reported as unavailable.
+- Agent version rejections are logged by the gateway and in the agent journal.
+- A release manifest whose `published_at` is outside the year 1 to 9999 range
+  is refused as an invalid manifest.
+
+### Reliability
+
+- Jobs: task event transactions are retried on transient SQL errors. Replay
+  accepts the state written by a COMMIT whose acknowledgement was lost, and
+  starts output persistence when it finds its own terminal result. Pending
+  output of a lost gateway instance is marked unavailable.
+- Host connections: a failed catalog report write is retried, pending
+  mailboxes left by another instance are reconciled, and an interrupted CA
+  creation can finish.
+- API: host writes lock only the hosts they change and use one pool
+  connection. Policy rules and catalog rows are loaded only when needed.
+- Executor:
+  - exit 0 is kept when a detached descendant holds the output pipes;
+  - the output wait after the process exits is bounded;
+  - tail filter memory is bounded by the output limit, and a tail is marked
+    truncated only when a requested line is lost;
+  - path parameters are refused when a path component can be written by an
+    untrusted user.
+- Built-in actions: `mysql_query` result bytes are bounded by
+  `max_response_bytes`; Redis `GET`, `MGET` and `HGET` reads are bounded;
+  `log_search` `path_glob` expansion is bounded and can be cancelled.
+- CLI: SIGINT and SIGTERM cancel the running command, including a password
+  prompt.
+- Deployment: the Helm chart injects provider secrets from Kubernetes Secrets.
+  Compose `local-up` bootstraps again after an interrupted first run.
+
+### Example catalog
+
+- `agent_upgrade` (`risk: dangerous`) upgrades a host agent online from the
+  package repository through a signed catalog action.
+- 66 new read-only actions, including configuration, files, JAR entries,
+  Dubbo QoS, MySQL, Redis and Kubernetes.
+- 17 `jvm_arthas_*` actions (`risk: write`) attach Arthas to a JVM.
+- The catalog now has 133 actions: 115 read, 17 write and 1 dangerous.
+- Redaction: the built-in secret rules cover more URL credential, DSN, query
+  parameter, `NAME=value`, `NAME: value`, command-line password and SQL text
+  forms, including URL passwords with escaped quotes. A skipped part of a line
+  is no longer scanned again, so redaction time grows linearly with the line
+  length.
+- Custom redaction rules accept `before_builtin` to run before the built-in
+  rules.
+- The built-in MySQL actions redact by row; `redis_slowlog` summarizes
+  `SLOWLOG GET`.
+
+### Documentation
+
+- The website allowops.com serves English and Chinese documentation.
 
 ## v0.1.0 — 2026-10-22 (pre-release)
 

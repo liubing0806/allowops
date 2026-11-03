@@ -1,0 +1,18 @@
+{
+  "body": {
+    "command": "thread 987654",
+    "jobId": 5,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "jobId": 5,
+        "message": "thread do not exist! id: 987654",
+        "statusCode": 1,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "deb40fe3-0d4d-4fea-a3fd-73623a48ffeb",
+  "state": "SUCCEEDED"
+}

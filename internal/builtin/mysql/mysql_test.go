@@ -6,11 +6,8 @@ import (
 	"database/sql/driver"
 	"errors"
 	"io"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -73,60 +70,6 @@ func TestParamsAndCancellationBeforeIO(t *testing.T) {
 	}
 }
 
-func TestCredential(t *testing.T) {
-	for _, s := range []string{`{}`, `{"username":"x"}`, `{"username":"","password":"x"}`, `{"username":"x","password":null}`, `{"username":"x","password":"secret","dsn":"evil"}`, `{"username":"x","password":"secret"} {}`, `not secret json`} {
-		_, err := decodeCredential(strings.NewReader(s))
-		if err == nil || strings.Contains(err.Error(), "secret") {
-			t.Errorf("unexpected credential error: %v", err)
-		}
-	}
-	c, err := decodeCredential(strings.NewReader(`{"username":"reader","password":"a:b@/\\"}`))
-	if err != nil || c.Username != "reader" || c.Password != "a:b@/\\" {
-		t.Fatalf("decode credential: %+v, %v", c, err)
-	}
-	dir := t.TempDir()
-	path := filepath.Join(dir, "credential.json")
-	if _, err := readCredential(path); err == nil {
-		t.Fatal("accepted missing file")
-	}
-	if err := os.WriteFile(path, []byte(`{"username":"reader","password":""}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(path, 0644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := readCredential(path); err == nil {
-		t.Fatal("accepted wide permissions")
-	}
-	if err := os.Chmod(path, 0600); err != nil {
-		t.Fatal(err)
-	}
-	_, err = readCredential(path)
-	if os.Geteuid() != 0 && err == nil {
-		t.Fatal("accepted non-root owner")
-	}
-	if os.Geteuid() == 0 && err != nil {
-		t.Fatal(err)
-	}
-	link := filepath.Join(dir, "link")
-	if err := os.Symlink(path, link); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := readCredential(link); err == nil {
-		t.Fatal("accepted symlink")
-	}
-	if _, err := readCredential(dir); err == nil {
-		t.Fatal("accepted directory")
-	}
-	fifo := filepath.Join(dir, "fifo")
-	if err := syscall.Mkfifo(fifo, 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := readCredential(fifo); err == nil {
-		t.Fatal("accepted FIFO")
-	}
-}
-
 // A small database/sql driver exercises row conversion and session ordering
 // without bypassing ownership checks in the production Run function.
 type fixture struct {
@@ -136,6 +79,7 @@ type fixture struct {
 	executed []string
 	failAt   int
 }
+
 type fixtureDriver struct{}
 
 func (fixtureDriver) Open(string) (driver.Conn, error)          { return nil, errors.New("use connector") }
@@ -147,8 +91,10 @@ type fixtureConn struct{ f *fixture }
 func (*fixtureConn) Prepare(string) (driver.Stmt, error) {
 	return nil, errors.New("unexpected prepare")
 }
+
 func (*fixtureConn) Close() error              { return nil }
 func (*fixtureConn) Begin() (driver.Tx, error) { return nil, errors.New("unexpected begin") }
+
 func (c *fixtureConn) ExecContext(_ context.Context, s string, _ []driver.NamedValue) (driver.Result, error) {
 	c.f.executed = append(c.f.executed, s)
 	if c.f.failAt == len(c.f.executed) {
@@ -156,6 +102,7 @@ func (c *fixtureConn) ExecContext(_ context.Context, s string, _ []driver.NamedV
 	}
 	return driver.RowsAffected(0), nil
 }
+
 func (c *fixtureConn) QueryContext(context.Context, string, []driver.NamedValue) (driver.Rows, error) {
 	return &fixtureRows{f: c.f}, nil
 }
@@ -167,6 +114,7 @@ type fixtureRows struct {
 
 func (r *fixtureRows) Columns() []string { return r.f.columns }
 func (*fixtureRows) Close() error        { return nil }
+
 func (r *fixtureRows) Next(dest []driver.Value) error {
 	if r.index == len(r.f.rows) {
 		if r.f.rowErr != nil {

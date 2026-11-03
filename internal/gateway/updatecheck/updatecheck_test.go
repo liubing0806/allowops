@@ -88,6 +88,7 @@ func TestFailuresKeepPreviousValueAndStoreOnlyCategories(t *testing.T) {
 		{"v prefix", 200, `{"version":"v0.6.0"}`, "invalid manifest"},
 		{"not json", 200, `<html>secret-body</html>`, "invalid manifest"},
 		{"bad published_at", 200, `{"version":"0.6.0","published_at":"yesterday"}`, "invalid manifest"},
+		{"published_at before year 1 UTC", 200, `{"version":"0.6.0","published_at":"0001-01-01T00:00:00+01:00"}`, "invalid manifest"},
 		{"too large", 200, `{"version":"0.6.0","pad":"` + strings.Repeat("x", 64<<10) + `"}`, "response too large"},
 		{"status", 503, `unavailable`, "unexpected HTTP status 503"},
 	}

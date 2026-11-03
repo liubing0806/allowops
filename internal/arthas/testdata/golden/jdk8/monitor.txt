@@ -1,0 +1,4 @@
+# monitor
+time	class	method	total	success	failed	total_ms	average_ms
+2026-10-26 04:30:27.343	demo.HotService	work	90	90	0	2.367	0.026
+2026-10-26 04:30:28.353	demo.HotService	work	96	96	0	1.867	0.019

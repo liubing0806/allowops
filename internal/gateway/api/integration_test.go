@@ -26,6 +26,7 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/audit"
 	"github.com/liubing0806/allowops/internal/gateway/authn"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
 	"github.com/liubing0806/allowops/internal/testpg"
 	"golang.org/x/oauth2"
@@ -105,6 +106,7 @@ func newFixture(t *testing.T, decorate ...func(*Service, http.Handler) http.Hand
 	}
 	return &fixture{s, db, server, audit, admin, viewer, at, vt}
 }
+
 func bearerTest(token string) connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, r connect.AnyRequest) (connect.AnyResponse, error) {
@@ -115,15 +117,19 @@ func bearerTest(token string) connect.Interceptor {
 		}
 	})
 }
+
 func (f *fixture) auth(token string) rpc.AuthServiceClient {
 	return rpc.NewAuthServiceClient(f.server.Client(), f.server.URL, connect.WithInterceptors(bearerTest(token)))
 }
+
 func (f *fixture) policy(token string) rpc.PolicyServiceClient {
 	return rpc.NewPolicyServiceClient(f.server.Client(), f.server.URL, connect.WithInterceptors(bearerTest(token)))
 }
+
 func (f *fixture) users() rpc.UserServiceClient {
 	return rpc.NewUserServiceClient(f.server.Client(), f.server.URL, connect.WithInterceptors(bearerTest(f.adminToken)))
 }
+
 func code(t *testing.T, err error, want connect.Code) {
 	t.Helper()
 	if connect.CodeOf(err) != want {
@@ -329,7 +335,7 @@ func TestSessionsOwnershipExpiryCookieAndCSRF(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
-	tctx := context.WithValue(ctx, requestKey{}, &requestState{writer: w})
+	tctx := reqctx.With(ctx, &requestState{writer: w})
 	f.service.sessionCookie(tctx, raw, web.ExpiresAt.AsTime())
 	cookie := w.Result().Cookies()[0]
 	if !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/" || cookie.Domain != "" {
@@ -466,6 +472,7 @@ type fakeOIDC struct {
 	codes      map[string]fakeCode
 	wrongNonce bool
 }
+
 type fakeCode struct{ nonce, challenge string }
 
 func newOIDC(t *testing.T) *fakeOIDC {
@@ -522,12 +529,14 @@ func newOIDC(t *testing.T) *fakeOIDC {
 	t.Cleanup(p.server.Close)
 	return p
 }
+
 func (f *fixture) addOIDC(t *testing.T, p *fakeOIDC) {
 	t.Helper()
 	if err := f.service.AddOIDC(context.Background(), "test", "test OIDC", "", authn.OIDCConfig{IssuerURL: p.server.URL, ClientID: "allowops", HTTPClient: p.server.Client()}); err != nil {
 		t.Fatal(err)
 	}
 }
+
 func (f *fixture) begin(t *testing.T, kind v1.LoginClient, pv string) (*url.URL, *http.Cookie) {
 	t.Helper()
 	req := connect.NewRequest(&v1.BeginOidcLoginRequest{ProviderId: "test", Client: kind})
@@ -558,6 +567,7 @@ func (f *fixture) begin(t *testing.T, kind v1.LoginClient, pv string) (*url.URL,
 	}
 	return dest, res.Cookies()[0]
 }
+
 func (f *fixture) complete(t *testing.T, p *fakeOIDC, dest *url.URL, cookie *http.Cookie, state string) (*connect.Response[v1.CompleteOidcLoginResponse], error) {
 	t.Helper()
 	providerCode := secret("")
@@ -571,6 +581,7 @@ func (f *fixture) complete(t *testing.T, p *fakeOIDC, dest *url.URL, cookie *htt
 	}
 	return f.auth("").CompleteOidcLogin(context.Background(), req)
 }
+
 func TestOIDCStateNonceBrowserAndPKCE(t *testing.T) {
 	f := newFixture(t)
 	p := newOIDC(t)

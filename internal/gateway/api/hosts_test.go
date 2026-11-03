@@ -18,9 +18,11 @@ import (
 func hostClient(f *fixture, token string) rpc.HostServiceClient {
 	return rpc.NewHostServiceClient(f.server.Client(), f.server.URL, connect.WithInterceptors(bearerTest(token)))
 }
+
 func joinClient(f *fixture, token string) rpc.JoinTokenServiceClient {
 	return rpc.NewJoinTokenServiceClient(f.server.Client(), f.server.URL, connect.WithInterceptors(bearerTest(token)))
 }
+
 func addHost(t *testing.T, f *fixture, name string) string {
 	t.Helper()
 	token, err := f.db.CreateJoinToken(context.Background(), 1, time.Hour)
@@ -33,9 +35,11 @@ func addHost(t *testing.T, f *fixture, name string) string {
 	}
 	return id
 }
+
 func namedTargets(names ...string) *v1.HostTargets {
 	return &v1.HostTargets{Selection: &v1.HostTargets_Hosts{Hosts: &v1.HostNames{Names: names}}}
 }
+
 func TestP4BHostsAtomicLabelsAndSelectors(t *testing.T) {
 	f := newFixture(t)
 	addHost(t, f, "a")
@@ -86,6 +90,7 @@ func TestP4BHostsAtomicLabelsAndSelectors(t *testing.T) {
 		t.Fatal("missing denial audit")
 	}
 }
+
 func TestP4BConcurrentLabels(t *testing.T) {
 	f := newFixture(t)
 	addHost(t, f, "a")
@@ -124,6 +129,7 @@ func TestP4BConcurrentLabels(t *testing.T) {
 		t.Fatalf("success=%d conflict=%d want 1 each", success, conflict)
 	}
 }
+
 func TestP4BCSVAtomicPreviewAndChangedTarget(t *testing.T) {
 	f := newFixture(t)
 	addHost(t, f, "a")
@@ -174,6 +180,7 @@ func TestP4BCSVAtomicPreviewAndChangedTarget(t *testing.T) {
 	_, err = client.ExecuteHostImport(ctx, connect.NewRequest(&v1.ExecuteHostImportRequest{PreviewId: id}))
 	code(t, err, connect.CodeFailedPrecondition)
 }
+
 func TestP4BJoinTokenLifecycle(t *testing.T) {
 	f := newFixture(t)
 	f.service.management.config.CAPin = "sha256:" + strings.Repeat("0", 64)

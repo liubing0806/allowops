@@ -1,0 +1,12 @@
+# memory
+type	name	used	total	max
+heap	heap	78735352	536870912	536870912
+heap	g1_eden_space	37748736	330301440	-1
+heap	g1_survivor_space	8388608	8388608	-1
+heap	g1_old_gen	32598008	198180864	536870912
+nonheap	nonheap	149362072	159117312	-1
+nonheap	code_cache	25554368	28573696	251658240
+nonheap	metaspace	109741760	115314688	-1
+nonheap	compressed_class_space	14075416	15228928	1073741824
+buffer_pool	direct	81923	81920	-1
+buffer_pool	mapped	0	0	-1

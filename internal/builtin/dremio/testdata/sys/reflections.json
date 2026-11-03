@@ -1,0 +1,102 @@
+{
+ "rowCount": 0,
+ "schema": [
+  {
+   "name": "reflection_id",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "reflection_name",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "type",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "status",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "dataset_id",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "dataset_name",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "dataset_type",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "sort_columns",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "partition_columns",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "distribution_columns",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "dimensions",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "measures",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "display_columns",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "external_reflection",
+   "type": {
+    "name": "VARCHAR"
+   }
+  },
+  {
+   "name": "num_failures",
+   "type": {
+    "name": "INTEGER"
+   }
+  },
+  {
+   "name": "arrow_cache",
+   "type": {
+    "name": "BOOLEAN"
+   }
+  }
+ ],
+ "rows": []
+}

@@ -1,0 +1,601 @@
+{
+  "body": {
+    "command": "dashboard -n 1",
+    "jobId": 2,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "gcInfos": [
+          {
+            "collectionCount": 7,
+            "collectionTime": 85,
+            "name": "g1_young_generation"
+          },
+          {
+            "collectionCount": 0,
+            "collectionTime": 0,
+            "name": "g1_old_generation"
+          }
+        ],
+        "jobId": 2,
+        "memoryInfo": {
+          "heap": [
+            {
+              "max": 536870912,
+              "name": "heap",
+              "total": 536870912,
+              "type": "heap",
+              "used": 65513984
+            },
+            {
+              "max": -1,
+              "name": "g1_eden_space",
+              "total": 309329920,
+              "type": "heap",
+              "used": 31457280
+            },
+            {
+              "max": 536870912,
+              "name": "g1_old_gen",
+              "total": 198180864,
+              "type": "heap",
+              "used": 5220864
+            },
+            {
+              "max": -1,
+              "name": "g1_survivor_space",
+              "total": 29360128,
+              "type": "heap",
+              "used": 28835840
+            }
+          ],
+          "nonheap": [
+            {
+              "max": -1,
+              "name": "nonheap",
+              "total": 142147584,
+              "type": "nonheap",
+              "used": 139565344
+            },
+            {
+              "max": 5836800,
+              "name": "codeheap_'non-nmethods'",
+              "total": 2555904,
+              "type": "nonheap",
+              "used": 1493504
+            },
+            {
+              "max": -1,
+              "name": "metaspace",
+              "total": 107741184,
+              "type": "nonheap",
+              "used": 107210680
+            },
+            {
+              "max": 122908672,
+              "name": "codeheap_'profiled_nmethods'",
+              "total": 12582912,
+              "type": "nonheap",
+              "used": 12560512
+            },
+            {
+              "max": 1073741824,
+              "name": "compressed_class_space",
+              "total": 13828096,
+              "type": "nonheap",
+              "used": 13564648
+            },
+            {
+              "max": 122912768,
+              "name": "codeheap_'non-profiled_nmethods'",
+              "total": 5439488,
+              "type": "nonheap",
+              "used": 4736000
+            }
+          ],
+          "buffer_pool": [
+            {
+              "max": -9223372036854775808,
+              "name": "mapped",
+              "total": 0,
+              "type": "buffer_pool",
+              "used": 0
+            },
+            {
+              "max": -9223372036854775808,
+              "name": "direct",
+              "total": 79773834,
+              "type": "buffer_pool",
+              "used": 79773837
+            },
+            {
+              "max": -9223372036854775808,
+              "name": "mapped - 'non-volatile memory'",
+              "total": 0,
+              "type": "buffer_pool",
+              "used": 0
+            }
+          ]
+        },
+        "runtimeInfo": {
+          "javaHome": "/opt/java/openjdk",
+          "javaVersion": "17.0.20.1",
+          "osName": "Linux",
+          "osVersion": "6.18.54-1-lts",
+          "processors": 4,
+          "systemLoadAverage": 5.86083984375,
+          "timestamp": 1792850071961,
+          "uptime": 823
+        },
+        "threads": [
+          {
+            "cpu": 0.0,
+            "daemon": false,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 34,
+            "interrupted": false,
+            "name": "DestroyJavaVM",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 3408
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 22,
+            "interrupted": false,
+            "name": "http-nio-8080-exec-1",
+            "priority": 5,
+            "state": "WAITING",
+            "time": 69
+          },
+          {
+            "cpu": 0.0,
+            "daemon": false,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 18,
+            "interrupted": false,
+            "name": "Catalina-utility-2",
+            "priority": 1,
+            "state": "WAITING",
+            "time": 41
+          },
+          {
+            "cpu": 0.0,
+            "daemon": false,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 17,
+            "interrupted": false,
+            "name": "Catalina-utility-1",
+            "priority": 1,
+            "state": "TIMED_WAITING",
+            "time": 40
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 23,
+            "interrupted": false,
+            "name": "http-nio-8080-exec-2",
+            "priority": 5,
+            "state": "WAITING",
+            "time": 40
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 32,
+            "interrupted": false,
+            "name": "http-nio-8080-Poller",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 39
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 24,
+            "interrupted": false,
+            "name": "http-nio-8080-exec-3",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 30
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 111,
+            "interrupted": false,
+            "name": "arthas-NettyWebsocketTtyBootstrap-3-3",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 28
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 25,
+            "interrupted": false,
+            "name": "http-nio-8080-exec-4",
+            "priority": 5,
+            "state": "WAITING",
+            "time": 27
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 30,
+            "interrupted": false,
+            "name": "http-nio-8080-exec-9",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 26
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 112,
+            "interrupted": false,
+            "name": "arthas-TermServer-1-1",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 22
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 26,
+            "interrupted": false,
+            "name": "http-nio-8080-exec-5",
+            "priority": 5,
+            "state": "WAITING",
+            "time": 21
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 27,
+            "interrupted": false,
+            "name": "http-nio-8080-exec-6",
+            "priority": 5,
+            "state": "WAITING",
+            "time": 21
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 28,
+            "interrupted": false,
+            "name": "http-nio-8080-exec-7",
+            "priority": 5,
+            "state": "WAITING",
+            "time": 21
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 29,
+            "interrupted": false,
+            "name": "http-nio-8080-exec-8",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 20
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 31,
+            "interrupted": false,
+            "name": "http-nio-8080-exec-10",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 19
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 115,
+            "interrupted": false,
+            "name": "arthas-TermServer-1-2",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 10
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 11,
+            "interrupted": false,
+            "name": "Notification Thread",
+            "priority": 9,
+            "state": "RUNNABLE",
+            "time": 9
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 33,
+            "interrupted": false,
+            "name": "http-nio-8080-Acceptor",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 6
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "InnocuousThreadGroup",
+            "id": 12,
+            "interrupted": false,
+            "name": "Common-Cleaner",
+            "priority": 8,
+            "state": "TIMED_WAITING",
+            "time": 6
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 106,
+            "interrupted": false,
+            "name": "arthas-NettyWebsocketTtyBootstrap-3-1",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 5
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 35,
+            "interrupted": false,
+            "name": "Attach Listener",
+            "priority": 9,
+            "state": "RUNNABLE",
+            "time": 3
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 114,
+            "interrupted": false,
+            "name": "arthas-NettyWebsocketTtyBootstrap-3-4",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 3
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 20,
+            "interrupted": false,
+            "name": "HikariPool-1 housekeeper",
+            "priority": 5,
+            "state": "TIMED_WAITING",
+            "time": 3
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 2,
+            "interrupted": false,
+            "name": "Reference Handler",
+            "priority": 10,
+            "state": "RUNNABLE",
+            "time": 2
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 116,
+            "interrupted": false,
+            "name": "arthas-command-execute",
+            "priority": 5,
+            "state": "TIMED_WAITING",
+            "time": 2
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 117,
+            "interrupted": false,
+            "name": "arthas-NettyWebsocketTtyBootstrap-3-5",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 2
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 119,
+            "interrupted": false,
+            "name": "Timer-for-arthas-dashboard-deb40fe3-0d4d-4fea-a3fd-73623a48ffeb",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 1
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 3,
+            "interrupted": false,
+            "name": "Finalizer",
+            "priority": 8,
+            "state": "WAITING",
+            "time": 0
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 4,
+            "interrupted": false,
+            "name": "Signal Dispatcher",
+            "priority": 9,
+            "state": "RUNNABLE",
+            "time": 0
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 101,
+            "interrupted": false,
+            "name": "arthas-timer",
+            "priority": 9,
+            "state": "WAITING",
+            "time": 0
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 107,
+            "interrupted": false,
+            "name": "arthas-NettyWebsocketTtyBootstrap-3-2",
+            "priority": 5,
+            "state": "RUNNABLE",
+            "time": 0
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 108,
+            "interrupted": false,
+            "name": "arthas-shell-server",
+            "priority": 9,
+            "state": "TIMED_WAITING",
+            "time": 0
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 109,
+            "interrupted": false,
+            "name": "arthas-session-manager",
+            "priority": 9,
+            "state": "TIMED_WAITING",
+            "time": 0
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 113,
+            "interrupted": false,
+            "name": "ResultDistributor",
+            "priority": 5,
+            "state": "TIMED_WAITING",
+            "time": 0
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "system",
+            "id": 118,
+            "interrupted": false,
+            "name": "arthas-TermServer-1-3",
+            "priority": 5,
+            "state": "TIMED_WAITING",
+            "time": 0
+          },
+          {
+            "cpu": 0.0,
+            "daemon": false,
+            "deltaTime": 0,
+            "group": "main",
+            "id": 19,
+            "interrupted": false,
+            "name": "container-0",
+            "priority": 5,
+            "state": "TIMED_WAITING",
+            "time": 0
+          },
+          {
+            "cpu": 0.0,
+            "daemon": true,
+            "deltaTime": 0,
+            "group": "InnocuousThreadGroup",
+            "id": 104,
+            "interrupted": false,
+            "name": "Keep-Alive-Timer",
+            "priority": 8,
+            "state": "TIMED_WAITING",
+            "time": 0
+          }
+        ],
+        "type": "dashboard"
+      },
+      {
+        "jobId": 2,
+        "message": "Process ends after 1 time(s).",
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "deb40fe3-0d4d-4fea-a3fd-73623a48ffeb",
+  "state": "SUCCEEDED"
+}

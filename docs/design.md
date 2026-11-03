@@ -29,10 +29,11 @@ allowops 是给 AI agent 使用的运维网关：agent 通过 MCP 调用运维�
                     allowops-exec（root）：验签 → 校验 → 脱敏 → 切换用户执行
 ```
 
-- 网关不主动连接任何主机。主机离线时任务标记 `offline`，不排队。
+- 网关不主动连接被管主机。主机离线时任务标记 `offline`，不排队。网关插件只能访问其配置中声明的外部地址（决定记录第 22 节 PL4）。
 - 网关对外只开 443 端口，按 TLS ALPN 区分主机连接、MCP、控制台 API。负载均衡必须为 L4 TCP 透传。
 - 网关除主机长连接外无实例级状态，可水平扩容。主机连接所在实例记录在 PostgreSQL，用 LISTEN/NOTIFY 通知该实例下发任务。
 - MVP 不做区域中继；主机端配置项为“上游地址”，为以后增加中继保留。
+- 网关端插件：服务拓扑、变更记录、排查知识和触发源通过编译期注册的插件接入，网关按扩展点提供固定 MCP 工具。设计见 [plugin-architecture.md](plugin-architecture.md)，决定见决定记录第 22 节。
 
 ### 组件
 
@@ -93,6 +94,7 @@ timeout: 10s
 max_output: 64KB
 batch_size: 20                         # 可选，MCP 调用只能更严格
 max_failures: 5                        # 可选
+max_targets: 1                         # 可选，目标主机数超过该值时网关拒绝整个 job；省略表示不限制
 redact:                                # 可选，覆盖全局脱敏规则
   builtin: [secrets]
 ```
@@ -121,6 +123,8 @@ redact:                                # 可选，覆盖全局脱敏规则
 8. exec[0] 必须是绝对路径；exec 中不允许出现 `sudo`，提权只能用 `run_as`。
 9. 主机上不存在 exec[0]、exec[0] 是 `#!` 脚本且未声明 `allow_interpreter`、或用到主机端不支持的功能时，该 action 在该主机标记 `unsupported`。
 10. 执行方式四选一：`exec`、`steps`、`script`、`builtin`（见下文“扩展执行能力”）。
+11. `max_targets`：可选，1 到 2147483647 的整数，省略表示不限制。`catalog validate` 拒绝 0、负数、非整数、非数字和超出范围的值，也拒绝空值。该字段计入 action 摘要，受签名保护。限制由网关执行，MCP 和 CLI 调用不能放宽或收紧；主机端不使用该值。
+12. 兼容性：主机端用严格 JSON 解析目录包。不认识 `max_targets` 的旧版主机端拒绝整个目录包（`CATALOG_REJECTED`）：该目录版本的全部 action 在该主机上返回 `unsupported`（`CATALOG_UNAVAILABLE`），主机进程、连接和已加载的旧版本不受影响，之后不含该字段的版本可以正常加载。支持该字段的主机端在 hello 的 `features` 中报告 `max_targets`。发布使用 `max_targets` 的目录前，先升级主机端，并确认目标主机的 `features` 含 `max_targets`。网关目前不根据 `features` 阻止发布。
 
 ### 扩展执行能力
 
@@ -133,11 +137,21 @@ redact:                                # 可选，覆盖全局脱敏规则
 | 候选路径 | `exec_fallbacks: [...]` | exec[0] 不存在时依次尝试，均须为绝对路径 |
 | 签名脚本 | `script: {file, interpreter}`、`args` | 脚本随目录签名，摘要计入 action 摘要；写入私有临时目录执行后删除；Python 加 `-I`；只在主机上执行 |
 | 日志检索 | `builtin: log_search` | Go 实现，支持 `.gz`、路径通配（限 allowed_roots）、固定串或正则、排除、上下文、最大匹配数 |
+| 日志源检索 | `builtin: log_query` | Go 实现，按 catalog 声明的日志源和时间范围检索，多行记录、分页 JSON 与游标、固定错误代码；设计见 `log-search-design.md` |
 | MySQL 只读查询 | `builtin: mysql_query` | 凭据在主机 `/etc/allowops/credentials/`（root，0600）；只允许单条 SELECT/SHOW/DESC/EXPLAIN；只读事务；行数和超时限制 |
 | Redis 只读命令 | `builtin: redis_command` | 只允许 GET、MGET、HGET、HLEN、TTL、TYPE、EXISTS、STRLEN、LLEN、SCARD、ZCARD、SCAN、INFO |
 | HTTP 探测 | `builtin: http_get`，参数类型 `url`（`allowed_prefixes` 必填） | 只发 GET，不跟随跳转，响应大小上限 |
+| Prometheus 只读查询 | `builtin: prometheus_query`，`builtin_config.api` 固定 query、query_range、series、labels、label_values、alerts、rules、targets 之一 | 只发 GET，不跟随跳转；可选凭据（bearer_token，或 username 与 password）在主机 `/etc/allowops/credentials/`（root，0600），配置凭据的 action 须声明 `run_as: root`；时间范围、步长、点数、序列数和响应大小受限；输出 TSV |
+| Alertmanager 只读查询 | `builtin: alertmanager_alerts` | 只发 `GET /api/v2/alerts`，不跟随跳转；可选凭据在主机 `/etc/allowops/credentials/`（root，0600），配置凭据的 action 须声明 `run_as: root`；告警数和响应大小限制；输出 TSV |
+| StarRocks 只读查询 | `builtin: starrocks_query` | 通过 MySQL 协议连接 FE（`address: tcp://host:port`）；凭据在主机 `/etc/allowops/credentials/`（root，0600）；调用方提供一条 SELECT、SHOW、DESC 或 EXPLAIN；始终需要 allowops-exec（`RequiresExec`）。只读边界由三层组成：只授予 SELECT 的数据库账号、sqlguard 词法校验、会话 `query_timeout` 与行数、字节上限（不使用只读事务，StarRocks 3.3 不支持）；可读库表只由账号授权决定 |
+| StarRocks 固定诊断 | `builtin: starrocks_diag` | 连接方式、凭据和 TSV 输出同 `starrocks_query`；调用方选择 `op`：集群状态、运行中查询、审计表慢查询、profile 列表、`ANALYZE PROFILE`、profile 摘要（含 SR-* 规则命中）；语句全部由处理器生成，账号需要 SYSTEM 级 OPERATE，与 query 账号分开；始终需要 allowops-exec。可选 `profile_run` 执行调用方的 SELECT 并返回摘要，默认关闭，先经 sqlguard |
+| Dremio 只读查询 | `builtin: dremio_query` | 通过 REST API v3 连接（`url: http(s)://host:port`），每次调用登录、提交作业、读取第一页结果（最多 500 行）、取消并注销；凭据在主机 `/etc/allowops/credentials/`（root，0600）；调用方提供一条 SELECT、SHOW、DESCRIBE 或 EXPLAIN PLAN FOR；始终需要 allowops-exec。Dremio 24.1 社区版没有权限边界（所有账号都是管理员），sqlguard 词法校验是 Dremio 一侧唯一的写入限制（决定 D6）；数据源一侧由数据源账号的只读权限限制；另有 `max_rows`、`max_bytes`、`timeout` 上限 |
+| Dremio 固定诊断 | `builtin: dremio_diag` | 连接方式和凭据同 `dremio_query`；调用方选择 `op`：节点与内存、作业列表、单个作业、作业 profile 摘要（含 DR-* 规则命中）、反射；请求由处理器生成，不接受 SQL、不经过 sqlguard，调用方的值只在通过固定格式或范围校验后进入请求；`builtin_config.ops` 可固定 op；始终需要 allowops-exec。同样没有权限边界，该处理器的写入限制是请求固定 |
+| JVM 运行数据（只读） | `builtin: jvm_perfdata` | 读取 systemd 单元或 Docker 容器内 JVM 的 hsperfdata（堆、GC、类、线程）；不 attach，不发信号，不写目标；目标由签名配置中的单元名，或容器名加主类确定，调用方只选目标名；始终需要 allowops-exec |
+| Arthas JVM 诊断 | `builtin: jvm_arthas` | 每个 action 一条固定的 Arthas 命令：L1 读取 JVM 状态，不增强类；L2 对一个类的一个方法最多增强 30 秒，或反编译一个类。每次调用 attach、执行、停止 Arthas；`risk: write`、`run_as: root`、`max_targets: 1`；Arthas 文件在目标挂载命名空间内按签名配置中的 SHA-256 校验；只有安装了 `allowops-arthas` 软件包的主机支持。计划见 `java-diagnostics-arthas-plan.md`，威胁分析见 `SECURITY.md` |
 
 - 内置处理器的参数 schema 由 allowops 定义，目录只能通过 `builtin_config` 收紧。需要读取主机凭据或声明 `run_as` 的内置处理器在 allowops-exec 中执行。
+- `mysql_query`、`redis_command`、`starrocks_query`、`starrocks_diag`、`dremio_query`、`dremio_diag` 必须读取 root 凭据，`RequiresExec` 为真，未声明 `run_as` 时也经 allowops-exec 以 root 执行。`jvm_perfdata` 读取其他用户的进程和容器根文件系统，`jvm_arthas` 以 root attach 并进入目标的命名空间，二者同样经 allowops-exec 以 root 执行。`starrocks_*` 和 `dremio_*` 的 SQL 校验是词法级白名单（`internal/builtin/sqlguard`，规则见 `builtin-sqlguard.md`），不单独保证只读；各处理器的字段、默认值和上限见 `builtin-starrocks.md`、`builtin-dremio.md`、`builtin-config.md`。
 
 ## 5. 主机端
 
@@ -184,8 +198,8 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 - 主机端在输出离开主机前脱敏，规则来自签名目录（全局 + action 覆盖）。不保留原始输出。
 - 内置规则：
   - `secrets`（默认开启）：PEM 私钥、阿里云 AccessKey、AWS Access Key、JWT、`Authorization: Bearer`、URL 中的用户名密码、`password=`/`secret=`/`token=` 等键值对、mysql 命令行 `-p<密码>`、`MYSQL_PWD=`、`REDISCLI_AUTH=`。
-  - `pii`（默认关闭）：手机号、18 位身份证号（校验码）、银行卡号（Luhn）。
-- 自定义规则：`redact.custom: [{name, regex}]`，Go RE2。替换为 `[REDACTED:类型]`。
+  - `pii`（默认关闭）：手机号、18 位身份证号（校验码）、银行卡号（Luhn）。身份证号和银行卡号只匹配独立数字串：紧邻字母、下划线或属于小数的数字不脱敏。
+- 自定义规则：`redact.custom: [{name, regex}]`，Go RE2。替换为 `[REDACTED:类型]`。可选字段 `before_builtin`（bool，默认 false）：为 true 时该规则在内置规则之前运行（多个此类规则保持配置顺序），其余自定义规则仍在内置规则之后；用于整体替换引号字符串的规则。
 - 文档写明局限：可能误伤；不能识别所有敏感内容。
 
 ### 主机身份与标签
@@ -204,7 +218,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 |---|---|
 | 主体 | 服务账号、控制台用户（角色、团队、负责人） |
 | 资源 | 主机（授权标签）、action（risk、名称） |
-| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和标签、创建 join token、管理用户角色、发布目录、查看 job、查看输出、查看审计 |
+| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和标签、创建 join token、管理用户角色、发布目录、查看资源清单（`view_inventory`）、查看 job、查看输出、查看审计 |
 | 环境 | 请求时间、来源 IP |
 
 - 判定结果 `allow`、`deny`；deny 优先；未匹配任何规则时 deny。MVP 不做审批。
@@ -228,13 +242,16 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 | 工具 | 作用 |
 |---|---|
 | `hosts_search` | 按标签选择器或主机名查询主机：主机、标签、在线状态、总数、标签分布 |
+| `entities_search` | 存在可用 Inventory 实例时列出；按类型、名称和来源查询实体，需 `view_inventory` 权限 |
 | `<action>` | 每个 action 一个工具，只列出该身份可能被允许的 action |
 | `jobs_get` | job 汇总；传 `host` 时分页返回该主机完整输出；支持 `wait_seconds` |
 | `jobs_list` | 当前服务账号最近的 job |
 | `jobs_cancel` | 取消 job |
 
+- `entities_search` 先按主机可见性过滤，再按 `limit`（默认 20，范围 1~100）和完整结果的 32KB 上限截断。返回内容标记为不可信数据。返回的 selector 作为 action 目标时仍逐台检查权限。
 - action 工具公共参数：`targets`（`hosts` 或 `selector`）、`expected_count`、`reason`、`wait_seconds`、`batch_size`、`max_failures`、`response_format`。
 - 用 `selector` 时必须带 `expected_count`，与实际数量不符时拒绝并返回实际数量。
+- action 设置了 `max_targets` 时，目标数（`selector` 为解析后的主机数）超过该值则拒绝整个 job：返回 `isError: true`、原因 `MAX_TARGETS_EXCEEDED`、实际数量和上限；不创建 job，不下发 task。工具描述和 `targets` 的 schema 写明上限。
 - 任一主机被 deny 时整个 job 拒绝，返回被拒主机和规则。
 - 工具注解：read → `readOnlyHint: true`；write → `destructiveHint: false`；dangerous → `destructiveHint: true`。
 - 参数错误返回 `isError: true` 并给出合法值。
@@ -244,7 +261,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 ### 执行流程和状态
 
 ```
-参数校验 → 解析 targets、核对 expected_count → 逐台 ABAC 判定（任一 deny 则拒绝）
+参数校验 → 解析 targets、核对 expected_count 和 max_targets → 逐台 ABAC 判定（任一 deny 则拒绝）
 → 分批下发；失败数超过 max_failures 时停止，剩余主机 skipped
 → wait_seconds 内完成返回汇总，否则返回 job_id 和进度
 ```
@@ -414,7 +431,7 @@ test/{attack,e2e,scale,vm}/
 - 单机模式（本地 YAML、stdio MCP）。
 - 区域中继和区域自治。
 - MCP OAuth 授权（以工程师身份调用，替代长期 token）。
-- CMDB 同步标签。
+- CMDB 同步标签。服务拓扑改由 Inventory 插件读取，不自建 CMDB（决定记录第 22 节 PL7）。
 - 审计导出到 syslog、webhook、Kafka。
 - agent 评估。
 - 在容器或 Pod 内执行签名脚本；按容器名自动解析数据库地址。

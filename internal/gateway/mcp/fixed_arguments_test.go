@@ -11,6 +11,7 @@ func TestFixedToolOmittedArgumentsUseEmptyObject(t *testing.T) {
 		t.Fatalf("omitted arguments=%v error=%v", args, err)
 	}
 }
+
 func TestFixedToolEmptyStringsRespectSchema(t *testing.T) {
 	for _, field := range []string{"hostname", "selector", "host", "next_cursor"} {
 		data, _ := json.Marshal(map[string]any{field: ""})

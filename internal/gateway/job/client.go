@@ -6,8 +6,8 @@ import (
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 )
 
-// Client is the in-process P6M boundary. The context must come from the shared
-// api.Service authentication middleware. Each operation performs authorization
+// Client is the in-process boundary used by the MCP service (design P6M). The context must come from the shared
+// Access.Middleware authentication. Each operation performs authorization
 // and audit itself, including when called without a Connect transport.
 // Callers must not retry RunJob automatically after an indeterminate result.
 type Client interface {

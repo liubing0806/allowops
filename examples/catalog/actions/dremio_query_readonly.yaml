@@ -1,0 +1,24 @@
+name: dremio_query_readonly
+description: Run one bounded read-only Dremio statement (SELECT, SHOW, DESCRIBE or EXPLAIN); name objects by their complete path. Dremio itself has no permission boundary, so the data sources behind it must use read-only accounts.
+risk: read
+run_as: root
+params:
+  sql:
+    type: string
+    description: Single read-only Dremio statement with complete object paths such as "source".schema.table; no line breaks or multiple statements.
+    regex: ^[^\r\n]+$
+    max_len: 4000
+timeout: 15s
+builtin: dremio_query
+builtin_config:
+  credential: /etc/allowops/credentials/dremio.json
+  url: http://127.0.0.1:9047
+  max_rows: 500
+  max_bytes: 1MB
+  timeout: 10s
+  statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

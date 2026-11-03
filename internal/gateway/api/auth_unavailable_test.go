@@ -9,6 +9,7 @@ import (
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	rpc "github.com/liubing0806/allowops/gen/allowops/v1/allowopsv1connect"
 	"github.com/liubing0806/allowops/internal/gateway/authn"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
 func TestCheckRequestKeepsUnavailableAuthenticationError(t *testing.T) {
@@ -20,7 +21,7 @@ func TestCheckRequestKeepsUnavailableAuthenticationError(t *testing.T) {
 		{failure(connect.CodeUnavailable, "identity database unavailable"), connect.CodeUnavailable},
 		{authn.ErrInvalidCredentials, connect.CodeUnauthenticated},
 	} {
-		ctx := context.WithValue(context.Background(), requestKey{}, &requestState{tls: true, err: tc.err})
+		ctx := reqctx.With(context.Background(), &requestState{tls: true, err: tc.err})
 		code(t, s.CheckRequest(ctx, false), tc.want)
 	}
 }

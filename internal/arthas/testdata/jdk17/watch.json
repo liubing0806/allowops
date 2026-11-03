@@ -1,0 +1,53 @@
+{
+  "body": {
+    "jobId": 3,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "command": "watch demo.HotService work {params,returnObj} -n 2 -x 2 -m 1 --timeout 5",
+        "jobId": 3,
+        "state": "SCHEDULED",
+        "type": "command"
+      },
+      {
+        "effect": {
+          "classCount": 1,
+          "cost": 81,
+          "listenerId": 1,
+          "methodCount": 1
+        },
+        "jobId": 3,
+        "success": true,
+        "type": "enhancer"
+      },
+      {
+        "accessPoint": "AtExit",
+        "className": "demo.HotService",
+        "cost": 0.542435,
+        "jobId": 3,
+        "methodName": "work",
+        "ts": "2026-10-26 04:30:58.382259989",
+        "type": "watch",
+        "value": "@ArrayList[\n    @Object[][\n        @Integer[0],\n    ],\n    @Long[4728970651561984952],\n]"
+      },
+      {
+        "accessPoint": "AtExit",
+        "className": "demo.HotService",
+        "cost": 0.484911,
+        "jobId": 3,
+        "methodName": "work",
+        "ts": "2026-10-26 04:30:58.382259990",
+        "type": "watch",
+        "value": "@ArrayList[\n    @Object[][\n        @Integer[0],\n    ],\n    @Long[4728970651561984952],\n]"
+      },
+      {
+        "jobId": 3,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "db514780-edea-4443-88fd-6fc601bfdd58",
+  "state": "SUCCEEDED"
+}

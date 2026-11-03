@@ -1,0 +1,19 @@
+name: docker_inspect_config
+description: Read image, creation time, restart count, network mode, mounts, extra hosts and environment variable names of one container.
+risk: read
+run_as: root
+params:
+  container:
+    type: string
+    description: Docker container name without option prefixes.
+    regex: ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$
+    max_len: 64
+exec: [/usr/bin/docker, inspect, --type, container, --format,
+  'Image: {{.Config.Image}} {{.Image}}{{"\n"}}Created: {{.Created}}{{"\n"}}RestartCount: {{.RestartCount}}{{"\n"}}NetworkMode: {{.HostConfig.NetworkMode}}{{"\n"}}Mounts: {{json .Mounts}}{{"\n"}}ExtraHosts: {{json .HostConfig.ExtraHosts}}{{"\n"}}EnvNames:{{range .Config.Env}} {{index (split . "=") 0}}{{end}}',
+  '{container}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

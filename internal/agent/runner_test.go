@@ -62,3 +62,20 @@ func TestHelperCallbackFailure(t *testing.T) {
 		t.Fatalf("callback error=%v", err)
 	}
 }
+
+// A builtin failure reaches the agent as reason EXECUTION_FAILED plus the
+// redacted error text in stderr; the agent must keep both.
+func TestHelperFailureKeepsStderr(t *testing.T) {
+	started := execd.Event{Type: "started"}
+	completed := execd.Event{Type: "completed", Response: &execd.Response{Result: executor.Result{ExitCode: 1, Stderr: "sqlguard: statement not allowed\n"}, Reason: "EXECUTION_FAILED"}}
+	var data strings.Builder
+	for _, event := range []execd.Event{started, completed} {
+		if err := json.NewEncoder(&data).Encode(event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	response, err := readHelperEvents(strings.NewReader(data.String()), catalog.Action{}, executor.Callbacks{})
+	if err != nil || response.Reason != "EXECUTION_FAILED" || response.Result.Stderr != "sqlguard: statement not allowed\n" || response.Result.ExitCode != 1 {
+		t.Fatalf("response=%+v err=%v", response, err)
+	}
+}

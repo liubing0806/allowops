@@ -1,0 +1,99 @@
+{
+  "body": {
+    "command": "memory",
+    "jobId": 11,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "jobId": 11,
+        "memoryInfo": {
+          "heap": [
+            {
+              "max": 536870912,
+              "name": "heap",
+              "total": 536870912,
+              "type": "heap",
+              "used": 78735352
+            },
+            {
+              "max": -1,
+              "name": "g1_eden_space",
+              "total": 330301440,
+              "type": "heap",
+              "used": 37748736
+            },
+            {
+              "max": -1,
+              "name": "g1_survivor_space",
+              "total": 8388608,
+              "type": "heap",
+              "used": 8388608
+            },
+            {
+              "max": 536870912,
+              "name": "g1_old_gen",
+              "total": 198180864,
+              "type": "heap",
+              "used": 32598008
+            }
+          ],
+          "nonheap": [
+            {
+              "max": -1,
+              "name": "nonheap",
+              "total": 159117312,
+              "type": "nonheap",
+              "used": 149362072
+            },
+            {
+              "max": 251658240,
+              "name": "code_cache",
+              "total": 28573696,
+              "type": "nonheap",
+              "used": 25554368
+            },
+            {
+              "max": -1,
+              "name": "metaspace",
+              "total": 115314688,
+              "type": "nonheap",
+              "used": 109741760
+            },
+            {
+              "max": 1073741824,
+              "name": "compressed_class_space",
+              "total": 15228928,
+              "type": "nonheap",
+              "used": 14075416
+            }
+          ],
+          "buffer_pool": [
+            {
+              "max": -9223372036854775808,
+              "name": "direct",
+              "total": 81920,
+              "type": "buffer_pool",
+              "used": 81923
+            },
+            {
+              "max": -9223372036854775808,
+              "name": "mapped",
+              "total": 0,
+              "type": "buffer_pool",
+              "used": 0
+            }
+          ]
+        },
+        "type": "memory"
+      },
+      {
+        "jobId": 11,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "01bce553-e289-4d1e-842a-62b724e54896",
+  "state": "SUCCEEDED"
+}

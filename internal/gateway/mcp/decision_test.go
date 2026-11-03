@@ -16,6 +16,7 @@ func TestA27EmptyHostSearchAllowed(t *testing.T) {
 		t.Fatalf("A27 empty search rejected: %v", err)
 	}
 }
+
 func TestG54DenialDetailsKeepPrefixAndTotalWithinBudget(t *testing.T) {
 	denied := make([]*v1.HostDenial, 500)
 	for i := range denied {

@@ -45,6 +45,19 @@ notifies hosts, which pull and verify the signed bytes before reporting a load.
 After publishing, inspect catalog distribution and unsupported actions in the
 console. A publish response alone is not evidence that every host loaded it.
 
+## Fields that hosts must understand
+
+An agent parses a catalog package strictly. If any action contains a field that
+the agent does not know, the agent rejects the whole package (`CATALOG_REJECTED`)
+and keeps its previously loaded version. Every action of the new version then
+returns `unsupported` on that host until the agent is upgraded; the host stays
+connected and later versions that it understands load normally.
+
+An agent reports the optional action fields it understands in `features` when
+it connects. `max_targets` is one of them. Before publishing a catalog that uses
+a new field, upgrade the agents and confirm that `features` of the target hosts
+contains it. The gateway does not check this when it accepts a publication.
+
 ## CI boundary
 
 Use the [pipeline examples](https://github.com/liubing0806/allowops/tree/main/examples/pipelines)

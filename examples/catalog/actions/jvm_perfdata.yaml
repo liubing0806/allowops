@@ -1,0 +1,22 @@
+# Usage: target=<name of an entry in builtin_config.targets>.
+# Reads /tmp/hsperfdata_<user>/<pid> only. It does not attach to the JVM, signal it or write to its files.
+# The output has no JVM arguments, command line or system properties.
+name: jvm_perfdata
+description: Read heap, GC, class and thread figures of an allowlisted JVM from its hsperfdata, without attaching to it.
+risk: read
+run_as: root
+params: {}
+builtin: jvm_perfdata
+builtin_config:
+  timeout: 5s
+  targets:
+    api:
+      systemd_unit: api.service
+    shop-web:
+      container: shop-web
+      main_class: com.example.shop.Main
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+redact:
+  builtin: [secrets]
