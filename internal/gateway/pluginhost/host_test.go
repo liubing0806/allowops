@@ -1,6 +1,7 @@
 package pluginhost
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/liubing0806/allowops/plugin"
 	"github.com/liubing0806/allowops/plugin/inventory"
+	_ "github.com/liubing0806/allowops/plugins/inventory/hostlabels"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,7 +30,7 @@ func (m *testInventory) Provision(ctx context.Context, h plugin.Host) error {
 		return errors.New("missing host capabilities")
 	}
 	if m.Mode == "provision" {
-		return errors.New("private provision error")
+		return errors.New("private provision error password=hunter2")
 	}
 	return nil
 }
@@ -42,9 +44,12 @@ func (m *testInventory) Resolve(ctx context.Context, q inventory.Query) ([]inven
 		<-releaseTimeout
 		return []inventory.Entity{sharedEntity}, nil
 	case "failed":
-		return nil, errors.New("private source error")
+		return nil, errors.New("private source error password=hunter2")
 	case "panic":
-		panic("private panic")
+		panic("private panic password=hunter2")
+	case "secret":
+		return []inventory.Entity{{Kind: "service", Name: "password=hunter2", Selector: "service=https://u:hunter2@x.example",
+			Attrs: map[string]string{jwtKey: "v", "team": "ops"}, Hosts: []string{"host"}}}, nil
 	case "invalid":
 		return []inventory.Entity{
 			{Kind: "bad-kind", Name: "a"}, {Kind: "service", Name: ""}, {Kind: "service", Name: strings.Repeat("x", 129)},
@@ -58,6 +63,8 @@ func (m *testInventory) Resolve(ctx context.Context, q inventory.Query) ([]inven
 }
 
 var releaseTimeout chan struct{}
+
+const jwtKey = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl"
 
 type wrongModule struct{}
 
@@ -206,5 +213,45 @@ func TestConcurrentSearchOwnsResults(t *testing.T) {
 	wg.Wait()
 	if sharedEntity.Attrs["password"] != "x" || sharedEntity.Attrs["team"] != "ops" || sharedEntity.Hosts[0] != "host" || sharedEntity.DependsOn[0] != "database/db" {
 		t.Fatal(sharedEntity)
+	}
+}
+
+func TestSecretsDoNotLeak(t *testing.T) {
+	var logs bytes.Buffer
+	deps := Deps{Logger: slog.New(slog.NewTextHandler(&logs, nil)), Hosts: func(context.Context) ([]plugin.HostInfo, error) {
+		return []plugin.HostInfo{{Hostname: "h1", Labels: map[string]string{"service": "https://u:hunter2@x.example"}}}, nil
+	}}
+	var configs []Config
+	for _, mode := range []string{"secret", "failed", "panic", "provision"} {
+		configs = append(configs, config(t, "id: "+mode+"\nmodule: inventory.host_test\nconfig: {mode: "+mode+"}"))
+	}
+	configs = append(configs, config(t, "id: labels\nmodule: inventory.host_labels\nconfig: {label: service}"))
+	h, err := New(context.Background(), configs, deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, errs := h.SearchInventory(context.Background(), inventory.Query{}, nil)
+	if len(results) != 2 || len(errs) != 2 {
+		t.Fatalf("results=%+v errors=%+v", results, errs)
+	}
+	for _, e := range results {
+		if e.Selector != "" || len(e.Hosts) != 1 || strings.Contains(e.Name, "hunter2") {
+			t.Errorf("redaction changed selector or kept secret: %+v", e)
+		}
+		if e.Source == "secret" && (len(e.Attrs) != 1 || e.Attrs["team"] != "ops") {
+			t.Errorf("secret attribute key kept: %+v", e.Attrs)
+		}
+	}
+	for _, probe := range []string{"password=h", "password=hunter2", "u:h"} {
+		if results, _ := h.SearchInventory(context.Background(), inventory.Query{Name: probe}, []string{"secret", "labels"}); len(results) != 0 {
+			t.Errorf("name probe %q matched %+v", probe, results)
+		}
+	}
+	configs[3].Required = true
+	if _, err := New(context.Background(), configs[3:4], deps); err == nil || strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("required provision error: %v", err)
+	}
+	if strings.Contains(logs.String(), "hunter2") {
+		t.Errorf("logs contain secret: %s", logs.String())
 	}
 }

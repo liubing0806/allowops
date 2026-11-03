@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/liubing0806/allowops/plugin/inventory"
 )
@@ -46,7 +48,6 @@ func TestRejectFiles(t *testing.T) {
 	for name, data := range map[string]string{
 		"unknown":   "entities: [{kind: service, name: a, other: x}]",
 		"duplicate": "entities: [{kind: service, name: a}, {kind: service, name: a}]",
-		"size":      strings.Repeat(" ", (4<<20)+1),
 		"kind":      "entities: [{kind: bad-kind, name: a}]",
 		"name":      "entities: [{kind: service, name: ''}]",
 		"long name": "entities: [{kind: service, name: '" + strings.Repeat("n", 129) + "'}]",
@@ -66,5 +67,54 @@ func TestRejectFiles(t *testing.T) {
 	}
 	if err := (&Module{File: t.TempDir()}).Provision(context.Background(), nil); err == nil {
 		t.Fatal("directory accepted")
+	}
+}
+
+func writeFile(t *testing.T, data string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "inventory.yaml")
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+func TestSizeLimit(t *testing.T) {
+	head := "entities: [{kind: service, name: a}]\n#"
+	exact := head + strings.Repeat("x", (4<<20)-len(head))
+	if err := (&Module{File: writeFile(t, exact)}).Provision(context.Background(), nil); err != nil {
+		t.Fatalf("file at the limit rejected: %v", err)
+	}
+	if err := (&Module{File: writeFile(t, exact+"x")}).Provision(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "4MB") {
+		t.Fatalf("file over the limit: %v", err)
+	}
+}
+func TestFIFODoesNotBlock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fifo")
+	if err := syscall.Mkfifo(path, 0600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- (&Module{File: path}).Provision(context.Background(), nil) }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("FIFO accepted")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Provision blocked on a FIFO")
+	}
+}
+func TestErrorsOmitEntityContent(t *testing.T) {
+	for name, data := range map[string]string{
+		"duplicate": "entities: [{kind: service, name: password=hunter2}, {kind: service, name: password=hunter2}]",
+		"invalid":   "entities: [{kind: service, name: password=hunter2, selector: '" + strings.Repeat("n", 513) + "'}]",
+		"attr":      "entities: [{kind: service, name: a, attrs: {'hunter2 key': x}}]",
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := (&Module{File: writeFile(t, data)}).Provision(context.Background(), nil)
+			if err == nil || strings.Contains(err.Error(), "hunter2") || !strings.Contains(err.Error(), "inventory entity #") {
+				t.Fatalf("error: %v", err)
+			}
+		})
 	}
 }
