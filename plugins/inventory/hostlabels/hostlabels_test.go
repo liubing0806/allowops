@@ -43,10 +43,6 @@ func TestLabelSourcesAndGrouping(t *testing.T) {
 			if len(got) != 0 {
 				t.Fatal(got)
 			}
-			got, _ = m.Resolve(context.Background(), inventory.Query{Name: "absent"})
-			if len(got) != 0 {
-				t.Fatal(got)
-			}
 		})
 	}
 }

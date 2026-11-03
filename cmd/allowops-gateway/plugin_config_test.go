@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
-	"github.com/liubing0806/allowops/plugin/inventory"
 )
 
 func TestInventoryPluginConfiguration(t *testing.T) {
@@ -38,7 +37,7 @@ func TestInventoryPluginConfiguration(t *testing.T) {
 	if len(sources) != 1 || sources[0] != "static" {
 		t.Fatal(sources)
 	}
-	results, errors := h.SearchInventory(context.Background(), inventory.Query{Kind: "service"}, nil)
+	results, errors := h.SearchInventory(context.Background(), pluginhost.Query{Kind: "service"}, nil)
 	if len(errors) != 0 || len(results) != 1 || results[0].Name != "order-api" {
 		t.Fatalf("%v %v", results, errors)
 	}

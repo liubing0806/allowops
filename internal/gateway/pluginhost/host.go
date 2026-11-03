@@ -42,6 +42,12 @@ func (h instanceHost) InstanceID() string                                   { re
 func (h instanceHost) Logger() *slog.Logger                                 { return h.deps.Logger }
 func (h instanceHost) Hosts(ctx context.Context) ([]plugin.HostInfo, error) { return h.deps.Hosts(ctx) }
 
+// Query is the caller's search. Name is a case-insensitive substring matched
+// against the redacted entity name.
+type Query struct {
+	Kind, Name string
+}
+
 type Result struct {
 	inventory.Entity
 	Source string
@@ -107,10 +113,10 @@ func New(ctx context.Context, configs []Config, deps Deps) (*Host, error) {
 			cancel()
 			if err != nil {
 				if c.Required {
-					return nil, fmt.Errorf("plugin %s: provision: %w", c.ID, err)
+					return nil, fmt.Errorf("plugin %s: provision: %s", c.ID, h.safe(err))
 				}
 				inst.ok = false
-				logger.Error("provision failed", "error", err)
+				logger.Error("provision failed", "error", h.safe(err))
 			}
 		}
 		h.instances = append(h.instances, inst)
@@ -141,7 +147,12 @@ type resolved struct {
 	reason   string
 }
 
-func resolve(ctx context.Context, inst instance, q inventory.Query) resolved {
+// safe returns v as one redacted line for logs and startup errors.
+func (h *Host) safe(v any) string {
+	return h.redactor.Line(strings.NewReplacer("\r", " ", "\n", " ").Replace(fmt.Sprint(v)))
+}
+
+func (h *Host) resolve(ctx context.Context, inst instance, q inventory.Query) resolved {
 	ctx, cancel := context.WithTimeout(ctx, inst.timeout)
 	defer cancel()
 	done := make(chan resolved, 1)
@@ -149,14 +160,14 @@ func resolve(ctx context.Context, inst instance, q inventory.Query) resolved {
 		result := resolved{}
 		defer func() {
 			if value := recover(); value != nil {
-				inst.logger.Error("resolve panic", "panic", value)
+				inst.logger.Error("resolve panic", "panic", h.safe(value))
 				result = resolved{reason: "panic"}
 			}
 			done <- result
 		}()
 		entities, err := inst.resolver.Resolve(ctx, q)
 		if err != nil {
-			inst.logger.Error("resolve failed", "error", err)
+			inst.logger.Error("resolve failed", "error", h.safe(err))
 			result.reason = "failed"
 			return
 		}
@@ -180,7 +191,7 @@ func resolve(ctx context.Context, inst instance, q inventory.Query) resolved {
 	}
 }
 
-func (h *Host) SearchInventory(ctx context.Context, q inventory.Query, sources []string) ([]Result, []SourceError) {
+func (h *Host) SearchInventory(ctx context.Context, q Query, sources []string) ([]Result, []SourceError) {
 	type pending struct {
 		inst instance
 		done chan resolved
@@ -192,7 +203,7 @@ func (h *Host) SearchInventory(ctx context.Context, q inventory.Query, sources [
 		}
 		done := make(chan resolved, 1)
 		calls = append(calls, pending{inst, done})
-		go func() { done <- resolve(ctx, inst, q) }()
+		go func() { done <- h.resolve(ctx, inst, inventory.Query{Kind: q.Kind}) }()
 	}
 	results := []Result{}
 	errors := []SourceError{}
@@ -208,10 +219,20 @@ func (h *Host) SearchInventory(ctx context.Context, q inventory.Query, sources [
 				discarded++
 				continue
 			}
-			if q.Kind != "" && e.Kind != q.Kind || !strings.Contains(strings.ToLower(e.Name), strings.ToLower(q.Name)) {
+			if q.Kind != "" && e.Kind != q.Kind {
+				continue
+			}
+			// Filter on the redacted name, so a name filter cannot probe a
+			// redacted secret one character at a time.
+			e.Name = h.redactor.Line(e.Name)
+			if !strings.Contains(strings.ToLower(e.Name), strings.ToLower(q.Name)) {
 				continue
 			}
 			for k, v := range e.Attrs {
+				if h.redactor.Line(k) != k {
+					delete(e.Attrs, k)
+					continue
+				}
 				prefix := k + "="
 				value := h.redactor.Line(prefix + v)
 				if strings.HasPrefix(value, prefix) {
@@ -220,8 +241,10 @@ func (h *Host) SearchInventory(ctx context.Context, q inventory.Query, sources [
 					e.Attrs[k] = "[REDACTED]"
 				}
 			}
-			e.Name = h.redactor.Line(e.Name)
-			e.Selector = h.redactor.Line(e.Selector)
+			// A redacted selector would select other hosts; keep only Hosts.
+			if h.redactor.Line(e.Selector) != e.Selector {
+				e.Selector = ""
+			}
 			for i, v := range e.DependsOn {
 				e.DependsOn[i] = h.redactor.Line(v)
 			}

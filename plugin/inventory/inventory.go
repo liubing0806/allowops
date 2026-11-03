@@ -13,9 +13,10 @@ type Entity struct {
 	DependsOn []string
 }
 
+// Query selects entities by exact kind; empty Kind means all. The gateway
+// filters names itself after redaction, so plugins never see name filters.
 type Query struct {
 	Kind string
-	Name string
 }
 
 type Resolver interface {

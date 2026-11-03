@@ -55,10 +55,10 @@ func (m *Module) Resolve(ctx context.Context, q inventory.Query) ([]inventory.En
 		}
 	}
 	out := []inventory.Entity{}
+	if q.Kind != "" && q.Kind != m.Kind {
+		return out, nil
+	}
 	for value, hosts := range groups {
-		if q.Kind != "" && q.Kind != m.Kind || !strings.Contains(strings.ToLower(value), strings.ToLower(q.Name)) {
-			continue
-		}
 		slices.Sort(hosts)
 		e := inventory.Entity{Kind: m.Kind, Name: value, Hosts: hosts}
 		if !strings.ContainsAny(m.Label, ",=") && strings.TrimSpace(m.Label) == m.Label && !strings.ContainsAny(value, ",=") && strings.TrimSpace(value) == value {

@@ -17,7 +17,6 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
-	"github.com/liubing0806/allowops/plugin/inventory"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -45,7 +44,7 @@ type Identity interface {
 
 type Inventory interface {
 	InventorySources() []string
-	SearchInventory(context.Context, inventory.Query, []string) ([]pluginhost.Result, []pluginhost.SourceError)
+	SearchInventory(context.Context, pluginhost.Query, []string) ([]pluginhost.Result, []pluginhost.SourceError)
 }
 
 type Config struct {

@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/liubing0806/allowops/plugin"
 	"github.com/liubing0806/allowops/plugin/inventory"
@@ -41,7 +42,9 @@ var kindPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 var attrPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
 func (m *Module) Provision(ctx context.Context, h plugin.Host) error {
-	f, err := os.Open(m.File)
+	// O_NONBLOCK keeps a FIFO from blocking startup; the file type check
+	// below then rejects it.
+	f, err := os.OpenFile(m.File, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return err
 	}
@@ -71,27 +74,29 @@ func (m *Module) Provision(ctx context.Context, h plugin.Host) error {
 	}
 	entities := make([]inventory.Entity, 0, len(file.Entities))
 	seen := map[[2]string]bool{}
-	for _, e := range file.Entities {
+	// Errors identify entities by position only: names and attributes may
+	// hold credentials and the error reaches logs and stderr.
+	for i, e := range file.Entities {
 		key := [2]string{e.Kind, e.Name}
 		if seen[key] {
-			return fmt.Errorf("duplicate inventory entity %s/%s", e.Kind, e.Name)
+			return fmt.Errorf("inventory entity #%d: duplicate kind and name", i+1)
 		}
 		seen[key] = true
 		if !kindPattern.MatchString(e.Kind) || len(e.Name) == 0 || len(e.Name) > 128 || len(e.Selector) > 512 {
-			return fmt.Errorf("invalid inventory entity %s/%s", e.Kind, e.Name)
+			return fmt.Errorf("inventory entity #%d: invalid kind, name or selector", i+1)
 		}
 		values := []string{e.Name, e.Selector}
 		values = append(values, e.Hosts...)
 		values = append(values, e.DependsOn...)
 		for k, v := range e.Attrs {
 			if !attrPattern.MatchString(k) {
-				return fmt.Errorf("invalid inventory attribute key %q", k)
+				return fmt.Errorf("inventory entity #%d: invalid attribute key", i+1)
 			}
 			values = append(values, v)
 		}
 		for _, v := range values {
 			if strings.ContainsAny(v, "\r\n") {
-				return fmt.Errorf("inventory strings must not contain newlines")
+				return fmt.Errorf("inventory entity #%d: strings must not contain newlines", i+1)
 			}
 		}
 		entities = append(entities, inventory.Entity{Kind: e.Kind, Name: e.Name, Attrs: e.Attrs, Hosts: e.Hosts, Selector: e.Selector, DependsOn: e.DependsOn})
@@ -103,7 +108,7 @@ func (m *Module) Provision(ctx context.Context, h plugin.Host) error {
 func (m *Module) Resolve(ctx context.Context, q inventory.Query) ([]inventory.Entity, error) {
 	out := []inventory.Entity{}
 	for _, e := range m.entities {
-		if q.Kind != "" && e.Kind != q.Kind || !strings.Contains(strings.ToLower(e.Name), strings.ToLower(q.Name)) {
+		if q.Kind != "" && e.Kind != q.Kind {
 			continue
 		}
 		e.Attrs = maps.Clone(e.Attrs)

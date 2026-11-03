@@ -27,12 +27,12 @@ type inventoryStub struct {
 	entities []pluginhost.Result
 	errors   []pluginhost.SourceError
 	called   bool
-	query    inventory.Query
+	query    pluginhost.Query
 	selected []string
 }
 
 func (i *inventoryStub) InventorySources() []string { return i.sources }
-func (i *inventoryStub) SearchInventory(ctx context.Context, q inventory.Query, sources []string) ([]pluginhost.Result, []pluginhost.SourceError) {
+func (i *inventoryStub) SearchInventory(ctx context.Context, q pluginhost.Query, sources []string) ([]pluginhost.Result, []pluginhost.SourceError) {
 	i.called = true
 	i.query = q
 	i.selected = sources
@@ -127,7 +127,7 @@ func TestInventoryVisibilityBeforeLimitAndHostCount(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := result.StructuredContent.(inventoryResult)
-	if len(out.Entities) != 1 || out.Entities[0].Name != "b-visible" || !out.Truncated || out.Entities[0].HostCount != 1 || !reflect.DeepEqual(out.Entities[0].Hosts, []string{"public"}) || source.query != (inventory.Query{Kind: "service", Name: "test"}) || !reflect.DeepEqual(source.selected, []string{"static"}) {
+	if len(out.Entities) != 1 || out.Entities[0].Name != "b-visible" || !out.Truncated || out.Entities[0].HostCount != 1 || !reflect.DeepEqual(out.Entities[0].Hosts, []string{"public"}) || source.query != (pluginhost.Query{Kind: "service", Name: "test"}) || !reflect.DeepEqual(source.selected, []string{"static"}) {
 		t.Fatalf("output=%+v source=%+v", out, source)
 	}
 	result, err = s.searchEntities(context.Background(), json.RawMessage(`{}`))

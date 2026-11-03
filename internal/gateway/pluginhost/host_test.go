@@ -149,7 +149,7 @@ func TestResolveFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	results, errs := h.SearchInventory(context.Background(), inventory.Query{}, nil)
+	results, errs := h.SearchInventory(context.Background(), Query{}, nil)
 	if len(results) != 1 || !reflect.DeepEqual(errs, []SourceError{{"timeout", "timeout"}, {"failed", "failed"}, {"panic", "panic"}}) {
 		t.Fatalf("results=%+v errors=%+v", results, errs)
 	}
@@ -158,7 +158,7 @@ func TestResolveFailures(t *testing.T) {
 			t.Fatal("query changed health")
 		}
 	}
-	results, errs = h.SearchInventory(context.Background(), inventory.Query{}, []string{"ok"})
+	results, errs = h.SearchInventory(context.Background(), Query{}, []string{"ok"})
 	if len(results) != 1 || len(errs) != 0 {
 		t.Fatalf("source selection: %v %v", results, errs)
 	}
@@ -171,7 +171,7 @@ func TestValidationFilteringSortingAndRedaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	results, errs := h.SearchInventory(context.Background(), inventory.Query{}, nil)
+	results, errs := h.SearchInventory(context.Background(), Query{}, nil)
 	if len(errs) != 0 || len(results) != 6 {
 		t.Fatalf("results=%+v errors=%+v", results, errs)
 	}
@@ -181,7 +181,7 @@ func TestValidationFilteringSortingAndRedaction(t *testing.T) {
 	if results[2].Selector == "password=x" || results[2].DependsOn[0] == "password=x" {
 		t.Fatal("secret not redacted")
 	}
-	results, _ = h.SearchInventory(context.Background(), inventory.Query{Kind: "service", Name: "b"}, nil)
+	results, _ = h.SearchInventory(context.Background(), Query{Kind: "service", Name: "b"}, nil)
 	if len(results) != 2 || results[0].Name != "B" {
 		t.Fatal(results)
 	}
@@ -195,7 +195,7 @@ func TestConcurrentSearchOwnsResults(t *testing.T) {
 	for range 2 {
 		wg.Go(func() {
 			for range 20 {
-				results, errs := h.SearchInventory(context.Background(), inventory.Query{}, nil)
+				results, errs := h.SearchInventory(context.Background(), Query{}, nil)
 				if len(errs) != 0 || len(results) != 1 {
 					t.Errorf("results=%v errors=%v", results, errs)
 					return
@@ -230,7 +230,7 @@ func TestSecretsDoNotLeak(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	results, errs := h.SearchInventory(context.Background(), inventory.Query{}, nil)
+	results, errs := h.SearchInventory(context.Background(), Query{}, nil)
 	if len(results) != 2 || len(errs) != 2 {
 		t.Fatalf("results=%+v errors=%+v", results, errs)
 	}
@@ -243,7 +243,7 @@ func TestSecretsDoNotLeak(t *testing.T) {
 		}
 	}
 	for _, probe := range []string{"password=h", "password=hunter2", "u:h"} {
-		if results, _ := h.SearchInventory(context.Background(), inventory.Query{Name: probe}, []string{"secret", "labels"}); len(results) != 0 {
+		if results, _ := h.SearchInventory(context.Background(), Query{Name: probe}, []string{"secret", "labels"}); len(results) != 0 {
 			t.Errorf("name probe %q matched %+v", probe, results)
 		}
 	}

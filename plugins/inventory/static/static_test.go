@@ -26,7 +26,7 @@ func TestExampleAndQuery(t *testing.T) {
 	for range 2 {
 		wg.Go(func() {
 			for range 20 {
-				results, err := m.Resolve(context.Background(), inventory.Query{Kind: "service", Name: "API"})
+				results, err := m.Resolve(context.Background(), inventory.Query{Kind: "service"})
 				if err != nil || len(results) != 1 || results[0].Attrs["team"] != "trade" || results[0].DependsOn[0] != "database/order-mysql" {
 					t.Errorf("entities=%+v error=%v", results, err)
 					return

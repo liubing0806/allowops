@@ -9,7 +9,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
-	"github.com/liubing0806/allowops/plugin/inventory"
 )
 
 type inventoryEntity struct {
@@ -35,7 +34,7 @@ func (s *Service) searchEntities(ctx context.Context, raw json.RawMessage) (*Too
 	if err != nil {
 		return nil, err
 	}
-	var q inventory.Query
+	var q pluginhost.Query
 	if err := decodeField(args, "kind", &q.Kind, false); err != nil {
 		return nil, invalidArguments(err)
 	}
