@@ -949,3 +949,20 @@ params:
 | A58 | 项目许可（2026-10-21） | 改为 MIT，版权人 liubing；不再使用 PolyForm 二选一与商业许可（A36 作废） |
 
 总指挥在实施中按规则自行决定的实现细节（G7~G18）记录在计划库，不改变上表和 design.md 的行为。
+
+## 22. 插件架构（PL1~PL10）
+
+2026-11-03 讨论确定，设计见 `plugin-architecture.md`。讨论起点：评估 allowops 作为 AI 运维 agent 还缺少的只读能力时，负责人认为自建 CMDB 过重，提出借鉴 dsh-superagent（DeepSeek Harness 的 bundle，基于 cordis 插件框架）“一切皆插件”的开发方式。
+
+| 编号 | 问题 | 决定 |
+|---|---|---|
+| PL1 | 插件机制 | 参照 Caddy 模块：编译期在 `init()` 中注册，网关 `main` 空白导入决定包含哪些插件；第三方插件通过自定义构建加入。不用 Go 标准库 `plugin` 包（要求相同工具链和依赖版本，只支持 Linux 和 macOS） |
+| PL2 | 插件 API 的位置与稳定性 | 公开包 `plugin/`（`internal/` 不能被其他 module 导入）；1.0 之前标为实验性，允许不兼容修改，修改时在 CHANGELOG 中说明 |
+| PL3 | 插件能注册什么 | 只能实现第 6 节的扩展点接口。不能注册 MCP 工具，不能调用 job 服务，不能注册在主机上执行的能力；网关按扩展点提供固定 MCP 工具，并新增对应的授权操作 |
+| PL4 | 网关出站访问 | 网关仍然不主动连接被管主机；网关插件只能访问其配置 `egress` 中声明的外部地址。修改 `design.md` 第 2 节的原表述“网关不主动连接任何主机” |
+| PL5 | 首批扩展点 | Inventory、Changes、Knowledge、Trigger；`auditsink`、`notifier` 以后按需增加。新增扩展点要记录决定，新增扩展点的实现不需要 |
+| PL6 | 主机端 builtin | 保留 `BuiltinHandler` 接口，改为注册表；`AgentHello.Capabilities.Builtins` 从注册表生成，不再单独列出名称 |
+| PL7 | CMDB | 不自建。服务拓扑由 Inventory 插件从已有系统读取（静态 YAML、主机标签、K8s、Prometheus、Nacos、CMDB HTTP API），网关合并结果，属性冲突时同时返回各来源的值 |
+| PL8 | 进程外插件 | 以后再做。扩展点接口只用 `context.Context` 和可序列化类型，以便加 gRPC 适配器时接口不变 |
+| PL9 | 编排层边界 | 待定：触发事件之后由谁启动排查、排查会话保存在哪里。Trigger 扩展点在此之前只定义接口 |
+| PL10 | 是否用 TypeScript 重写 | 不重写。主机端需要 `CGO_ENABLED=0` 和 CentOS 7（glibc 2.17）支持，Node.js 18 起官方二进制要求 glibc 2.28；root 辅助程序加载 JS 运行时会扩大攻击面。Caddy 风格的插件在 Go 中即可实现 |

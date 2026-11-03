@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>allowops 插件架构</title>
+<style>
+  html, body { margin: 0; background: #f6f7f9; }
+  body { font-family: "Noto Sans CJK SC", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  canvas { display: block; margin: 0 auto 18px; background: #fff; border-bottom: 1px solid #e5e7eb; }
+</style>
+</head>
+<body>
+<canvas id="now"></canvas>
+<canvas id="target"></canvas>
+<canvas id="call"></canvas>
+<canvas id="life"></canvas>
+<canvas id="map"></canvas>
+<script>
+// 依据：docs/plugin-architecture.md；docs/architecture-decisions.md 第 22 节；commit b11c123 的
+// cmd/allowops-gateway/main.go、internal/gateway/mcp/fixed.go、internal/gateway/authz/types.go、
+// internal/catalog/builtin.go、internal/agent/agent.go。绘图函数与 architecture-diagram.html 相同。
+const W = 1680;
+const FONT = '"Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif';
+const MONO = '"JetBrains Mono","DejaVu Sans Mono",monospace';
+const C = {
+  client:  { fill: '#eaf2fd', stroke: '#3b6fb6', title: '#1d3f73' },
+  net:     { fill: '#eef0f3', stroke: '#6b7280', title: '#374151' },
+  gw:      { fill: '#eeedfc', stroke: '#5b54c8', title: '#2f2a7a' },
+  gwInner: { fill: '#ffffff', stroke: '#8a85dc', title: '#2f2a7a' },
+  store:   { fill: '#e8f5ee', stroke: '#2f855a', title: '#1c4e35' },
+  host:    { fill: '#fdf4e4', stroke: '#b7791f', title: '#6b4511' },
+  file:    { fill: '#ffffff', stroke: '#c9a25f', title: '#6b4511' },
+  write:   { fill: '#fdeef0', stroke: '#c0485a', title: '#7a1f2e' },
+};
+let g;
+function canvas(id, h) {
+  const cv = document.getElementById(id), dpr = window.devicePixelRatio || 1;
+  cv.width = W * dpr; cv.height = h * dpr; cv.style.width = W + 'px'; cv.style.height = h + 'px';
+  g = cv.getContext('2d'); g.scale(dpr, dpr);
+}
+function rr(x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+}
+function wrap(text, maxW) {
+  const out = []; let line = '';
+  for (const ch of text) {
+    if (g.measureText(line + ch).width > maxW && line) { out.push(line); line = ch; } else line += ch;
+  }
+  if (line) out.push(line);
+  return out;
+}
+// 方框：标题 + 若干行说明；以 ` 开头的行用等宽字体
+function box(x, y, w, h, col, title, lines = [], opt = {}) {
+  g.save();
+  rr(x, y, w, h, opt.r ?? 8);
+  g.fillStyle = col.fill; g.fill();
+  g.lineWidth = opt.lw ?? 1.5; g.strokeStyle = col.stroke;
+  if (opt.dash) g.setLineDash(opt.dash);
+  g.stroke(); g.setLineDash([]);
+  const pad = opt.pad ?? 10, ts = opt.ts ?? 15, fs = opt.fs ?? 12.5;
+  let ty = y + pad + ts;
+  g.fillStyle = col.title; g.font = `600 ${ts}px ${opt.monoTitle ? MONO : FONT}`;
+  g.textAlign = opt.center ? 'center' : 'left';
+  const tx = opt.center ? x + w / 2 : x + pad;
+  for (const t of wrap(title, w - 2 * pad)) { g.fillText(t, tx, ty); ty += ts + 5; }
+  g.fillStyle = '#374151';
+  ty += 2;
+  for (const l of lines) {
+    const mono = l.startsWith('`');
+    g.font = `${fs}px ${mono ? MONO : FONT}`;
+    for (const t of wrap(mono ? l.slice(1) : l, w - 2 * pad)) { g.fillText(t, tx, ty); ty += fs + 6; }
+  }
+  g.restore();
+  return { x, y, w, h, cx: x + w / 2, cy: y + h / 2, r: x + w, b: y + h };
+}
+function arrow(pts, opt = {}) {
+  g.save();
+  g.strokeStyle = opt.color ?? '#4b5563'; g.fillStyle = opt.color ?? '#4b5563';
+  g.lineWidth = opt.lw ?? 1.8;
+  if (opt.dash) g.setLineDash(opt.dash);
+  g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+  for (const p of pts.slice(1)) g.lineTo(p[0], p[1]);
+  g.stroke(); g.setLineDash([]);
+  const head = (a, b) => {
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), s = 9;
+    g.beginPath(); g.moveTo(b[0], b[1]);
+    g.lineTo(b[0] - s * Math.cos(ang - 0.4), b[1] - s * Math.sin(ang - 0.4));
+    g.lineTo(b[0] - s * Math.cos(ang + 0.4), b[1] - s * Math.sin(ang + 0.4));
+    g.closePath(); g.fill();
+  };
+  head(pts[pts.length - 2], pts[pts.length - 1]);
+  if (opt.both) head(pts[1], pts[0]);
+  g.restore();
+}
+function label(text, x, y, opt = {}) {
+  g.save();
+  const fs = opt.fs ?? 12;
+  g.font = `${opt.bold ? 600 : 400} ${fs}px ${opt.mono ? MONO : FONT}`;
+  g.textAlign = opt.align ?? 'left';
+  if (opt.bg) {
+    const w = g.measureText(text).width;
+    const bx = opt.align === 'center' ? x - w / 2 : opt.align === 'right' ? x - w : x;
+    g.fillStyle = opt.bg; g.fillRect(bx - 4, y - fs, w + 8, fs + 6);
+  }
+  g.fillStyle = opt.color ?? '#374151';
+  g.fillText(text, x, y);
+  g.restore();
+}
+function heading(n, text, sub) {
+  label(`${n}  ${text}`, 30, 40, { fs: 21, bold: true, color: '#111827' });
+  if (sub) label(sub, 30, 64, { fs: 12.5, color: '#6b7280' });
+}
+function lifeline(x, y0, y1) {
+  g.save(); g.setLineDash([4, 4]); g.strokeStyle = '#9ca3af'; g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(x, y0); g.lineTo(x, y1); g.stroke(); g.restore();
+}
+function selfLoop(x, y, col) {
+  arrow([[x, y - 6], [x + 30, y - 6], [x + 30, y + 8], [x + 2, y + 8]], { color: col, lw: 1.4 });
+}
+C.plugin = { fill: '#e3f6f5', stroke: '#0f8a83', title: '#0b4f4b' };
+C.ext    = { fill: '#f3f4f6', stroke: '#9ca3af', title: '#374151' };
+function tag(text, x, y, col) {
+  g.save(); g.font = `11px ${FONT}`; const tw = g.measureText(text).width + 12;
+  rr(x, y - 12, tw, 18, 4); g.fillStyle = col.fill; g.fill(); g.strokeStyle = col.stroke; g.stroke(); g.restore();
+  label(text, x + tw / 2, y + 1, { fs: 11, color: col.title, align: 'center' });
+  return tw;
+}
+function legend(items, x0) {
+  items.forEach(([t, col], i) => {
+    const x = x0 + i * 112;
+    g.save(); rr(x, 28, 14, 14, 3); g.fillStyle = col.fill; g.fill(); g.strokeStyle = col.stroke; g.stroke(); g.restore();
+    label(t, x + 19, 40, { fs: 12, color: '#4b5563' });
+  });
+}
+
+// ═════════ 1. 现状 ═════════
+canvas('now', 900);
+heading('1', '现状：哪些部分可扩展，哪些是写死的', '依据 commit b11c123：cmd/allowops-gateway/main.go、internal/gateway/mcp/fixed.go、internal/gateway/authz/types.go、internal/catalog/builtin.go、internal/agent/agent.go。');
+legend([['调用方', C.client], ['网关', C.gw], ['依赖服务', C.store], ['主机侧', C.host], ['写死的位置', C.write]], 1090);
+const n1 = box(30, 100, 250, 84, C.client, 'AI agent（MCP 客户端）', ['MCP Streamable HTTP', '服务账号 token']);
+const n2 = box(30, 196, 250, 84, C.client, 'CLI / 控制台', ['OIDC、LDAP 登录']);
+const n3 = box(30, 292, 250, 84, C.client, 'CI：目录发布', ['签名目录包']);
+const gwN = box(330, 90, 900, 470, C.gw, 'allowops-gateway：组件在 main.go 中按固定顺序构造', [], { lw: 2 });
+for (const c of [n1, n2, n3]) arrow([[c.r, c.cy], [gwN.x, c.cy]], { color: C.client.stroke });
+const order = ['audit', 'api（身份）', 'hostconn', 'output', 'job', 'mcp', 'server'];
+order.forEach((t, i) => {
+  box(346 + i * 124, 132, 112, 40, C.gwInner, t, [], { ts: 13, center: true, pad: 9, monoTitle: i !== 1 });
+  if (i < order.length - 1) arrow([[346 + i * 124 + 112, 152], [346 + (i + 1) * 124, 152]], { color: C.gw.stroke, lw: 1.4 });
+});
+label('构造顺序（main.go 第 175~296 行）；之后启动审计检查点、审计导出、版本检查，最后 srv.Serve', 346, 194, { fs: 12, color: '#4b5563' });
+box(346, 210, 420, 150, C.gwInner, 'MCP 工具（internal/gateway/mcp）', ['固定工具：hosts_search、jobs_get、jobs_list、jobs_cancel', '每个 action 一个工具：来自签名目录，按身份过滤', '工具列表按“身份 + 目录版本 + 策略版本”缓存', '', '没有拓扑、变更、知识类工具的入口'], { ts: 13.5, fs: 12 });
+tag('写死：fixed.go:5', 600, 222, C.write);
+box(790, 210, 424, 150, C.gwInner, 'ABAC（internal/gateway/authz）', ['Operation 枚举：execute_action、modify_policy、', 'manage_hosts、view_jobs、view_output 等', '规则按角色、操作、主机标签匹配', '', '新工具需要新增操作'], { ts: 13.5, fs: 12 });
+tag('写死：types.go:5', 1085, 222, C.write);
+box(346, 376, 868, 84, C.gwInner, 'gateway.yaml', ['已有可配置项：providers（OIDC 多个、LDAP 一个）、output（任意 S3 兼容存储）、jobs、audit、update_check', '没有 plugins 配置节；解码使用 KnownFields(true)，未知字段拒绝启动'], { ts: 13.5, fs: 12 });
+box(346, 476, 868, 70, C.gwInner, '网关出站访问', ['design.md 第 2 节：网关不主动连接任何主机；只连接身份源、PostgreSQL、对象存储'], { ts: 13.5, fs: 12 });
+const stN = box(1280, 90, 370, 470, C.store, '依赖服务', ['身份源：OIDC、LDAP', '', 'PostgreSQL：主机、身份、目录、策略、job、task、审计', '', 'S3 兼容对象存储：命令输出', '', 'Prometheus：采集网关指标']);
+arrow([[gwN.r, 320], [stN.x, 320]], { color: C.store.stroke });
+g.save(); rr(30, 600, 1620, 280, 10); g.fillStyle = '#fffaf1'; g.fill(); g.setLineDash([6, 4]); g.strokeStyle = C.host.stroke; g.lineWidth = 1.5; g.stroke(); g.restore();
+label('主机侧：已经有插件的雏形（builtin 处理器接口 + 能力协商）', 46, 628, { fs: 14, bold: true, color: C.host.title });
+arrow([[700, 600], [700, gwN.b]], { color: C.host.stroke, lw: 2.2 });
+label('主机主动外连 :443，gRPC 双向流 + mTLS', 712, 586, { fs: 12, color: C.host.title });
+box(50, 646, 500, 210, C.host, 'BuiltinHandler 接口（catalog/builtin.go:27）', ['`Parameters / ValidateConfig / Run', '可选接口：', '`RedactingBuiltinHandler', '`ActionBuiltinValidator', '`BudgetedBuiltinHandler', '与 Caddy“基础接口 + 可选能力接口”的做法一致'], { ts: 14 });
+box(580, 646, 520, 210, C.write, '处理器名称写了两遍', ['`catalog/builtin.go:55  var Builtins = map[...]{', '`  mysql_query, log_search, log_query, http_get, ...}', '', '`agent/agent.go:111  Capabilities.Builtins: []string{', '`  "log_search", "log_query", "http_get", ...}', '', '新增处理器要改两处；漏改 agent.go 时主机不报告能力，', '对应 action 被标记为 unsupported（从代码推断，未复现）'], { ts: 14, fs: 12 });
+box(1130, 646, 500, 210, C.host, 'action 目录（签名后下发）', ['115 个示例 action，114 个只读', '执行方式：exec、steps、script、builtin', '新增只读诊断能力的主要方式', '', '主机不支持某个 builtin 时，', '对应 action 标记为 unsupported'], { ts: 14 });
+
+// ═════════ 2. 目标 ═════════
+canvas('target', 1040);
+heading('2', '目标：新增插件模块后的架构', '青色为新增模块。插件编译进网关，只实现扩展点接口；网关按扩展点提供固定 MCP 工具，统一做 ABAC、审计、脱敏和输出上限。');
+legend([['调用方', C.client], ['网关已有', C.gw], ['新增模块', C.plugin], ['外部系统', C.ext], ['主机侧', C.host]], 1090);
+const t1 = box(30, 100, 240, 110, C.client, 'AI agent（MCP 客户端）', ['action 工具', 'entities_search', 'changes_list', 'runbooks_search / read']);
+const t2 = box(30, 222, 240, 70, C.client, 'CLI / 控制台', ['系统页显示插件健康状态']);
+const t3 = box(30, 304, 240, 80, C.client, 'Alertmanager、定时器', ['Trigger 的事件来源', '（阶段 4，依赖 PL9）']);
+const gwT = box(310, 90, 960, 640, C.gw, 'allowops-gateway', [], { lw: 2 });
+for (const c of [t1, t2]) arrow([[c.r, c.cy], [gwT.x, c.cy]], { color: C.client.stroke });
+arrow([[t3.r, t3.cy], [gwT.x, t3.cy]], { color: C.ext.stroke, dash: [6, 4] });
+box(326, 128, 300, 120, C.gwInner, 'MCP（internal/gateway/mcp）', ['已有：hosts_search、jobs_*、action 工具', '新增固定工具：', '`entities_search  changes_list', '`runbooks_search  runbooks_read'], { ts: 13.5, fs: 12 });
+tag('改', 580, 140, C.plugin);
+box(640, 128, 300, 120, C.gwInner, 'ABAC（internal/gateway/authz）', ['新增操作：', '`view_inventory', '`view_changes', '`view_knowledge'], { ts: 13.5, fs: 12 });
+tag('改', 900, 140, C.plugin);
+box(954, 128, 300, 120, C.gwInner, '已有组件', ['audit、api（身份）、hostconn、', 'output、job、server', '不变；插件不能调用 job 服务'], { ts: 13.5, fs: 12 });
+const ph = box(326, 266, 928, 190, C.plugin, 'internal/gateway/pluginhost（新增）：读取 gateway.yaml 的 plugins 节，构造、包装、停止插件实例', [], { ts: 14 });
+[['配置解析', ['module 必须已注册', 'config 用 KnownFields 严格解码', 'id 唯一']],
+ ['构造与停止', ['Provision → Validate，有超时', 'required 实例失败则拒绝启动', '停止时 Cleanup']],
+ ['调用包装', ['每实例超时、并发上限', 'recover：panic 不影响网关', '部分失败列入 source_errors']],
+ ['结果处理', ['多实例合并、冲突同时返回', '主机可见性过滤、脱敏', '32KB 上限、untrusted 标记']],
+ ['宿主上下文 Host', ['HTTPClient 只访问 egress', 'Credential(ref) 读凭据文件', 'Cache、State、Health']]].forEach(([t, d], i) =>
+  box(340 + i * 182, 304, 172, 138, C.gwInner, t, d, { ts: 13, fs: 11.5, pad: 9 }));
+const api = box(326, 474, 928, 104, C.plugin, 'plugin/（新增公开包，internal 之外，供第三方导入；1.0 前为实验性）', ['`plugin.Register(Module)   ModuleInfo{ID, New}   Provisioner / Validator / Cleaner', '`plugin/inventory.Resolver   plugin/changes.Lister   plugin/knowledge.Store   plugin/trigger.Source', '`plugin/plugintest：每个扩展点一套契约测试'], { ts: 14, fs: 12 });
+const std = box(326, 596, 928, 118, C.plugin, 'plugins/standard（新增官方插件，网关 main 空白导入；第三方插件经 allowops build 自定义构建加入）', [], { ts: 14 });
+[['inventory.static', '拓扑 YAML 文件'], ['inventory.host_labels', '由主机标签推导'], ['changes.allowops', '目录和策略版本'], ['knowledge.git_markdown', 'Git 仓库 runbook'], ['第三方 / 以后', 'k8s、nacos、cmdb、jenkins']].forEach(([n, d], i) =>
+  box(340 + i * 182, 634, 172, 66, i === 4 ? C.ext : C.gwInner, n, [d], { ts: 11.5, fs: 11.5, pad: 7, monoTitle: i !== 4, dash: i === 4 ? [5, 4] : undefined }));
+arrow([[790, 456], [790, 474]], { color: C.plugin.stroke, both: true });
+arrow([[790, 578], [790, 596]], { color: C.plugin.stroke });
+label('实现', 800, 592, { fs: 11, color: C.plugin.title });
+const ex = box(1310, 90, 340, 400, C.ext, '外部系统（只读，经 egress 白名单）', ['K8s API', 'CMDB HTTP API', 'Nacos、Apollo', 'Jenkins、云效流水线', 'Git 仓库（runbook）', '钉钉文档', '', '网关仍然不主动连接被管主机（PL4）'], { ts: 14 });
+arrow([[ph.r, 400], [ex.x, 400]], { color: C.plugin.stroke });
+label('HTTPClient', 1266, 388, { fs: 11, color: C.plugin.title });
+box(1310, 506, 340, 224, C.store, '依赖服务（不变）', ['身份源、PostgreSQL、S3 兼容对象存储', '', 'PostgreSQL 新增：', '插件实例键值（Trigger 游标）', 'Trigger 事件去重', '', 'advisory lock：轮询类 Trigger 只在一个实例运行']);
+g.save(); rr(30, 770, 1620, 250, 10); g.fillStyle = '#fffaf1'; g.fill(); g.setLineDash([6, 4]); g.strokeStyle = C.host.stroke; g.lineWidth = 1.5; g.stroke(); g.restore();
+label('主机侧：只改注册方式（阶段 0），执行边界不变', 46, 798, { fs: 14, bold: true, color: C.host.title });
+arrow([[790, 770], [790, gwT.b]], { color: C.host.stroke, lw: 2.2 });
+label('action 工具仍经 job 下发到主机', 802, 756, { fs: 12, color: C.host.title });
+box(50, 816, 500, 186, C.plugin, 'internal/builtin 注册表（新增）', ['`builtin.Register("mysql_query", mysqlHandler{})', '每个处理器在自己的包里注册', 'catalog 校验和执行从注册表查找处理器', 'Capabilities.Builtins 从注册表生成，不再单独列出名称', '新增测试：能力列表与注册表一致'], { ts: 14, fs: 12 });
+box(580, 816, 520, 186, C.host, '以后新增的主机端 builtin', ['链路追踪：trace_query（SkyWalking、Jaeger）', '集中日志：loki_query（Loki、Elasticsearch、SLS）', '消息队列积压：kafka_lag', '远端探测：probe（TCP、HTTP、TLS 证书）', '在能访问这些系统的探针主机上执行，', '与现有 prometheus_query 相同'], { ts: 14, fs: 12 });
+box(1130, 816, 500, 186, C.host, '不变的部分', ['签名目录、allowops-agent、allowops-exec', '参数校验、脱敏、输出上限都在主机上完成', '插件不能注册在主机上执行的能力（PL3）', '', 'CGO_ENABLED=0、支持 CentOS 7（PL10）'], { ts: 14, fs: 12 });
+
+// ═════════ 3. 一次插件调用 ═════════
+canvas('call', 470);
+heading('3', '一次插件工具调用的处理顺序（以 entities_search 为例）', '与 action 调用共用认证、ABAC 和审计；不经过 job，不下发到主机。依据 plugin-architecture.md 第 7.2 节。');
+const steps = [
+  ['认证', ['Bearer token', '与 action 工具相同'], C.gwInner], ['参数校验', ['kind、name、attrs', 'depth、limit 上限'], C.gwInner],
+  ['ABAC', ['view_inventory', 'deny 优先'], C.gwInner], ['审计（调用前）', ['工具、参数、身份', '失败则不调用'], C.gwInner],
+  ['选择实例', ['sources 参数', '省略时全部启用实例'], C.plugin], ['并发调用', ['每实例超时、并发上限', 'recover'], C.plugin],
+];
+const steps2 = [
+  ['合并', ['Kind + Name 相同为同一实体', '冲突返回 conflicts'], C.plugin], ['可见性过滤', ['移除当前身份', '无权查看的主机'], C.plugin],
+  ['脱敏', ['internal/redact', 'secrets 规则'], C.plugin], ['输出上限', ['32KB，超出截断', '标记 truncated'], C.plugin],
+  ['untrusted 标记', ['output_trust:', 'untrusted'], C.plugin], ['审计（结果）', ['实例 ID、结果数、', '失败实例；不存正文'], C.gwInner],
+];
+const bw = 240, bg2 = 30;
+steps.forEach(([t, d, col], i) => {
+  box(30 + i * (bw + bg2), 100, bw, 96, col, t, d, { ts: 14, fs: 12, center: true });
+  if (i < 5) arrow([[30 + i * (bw + bg2) + bw, 148], [30 + (i + 1) * (bw + bg2), 148]], { color: C.gw.stroke });
+});
+arrow([[30 + 5 * (bw + bg2) + bw / 2, 196], [30 + 5 * (bw + bg2) + bw / 2, 230]], { color: C.gw.stroke });
+steps2.forEach(([t, d, col], i) => {
+  const k = 5 - i;
+  box(30 + k * (bw + bg2), 230, bw, 96, col, t, d, { ts: 14, fs: 12, center: true });
+  if (i < 5) arrow([[30 + k * (bw + bg2), 278], [30 + (k - 1) * (bw + bg2) + bw, 278]], { color: C.gw.stroke });
+});
+label('青色步骤由 pluginhost 执行，白色步骤复用现有 MCP 处理。一个实例失败时返回其他实例的结果，并在 source_errors 中列出失败实例和错误类别。', 30, 366, { fs: 12.5 });
+label('返回的 Hosts 或 Selector 可以直接作为下一次 action 调用的 targets：服务 → 主机 → 执行只读 action。', 30, 390, { fs: 12.5 });
+label('配置修改需要重启网关生效，不支持热加载。工具列表缓存键加入插件配置版本；某个扩展点没有启用的实例时，对应工具不出现在工具列表中。', 30, 414, { fs: 12.5, color: '#6b7280' });
+
+// ═════════ 4. 插件的生命周期 ═════════
+canvas('life', 420);
+heading('4', '插件从编写到运行', '参照 Caddy 模块与 xcaddy；生命周期规则参照 dsh-superagent 的 ctx.effect（注册与注销成对）。依据 plugin-architecture.md 第 5、8 节。');
+const life = [
+  ['① 编写', ['实现扩展点接口', '`init(){ plugin.Register(M{}) }', '跑 plugintest 契约测试'], C.plugin],
+  ['② 构建', ['官方：空白导入', '`plugins/standard', '第三方：allowops build --with'], C.plugin],
+  ['③ 配置', ['gateway.yaml plugins 节', 'id、module、egress、', 'timeout、required、config'], C.gwInner],
+  ['④ 启动', ['严格解码 config', 'Provision → Validate', 'required 失败则拒绝启动'], C.gwInner],
+  ['⑤ 运行', ['MCP 固定工具调用', '健康状态到控制台系统页', 'Trigger：advisory lock 单实例'], C.gwInner],
+  ['⑥ 停止', ['srv.Shutdown 之后', '停止 Trigger', '每实例 Cleanup，有超时'], C.gwInner],
+];
+life.forEach(([t, d, col], i) => {
+  box(30 + i * 272, 100, 250, 140, col, t, d, { ts: 15, fs: 12 });
+  if (i < 5) arrow([[30 + i * 272 + 250, 170], [30 + (i + 1) * 272, 170]], { color: C.gw.stroke });
+});
+box(30, 270, 790, 120, C.write, '不做的事', ['不用 Go 标准库 plugin 包（运行时加载 .so）：要求相同工具链和依赖版本，只支持 Linux、macOS', '不提供插件市场，不支持运行时安装或热加载', '插件不能注册 MCP 工具、不能调用 job 服务、不能注册主机端执行能力（PL3）'], { ts: 14, fs: 12 });
+box(860, 270, 790, 120, C.ext, '阶段 5：进程外插件', ['为每个扩展点生成 gRPC 适配器（参照 HashiCorp go-plugin）', '网关一侧仍是同一个 Go 接口，汇总、授权、审计代码不变', '插件进程单独持有凭据，可用独立用户或容器限制网络'], { ts: 14, fs: 12, dash: [6, 4] });
+
+// ═════════ 5. 以后的功能写成哪类插件 ═════════
+canvas('map', 610);
+heading('5', '以后的功能写成哪类插件', '判断规则：诊断数据写成 action 或主机端 builtin；决定“查什么、在哪查”的上下文和触发源写成网关插件。依据 plugin-architecture.md 第 3、13 节。');
+const cols = [
+  ['Inventory：服务拓扑', 'entities_search · view_inventory', C.plugin, ['inventory.static', 'inventory.host_labels', 'inventory.k8s_labels', 'inventory.prometheus_targets', 'inventory.nacos', 'inventory.cmdb_http']],
+  ['Changes：变更时间线', 'changes_list · view_changes', C.plugin, ['changes.allowops', 'changes.jenkins', 'changes.yunxiao', 'changes.k8s_rollout', 'changes.nacos']],
+  ['Knowledge：排查知识', 'runbooks_search / read · view_knowledge', C.plugin, ['knowledge.git_markdown', 'knowledge.dingtalk_docs']],
+  ['Trigger：触发源（阶段 4）', '依赖 PL9 编排层边界', C.plugin, ['trigger.alertmanager_webhook', 'trigger.schedule']],
+  ['以后的扩展点', '新增扩展点需记录决定', C.ext, ['auditsink.kafka', 'auditsink.syslog', 'notifier.dingtalk']],
+  ['主机端 builtin + action', '在探针主机上执行，经 job', C.host, ['trace_query', 'loki_query', 'kafka_lag', 'probe（TCP、HTTP、TLS）', 'action：jmap、traceroute']],
+];
+const FIRST = ['inventory.static', 'inventory.host_labels', 'changes.allowops', 'knowledge.git_markdown'];
+cols.forEach(([t, s, col, items], i) => {
+  const x = 30 + i * 272;
+  box(x, 96, 256, 470, col, t, [s], { ts: 14.5, fs: 11.5, dash: col === C.ext ? [6, 4] : undefined });
+  items.forEach((n, k) => {
+    const yy = 160 + k * 56;
+    box(x + 12, yy, 232, 44, C.gwInner, n, [], { ts: 11.5, pad: 14, monoTitle: !n.includes('（') && !n.includes('：') });
+    if (FIRST.includes(n)) tag('首批', x + 196, yy + 23, C.store);
+  });
+});
+label('首批官方插件：inventory.static、inventory.host_labels、changes.allowops、knowledge.git_markdown；其余为示例模块 ID，按需要实现。', 30, 592, { fs: 12.5, color: '#6b7280' });
+
+</script>
+</body>
+</html>

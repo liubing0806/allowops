@@ -29,10 +29,11 @@ allowops 是给 AI agent 使用的运维网关：agent 通过 MCP 调用运维�
                     allowops-exec（root）：验签 → 校验 → 脱敏 → 切换用户执行
 ```
 
-- 网关不主动连接任何主机。主机离线时任务标记 `offline`，不排队。
+- 网关不主动连接被管主机。主机离线时任务标记 `offline`，不排队。网关插件只能访问其配置中声明的外部地址（决定记录第 22 节 PL4）。
 - 网关对外只开 443 端口，按 TLS ALPN 区分主机连接、MCP、控制台 API。负载均衡必须为 L4 TCP 透传。
 - 网关除主机长连接外无实例级状态，可水平扩容。主机连接所在实例记录在 PostgreSQL，用 LISTEN/NOTIFY 通知该实例下发任务。
 - MVP 不做区域中继；主机端配置项为“上游地址”，为以后增加中继保留。
+- 网关端插件：服务拓扑、变更记录、排查知识和触发源通过编译期注册的插件接入，网关按扩展点提供固定 MCP 工具。设计见 [plugin-architecture.md](plugin-architecture.md)，决定见决定记录第 22 节。
 
 ### 组件
 
@@ -422,7 +423,7 @@ test/{attack,e2e,scale,vm}/
 - 单机模式（本地 YAML、stdio MCP）。
 - 区域中继和区域自治。
 - MCP OAuth 授权（以工程师身份调用，替代长期 token）。
-- CMDB 同步标签。
+- CMDB 同步标签。服务拓扑改由 Inventory 插件读取，不自建 CMDB（决定记录第 22 节 PL7）。
 - 审计导出到 syslog、webhook、Kafka。
 - agent 评估。
 - 在容器或 Pod 内执行签名脚本；按容器名自动解析数据库地址。
