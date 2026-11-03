@@ -5,11 +5,13 @@
 #   MINI=1      run MiniServer instead of the Spring Boot sample (runtime without java.instrument)
 #   PROBE=1     load /app/probe.jar (records retransformations; not used in latency runs)
 #   LOGDIR      where JVM logs go, default /logs
+#   GC          garbage collector flags, default -XX:+UseG1GC (for example -XX:+UseParallelGC)
 #   UNSET_HOME=1  remove HOME from the environment (the no-HOME variant)
 set -eu
 if [ "${UNSET_HOME:-0}" = "1" ]; then unset HOME; fi
 HEAP="${HEAP:-512m}"
 LOGDIR="${LOGDIR:-/logs}"
+GC="${GC:--XX:+UseG1GC}"
 
 ver="$(java -version 2>&1 | sed -n '1s/.*version "\([^"]*\)".*/\1/p')"
 case "$ver" in
@@ -17,7 +19,7 @@ case "$ver" in
   *)   major="$(echo "$ver" | cut -d. -f1)" ;;
 esac
 
-flags="-Xms$HEAP -Xmx$HEAP -XX:+UseG1GC -Djava.security.egd=file:/dev/./urandom -Dspring.main.banner-mode=off"
+flags="-Xms$HEAP -Xmx$HEAP $GC -Djava.security.egd=file:/dev/./urandom -Dspring.main.banner-mode=off"
 if [ "$major" -ge 9 ]; then
   flags="$flags -Xlog:safepoint*=info:file=$LOGDIR/safepoint.log:uptime,time"
   flags="$flags -Xlog:gc*=info:file=$LOGDIR/gc.log:uptime,time"

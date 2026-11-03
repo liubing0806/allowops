@@ -1436,7 +1436,7 @@ builtin_config:
 
 一次调用的时长（其中约 5 秒是 CPU 采样）：watch、trace、stack 在方法被调用够 `count` 次时结束增强，方法在增强后很快被调用够次数时，一次调用约 10~15 秒；调用次数不足时，增强持续到 `enhance_duration`，一次调用约 40~50 秒（增强时长加 attach 和清理，默认配置）。monitor 在方法第一次被调用后才输出周期，第 `count` 次输出后再过一个周期结束；方法在增强后很快被调用时约 10 秒加 (`count` + 1) × `cycle` 秒，方法没有被调用时约 40~50 秒。jad 不增强，一次调用约 10 秒。本地真实 JVM 测试（JDK 8、11、17、21，每个命令每个 JDK 1 次，被增强的方法每秒约 50 次调用，默认配置）的结果：watch、trace、stack（`count` 1）9.9~12.3 秒，monitor（`count` 1，`cycle` 2）13.7~15.3 秒，jad（整个类）9.3~10.7 秒。40~50 秒超过 MCP `wait_seconds` 的默认值 30 秒，调用方传 `wait_seconds` 90（上限 120），或用 `jobs_get` 查询结果。
 
-对目标 JVM 的影响：增强开始后 1~4 秒内整个 JVM 的 CPU 升高，所有接口的延迟可达数百毫秒；Arthas 计划阶段 0 在 JDK 11、21 上观察到整个 JVM 最长 4.12 秒的暂停，原因是 JVM 线程写安全点日志或 hsperfdata 时等待文件系统 journal 提交（[arthas-jvm-pause-report.md](arthas-jvm-pause-report.md)）。详见 `builtin-config.md` jvm_arthas 一节的“L2 命令”。
+对目标 JVM 的影响：增强开始后 1~4 秒内整个 JVM 的 CPU 升高，所有接口的延迟可达数百毫秒；每个 JVM 的第一次增强影响更大，JVM CPU 在 5~10 秒内高于 100%，最大延迟 220~1127 ms，之后的稳态增幅也更高（[arthas-stage3-l2-report.md](arthas-stage3-l2-report.md)）；Arthas 计划阶段 0 在 JDK 11、21 上观察到整个 JVM 最长 4.12 秒的暂停，原因是 JVM 线程写安全点日志或 hsperfdata 时等待文件系统 journal 提交（[arthas-jvm-pause-report.md](arthas-jvm-pause-report.md)）。详见 `builtin-config.md` jvm_arthas 一节的“L2 命令”。
 
 jad 的副作用：目标 JVM 把类的当前字节码写到 `<Arthas 日志目录>/classdump/<类加载器类名>-<哈希>/<包路径>/<类名>.class`，文件属主为目标 JVM 的用户。Arthas 和 allowops 都不删除这个文件，同一类再次 jad 时覆盖同一文件。
 

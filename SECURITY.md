@@ -173,6 +173,16 @@ controls the target JVM controls what Arthas reports about it.
   the project's measurements responses were delayed by up to 1.5 seconds
   during the first 1 to 4 seconds. The CPU check refuses only a JVM that is
   busy before the attach.
+- An L1 call is usually invisible to the application (at most 23 ms in the
+  stage-3 measurements), with two exceptions: `thread -b` on a JDK 17 JVM with
+  1000 deep-stacked threads took up to 111 ms, and on JDK 8 with the Parallel
+  or Serial collector the attach can trigger a 70 to 120 ms Metadata GC
+  Threshold Full GC.
+- The first L2 enhancement in a JVM costs more than later ones. In the
+  stage-3 measurements it kept the JVM above one CPU for 5 to 10 seconds and
+  delayed responses by up to 1.1 seconds; later enhancements delayed them by
+  at most 157 ms. A `guard.max_cpu_percent` below that CPU ends the first L2
+  call in every JVM.
 - To show the values that `watch` captures, Arthas calls `isEmpty`, `size`,
   `iterator` and `entrySet` of the collections and maps among them, which can
   be methods of the application.

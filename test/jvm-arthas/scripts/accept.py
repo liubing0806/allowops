@@ -17,8 +17,10 @@ and JA_PORT_PREFIX at 32 or lower. Subcommands:
   metaspace JVMs with a MaxMetaspaceSize: calls until the metaspace check refuses (item 6).
 """
 import argparse
+import collections
 import concurrent.futures
 import subprocess
+import sys
 import threading
 
 from ja import *
@@ -31,8 +33,10 @@ JDKS = ["jdk8", "jdk11", "jdk17", "jdk21"]
 # Every L1 command kind; dashboard first because it takes longest.
 ALL_KINDS = ["dashboard", "thread_top", "thread_blocking", "thread_info", "memory", "jvm", "class_info", "method_info",
              "classloader_tree", "classloader_list", "logger", "sysprop", "version"]
-# "Reference Handler" exists for the whole life of the JVM; its id differs on JDK 21.
-THREAD_ID = {"jdk21": 9}
+# compose.stage3.yaml sets LOGDIR=/logs-tmpfs; JA_LOGDIR_TMPFS tells keep_logs to read the JVM logs from there.
+LOGDIR_TMPFS = os.environ.get("JA_LOGDIR_TMPFS", "")
+# "Reference Handler" exists for the whole life of the JVM; its id differs on JDK 21 (9, and 10 with compose.stage3.yaml).
+THREAD_ID = {"jdk21": 10 if LOGDIR_TMPFS else 9}
 
 
 def ja_call(svc, out, label, kinds, calls=None, start=None, every=None, gap=None, state="fresh", extra=(), evidence=None):
@@ -83,7 +87,105 @@ def start_loadgen(t, d, total, flows, cpus=LOAD_CPUS):
 def keep_logs(t, svc, d):
     for f in (RUN / svc / "logs").glob("*"):
         run(["cp", str(f), str(d / f.name)], check=False)
+    if LOGDIR_TMPFS:
+        # compose.stage3.yaml: the JVM logs to a tmpfs of the container, which docker cp does not see
+        for f in ("safepoint.log", "gc.log", "redefine.log"):
+            p = t.docker_exec("cat", f"{LOGDIR_TMPFS}/{f}")
+            if p.returncode == 0:
+                (d / f).write_text(p.stdout)
     (d / "stdout.log").write_text(run(["docker", "logs", "--timestamps", t.container], check=False).stdout)
+
+
+class Others(threading.Thread):
+    """Every 10 s, from /proc only: the busy time of the cpus the test uses and the processes that used the most cpu in the
+    interval, with the cpu each last ran on and its cgroup, so that the runs disturbed by other work can be found. With jvm_pid,
+    also the 8 threads of that JVM that used the most cpu ("jvm_threads") and the number of its threads by name ("jvm_thread_names")."""
+
+    def __init__(self, path, cpus="4-9,12-15", every=10.0, jvm_pid=None):
+        super().__init__(daemon=True)
+        self.path, self.every, self.stop_ev, self.jvm_pid = path, every, threading.Event(), jvm_pid
+        self.cpus = {f"cpu{c}" for part in cpus.split(",") for c in range(int(part.split("-")[0]), int(part.split("-")[-1]) + 1)}
+
+    @staticmethod
+    def procs():
+        out = {}
+        for pid in os.listdir("/proc"):
+            if not pid.isdigit():
+                continue
+            try:
+                s = open(f"/proc/{pid}/stat").read()
+            except OSError:
+                continue
+            rest = s[s.rindex(")") + 2:].split()
+            out[pid] = (s[s.index("(") + 1:s.rindex(")")], int(rest[11]) + int(rest[12]), int(rest[36]))
+        return out
+
+    def threads(self):
+        out = {}
+        try:
+            tids = os.listdir(f"/proc/{self.jvm_pid}/task")
+        except OSError:
+            return out
+        for tid in tids:
+            try:
+                st = open(f"/proc/{self.jvm_pid}/task/{tid}/stat").read()
+            except OSError:
+                continue
+            rest = st[st.rindex(")") + 2:].split()
+            out[tid] = (st[st.index("(") + 1:st.rindex(")")], int(rest[11]) + int(rest[12]))
+        return out
+
+    def busy(self):
+        out = {}
+        for ln in open("/proc/stat"):
+            f = ln.split()
+            if f and f[0] in self.cpus:
+                v = [int(x) for x in f[1:9]]
+                out[f[0]] = sum(v) - v[3] - v[4]
+        return out
+
+    def run(self):
+        prev_t, prev_p, prev_b = time.time(), self.procs(), self.busy()
+        prev_th = self.threads() if self.jvm_pid else {}
+        with open(self.path, "w") as f:
+            while not self.stop_ev.wait(self.every):
+                t, p, b = time.time(), self.procs(), self.busy()
+                dt_s = t - prev_t
+                rows = []
+                for ticks, pid in sorted(((v[1] - prev_p[k][1], k) for k, v in p.items() if k in prev_p), reverse=True)[:12]:
+                    if ticks <= 0:
+                        break
+                    try:
+                        cg = open(f"/proc/{pid}/cgroup").read().strip().split("::")[-1][-48:]
+                    except OSError:
+                        cg = ""
+                    rows.append({"pid": int(pid), "comm": p[pid][0], "cpu_pct": round(ticks / dt_s, 1), "last_cpu": p[pid][2], "cgroup": cg})
+                rec = {"t": t, "seconds": round(dt_s, 2), "cpu_busy_pct": {k: round((b[k] - prev_b.get(k, b[k])) / dt_s, 1) for k in sorted(b)}, "top": rows}
+                if self.jvm_pid:
+                    th = self.threads()
+                    top = sorted(((v[1] - prev_th[k][1], v[0]) for k, v in th.items() if k in prev_th), reverse=True)[:8]
+                    rec["jvm_threads"] = [{"name": n, "cpu_pct": round(d / dt_s, 1)} for d, n in top if d > 0]
+                    rec["jvm_thread_count"] = len(th)
+                    # thread names (15 characters, from /proc) with the digits replaced, to see which threads a call leaves
+                    names = collections.Counter(re.sub(r"\d+", "#", v[0]) for v in th.values())
+                    rec["jvm_thread_names"] = dict(sorted(names.items()))
+                    prev_th = th
+                f.write(json.dumps(rec) + "\n")
+                f.flush()
+                prev_t, prev_p, prev_b = t, p, b
+
+
+def start_probes(t, d, seconds, watch=True):
+    """docs/arthas-jvm-pause-report.md section 7 item 4: host_io_probe.py on the file system of the repository (/) and on the one of
+    the raw data, and pause_watch.py on the JVM; both run on the cpus of the calls and end by themselves after `seconds`."""
+    here = pathlib.Path(__file__).resolve().parent
+    (RUN / "io-probe-root").mkdir(parents=True, exist_ok=True)
+    subprocess.Popen(["sudo", "-n", "taskset", "-c", CALL_CPUS, sys.executable, str(here / "host_io_probe.py"), str(d / "host_io.jsonl"), str(int(seconds)),
+                      "--dir", str(RUN / "io-probe-root"), "--dir", str(OUT / "io-probe-data"), "--disk", os.environ.get("JA_DISK", "nvme0n1")],
+                     stdout=subprocess.DEVNULL, stderr=open(d / "host_io.err", "w"))
+    if watch:
+        subprocess.Popen(["sudo", "-n", "taskset", "-c", CALL_CPUS, sys.executable, str(here / "pause_watch.py"), str(t.pid()), str(d / "watch.jsonl"), str(int(seconds))],
+                         stdout=subprocess.DEVNULL, stderr=open(d / "watch.err", "w"))
 
 
 def set_env(mem, java_extra=""):
@@ -115,6 +217,11 @@ def latency(a, rep):
     col = Collector(t, d / "metrics.jsonl")
     col.start()
     total = a.warm + a.phase * 2 + a.after + 8 + 8 + 6
+    others = None
+    if a.probe:
+        start_probes(t, d, total + 30)
+        others = Others(d / "others.jsonl", jvm_pid=t.pid())
+        others.start()
     lg = start_loadgen(t, d, total, LOAD_PROFILES[a.profile])
     t_start = time.time()
     try:
@@ -122,7 +229,8 @@ def latency(a, rep):
             time.sleep(min(20, a.warm / 2))
             live = json.loads(http_get(f"http://{ip}:8080/diag"))["threads"]
             n = max(0, a.threads_total - live)
-            ev(f"threads before {live}; " + http_get(f"http://{ip}:8080/load/threads?n={n}&blocked={a.blocked}", 60))
+            deep = f"&depth={a.depth}&holders={a.holders}&locks={a.locks}" if a.depth else ""
+            ev(f"threads before {live}; " + http_get(f"http://{ip}:8080/load/threads?n={n}&blocked={a.blocked}{deep}", 120))
         elif a.blocked:
             ev(http_get(f"http://{ip}:8080/load/threads?n={a.blocked + 1}&blocked={a.blocked}", 60))
         time.sleep(max(0, t_start + a.warm - time.time()))
@@ -159,10 +267,15 @@ def latency(a, rep):
             lg.terminate()
         col.stop_ev.set()
         col.join(timeout=5)
+        if others:
+            others.stop_ev.set()
     meta = {"svc": a.svc, "scenario": scenario, "rep": rep, "profile": a.profile, "phase_s": a.phase, "warm_s": a.warm,
             "windows": {"before": [b0, b0 + a.phase], "during": [d0, d0 + a.phase], "after": [a0, a0 + a.after]},
             "events": events, "args": vars(a), "app_cpuset": os.environ.get("APP_CPUS", "4-7"), "load_cpus": LOAD_CPUS,
             "project": PROJECT, "image": run(["docker", "inspect", "-f", "{{.Image}}", t.container], check=False).stdout.strip()}
+    if a.probe:
+        meta["env"] = {k: os.environ.get(k, "") for k in ("COMPOSE_FILE", "JA_GC", "JA_JAVA_EXTRA", "JA_LOGDIR_TMPFS", "APP_MEM")}
+        meta["java_cmdline"] = open(f"/proc/{t.pid()}/cmdline").read().replace("\0", " ").strip()
     keep_logs(t, a.svc, d)
     (d / "meta.json").write_text(json.dumps(meta, indent=2, default=str))
     (d / "done").write_text("ok")
@@ -337,6 +450,10 @@ if __name__ == "__main__":
     lp.add_argument("--retain", type=int, default=0, help="MB of heap kept reachable before the warm-up")
     lp.add_argument("--retain-size", type=int, default=1048512)
     lp.add_argument("--max-old-gen", type=int, default=0)
+    lp.add_argument("--depth", type=int, default=0, help="stack frames every started thread descends before it parks or blocks")
+    lp.add_argument("--holders", type=int, default=0, help="of the parked threads, how many hold monitors on the way down")
+    lp.add_argument("--locks", type=int, default=0, help="monitors each holder takes over its depth")
+    lp.add_argument("--probe", action="store_true", help="also run host_io_probe.py, pause_watch.py and the sampler of other processes (stage 3)")
     cp = sub.add_parser("cycles")
     cp.add_argument("--svcs", default=",".join(JDKS))
     cp.add_argument("--calls", type=int, default=50)

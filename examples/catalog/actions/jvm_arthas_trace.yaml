@@ -9,7 +9,7 @@
 # max_methods methods. The output starts with a `# call` section (status, check, attach number, CPU before the attach, affected classes
 # and methods, enhanced classes after the reset, clean-up result); the trace output follows, with secrets and personal data redacted.
 name: jvm_arthas_trace
-description: Trace the calls made inside one method of a class in an allowlisted JVM, with the time spent in each, through the Arthas agent, for at most count calls within 30 seconds. The whole JVM responds more slowly for 1 to 4 seconds after the enhancement starts. A call takes about 10 to 15 seconds when count matching calls happen soon after the enhancement starts, and 40 to 50 seconds (the enhancement time plus the attach and the clean-up) when fewer happen; pass wait_seconds=90 or read the job with jobs_get.
+description: Trace the calls made inside one method of a class in an allowlisted JVM, with the time spent in each, through the Arthas agent, for at most count calls within 30 seconds. The whole JVM responds more slowly for 1 to 4 seconds after the enhancement starts. The first enhancement in a JVM keeps it above one CPU for 5 to 10 seconds. A call takes about 10 to 15 seconds when count matching calls happen soon after the enhancement starts, and 40 to 50 seconds (the enhancement time plus the attach and the clean-up) when fewer happen; pass wait_seconds=90 or read the job with jobs_get.
 risk: write
 run_as: root
 idempotent: false

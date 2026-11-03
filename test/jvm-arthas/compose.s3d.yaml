@@ -1,0 +1,15 @@
+# Third overlay for the L2 measurements of the stage-3 acceptance (docs/arthas-stage3-acceptance-report.md), used after
+# compose.stage3.yaml:
+#   COMPOSE_FILE=compose.yaml:compose.stage3.yaml:compose.s3d.yaml COMPOSE_PROJECT_NAME=jvm-arthas-s3d JA_PORT_PREFIX=23
+# It only gives the four JDK services image tags of their own (jvmarthas/app-s3d:<jdk>): the sample application of these
+# images has the classes of the L2 checks (demo.L2Controller, demo.L2Overloads), and rebuilding them does not replace the
+# jvmarthas/app-s3:* images of the other stage-3 measurements. scripts/run_s3_l2.sh sets the variables.
+services:
+  jdk8:
+    image: jvmarthas/app-s3d:jdk8
+  jdk11:
+    image: jvmarthas/app-s3d:jdk11
+  jdk17:
+    image: jvmarthas/app-s3d:jdk17
+  jdk21:
+    image: jvmarthas/app-s3d:jdk21

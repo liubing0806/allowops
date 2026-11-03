@@ -35,7 +35,8 @@ def lines(path):
             yield float(m.group(1)), m.group(2)
 
 
-def scan(path, thr_ms):
+def scan(path, thr_ms, ends=None):
+    """ends, when a list, gets the uptime at which each listed gap's safepoint ended (one entry per output line)."""
     out = []
     block = []          # lines of the current safepoint (JDK 17/21: since the previous summary line)
     app = None          # JDK 11: the "Application time" line of the current safepoint
@@ -57,6 +58,8 @@ def scan(path, thr_ms):
                 if lost >= thr_ms:
                     out.append((path, app[0], enter[1], "after the 'Application time' line", round(lost, 1),
                                 f"reported stop {stop_ms:.1f} ms, stopping threads {sync_ms:.1f} ms", app[1]))
+                    if ends is not None:
+                        ends.append(enter[0] + stop_ms / 1000)
             app = enter = None
             continue
         m = SUM17.match(text)
@@ -77,13 +80,35 @@ def scan(path, thr_ms):
                 out.append((path, block[0][0] if block else 0.0, op, "in the cleanup phase", round(lost, 1),
                             f"reaching {reach:.1f} ms, cleanup {clean:.1f} ms, at safepoint {at:.1f} ms, total {total:.1f} ms",
                             prev[1] if prev else ""))
+                if ends is not None:
+                    ends.append(up)
             if reach >= thr_ms:
                 out.append((path, block[0][0] if block else 0.0, op, "reaching safepoint", round(reach, 1),
                             f"reaching {reach:.1f} ms, cleanup {clean:.1f} ms, at safepoint {at:.1f} ms, total {total:.1f} ms", ""))
+                if ends is not None:
+                    ends.append(up)
             block = []
             continue
         block.append((up, text))
     return out
+
+
+def spans(path, thr_ms):
+    """The log write gaps of scan() as wall-clock intervals: [(epoch start, epoch end, operation, where, lost ms)]. The uptime
+    decoration is turned into epoch seconds with the time decoration of the first line ([<time>][<uptime>s])."""
+    first = None
+    for ln in open(path, errors="ignore"):
+        m = re.match(r"^\[([^\]]+)\]\[([0-9.]+)s\]", ln)
+        if m:
+            first = m
+            break
+    if not first:
+        return []
+    from datetime import datetime
+    offset = datetime.strptime(first.group(1), "%Y-%m-%dT%H:%M:%S.%f%z").timestamp() - float(first.group(2))
+    ends = []
+    rows = scan(path, thr_ms, ends)
+    return [(r[1] + offset, e + offset, r[2], r[3], r[4]) for r, e in zip(rows, ends) if r[3] != "reaching safepoint"]
 
 
 def main():

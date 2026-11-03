@@ -12,9 +12,16 @@
 //	-state fresh      every call gets a new state directory, so the attach count and interval checks pass
 //	-threads-live N   the checks read N as java.threads.live (thread -b on JVMs with more than 1000 threads)
 //
+// The L2 commands (watch, trace, stack, monitor, jad) take their arguments from -class, -method,
+// -count, -min-cost-ms, -cycle, -express and -expand (defaults: those of the catalog parameters), and
+// their builtin_config from -class-prefixes (default demo.), -enhance, -max-methods, -max-cpu-percent
+// and the -guard-* options, whose zero values leave the product defaults in place (stage-3
+// acceptance, docs/arthas-stage3-acceptance-report.md).
+//
 // Usage:
 //
 //	ja-call -container jvm-arthas-accept-jdk17-1 -files run/arthas-minlog -kinds dashboard,jvm -out calls.jsonl
+//	ja-call -container ... -kinds watch,trace -min-cost-ms 10000 -count 5
 //	ja-call -container ... -snapshot      prints the counters, memory and Arthas state of the JVM once
 package main
 
@@ -56,6 +63,19 @@ type options struct {
 	noFullGCWithin                         time.Duration
 	snapshot                               bool
 	diag                                   string
+	l2                                     l2Options
+}
+
+// l2Options are the arguments and the builtin_config of the L2 commands.
+type l2Options struct {
+	class, method, jadMethod, express string
+	count, cycle, expand              int
+	minCost                           int64
+	classPrefixes                     string
+	enhance                           time.Duration
+	maxMethods, maxCPUPercent         int
+	guardCPU, guardGCTime, guardGCs   int
+	guardSettle                       time.Duration
 }
 
 func main() {
@@ -81,6 +101,22 @@ func main() {
 	flag.DurationVar(&o.noFullGCWithin, "no-full-gc-within", 0, "checks.no_full_gc_within (0: the default, 60s)")
 	flag.BoolVar(&o.snapshot, "snapshot", false, "print one snapshot of the JVM and exit")
 	flag.StringVar(&o.diag, "diag", "", "URL of the /diag endpoint of the sample application, read before and after every call")
+	flag.StringVar(&o.l2.class, "class", "demo.HotService", "class of the L2 commands")
+	flag.StringVar(&o.l2.method, "method", "work", "method of watch, trace, stack and monitor")
+	flag.StringVar(&o.l2.jadMethod, "jad-method", "", "method of jad (default: the whole class)")
+	flag.StringVar(&o.l2.express, "express", "params,returnObj", "watch express (the default of the catalog parameter)")
+	flag.IntVar(&o.l2.count, "count", 1, "-n of watch, trace, stack and monitor (the default of the catalog parameter)")
+	flag.IntVar(&o.l2.cycle, "cycle", 1, "-c of monitor, in seconds")
+	flag.IntVar(&o.l2.expand, "expand", 1, "-x of watch (the default of the catalog parameter)")
+	flag.Int64Var(&o.l2.minCost, "min-cost-ms", 0, "condition #cost>N of watch, trace, stack and monitor (0: none)")
+	flag.StringVar(&o.l2.classPrefixes, "class-prefixes", "demo.", "comma-separated class_prefixes of the L2 commands")
+	flag.DurationVar(&o.l2.enhance, "enhance", 0, "enhance_duration (0: the default, 30s)")
+	flag.IntVar(&o.l2.maxMethods, "max-methods", 0, "max_methods (0: the default, 5)")
+	flag.IntVar(&o.l2.maxCPUPercent, "max-cpu-percent", 0, "checks.max_cpu_percent of the L2 commands (0: the default, 50)")
+	flag.IntVar(&o.l2.guardCPU, "guard-cpu", 0, "guard.max_cpu_percent, 100 is one CPU (0: off, the default)")
+	flag.IntVar(&o.l2.guardGCTime, "guard-gc-time", 0, "guard.max_gc_time_percent (0: off, the default)")
+	flag.IntVar(&o.l2.guardGCs, "guard-gc-rate", 0, "guard.max_gc_per_second (0: off, the default)")
+	flag.DurationVar(&o.l2.guardSettle, "guard-settle", 0, "guard.settle (0: the default)")
 	flag.Parse()
 	for _, k := range strings.Split(kinds, ",") {
 		o.kinds = append(o.kinds, arthas.Kind(strings.TrimSpace(k)))
@@ -195,8 +231,33 @@ func request(o options, kind arthas.Kind) arthas.Request {
 		r.Class, r.Method = "demo.HotService", "work"
 	case arthas.KindSysprop:
 		r.Key = "java.version"
+	case arthas.KindJad:
+		r.Class, r.Method = o.l2.class, o.l2.jadMethod
+	case arthas.KindWatch, arthas.KindTrace, arthas.KindStack, arthas.KindMonitor:
+		r.Class, r.Method, r.Count, r.MinCost = o.l2.class, o.l2.method, o.l2.count, o.l2.minCost
+		if kind == arthas.KindWatch {
+			r.Express, r.Expand = o.l2.express, o.l2.expand
+		}
+		if kind == arthas.KindMonitor {
+			r.Cycle = o.l2.cycle
+		}
 	}
 	return r
+}
+
+// l2Config sets the builtin_config keys of the L2 commands; the validation of the builtin refuses
+// them for the other commands.
+func l2Config(cfg *jvmarthas.Config, o l2Options) {
+	kind := cfg.Command
+	if kind.Level() != 2 {
+		return
+	}
+	cfg.ClassPrefixes = strings.Split(o.classPrefixes, ",")
+	cfg.Checks.MaxCPUPercent = o.maxCPUPercent
+	cfg.Guard = jvmarthas.Guard{MaxCPUPercent: o.guardCPU, MaxGCTimePercent: o.guardGCTime, MaxGCPerSecond: o.guardGCs, Settle: o.guardSettle}
+	if kind.Enhances() {
+		cfg.EnhanceDuration, cfg.MaxMethods = o.enhance, o.maxMethods
+	}
 }
 
 // record is one line of the output. Times are Unix seconds; durations are milliseconds.
@@ -219,6 +280,11 @@ type record struct {
 	ExitCode int    `json:"exit_code"`
 	Err      string `json:"err,omitempty"`
 	Stderr   string `json:"stderr,omitempty"`
+
+	// CPUBefore, Affect and EnhancedClasses are the rows of the L2 commands.
+	CPUBefore       string `json:"cpu_before,omitempty"`
+	Affect          string `json:"affect,omitempty"`
+	EnhancedClasses string `json:"enhanced_classes,omitempty"`
 
 	Steps steps `json:"steps"`
 
@@ -294,6 +360,7 @@ func oneCall(ctx context.Context, o options, jvm *jvmtarget.JVM, cg string, kind
 	if kind == arthas.KindSysprop {
 		cfg.SyspropKeys = []string{"java.version", "user.timezone"}
 	}
+	l2Config(&cfg, o.l2)
 	tr := &trace{}
 	env := jvmarthas.NewEnv()
 	env.StateDir = stateDir
@@ -349,6 +416,7 @@ func oneCall(ctx context.Context, o options, jvm *jvmtarget.JVM, cg string, kind
 	rec.Start, rec.End, rec.Ms = unix(start), unix(end), float64(end.Sub(start).Microseconds())/1000
 	rec.Status, rec.Check, rec.Reason = row(res.Stdout, "status"), row(res.Stdout, "check"), row(res.Stdout, "reason")
 	rec.Attach, rec.Earlier, rec.Cleanup = row(res.Stdout, "attach"), row(res.Stdout, "earlier_sessions"), row(res.Stdout, "cleanup")
+	rec.CPUBefore, rec.Affect, rec.EnhancedClasses = row(res.Stdout, "cpu_before"), row(res.Stdout, "affect"), row(res.Stdout, "enhanced_classes")
 	rec.ExitCode, rec.Stderr = res.ExitCode, strings.TrimSpace(res.Stderr)
 	if err != nil {
 		rec.Err = err.Error()

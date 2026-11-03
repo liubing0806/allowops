@@ -7,6 +7,9 @@
 #                   set JA_EVIDENCE=<directory> to keep the output of every call)
 #   make accept  the stage-2 acceptance measurements of docs/arthas-stage2-acceptance-report.md (about 4.5 hours, needs
 #                JA_OUT=<raw data dir> and an otherwise idle cpuset 4-9; images and containers of their own, see compose.accept.yaml)
+#   make s3      the stage-3 measurements of docs/arthas-stage3-acceptance-report.md (about 8 hours, needs JA_OUT=<raw data dir>
+#                and an otherwise idle cpuset 4-9; JVM logs and /tmp on tmpfs, see compose.stage3.yaml). Analysis:
+#                scripts/s3_analyze.py <raw data dir>, and scripts/l2_threshold.py for runs with L2 jobs
 SHELL := /bin/sh
 ROOT := $(CURDIR)
 REPO := $(abspath $(ROOT)/../..)
@@ -14,8 +17,9 @@ PROFILES := --profile jre --profile variants
 SERVICES := jdk8 jdk11 jdk17 jdk21 jre8 jre17 jlink17 noattach8 noattach17 rofs8 rofs17 rofsnotmp17 nohome8 nohome17 root8 root17 xrs8 xrs17 pid1-17 probe8 probe17
 
 ACCEPT_ENV := COMPOSE_FILE=compose.yaml:compose.accept.yaml COMPOSE_PROJECT_NAME=$(or $(COMPOSE_PROJECT_NAME),jvm-arthas-accept) JA_PORT_PREFIX=$(or $(JA_PORT_PREFIX),26)
+S3_ENV := COMPOSE_FILE=compose.yaml:compose.stage3.yaml COMPOSE_PROJECT_NAME=$(or $(COMPOSE_PROJECT_NAME),jvm-arthas-s3m) JA_PORT_PREFIX=$(or $(JA_PORT_PREFIX),27)
 
-.PHONY: app probe arthas tools prepare build up up-all down ps bench real-test accept accept-down
+.PHONY: app probe arthas tools prepare build up up-all down ps bench real-test accept accept-down s3 s3-down
 
 app:
 	cd app && mvn -q -s $(ROOT)/app/settings.xml -Dmaven.repo.local=$(ROOT)/run/m2 clean package -DskipTests
@@ -67,3 +71,10 @@ accept: app probe arthas prepare tools
 
 accept-down:
 	$(ACCEPT_ENV) docker compose $(PROFILES) down -v --remove-orphans
+
+s3: app probe arthas prepare tools
+	$(S3_ENV) docker compose build jdk8 jdk11 jdk17 jdk21
+	$(S3_ENV) scripts/run_s3.sh
+
+s3-down:
+	$(S3_ENV) docker compose $(PROFILES) down -v --remove-orphans

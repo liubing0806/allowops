@@ -11,7 +11,7 @@
 # max_methods methods. The output starts with a `# call` section (status, check, attach number, CPU before the attach, affected classes
 # and methods, enhanced classes after the reset, clean-up result); the monitor output follows, with secrets and personal data redacted.
 name: jvm_arthas_monitor
-description: Count the calls, successes, failures and average time of one method of a class in an allowlisted JVM through the Arthas agent, in count periods of cycle seconds within 30 seconds. The whole JVM responds more slowly for 1 to 4 seconds after the enhancement starts. A call takes about 10 seconds plus (count + 1) x cycle seconds when the method is called soon after the enhancement starts, and 40 to 50 seconds (the enhancement time plus the attach and the clean-up) when it is not called; pass wait_seconds=90 or read the job with jobs_get.
+description: Count the calls, successes, failures and average time of one method of a class in an allowlisted JVM through the Arthas agent, in count periods of cycle seconds within 30 seconds. The whole JVM responds more slowly for 1 to 4 seconds after the enhancement starts. The first enhancement in a JVM keeps it above one CPU for 5 to 10 seconds. A call takes about 10 seconds plus (count + 1) x cycle seconds when the method is called soon after the enhancement starts, and 40 to 50 seconds (the enhancement time plus the attach and the clean-up) when it is not called; pass wait_seconds=90 or read the job with jobs_get.
 risk: write
 run_as: root
 idempotent: false

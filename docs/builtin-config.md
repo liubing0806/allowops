@@ -301,7 +301,7 @@ L2 命令（`watch`、`trace`、`stack`、`monitor`、`jad`）另外要求：
 | `guard.max_cpu_percent` | 未配置 | JVM 一秒内的 CPU 时间，单位是一个 CPU 的百分比（100 为一个 CPU，400 为四个） |
 | `guard.max_gc_time_percent` | 未配置 | 一秒内垃圾回收耗时的百分比，0..100 |
 | `guard.max_gc_per_second` | 未配置 | 一秒内垃圾回收次数 |
-| `guard.settle` | 5s | 取值 0..60s，0 等同省略。attach 后这段时间内不评估运行期阈值；缩短使评估更早开始，延长则推迟。`watch`、`trace`、`stack`、`monitor` 从增强开始计时，有效值至少 5s，配置小于 5s 时按 5s 执行 |
+| `guard.settle` | 5s | 取值 0..60s，0 等同省略。attach 后这段时间内不评估运行期阈值；缩短使评估更早开始，延长则推迟。`watch`、`trace`、`stack`、`monitor` 从增强开始计时，有效值至少 5s，配置小于 5s 时按 5s 执行。每个 JVM 第一次增强的 CPU 升高可持续 5~10 秒，见“L2 命令”中对目标 JVM 的影响 |
 | `guard.health_check` | 未配置 | 见下 |
 
 这两项检查按 hsperfdata 中的收集器名（`sun.gc.collector.N.name`）和代名（`sun.gc.generation.N.name`）判断是否适用（A69）：
@@ -339,6 +339,13 @@ L2 命令（`watch`、`trace`、`stack`、`monitor`、`jad`）另外要求：
 | 其他命令 | 无 |
 
 `class`、`method` 在参数校验阶段按上述规则拒绝，包含空白、引号、`;`、`|`、`#`、`*`、括号或 OGNL 表达式的值不会到达 Arthas。
+
+L1 命令对目标 JVM 的影响（Arthas 计划阶段 3 复核，[arthas-stage3-acceptance-report.md](arthas-stage3-acceptance-report.md)，JDK 8/11/17/21，4 CPU 容器，1000 请求/秒）：
+
+- 调用所在秒的最大延迟 ≤ 23 ms，下面两种情况除外。
+- `thread_blocking` 在线程多、栈深、持有监视器的线程多的 JVM 上更慢：JDK 17、1000 个线程、栈深 40 层时，每个 JVM 的第一次调用最大 101.5 ms，1500 个线程时 111.0 ms，之后的调用约 50 ms。
+- JDK 8 的 Parallel、Serial 收集器上，attach 加载 Arthas 的类可能触发一次 `Metadata GC Threshold` Full GC。测量的 6 次运行都出现，调用所在秒的最大延迟 71.6~117.8 ms。执行前检查不能预判这次 Full GC。
+- CMS 的并发周期按 Full GC 计，`recent_full_gc` 检查因此常拒绝 CMS 上的调用：老年代约 79% 时，24 次调用中 18 次被拒绝。
 
 ### 调用流程
 
@@ -423,6 +430,9 @@ L1 的执行前检查（attach 状态、内存、元空间、attach 次数与间
 对目标 JVM 的影响：
 
 - 增强开始后 1~4 秒内，整个 JVM 的 CPU 升高，所有接口的延迟可达数百毫秒（Arthas 计划阶段 0 实测，4 CPU 容器）。运行期监测在从增强开始计时的 `guard.settle`（至少 5 秒）内不评估阈值，目的是避免这段瞬态触发中止。
+- 每个 JVM 的第一次 L2 增强影响更大。阶段 3 验收（[arthas-stage3-l2-report.md](arthas-stage3-l2-report.md)，JDK 8/11/17/21，4 CPU 容器，1000 和 10000 次/秒）：第一次增强使所有接口的延迟升高 1~4 秒，最大 220~1127 ms，JVM CPU 在 5~10 秒内高于 100%（与其他进程争用 CPU 时更长）；后续增强影响 1~2 秒，最大延迟 ≤ 157 ms。
+- 增强开始 10 秒后，未被观察接口的 p99 增幅：后续增强最大 +15%，第一次增强的 24 次中 4 次为 +27%~+46%。被观察方法（1000 次/秒）的 p99 增幅：JDK 17、21 ≤ 20%；JDK 8 每组最大 +23%~+50%，JDK 8、11 的第一次增强 +21%~+30%。
+- 配置 `guard.max_cpu_percent` 时，第一次增强在增强开始 5~10 秒内的 JVM CPU 为 121%~266%（JVM 已使用 150% 时为 351%~362%），超过阈值即中止。阈值低于这个值时，每个 JVM 的第一次 L2 调用都会以 `aborted_by_guard` 结束。
 - 阶段 0 在 JDK 11、21 上观察到整个 JVM 最长 4.12 秒的暂停。原因是 JVM 线程写安全点日志或 hsperfdata 时等待文件系统 journal 提交（[arthas-jvm-pause-report.md](arthas-jvm-pause-report.md)）。暂停期间进程 CPU 接近 0，运行期监测不能发现。
 - `jad` 让目标 JVM 把类的当前字节码写到 `<Arthas 日志目录>/classdump/<类加载器类名>-<哈希>/<包路径>/<类名>.class`，默认日志目录是目标 JVM 用户的 `~/logs/arthas`。文件属主为目标 JVM 的用户。Arthas 和 allowops 都不删除这个文件，同一类再次 `jad` 时覆盖同一文件。反编译读取这个文件，目录不可写时 `jad` 失败。
 
