@@ -2,6 +2,8 @@
 
 状态：方向已确认（2026-11-03），尚未实施。决定见 `architecture-decisions.md` 第 22 节（PL1~PL10）。图示见 [plugin-architecture.html](plugin-architecture.html)（浏览器打开；截图 [plugin-architecture.png](plugin-architecture.png)）。
 
+阶段 0、1 的实现设计见 [plugin-stage01-design.md](plugin-stage01-design.md)。该文第 10 节列出实现与本文的差异，包括本文第 2.2 节的一处推断更正、第 5、6、7 节的简化和第 7.2 节审计描述的修正；两者不一致时以实现设计为准。
+
 本文说明三件事：
 
 1. 现在的架构里，哪些部分已经是可扩展的，哪些是写死的。
@@ -32,7 +34,7 @@
 | --- | --- | --- |
 | action 目录 | `examples/catalog/actions/`，签名后下发 | 声明式；新增只读诊断能力的主要方式 |
 | builtin 处理器接口 | `internal/catalog/builtin.go:27` 的 `BuiltinHandler` | 基础接口加三个可选接口：`RedactingBuiltinHandler`、`ActionBuiltinValidator`、`BudgetedBuiltinHandler` |
-| 主机能力协商 | `AgentHello.Capabilities.Builtins` | 不支持某个 builtin 的主机，对应 action 标记为 `unsupported` |
+| 主机能力判断 | `catalog.CheckHost`（`internal/agent/catalog.go:163`）按 `catalog.Builtins` 判断 | 不支持某个 builtin 的主机，对应 action 标记为 `unsupported` |
 | 身份源 | `gateway.yaml` 的 `providers` | OIDC 可配置多个，LDAP 最多一个 |
 | 对象存储 | 只依赖 S3 API | 可接任意 S3 兼容服务 |
 
@@ -40,8 +42,8 @@
 
 | 位置 | 现状 | 影响 |
 | --- | --- | --- |
-| `internal/catalog/builtin.go:55` | `Builtins` 是一个字面量 map，列出 11 个处理器 | 新增处理器要改这个文件 |
-| `internal/agent/agent.go:111` | 能力列表里又写了一遍同样的 11 个名称 | 两处不一致时，主机不会报告新处理器，对应 action 会被标记为 `unsupported`。这是从代码推断的，未复现 |
+| `internal/catalog/builtin.go:54` | `Builtins` 是一个字面量 map，列出 11 个处理器 | 新增处理器要改这个文件 |
+| `internal/agent/agent.go:111` | 能力列表里又写了一遍同样的 11 个名称 | 两处不一致时，主机 API 显示的能力列表不准确。网关不读取这个列表，不影响 action 是否可用 |
 | `internal/gateway/mcp/fixed.go:5` | 固定工具只有 `hosts_search`、`jobs_get`、`jobs_list`、`jobs_cancel` | 没有入口提供拓扑、变更、知识类工具 |
 | `internal/gateway/authz/types.go:5` | `Operation` 枚举写死 | 新工具需要新增授权操作 |
 | `cmd/allowops-gateway/main.go` | 在 `main` 里按顺序构造各组件 | 没有插件的配置、构造和停止流程 |

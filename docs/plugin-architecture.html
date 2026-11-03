@@ -163,7 +163,7 @@ label('主机侧：已经有插件的雏形（builtin 处理器接口 + 能力�
 arrow([[700, 600], [700, gwN.b]], { color: C.host.stroke, lw: 2.2 });
 label('主机主动外连 :443，gRPC 双向流 + mTLS', 712, 586, { fs: 12, color: C.host.title });
 box(50, 646, 500, 210, C.host, 'BuiltinHandler 接口（catalog/builtin.go:27）', ['`Parameters / ValidateConfig / Run', '可选接口：', '`RedactingBuiltinHandler', '`ActionBuiltinValidator', '`BudgetedBuiltinHandler', '与 Caddy“基础接口 + 可选能力接口”的做法一致'], { ts: 14 });
-box(580, 646, 520, 210, C.write, '处理器名称写了两遍', ['`catalog/builtin.go:55  var Builtins = map[...]{', '`  mysql_query, log_search, log_query, http_get, ...}', '', '`agent/agent.go:111  Capabilities.Builtins: []string{', '`  "log_search", "log_query", "http_get", ...}', '', '新增处理器要改两处；漏改 agent.go 时主机不报告能力，', '对应 action 被标记为 unsupported（从代码推断，未复现）'], { ts: 14, fs: 12 });
+box(580, 646, 520, 210, C.write, '处理器名称写了两遍', ['`catalog/builtin.go:54  var Builtins = map[...]{', '`  mysql_query, log_search, log_query, http_get, ...}', '', '`agent/agent.go:111  Capabilities.Builtins: []string{', '`  "log_search", "log_query", "http_get", ...}', '', '新增处理器要改两处；漏改 agent.go 时主机 API 显示的', '能力列表不准确（网关不读取它，不影响 action 是否可用）'], { ts: 14, fs: 12 });
 box(1130, 646, 500, 210, C.host, 'action 目录（签名后下发）', ['115 个示例 action，114 个只读', '执行方式：exec、steps、script、builtin', '新增只读诊断能力的主要方式', '', '主机不支持某个 builtin 时，', '对应 action 标记为 unsupported'], { ts: 14 });
 
 // ═════════ 2. 目标 ═════════
