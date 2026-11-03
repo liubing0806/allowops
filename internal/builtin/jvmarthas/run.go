@@ -443,10 +443,12 @@ func (c *call) prepare(ctx context.Context, state *State, proc *Process, key Key
 	}
 
 	// The record goes to disk before the attach, so that a call that dies after it can be recovered.
+	// It counts as unanswered until the JVM answers the load command.
 	now := c.env.Now()
 	rec := Record{
 		Version: recordVersion, BootID: key.BootID, PID: key.PID, StartTime: key.StartTime, Target: c.target.Name,
 		Command: string(c.cmd.Kind), Port: port, Password: password, Created: now, Deadline: now.Add(c.cmd.ExecTimeout + c.cmd.Enhance + recordLifetime),
+		LoadUnanswered: true,
 	}
 	if err := state.WriteRecord(rec); err != nil {
 		c.fail("session record: %v", err)
@@ -525,16 +527,11 @@ func (c *call) attachAndRun(ctx context.Context, state *State, proc *Process, cl
 	if _, err := proc.JVM.Attach(ctx, jvmtarget.AttachRequest{Agent: arg}); err != nil {
 		// The load can have worked although the reply did not arrive.
 		present := waitPresent(bg, c.env, proc, rec.Port, c.env.AttachSettle)
-		out := outcome{status: StatusFailed, reason: "attach: " + err.Error(), mayExist: present}
-		if !present && errors.Is(err, jvmtarget.ErrLoadUnanswered) {
-			rec.LoadUnanswered = true
-			if werr := state.WriteRecord(*rec); werr != nil {
-				out.reason += "; session record: " + werr.Error()
-			}
-			out.pending = true
-		}
-		return out
+		// The record on disk is marked unanswered since before the attach.
+		pending := !present && errors.Is(err, jvmtarget.ErrLoadUnanswered)
+		return outcome{status: StatusFailed, reason: "attach: " + err.Error(), mayExist: present, pending: pending}
 	}
+	rec.LoadUnanswered = false
 	if err := waitListening(ctx, c.env, proc, rec.Port); err != nil {
 		return outcome{status: StatusFailed, reason: err.Error(), mayExist: serverPresent(c.env, proc, rec.Port)}
 	}
