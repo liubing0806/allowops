@@ -79,9 +79,11 @@ func New(ctx context.Context, configs []Config, deps Deps) (*Host, error) {
 	h := &Host{}
 	h.redactor, _ = redact.New(nil)
 	seen := map[string]bool{}
-	for _, c := range configs {
+	// Errors name an instance by its validated ID or its position, never by
+	// unvalidated values from the configuration.
+	for i, c := range configs {
 		if !instanceID.MatchString(c.ID) || seen[c.ID] {
-			return nil, fmt.Errorf("plugin %q: invalid or duplicate instance ID", c.ID)
+			return nil, fmt.Errorf("plugins[%d]: invalid or duplicate instance ID", i)
 		}
 		seen[c.ID] = true
 		if c.Timeout == 0 {
@@ -95,7 +97,7 @@ func New(ctx context.Context, configs []Config, deps Deps) (*Host, error) {
 		}
 		info, ok := plugin.Lookup(plugin.ModuleID(c.Module))
 		if !ok {
-			return nil, fmt.Errorf("plugin %s: unknown module %q", c.ID, c.Module)
+			return nil, fmt.Errorf("plugin %s: unknown module", c.ID)
 		}
 		m := info.New()
 		resolver, ok := m.(inventory.Resolver)

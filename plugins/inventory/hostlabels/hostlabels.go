@@ -14,7 +14,7 @@ import (
 
 func init() { plugin.Register(Module{}) }
 
-var credentialLabel = regexp.MustCompile(`(?i)pass|pwd|secret|token|credential|auth|(?:api|access|private|app|sign)[_.-]?key`)
+var credentialLabel = regexp.MustCompile(`(?i)pass|pwd|secret|token|credential|auth|(?:api|access|private|app|sign|signing|master|encrypt(?:ion)?)[_.-]?key`)
 
 type Module struct {
 	Label string `yaml:"label"`

@@ -178,7 +178,7 @@ type Config struct {
 2. `disabled: true` 的实例跳过，不构造，不出现在健康状态中。
 3. `plugin.Lookup(module)`。未注册时报错。
 4. 按模块 ID 的命名空间检查接口。本轮只有 `inventory`：`New()` 的返回值必须实现 `inventory.Resolver`。其他命名空间或接口不符时报错。
-5. 解码 `config`。解码错误只保留插件 `id` 和行号（`plugin <id>: invalid config at line N`），`yaml.v3` 的原始错误会引用字段名和值。先遍历节点树，含有别名节点（`*anchor`）时报错，错误信息给出插件 `id`。然后把节点重新编码为 YAML，再用 `KnownFields(true)` 解码到 `New()` 返回的对象。重新编码是因为 `yaml.v3` 的 `Node.Decode` 不支持 `KnownFields`；拒绝别名是因为单独重新编码一个子树时，引用的锚点可能在子树之外。
+5. 解码 `config`。第 1、3 步的错误不回显未校验的值：`id` 不合法时用序号（`plugins[N]`），模块未注册时不写模块名。解码错误只保留插件 `id` 和行号（`plugin <id>: invalid config at line N`），`yaml.v3` 的原始错误会引用字段名和值。先遍历节点树，含有别名节点（`*anchor`）时报错，错误信息给出插件 `id`。然后把节点重新编码为 YAML，再用 `KnownFields(true)` 解码到 `New()` 返回的对象。重新编码是因为 `yaml.v3` 的 `Node.Decode` 不支持 `KnownFields`；拒绝别名是因为单独重新编码一个子树时，引用的锚点可能在子树之外。
 6. 如果实现了 `Provisioner`，用带 `timeout` 的 ctx 调用 `Provision`。失败时：`required: true` 报错；否则实例标记为不可用，错误写日志，继续启动。
 
 第 1、3、4、5 步的错误都是配置错误，网关拒绝启动，不受 `required` 影响。
@@ -282,7 +282,7 @@ config:
 - 每次 `Resolve` 调用 `Host.Hosts(ctx)`，按标签值分组。`Query.Kind` 与配置的 `kind` 不同时返回空结果。每个不同的值生成一个实体：`Name` 为标签值，`Hosts` 为该值下的主机名（排序）。
 - `Selector` 为 `<label>=<value>`，只在标签键和值都不含 `,`、`=`，且没有首尾空白时生成。否则不生成 selector，只返回 `Hosts`。原因：selector 语法按 `,` 拆分条件、按 `=` 拆分键值、并去掉首尾空白（`internal/gateway/api/hosts.go:55-60`），而标签值允许这些字符（`internal/gateway/api/hosts.go:285`）。拼接这样的值会选中其他主机。
 - 没有该标签的主机不出现在结果中。
-- `label` 名称含 `pass`、`pwd`、`secret`、`token`、`credential`、`auth` 或 `api_key` 这类词时，`Provision` 报错。原因：实体名称就是标签值，网关脱敏名称时没有标签键作为上下文，`password` 标签的值会原样返回。
+- `label` 名称含 `pass`、`pwd`、`secret`、`token`、`credential`、`auth` 或 `api_key`、`master_key`、`signing_key` 这类词时，`Provision` 报错。测试逐个对照 `internal/redact`：脱敏器按 `<键>=<值>` 识别为凭据的键都必须被拒绝。原因：实体名称就是标签值，网关脱敏名称时没有标签键作为上下文，`password` 标签的值会原样返回。
 - 不缓存。
 
 ## 8. MCP 工具 `entities_search`
@@ -454,3 +454,12 @@ PR #24 审阅（Astra，2026-11-03，基于 `97b4894`）。失败测试 `49e625a
 | 可选：`plugin` 包测试注册后未清理，`-count=2` 时 panic | 采纳，测试结束时注销 |
 | 可选：`VisibleHostnames` 对每台主机线性查找名称 | 采纳，改为集合查找 |
 | 可选：第 2 节未写 Arthas 安装状态过滤 | 采纳（第 2 节） |
+
+PR #24 第二轮复审（Astra，2026-11-03，基于 `0cefd2e`）。上一轮 2 条中配置解码错误确认关闭。失败测试和修复紧随其后提交：
+
+| 意见 | 处理 |
+| --- | --- |
+| 凭据标签规则漏掉 `master_key`、`signing_key`、`encrypt(ion)_key` | 采纳。补齐，并增加与 `internal/redact` 对照的测试（第 7.2 节） |
+| 非法 `id`、未注册的 `module` 原样出现在启动错误中 | 采纳。用序号或已校验的 ID 标识（第 6.2 节） |
+| `gateway.yaml` 外层解析错误（未知锚点、未知字段、类型错误）引用原值 | 本 PR 不处理。这是整个 `gateway.yaml` 的既有行为，不限于 `plugins` 节，另行处理 |
+
