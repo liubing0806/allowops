@@ -3,6 +3,7 @@ package pluginhost
 import (
 	"bytes"
 	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/liubing0806/allowops/plugin"
@@ -18,6 +19,8 @@ type Config struct {
 	Config   yaml.Node     `yaml:"config"`
 }
 
+var yamlErrorLine = regexp.MustCompile(`line (\d+)`)
+
 func decodeConfig(c Config, m plugin.Module) error {
 	if hasAlias(&c.Config) {
 		return fmt.Errorf("plugin %s: config contains YAML alias", c.ID)
@@ -29,7 +32,11 @@ func decodeConfig(c Config, m plugin.Module) error {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(m); err != nil {
-		return fmt.Errorf("plugin %s: %w", c.ID, err)
+		// yaml.v3 errors quote field names and values; keep only the line.
+		if line := yamlErrorLine.FindStringSubmatch(err.Error()); line != nil {
+			return fmt.Errorf("plugin %s: invalid config at line %s", c.ID, line[1])
+		}
+		return fmt.Errorf("plugin %s: invalid config", c.ID)
 	}
 	return nil
 }

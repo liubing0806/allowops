@@ -14,6 +14,7 @@ func (m testModule) Module() ModuleInfo {
 func TestRegisterAndLookup(t *testing.T) {
 	id := ModuleID("inventory.registry_test")
 	Register(testModule{id})
+	t.Cleanup(func() { unregister(id) })
 	info, ok := Lookup(id)
 	if !ok || info.ID != id || info.New().Module().ID != id {
 		t.Fatalf("lookup: %+v, %v", info, ok)
@@ -28,7 +29,9 @@ func TestModuleID(t *testing.T) {
 	for _, id := range []string{"", "inventory", "a.b.c", "Inventory.static", "inventory.host-labels", "1a.b", "a." + strings.Repeat("b", 33), strings.Repeat("a", 33) + ".b"} {
 		t.Run(id, func(t *testing.T) { assertPanic(t, func() { Register(testModule{ModuleID(id)}) }) })
 	}
-	Register(testModule{ModuleID(strings.Repeat("a", 32) + "." + strings.Repeat("b", 32))})
+	long := ModuleID(strings.Repeat("a", 32) + "." + strings.Repeat("b", 32))
+	Register(testModule{long})
+	unregister(long)
 }
 
 func assertPanic(t *testing.T, f func()) {
@@ -39,4 +42,10 @@ func assertPanic(t *testing.T, f func()) {
 		}
 	}()
 	f()
+}
+
+func unregister(id ModuleID) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	delete(registry, id)
 }

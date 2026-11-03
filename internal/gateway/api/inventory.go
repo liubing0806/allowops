@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"slices"
 
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
@@ -17,8 +16,12 @@ func (s *Service) VisibleHostnames(ctx context.Context, names []string) (map[str
 	if err != nil {
 		return nil, dbError(err)
 	}
+	requested := map[string]bool{}
+	for _, name := range names {
+		requested[name] = true
+	}
 	for _, h := range hosts {
-		if !slices.Contains(names, h.Hostname) {
+		if !requested[h.Hostname] {
 			continue
 		}
 		var labels map[string]string

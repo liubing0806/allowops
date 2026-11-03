@@ -34,8 +34,8 @@
 改动：
 
 1. 在 `internal/catalog/builtin.go` 增加 `func BuiltinNames() []string`，返回 `Builtins` 的键，按字母排序。
-2. `agent.go:111` 改为 `Builtins: catalog.BuiltinNames()`。`internal/agent` 已经导入 `internal/catalog`。
-3. `internal/agent/events_test.go:54` 改为断言 hello 中的列表等于 `catalog.BuiltinNames()`。
+2. `agent.go:111` 改为从 `catalog.BuiltinNames()` 生成。`internal/agent` 已经导入 `internal/catalog`。合入 main 的 Arthas 改动后，主机未安装 Arthas 时列表去掉 `jvm_arthas`，与 main 的行为一致。
+3. `internal/agent/events_test.go:54` 改为断言 hello 中的列表等于 `catalog.BuiltinNames()`（两边都去掉 `jvm_arthas` 后比较；安装状态由 `arthas_test.go` 覆盖）。
 4. 在 `internal/catalog` 增加一个测试，用字面量列表断言 `BuiltinNames()` 的完整内容。这样误删一个处理器时测试失败。
 
 不做：不把注册移到各 `internal/builtin/*` 包。那些包要导入 `catalog` 的类型，而 `catalog` 已导入它们，会形成循环依赖。`Builtins` 保持可修改的包级变量，3 个测试文件在运行时增删条目（`internal/cli/builtin_parameters_test.go:33`、`internal/executor/builtin_error_text_test.go:30,121`、`internal/executor/parameter_namespaces_test.go:27,76`）。
@@ -178,7 +178,7 @@ type Config struct {
 2. `disabled: true` 的实例跳过，不构造，不出现在健康状态中。
 3. `plugin.Lookup(module)`。未注册时报错。
 4. 按模块 ID 的命名空间检查接口。本轮只有 `inventory`：`New()` 的返回值必须实现 `inventory.Resolver`。其他命名空间或接口不符时报错。
-5. 解码 `config`。先遍历节点树，含有别名节点（`*anchor`）时报错，错误信息给出插件 `id`。然后把节点重新编码为 YAML，再用 `KnownFields(true)` 解码到 `New()` 返回的对象。重新编码是因为 `yaml.v3` 的 `Node.Decode` 不支持 `KnownFields`；拒绝别名是因为单独重新编码一个子树时，引用的锚点可能在子树之外。
+5. 解码 `config`。解码错误只保留插件 `id` 和行号（`plugin <id>: invalid config at line N`），`yaml.v3` 的原始错误会引用字段名和值。先遍历节点树，含有别名节点（`*anchor`）时报错，错误信息给出插件 `id`。然后把节点重新编码为 YAML，再用 `KnownFields(true)` 解码到 `New()` 返回的对象。重新编码是因为 `yaml.v3` 的 `Node.Decode` 不支持 `KnownFields`；拒绝别名是因为单独重新编码一个子树时，引用的锚点可能在子树之外。
 6. 如果实现了 `Provisioner`，用带 `timeout` 的 ctx 调用 `Provision`。失败时：`required: true` 报错；否则实例标记为不可用，错误写日志，继续启动。
 
 第 1、3、4、5 步的错误都是配置错误，网关拒绝启动，不受 `required` 影响。
@@ -282,6 +282,7 @@ config:
 - 每次 `Resolve` 调用 `Host.Hosts(ctx)`，按标签值分组。`Query.Kind` 与配置的 `kind` 不同时返回空结果。每个不同的值生成一个实体：`Name` 为标签值，`Hosts` 为该值下的主机名（排序）。
 - `Selector` 为 `<label>=<value>`，只在标签键和值都不含 `,`、`=`，且没有首尾空白时生成。否则不生成 selector，只返回 `Hosts`。原因：selector 语法按 `,` 拆分条件、按 `=` 拆分键值、并去掉首尾空白（`internal/gateway/api/hosts.go:55-60`），而标签值允许这些字符（`internal/gateway/api/hosts.go:285`）。拼接这样的值会选中其他主机。
 - 没有该标签的主机不出现在结果中。
+- `label` 名称含 `pass`、`pwd`、`secret`、`token`、`credential`、`auth` 或 `api_key` 这类词时，`Provision` 报错。原因：实体名称就是标签值，网关脱敏名称时没有标签键作为上下文，`password` 标签的值会原样返回。
 - 不缓存。
 
 ## 8. MCP 工具 `entities_search`
@@ -443,3 +444,13 @@ Astra 第二轮复核（2026-11-03，基于 `ebf2f30`）。上表 5 条确认关
 | --- | --- |
 | `-p<密码>` 单独作为名称时被脱敏，放在 `memo=`、`service=`、`service/` 之后不被识别，经 selector、`Attrs` 值和 `DependsOn` 返回 | 采纳。值、selector 条件和依赖名称部分单独再脱敏（第 6.3 节） |
 | `yaml.v3` 解码错误引用文件中的值，进入日志和启动错误 | 采纳。只保留行号（第 7.1 节） |
+
+PR #24 审阅（Astra，2026-11-03，基于 `97b4894`）。失败测试 `49e625a`，修复在其后一个提交：
+
+| 意见 | 处理 |
+| --- | --- |
+| `inventory.host_labels` 以 `password` 这类标签分组时，标签值作为名称返回，脱敏缺少键上下文 | 采纳。凭据类标签名在 `Provision` 时拒绝（第 7.2 节） |
+| 插件 `config` 解码错误引用字段名，进入启动错误 | 采纳。只保留插件 ID 和行号（第 6.2 节） |
+| 可选：`plugin` 包测试注册后未清理，`-count=2` 时 panic | 采纳，测试结束时注销 |
+| 可选：`VisibleHostnames` 对每台主机线性查找名称 | 采纳，改为集合查找 |
+| 可选：第 2 节未写 Arthas 安装状态过滤 | 采纳（第 2 节） |

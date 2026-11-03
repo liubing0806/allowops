@@ -14,6 +14,8 @@ import (
 
 func init() { plugin.Register(Module{}) }
 
+var credentialLabel = regexp.MustCompile(`(?i)pass|pwd|secret|token|credential|auth|(?:api|access|private|app|sign)[_.-]?key`)
+
 type Module struct {
 	Label string `yaml:"label"`
 	Kind  string `yaml:"kind"`
@@ -27,6 +29,11 @@ func (Module) Module() plugin.ModuleInfo {
 func (m *Module) Provision(ctx context.Context, h plugin.Host) error {
 	if m.Label == "" {
 		return fmt.Errorf("label required")
+	}
+	// Entity names are label values; the gateway redacts names without the
+	// label key, so a value under a credential key would be returned as is.
+	if credentialLabel.MatchString(m.Label) {
+		return fmt.Errorf("label must not be a credential label")
 	}
 	if m.Kind == "" {
 		m.Kind = "service"
