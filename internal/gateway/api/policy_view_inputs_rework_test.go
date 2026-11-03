@@ -10,7 +10,7 @@ import (
 )
 
 func TestDefaultPolicyViewInputsCarryStoredActionsAndHosts(t *testing.T) {
-	s := &Service{Config: Config{MaxTestEvaluations: 34}}
+	s := &Service{Config: Config{MaxTestEvaluations: 35}}
 	snap := &policySnapshot{Subjects: []policySubject{{ID: "inspector", Attributes: authz.Subject{ID: "inspector"}}}, Actions: []authz.Action{{Name: "danger_action", Risk: "dangerous"}, {Name: "read_action", Risk: "read"}}, Hosts: []authz.Host{{ID: "dev", Labels: map[string]string{"env": "dev"}}, {ID: "prod", Labels: map[string]string{"env": "prod"}}}}
 	env := authz.Environment{TimeNS: 1234567890, SourceIP: "192.0.2.1"}
 	inputs, indices, err := s.inputs(snap, nil, env)
@@ -56,10 +56,10 @@ func TestDefaultPolicyViewInputsCarryStoredActionsAndHosts(t *testing.T) {
 			}
 		}
 	}
-	if len(inputs) != 34 { // S=1, C=12, H=2, A=2: S*(C+2H+3A+3AH).
-		t.Errorf("default inputs=%d; want 34", len(inputs))
+	if len(inputs) != 35 { // S=1, C=13, H=2, A=2: S*(C+2H+3A+3AH).
+		t.Errorf("default inputs=%d; want 35", len(inputs))
 	}
-	s.Config.MaxTestEvaluations = 33
+	s.Config.MaxTestEvaluations = 34
 	_, _, err = s.inputs(snap, nil, env)
 	if connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Errorf("resource matrix over cap code=%v; want resource_exhausted", connect.CodeOf(err))

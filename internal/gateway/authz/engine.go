@@ -160,7 +160,7 @@ func capabilities() *ast.Capabilities {
 
 func validOperation(op Operation) bool {
 	switch op {
-	case ExecuteAction, ModifyPolicy, ManageServiceAccounts, ManageHosts, CreateJoinToken, ManageUserRoles, PublishCatalog, ViewHosts, ViewCatalog, ViewJobs, ViewOutput, ViewAudit, ViewSystem:
+	case ExecuteAction, ModifyPolicy, ManageServiceAccounts, ManageHosts, CreateJoinToken, ManageUserRoles, PublishCatalog, ViewHosts, ViewInventory, ViewCatalog, ViewJobs, ViewOutput, ViewAudit, ViewSystem:
 		return true
 	default:
 		return false

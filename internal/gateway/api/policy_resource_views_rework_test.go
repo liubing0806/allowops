@@ -236,7 +236,7 @@ func TestDefaultPolicyTrialIncludesLiveJobAndCatalogViews(t *testing.T) {
 	if tested.Msg.Test.ChangedCount != 10 {
 		t.Errorf("default resource-view changes=%d; want 6 action job/output, 2 global job/output and 2 catalog decisions", tested.Msg.Test.ChangedCount)
 	}
-	const evaluations = 68 // S=2, C=12, H=2, A=2: S*(C+2H+3A+3AH).
+	const evaluations = 70 // S=2, C=13, H=2, A=2: S*(C+2H+3A+3AH).
 	if tested.Msg.Test.EvaluatedCount != evaluations {
 		t.Errorf("default resource-view evaluated=%d; want %d", tested.Msg.Test.EvaluatedCount, evaluations)
 	}
