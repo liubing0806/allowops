@@ -13,6 +13,7 @@ const (
 	ManageUserRoles       Operation = "manage_user_roles"
 	PublishCatalog        Operation = "publish_catalog"
 	ViewHosts             Operation = "view_hosts"
+	ViewInventory         Operation = "view_inventory"
 	ViewCatalog           Operation = "view_catalog"
 	ViewJobs              Operation = "view_jobs"
 	ViewOutput            Operation = "view_output"

@@ -23,6 +23,7 @@ import (
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/authn"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -79,6 +80,7 @@ type Service struct {
 	management    *management
 	jobStatistics JobStatistics
 	objectStorage ObjectStorageHealth
+	pluginHealth  func() []pluginhost.Health
 	oidc          map[string]*OIDCProvider
 	ldap          map[string]LDAPProvider
 	state         atomic.Pointer[policyState]

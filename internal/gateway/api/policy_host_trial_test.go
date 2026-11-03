@@ -50,7 +50,7 @@ func TestDefaultPolicyTrialIncludesLiveHostPermissions(t *testing.T) {
 		seen[change.CaseIndex] = true
 	}
 	// The same inputs must count towards the cap on trial and save revalidation.
-	const evaluations = 32 // 2 subjects * (12 global + 2 operations * 2 hosts).
+	const evaluations = 34 // 2 subjects * (13 global + 2 operations * 2 hosts).
 	if tested.Msg.Test.EvaluatedCount != evaluations {
 		t.Errorf("evaluated_count=%d; want %d", tested.Msg.Test.EvaluatedCount, evaluations)
 	}

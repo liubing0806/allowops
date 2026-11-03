@@ -29,10 +29,11 @@ allowops 是给 AI agent 使用的运维网关：agent 通过 MCP 调用运维�
                     allowops-exec（root）：验签 → 校验 → 脱敏 → 切换用户执行
 ```
 
-- 网关不主动连接任何主机。主机离线时任务标记 `offline`，不排队。
+- 网关不主动连接被管主机。主机离线时任务标记 `offline`，不排队。网关插件只能访问其配置中声明的外部地址（决定记录第 22 节 PL4）。
 - 网关对外只开 443 端口，按 TLS ALPN 区分主机连接、MCP、控制台 API。负载均衡必须为 L4 TCP 透传。
 - 网关除主机长连接外无实例级状态，可水平扩容。主机连接所在实例记录在 PostgreSQL，用 LISTEN/NOTIFY 通知该实例下发任务。
 - MVP 不做区域中继；主机端配置项为“上游地址”，为以后增加中继保留。
+- 网关端插件：服务拓扑、变更记录、排查知识和触发源通过编译期注册的插件接入，网关按扩展点提供固定 MCP 工具。设计见 [plugin-architecture.md](plugin-architecture.md)，决定见决定记录第 22 节。
 
 ### 组件
 
@@ -217,7 +218,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 |---|---|
 | 主体 | 服务账号、控制台用户（角色、团队、负责人） |
 | 资源 | 主机（授权标签）、action（risk、名称） |
-| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和标签、创建 join token、管理用户角色、发布目录、查看 job、查看输出、查看审计 |
+| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和标签、创建 join token、管理用户角色、发布目录、查看资源清单（`view_inventory`）、查看 job、查看输出、查看审计 |
 | 环境 | 请求时间、来源 IP |
 
 - 判定结果 `allow`、`deny`；deny 优先；未匹配任何规则时 deny。MVP 不做审批。
@@ -241,11 +242,13 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 | 工具 | 作用 |
 |---|---|
 | `hosts_search` | 按标签选择器或主机名查询主机：主机、标签、在线状态、总数、标签分布 |
+| `entities_search` | 存在可用 Inventory 实例时列出；按类型、名称和来源查询实体，需 `view_inventory` 权限 |
 | `<action>` | 每个 action 一个工具，只列出该身份可能被允许的 action |
 | `jobs_get` | job 汇总；传 `host` 时分页返回该主机完整输出；支持 `wait_seconds` |
 | `jobs_list` | 当前服务账号最近的 job |
 | `jobs_cancel` | 取消 job |
 
+- `entities_search` 先按主机可见性过滤，再按 `limit`（默认 20，范围 1~100）和完整结果的 32KB 上限截断。返回内容标记为不可信数据。返回的 selector 作为 action 目标时仍逐台检查权限。
 - action 工具公共参数：`targets`（`hosts` 或 `selector`）、`expected_count`、`reason`、`wait_seconds`、`batch_size`、`max_failures`、`response_format`。
 - 用 `selector` 时必须带 `expected_count`，与实际数量不符时拒绝并返回实际数量。
 - action 设置了 `max_targets` 时，目标数（`selector` 为解析后的主机数）超过该值则拒绝整个 job：返回 `isError: true`、原因 `MAX_TARGETS_EXCEEDED`、实际数量和上限；不创建 job，不下发 task。工具描述和 `targets` 的 schema 写明上限。
@@ -428,7 +431,7 @@ test/{attack,e2e,scale,vm}/
 - 单机模式（本地 YAML、stdio MCP）。
 - 区域中继和区域自治。
 - MCP OAuth 授权（以工程师身份调用，替代长期 token）。
-- CMDB 同步标签。
+- CMDB 同步标签。服务拓扑改由 Inventory 插件读取，不自建 CMDB（决定记录第 22 节 PL7）。
 - 审计导出到 syslog、webhook、Kafka。
 - agent 评估。
 - 在容器或 Pod 内执行签名脚本；按容器名自动解析数据库地址。

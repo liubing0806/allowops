@@ -48,7 +48,7 @@ func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, available ma
 	// failures and unknown/denied tools without duplicating the authorized event (design G49).
 	if auditErr := s.identity.AppendResultAudit(ctx, event); auditErr != nil {
 		message := "result audit unavailable"
-		if state.jobID != "" && (r.Params.Name == "jobs_cancel" || !strings.HasPrefix(r.Params.Name, "jobs_") && r.Params.Name != "hosts_search") {
+		if state.jobID != "" && (r.Params.Name == "jobs_cancel" || !strings.HasPrefix(r.Params.Name, "jobs_") && r.Params.Name != "hosts_search" && r.Params.Name != "entities_search") {
 			message += "; operation may have committed"
 		}
 		err = accessError(connect.CodeUnavailable, message)
@@ -152,6 +152,9 @@ func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, available
 	}
 	if r.Params.Name == "hosts_search" {
 		return s.searchHosts(ctx, r.Params.Arguments)
+	}
+	if r.Params.Name == "entities_search" {
+		return s.searchEntities(ctx, r.Params.Arguments)
 	}
 	if s.jobs == nil {
 		return nil, accessError(connect.CodeUnavailable, "job service unavailable")

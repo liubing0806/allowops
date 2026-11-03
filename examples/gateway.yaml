@@ -25,3 +25,19 @@ management:
   label_key_bytes: 128
   label_value_bytes: 1024
   label_count_buckets: 200
+
+# Optional inventory sources. At most 32 instances; changes require a restart.
+# plugins:
+#   - id: inv-static
+#     module: inventory.static
+#     required: false
+#     timeout: 5s
+#     config:
+#       file: /etc/allowops/topology.yaml
+#   - id: inv-host-labels
+#     module: inventory.host_labels
+#     config:
+#       label: service  # Use reported.service for agent-reported labels.
+#       kind: service
+# An optional plugin that fails provisioning appears as UNAVAILABLE in system
+# dependencies and makes overall system status DEGRADED. Readiness is unchanged.

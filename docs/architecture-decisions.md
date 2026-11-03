@@ -89,7 +89,7 @@
 |---|---|---|
 | 主体 | agent 服务账号、控制台用户 | 角色、团队、负责人 |
 | 资源 | 主机、action | 主机授权标签；action 的 risk、分类 |
-| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和授权标签、创建 join token、管理用户角色、发布目录、查看 job、查看输出（`view_output`）、查看审计 | — |
+| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和授权标签、创建 join token、管理用户角色、发布目录、查看资源清单（`view_inventory`）、查看 job、查看输出（`view_output`）、查看审计 | — |
 | 环境 | 请求上下文 | 请求时间、来源 IP |
 
 - 判定结果：`allow`、`deny`。deny 优先于 allow。未匹配任何规则时 deny。
@@ -503,10 +503,10 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 
 | 角色 | 默认权限 |
 |---|---|
-| admin | 全部：策略、服务账号、主机、join token、用户角色 |
-| operator | 管理主机（授权标签、删除）、创建 join token、查看 job |
+| admin | 全部：策略、服务账号、主机、join token、用户角色、资源清单（`view_inventory`） |
+| operator | 管理主机（授权标签、删除）、创建 join token、查看 job 和资源清单（`view_inventory`） |
 | auditor | 查看审计、job 和命令输出 |
-| viewer | 查看主机、目录和 job 摘要，不能查看命令输出 |
+| viewer | 查看主机、目录、job 摘要和资源清单（`view_inventory`），不能查看命令输出 |
 | publisher | 只能发布目录（供 CI 使用） |
 
 - 防锁死：保存策略前检查，保存后若没有任何主体能修改策略则拒绝保存。
@@ -955,3 +955,20 @@ params:
 | A70 | Arthas 阶段 3 验收后的处理（2026-11-03） | 采纳 `arthas-stage3-l2-report.md` 第 7 节的建议：`java-diagnostics-arthas-plan.md` 第 1 节的 L2 阈值和 3.2 节 L2 CPU 检查 50% 不变；L2 风险说明把增强开始后的影响分为每个 JVM 的第一次增强和后续增强，并写明第一次增强和 JDK 8 的稳态增幅；运行期监测的不评估期保持 5 秒，配置说明写明 `guard.max_cpu_percent` 低于第一次增强的 CPU 时会中止每个 JVM 的第一次 L2 调用；第一次增强的原因调查和补充测量列为阶段 3 的后续工作。同时采纳 `arthas-stage3-acceptance-report.md` 第 8 节的建议：L1 阈值不变，`thread -b` 线程数上限保持 1000；风险说明写明 JDK 17 上 `thread -b` 第一次调用约 100 ms、JDK 8 Parallel 和 Serial 上 attach 可能触发 70~120 ms 的 `Metadata GC Threshold` Full GC、CMS 的并发周期按 Full GC 计而使调用常被拒绝；L1 其余秒 ±5% 的判定同时给出没有调用的对照运行。`logger` 类加载器不卸载的问题暂不向 Arthas 上游报告，`logger` 继续暂停 |
 
 总指挥在实施中按规则自行决定的实现细节（G7~G18）记录在计划库，不改变上表和 design.md 的行为。
+
+## 22. 插件架构（PL1~PL10）
+
+2026-11-03 讨论确定，设计见 `plugin-architecture.md`。讨论起点：评估 allowops 作为 AI 运维 agent 还缺少的只读能力时，负责人认为自建 CMDB 过重，提出借鉴 dsh-superagent（DeepSeek Harness 的 bundle，基于 cordis 插件框架）“一切皆插件”的开发方式。
+
+| 编号 | 问题 | 决定 |
+|---|---|---|
+| PL1 | 插件机制 | 参照 Caddy 模块：编译期在 `init()` 中注册，网关 `main` 空白导入决定包含哪些插件；第三方插件通过自定义构建加入。不用 Go 标准库 `plugin` 包（要求相同工具链和依赖版本，只支持 Linux 和 macOS） |
+| PL2 | 插件 API 的位置与稳定性 | 公开包 `plugin/`（`internal/` 不能被其他 module 导入）；1.0 之前标为实验性，允许不兼容修改，修改时在 CHANGELOG 中说明 |
+| PL3 | 插件能注册什么 | 只能实现第 6 节的扩展点接口。不能注册 MCP 工具，不能调用 job 服务，不能注册在主机上执行的能力；网关按扩展点提供固定 MCP 工具，并新增对应的授权操作 |
+| PL4 | 网关出站访问 | 网关仍然不主动连接被管主机；网关插件只能访问其配置 `egress` 中声明的外部地址。修改 `design.md` 第 2 节的原表述“网关不主动连接任何主机” |
+| PL5 | 首批扩展点 | Inventory、Changes、Knowledge、Trigger；`auditsink`、`notifier` 以后按需增加。新增扩展点要记录决定，新增扩展点的实现不需要 |
+| PL6 | 主机端 builtin | 保留 `BuiltinHandler` 接口，改为注册表；`AgentHello.Capabilities.Builtins` 从注册表生成，不再单独列出名称 |
+| PL7 | CMDB | 不自建。服务拓扑由 Inventory 插件从已有系统读取（静态 YAML、主机标签、K8s、Prometheus、Nacos、CMDB HTTP API），网关合并结果，属性冲突时同时返回各来源的值 |
+| PL8 | 进程外插件 | 以后再做。扩展点接口只用 `context.Context` 和可序列化类型，以便加 gRPC 适配器时接口不变 |
+| PL9 | 编排层边界 | 待定：触发事件之后由谁启动排查、排查会话保存在哪里。Trigger 扩展点在此之前只定义接口 |
+| PL10 | 是否用 TypeScript 重写 | 不重写。主机端需要 `CGO_ENABLED=0` 和 CentOS 7（glibc 2.17）支持，Node.js 18 起官方二进制要求 glibc 2.28；root 辅助程序加载 JS 运行时会扩大攻击面。Caddy 风格的插件在 Go 中即可实现 |

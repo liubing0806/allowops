@@ -116,10 +116,10 @@ func TestConditionsAndOperationIsolation(t *testing.T) {
 
 func TestDefaultRoles(t *testing.T) {
 	permissions := map[string][]Operation{
-		"admin":     {ModifyPolicy, ManageServiceAccounts, ManageHosts, CreateJoinToken, ManageUserRoles, PublishCatalog, ViewHosts, ViewCatalog, ViewJobs, ViewOutput, ViewAudit, ViewSystem, ExecuteAction},
-		"operator":  {ManageHosts, CreateJoinToken, ViewHosts, ViewJobs, ViewSystem},
+		"admin":     {ModifyPolicy, ManageServiceAccounts, ManageHosts, CreateJoinToken, ManageUserRoles, PublishCatalog, ViewHosts, ViewInventory, ViewCatalog, ViewJobs, ViewOutput, ViewAudit, ViewSystem, ExecuteAction},
+		"operator":  {ManageHosts, CreateJoinToken, ViewHosts, ViewInventory, ViewJobs, ViewSystem},
 		"auditor":   {ViewAudit, ViewJobs, ViewOutput},
-		"viewer":    {ViewHosts, ViewCatalog, ViewJobs},
+		"viewer":    {ViewHosts, ViewInventory, ViewCatalog, ViewJobs},
 		"publisher": {PublishCatalog},
 	}
 	e := engineFor(t, DefaultRules(), nil)

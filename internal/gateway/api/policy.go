@@ -328,7 +328,7 @@ func snapshotActions(ctx context.Context, q querier, snap *policySnapshot) error
 
 var actionViewOperations = []authz.Operation{authz.ViewCatalog, authz.ViewJobs, authz.ViewOutput}
 
-var consoleOperations = []authz.Operation{authz.ModifyPolicy, authz.ManageServiceAccounts, authz.ManageHosts, authz.CreateJoinToken, authz.ManageUserRoles, authz.PublishCatalog, authz.ViewHosts, authz.ViewCatalog, authz.ViewJobs, authz.ViewOutput, authz.ViewAudit, authz.ViewSystem}
+var consoleOperations = []authz.Operation{authz.ModifyPolicy, authz.ManageServiceAccounts, authz.ManageHosts, authz.CreateJoinToken, authz.ManageUserRoles, authz.PublishCatalog, authz.ViewHosts, authz.ViewInventory, authz.ViewCatalog, authz.ViewJobs, authz.ViewOutput, authz.ViewAudit, authz.ViewSystem}
 
 type testEnvironment struct {
 	authz.Environment

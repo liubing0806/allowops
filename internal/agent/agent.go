@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"syscall"
 	"time"
 
@@ -121,10 +122,9 @@ func (a *Agent) backoff(attempt uint) time.Duration {
 }
 
 func (a *Agent) hello() *v1.AgentHello {
-	builtins := []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "prometheus_query", "alertmanager_alerts", "starrocks_query", "dremio_query", "starrocks_diag", "dremio_diag", "jvm_perfdata"}
-	if a.options.ArthasInstalled() {
-		builtins = append(builtins, "jvm_arthas")
-	}
+	// jvm_arthas is reported only where the Arthas package is installed.
+	installed := a.options.ArthasInstalled()
+	builtins := slices.DeleteFunc(catalog.BuiltinNames(), func(name string) bool { return name == "jvm_arthas" && !installed })
 	labels := map[string]string{"os": runtime.GOOS, "arch": runtime.GOARCH, "hostname": a.identity.get().Hostname}
 	for key, value := range a.config.ReportedLabels {
 		labels[key] = value
