@@ -199,7 +199,7 @@ LDAP 密码仅经 TLS 发往网关，网关仅使用 LDAPS/StartTLS、转义过�
 
 ### job 与输出 API
 
-RunJob 与 MCP 共用参数校验、目标解析、expected_count 检查、逐台 ABAC、批次调度和审计。selector 必须传 expected_count，不匹配返回实际数量；任一 deny 则整单拒绝，并返回被拒主机和规则，不派发部分任务。reason 必填。batch_size/max_failures 只能收紧 action/网关限制，未传时取 action 限制与网关 jobs 配置中的较小值（网关默认 20/5）；max_failures=0 表示首次失败即停止。wait_seconds 未传时取网关 jobs 配置（默认 30，最大 120），显式 0 为立即返回；MCP 工具 schema 中的 default 与 maximum 按同一配置生成；它只限制 RPC 等待，不改变 action 超时。RunJob 网络结果不明时不得盲目重试，协议没有新增幂等键；可按主体、action 和时间查询 job 后人工确认。
+RunJob 与 MCP 共用参数校验、目标解析、expected_count 检查、max_targets 检查、逐台 ABAC、批次调度和审计。selector 必须传 expected_count，不匹配返回实际数量；目标数超过 action 的 `max_targets` 时返回 `FAILED_PRECONDITION` 和 `MAX_TARGETS_EXCEEDED`，该检查在 expected_count 之后、ABAC 之前，不创建 job；任一 deny 则整单拒绝，并返回被拒主机和规则，不派发部分任务。reason 必填。batch_size/max_failures 只能收紧 action/网关限制，未传时取 action 限制与网关 jobs 配置中的较小值（网关默认 20/5）；max_failures=0 表示首次失败即停止。wait_seconds 未传时取网关 jobs 配置（默认 30，最大 120），显式 0 为立即返回；MCP 工具 schema 中的 default 与 maximum 按同一配置生成；它只限制 RPC 等待，不改变 action 超时。RunJob 网络结果不明时不得盲目重试，协议没有新增幂等键；可按主体、action 和时间查询 job 后人工确认。
 
 G39：RunJobRequest 新增字段 10、GetJobRequest 新增字段 3 为 `response_format`；RunJobResponse/GetJobResponse 新增字段 2 为 `JobSummary`，原字段保持编号和含义。缺省为 concise，每组至多返回前两个主机名；detailed 在响应预算内列出全部主机名。分组只比较退出码的存在性和值、stdout SHA-256、stderr SHA-256。每组 stdout+stderr 预览总计至多 4KiB，单次响应的 protobuf 和 JSON 编码均至多 32KiB。省略组、主机名或预览时 summary.truncated 为 true；group.truncated 表示预览或主机输出发生截断。输出信任标记固定 UNTRUSTED。Job 本身保持仅元数据；所有汇总预览仍需 view_output，缺少该权限时只返回元数据。
 
@@ -290,7 +290,7 @@ SystemStatus 的计数按调用者权限返回；不允许通过 overview 泄露
 | PERMISSION_DENIED | ABAC deny，整单任一目标被拒绝，读取输出无权限 | `POLICY_DENIED` + denied_hosts/rules/policy_version |
 | NOT_FOUND | 已授权查询的资源不存在；输出已丢失或过期 | `OUTPUT_UNAVAILABLE` |
 | ALREADY_EXISTS | 同名主机注册、已存在的目录版本冲突 | `HOSTNAME_EXISTS` |
-| FAILED_PRECONDITION | expected_count 不同、目录过期、防策略锁死、未完成上传 | `TARGET_COUNT_MISMATCH` + actual_count；`POLICY_LOCKOUT` |
+| FAILED_PRECONDITION | expected_count 不同、目标数超过 action 的 max_targets、目录过期、防策略锁死、未完成上传 | `TARGET_COUNT_MISMATCH` + actual_count；`MAX_TARGETS_EXCEEDED` + actual_count + violations（字段 `targets`，说明中给出上限）；`POLICY_LOCKOUT` |
 | ABORTED | revision/base_version 变化、预览快照变化、同一上传位置内容冲突 | `REVISION_CONFLICT`；重新读取/试算后重试 |
 | RESOURCE_EXHAUSTED | 消息、总字节、速率、并发上限 | `LIMIT_EXCEEDED`，可重试情况给 retry_after |
 | OUT_OF_RANGE | 输出 offset 超过可读范围、无效的序列区间 | `OUTPUT_OFFSET_OUT_OF_RANGE` |

@@ -139,6 +139,13 @@ Action parameters go inside `params`; common parameters and filters are top-leve
 | `max_failures` | Nonnegative; only reduces the signed effective limit, normally 5. Stops when failures exceed it. |
 | `response_format` | `concise` (default) or `detailed`. |
 
+If the action sets `max_targets`, its description and the `targets` schema state
+the limit. A call whose target count (for a selector, the resolved count) is
+above it is rejected as a whole with `isError: true`, `reason`
+`MAX_TARGETS_EXCEEDED`, `actual_count` and a `violations` entry that names the
+limit. This check follows the `expected_count` check and precedes policy
+evaluation; no job or task is created.
+
 Only filters declared by the action appear in its schema. `match`/`exclude` are
 RE2 patterns, `head`/`tail` are positive counts, and `count` is a boolean.
 `head`, `tail` and `count` cannot coexist, including `count: false`.

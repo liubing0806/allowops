@@ -93,6 +93,7 @@ timeout: 10s
 max_output: 64KB
 batch_size: 20                         # 可选，MCP 调用只能更严格
 max_failures: 5                        # 可选
+max_targets: 1                         # 可选，目标主机数超过该值时网关拒绝整个 job；省略表示不限制
 redact:                                # 可选，覆盖全局脱敏规则
   builtin: [secrets]
 ```
@@ -121,6 +122,8 @@ redact:                                # 可选，覆盖全局脱敏规则
 8. exec[0] 必须是绝对路径；exec 中不允许出现 `sudo`，提权只能用 `run_as`。
 9. 主机上不存在 exec[0]、exec[0] 是 `#!` 脚本且未声明 `allow_interpreter`、或用到主机端不支持的功能时，该 action 在该主机标记 `unsupported`。
 10. 执行方式四选一：`exec`、`steps`、`script`、`builtin`（见下文“扩展执行能力”）。
+11. `max_targets`：可选，1 到 2147483647 的整数，省略表示不限制。`catalog validate` 拒绝 0、负数、非整数、非数字和超出范围的值，也拒绝空值。该字段计入 action 摘要，受签名保护。限制由网关执行，MCP 和 CLI 调用不能放宽或收紧；主机端不使用该值。
+12. 兼容性：主机端用严格 JSON 解析目录包。不认识 `max_targets` 的旧版主机端拒绝整个目录包（`CATALOG_REJECTED`）：该目录版本的全部 action 在该主机上返回 `unsupported`（`CATALOG_UNAVAILABLE`），主机进程、连接和已加载的旧版本不受影响，之后不含该字段的版本可以正常加载。支持该字段的主机端在 hello 的 `features` 中报告 `max_targets`。发布使用 `max_targets` 的目录前，先升级主机端，并确认目标主机的 `features` 含 `max_targets`。网关目前不根据 `features` 阻止发布。
 
 ### 扩展执行能力
 
@@ -243,6 +246,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 
 - action 工具公共参数：`targets`（`hosts` 或 `selector`）、`expected_count`、`reason`、`wait_seconds`、`batch_size`、`max_failures`、`response_format`。
 - 用 `selector` 时必须带 `expected_count`，与实际数量不符时拒绝并返回实际数量。
+- action 设置了 `max_targets` 时，目标数（`selector` 为解析后的主机数）超过该值则拒绝整个 job：返回 `isError: true`、原因 `MAX_TARGETS_EXCEEDED`、实际数量和上限；不创建 job，不下发 task。工具描述和 `targets` 的 schema 写明上限。
 - 任一主机被 deny 时整个 job 拒绝，返回被拒主机和规则。
 - 工具注解：read → `readOnlyHint: true`；write → `destructiveHint: false`；dangerous → `destructiveHint: true`。
 - 参数错误返回 `isError: true` 并给出合法值。
@@ -252,7 +256,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 ### 执行流程和状态
 
 ```
-参数校验 → 解析 targets、核对 expected_count → 逐台 ABAC 判定（任一 deny 则拒绝）
+参数校验 → 解析 targets、核对 expected_count 和 max_targets → 逐台 ABAC 判定（任一 deny 则拒绝）
 → 分批下发；失败数超过 max_failures 时停止，剩余主机 skipped
 → wait_seconds 内完成返回汇总，否则返回 job_id 和进度
 ```

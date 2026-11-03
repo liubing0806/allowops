@@ -41,6 +41,7 @@ test/examples/check_examples.py
 
 - name 匹配 `^[a-z][a-z0-9_]{0,63}$`，文件名与 name 一致。保留工具名不得用于 action。action 和每个参数的 description 必填；示例 YAML 的 description 使用英文。
 - 执行方式恰好为 exec、steps、script、builtin 之一。exec 的首项及 exec_fallbacks 均为绝对路径；exec 不含提权命令，提权仅通过 run_as。省略 run_as 时使用 allowops 用户。
+- `max_targets` 为可选字段：1 到 2147483647 的整数，省略表示不限制；job 的目标主机数（`selector` 为解析后的数量）超过该值时，网关拒绝整个 job。需要限制同时作用的实例数时设置（如诊断类 action 设为 1）。字段受签名保护；不认识它的旧版主机端会拒绝整个目录包，发布前须先升级主机端（见 `docs/design.md` 第 4 节格式规则 12）。依据：`internal/catalog/catalog.go` 的 `validateLimits`，`internal/gateway/job/service.go` 的 `RunJob`。
 - 参数只替换完整 argv 元素 `{param}`。可选项使用子列表，缺失时省略整组；Go 格式模板按字面值传递。不执行 shell，不拼接选项或路径。
 - string、path 拒绝以连字符开头的值。未知参数、缺失必填值或类型错误一律拒绝。path 必须存在，解析符号链接后按路径分量检查 allowed_roots；它不单独拒绝所有 `..` 写法。内置 log_search 额外拒绝 `..` 分量；依据：`internal/params/params.go` 的 `ResolvePath`、`internal/builtin/logsearch/logsearch.go` 的 `files`。执行前还要通过属主与写权限检查，见第 4 节第 8 项。
 - 包装命令后真正执行的命令也必须通过解释器检查。Docker 示例不分配 TTY（终端）；不启用解释器覆盖。签名脚本是 D6 明确允许的例外，主机端须使用 Python -I。

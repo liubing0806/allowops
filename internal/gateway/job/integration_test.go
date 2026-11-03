@@ -78,6 +78,7 @@ type fixture struct {
 	Signer              ed25519.PrivateKey
 	Storage             *failingStorage
 	Package             *catalog.Package
+	ExtraActions        []catalog.Action
 	Hosts               []string
 	Stop                []context.CancelFunc
 	BeforeMessage       func(hostconn.Event)
@@ -178,6 +179,9 @@ func setup(t *testing.T, configure ...func(*fixture)) *fixture {
 		{Name: "steps", Description: "stop on error", Risk: "read", OnError: "stop", Steps: []catalog.Step{{Name: "first", Exec: []any{"/usr/bin/false"}}, {Name: "second", Exec: []any{"/usr/bin/printf", "not executed"}}}, Timeout: "5s", MaxOutput: 1024},
 		{Name: "cancel_steps", Description: "cancel continuing steps", Risk: "read", OnError: "continue", Steps: []catalog.Step{{Name: "first", Exec: []any{"/usr/bin/sleep", "2"}}, {Name: "second", Exec: []any{"/usr/bin/printf", "not executed"}}}, Timeout: "5s", MaxOutput: 1024},
 	} {
+		actions[a.Name] = a
+	}
+	for _, a := range f.ExtraActions {
 		actions[a.Name] = a
 	}
 	loaded, err := catalog.Load("../../../examples/catalog")

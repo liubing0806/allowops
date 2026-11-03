@@ -214,6 +214,9 @@ func (s *Service) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobRe
 		if r.ExpectedCount != nil && *r.ExpectedCount != uint64(len(targets)) {
 			return nil, detailError(connect.CodeFailedPrecondition, &v1.ErrorDetail{Reason: "EXPECTED_COUNT_MISMATCH", ActualCount: proto.Uint64(uint64(len(targets)))})
 		}
+		if a.MaxTargets != nil && uint64(len(targets)) > uint64(*a.MaxTargets) {
+			return nil, maxTargetsExceeded(a, len(targets))
+		}
 		if len(targets) == 0 {
 			return nil, failure(connect.CodeInvalidArgument, "NO_TARGETS")
 		}

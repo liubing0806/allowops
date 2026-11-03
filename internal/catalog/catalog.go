@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -68,6 +69,7 @@ type Action struct {
 	Redact           *redact.Config               `json:"redact,omitempty" yaml:"redact,omitempty"`
 	BatchSize        int                          `json:"batch_size,omitempty" yaml:"batch_size,omitempty"`
 	MaxFailures      *int                         `json:"max_failures,omitempty" yaml:"max_failures,omitempty"`
+	MaxTargets       *int                         `json:"max_targets,omitempty" yaml:"max_targets,omitempty"`
 	AllowInterpreter bool                         `json:"allow_interpreter,omitempty" yaml:"allow_interpreter,omitempty"`
 	maxOutputSet     bool
 }
@@ -112,6 +114,11 @@ func ParseAction(data []byte) (Action, error) {
 	for i := 0; i < len(content); i += 2 {
 		if content[i].Value == "max_output" {
 			a.maxOutputSet = true
+		}
+		// yaml.v3 truncates 1.5 to 1 and reads an empty value as unset. For a
+		// limit, either would silently loosen what the author wrote.
+		if value := content[i+1]; content[i].Value == "max_targets" && (value.Kind != yaml.ScalarNode || value.Tag != "!!int") {
+			return a, errMaxTargetsRange
 		}
 	}
 	return a, nil
@@ -215,6 +222,8 @@ func Load(dir string) (*Catalog, error) {
 	}
 	return result, nil
 }
+
+var errMaxTargetsRange = fmt.Errorf("max_targets must be an integer from 1 to %d", math.MaxInt32)
 
 var actionName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
@@ -413,7 +422,7 @@ func validateSteps(a Action, defs map[string]params.Definition) error {
 	return nil
 }
 
-// validateLimits checks timeout, output and batch limits, run_as and redaction.
+// validateLimits checks timeout, output, batch and target limits, run_as and redaction.
 func validateLimits(a Action) error {
 	timeout, err := time.ParseDuration(a.Timeout)
 	if err != nil || timeout <= 0 {
@@ -425,11 +434,25 @@ func validateLimits(a Action) error {
 	if a.BatchSize < 0 || (a.MaxFailures != nil && *a.MaxFailures < 0) {
 		return fmt.Errorf("batch_size and max_failures must be nonnegative")
 	}
+	if a.MaxTargets != nil && (*a.MaxTargets < 1 || *a.MaxTargets > math.MaxInt32) {
+		return errMaxTargetsRange
+	}
 	if strings.ContainsAny(a.RunAs, "\x00\r\n") || strings.HasPrefix(a.RunAs, "-") {
 		return fmt.Errorf("invalid run_as")
 	}
 	_, err = redact.New(a.Redact)
 	return err
+}
+
+// TargetLimit describes max_targets for callers, or returns "" when it is unset.
+func (a Action) TargetLimit() string {
+	if a.MaxTargets == nil {
+		return ""
+	}
+	if *a.MaxTargets == 1 {
+		return "at most 1 target host"
+	}
+	return fmt.Sprintf("at most %d target hosts", *a.MaxTargets)
 }
 
 func actionWarnings(a Action) []string {
