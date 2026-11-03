@@ -93,6 +93,9 @@ type Record struct {
 	Created   time.Time `json:"created"`
 	// Deadline is when Arthas drops the idle session by itself (sessionTimeout).
 	Deadline time.Time `json:"deadline"`
+	// LoadUnanswered tells that the JVM got the load command but did not answer it. Until the
+	// deadline the server may still start, so a missing server does not make the record stale.
+	LoadUnanswered bool `json:"load_unanswered,omitempty"`
 }
 
 // Counter is what the state directory remembers of the attaches to one JVM.

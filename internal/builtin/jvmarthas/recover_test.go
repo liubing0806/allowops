@@ -202,3 +202,47 @@ func TestRecoverWithoutAStateDirectoryYet(t *testing.T) {
 		t.Errorf("the state directory was not created: %v", err)
 	}
 }
+
+// leaveUnanswered writes the record of a call whose load command got no answer.
+func (r *rig) leaveUnanswered(port int, deadline time.Time) Record {
+	r.t.Helper()
+	rec := Record{
+		Version: 1, BootID: r.key.BootID, PID: r.key.PID, StartTime: r.key.StartTime, Target: "api", Command: "version",
+		Port: port, Password: rigPassword, Created: time.Now().Add(-time.Second), Deadline: deadline, LoadUnanswered: true,
+	}
+	if err := r.state().WriteRecord(rec); err != nil {
+		r.t.Fatal(err)
+	}
+	return rec
+}
+
+func TestRecoverKeepsTheRecordOfAnUnansweredLoad(t *testing.T) {
+	r := newRig(t)
+	rec := r.leaveUnanswered(18570, time.Now().Add(time.Minute))
+	got, err := Recover(context.Background(), r.env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Failed) != 1 || got.Stale != 0 {
+		t.Fatalf("recovery = %+v, want one failure", got)
+	}
+	if strings.Contains(got.Failed[0], rigPassword) {
+		t.Errorf("failure text holds the password: %q", got.Failed[0])
+	}
+	if _, err := r.state().ReadRecord(rec.Key()); err != nil {
+		t.Errorf("record was removed while the load may still start a server: %v", err)
+	}
+}
+
+func TestRecoverDeletesAnUnansweredLoadAfterItsDeadline(t *testing.T) {
+	r := newRig(t)
+	r.leaveUnanswered(18570, time.Now().Add(-time.Second))
+	got, err := Recover(context.Background(), r.env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Stale != 1 || len(got.Failed) != 0 {
+		t.Errorf("recovery = %+v", got)
+	}
+	r.wantEnded()
+}

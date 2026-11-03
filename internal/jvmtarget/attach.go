@@ -57,6 +57,9 @@ var (
 	ErrAttachTimeout = errors.New("the attach socket did not appear")
 	// ErrAttachRefused means the JVM did not load the agent, or answered in an unknown way.
 	ErrAttachRefused = errors.New("the JVM did not load the agent")
+	// ErrLoadUnanswered means the load command was sent and the JVM did not answer it. The JVM
+	// answers only after the agent's initialisation returned, so the agent may still start.
+	ErrLoadUnanswered = errors.New("the JVM got the load command and may still load the agent")
 	// ErrAgentArgument means the argument of the load command is not acceptable. Nothing was sent.
 	ErrAgentArgument = errors.New("invalid agent argument")
 )

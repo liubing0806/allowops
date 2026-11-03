@@ -3,6 +3,7 @@ package jvmarthas
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
@@ -418,6 +419,44 @@ func TestRunShutsDownAServerThatOpensItsPortAfterTheAttachEnded(t *testing.T) {
 	}
 	if got := mustRow(t, res.Stdout, "cleanup"); got != "ok" {
 		t.Errorf("cleanup = %q, want ok:\n%s", got, res.Stdout)
+	}
+	r.wantEnded()
+}
+
+// The JVM got the load command but did not answer before the call ended. It may still start the
+// server after the settle time, so the record with the password stays for the recovery.
+func TestRunKeepsTheRecordWhenTheLoadIsUnanswered(t *testing.T) {
+	r := newRig(t)
+	var sent jvmtarget.AttachRequest
+	r.jvm.onAttach = func(req jvmtarget.AttachRequest) error { sent = req; return nil }
+	r.jvm.attachErr = fmt.Errorf("reading the answer: %w; %w", context.Canceled, jvmtarget.ErrLoadUnanswered)
+	res, err := r.run(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ExitCode != builtin.ExitFailure || mustRow(t, res.Stdout, "status") != StatusFailed {
+		t.Fatalf("exit code %d\n%s", res.ExitCode, res.Stdout)
+	}
+	if !strings.Contains(res.Stderr, "cleanup failed") {
+		t.Errorf("stderr does not report the open clean-up:\n%s", res.Stderr)
+	}
+	rec, err := r.state().ReadRecord(r.key)
+	if err != nil {
+		t.Fatalf("the session record was removed: %v", err)
+	}
+	if !rec.LoadUnanswered || !rec.Deadline.After(time.Now()) {
+		t.Errorf("record = %+v, want an unanswered load with a deadline ahead", rec)
+	}
+	// The server comes up late; the recovery still reaches it with the recorded password.
+	if err := r.onAttach(sent); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Recover(context.Background(), r.env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Cleaned != 1 || len(got.Failed) != 0 {
+		t.Errorf("recovery = %+v", got)
 	}
 	r.wantEnded()
 }

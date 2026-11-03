@@ -487,6 +487,10 @@ func TestAttachWhenTheJVMDoesNotAnswer(t *testing.T) {
 	if err == nil || time.Since(start) > 4*time.Second {
 		t.Fatalf("err = %v after %v", err, time.Since(start))
 	}
+	// The load command was sent: the JVM can still load the agent after the wait.
+	if !errors.Is(err, ErrLoadUnanswered) {
+		t.Errorf("err = %v; want ErrLoadUnanswered", err)
+	}
 	if left := e.attachFiles(); len(left) != 0 {
 		t.Errorf("attach files left: %v", left)
 	}
@@ -495,8 +499,12 @@ func TestAttachWhenTheJVMDoesNotAnswer(t *testing.T) {
 func TestAttachWhenTheJVMClosesTheConnection(t *testing.T) {
 	e := newAttachEnv(t, attachOpts{})
 	e.listener.closeAtOnce = true
-	if _, err := e.attach(testAgent); !errors.Is(err, ErrAttachRefused) {
+	_, err := e.attach(testAgent)
+	if !errors.Is(err, ErrAttachRefused) {
 		t.Errorf("err = %v; want ErrAttachRefused", err)
+	}
+	if errors.Is(err, ErrLoadUnanswered) {
+		t.Errorf("err = %v; a closed connection is an answer", err)
 	}
 }
 
