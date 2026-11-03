@@ -1,0 +1,17 @@
+name: starrocks_cluster_status
+description: "Show StarRocks frontend, backend and compute node status with fixed SHOW statements. Use op cluster (component selects the node type) or op running for the queries that are executing now; the account needs SYSTEM OPERATE and the statements are fixed."
+risk: read
+run_as: root
+timeout: 15s
+builtin: starrocks_diag
+builtin_config:
+  credential: /etc/allowops/credentials/starrocks-diag.json
+  address: tcp://127.0.0.1:9030
+  max_rows: 200
+  max_bytes: 64KB
+  timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

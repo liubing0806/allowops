@@ -1,0 +1,8 @@
+# Build outputs and local run state; raw measurement data stays outside the repository.
+run/
+results/
+bin/
+app/target/
+probe/probe.jar
+__pycache__/
+app/target-log4j2/

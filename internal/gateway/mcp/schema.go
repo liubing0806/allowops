@@ -86,9 +86,14 @@ func actionTool(a catalog.Action, cfg job.Config) (*ToolDefinition, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A job with more targets than max_targets is rejected as a whole.
+	limit := ""
+	if text := a.TargetLimit(); text != "" {
+		limit = " This action accepts " + text + " per job; a job with more targets is rejected."
+	}
 	props := map[string]any{
 		"params": schema,
-		"targets": map[string]any{"type": "object", "description": "Select explicit hostnames or a label selector; exactly one selection is required.", "properties": map[string]any{
+		"targets": map[string]any{"type": "object", "description": "Select explicit hostnames or a label selector; exactly one selection is required." + limit, "properties": map[string]any{
 			"hosts":    map[string]any{"type": "array", "description": "Globally unique hostnames.", "items": map[string]any{"type": "string", "minLength": 1}, "minItems": 1, "uniqueItems": true},
 			"selector": map[string]any{"type": "string", "description": "Comma-separated key=value conjunctions (A10).", "minLength": 1},
 		}, "additionalProperties": false, "oneOf": []any{map[string]any{"required": []string{"hosts"}}, map[string]any{"required": []string{"selector"}}}},
@@ -130,7 +135,7 @@ func actionTool(a catalog.Action, cfg job.Config) (*ToolDefinition, error) {
 	if len(schema["required"].([]string)) > 0 {
 		required = append(required, "params")
 	}
-	return &ToolDefinition{Name: a.Name, Description: a.Description + toolInstructions, Annotations: annotations, InputSchema: map[string]any{
+	return &ToolDefinition{Name: a.Name, Description: a.Description + limit + toolInstructions, Annotations: annotations, InputSchema: map[string]any{
 		"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": props, "required": required, "additionalProperties": false,
 	}}, nil
 }
@@ -151,9 +156,11 @@ func batchLimits(a catalog.Action, cfg job.Config) (uint32, uint32, error) {
 	}
 	return batch, failures, nil
 }
+
 func waitSchema(cfg job.Config) map[string]any {
 	return map[string]any{"type": "integer", "description": "Wait for completion, then return the job ID and progress. Zero returns immediately.", "minimum": 0, "maximum": cfg.MaxWaitSeconds, "default": cfg.WaitSeconds}
 }
+
 func formatSchema() map[string]any {
 	return map[string]any{"type": "string", "description": "concise shows two sample hostnames per group; detailed includes paginated hostnames from P6 groups; P6 may already have truncated its source summary.", "enum": []string{"concise", "detailed"}, "default": "concise"}
 }

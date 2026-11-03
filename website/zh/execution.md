@@ -50,7 +50,9 @@ redact:
 | `mysql_query` | 单条 SELECT/SHOW/DESC/EXPLAIN 语句，只读事务，限制行数、结果字节数和超时。主机凭据保存在属于 root、权限为 0600 的文件中。 |
 | `redis_command` | 只读允许列表：GET、MGET、HGET、HLEN、TTL、TYPE、EXISTS、STRLEN、LLEN、SCARD、ZCARD、SCAN 和 INFO。 |
 | `http_get` | 在签名的 URL 前缀范围内执行 GET；不跟随重定向；响应大小有上限。 |
+| `jvm_perfdata` | 读取允许列表中 JVM（systemd 单元，或 Docker 容器与主类）的 hsperfdata，输出堆、GC、类和线程数据。不 attach，不发信号，不写目标；JVM 参数和系统属性从不输出。 |
+| `jvm_arthas` | 每个动作对应一条固定的 Arthas 命令，在允许列表中的 JVM 内执行。L1 命令（12 种）读取状态，不增强任何类。L2 命令 `watch`、`trace`、`stack` 和 `monitor` 对一个类的一个方法名（包含重载，最多 `max_methods` 个）最多增强 30 秒，之后重置；`jad` 反编译一个已加载的类。L2 的类名必须以 `builtin_config.class_prefixes` 中的前缀开头；JDK 和 Arthas 的包一律拒绝。每次调用都会 attach Arthas agent、执行命令，再停止 agent，因此动作为 `risk: write`、`run_as: root`、`max_targets: 1`、`batch_size: 1`；L2 动作按名称单独授权，与 L1 分开。Arthas 文件在目标的挂载命名空间内按 SHA-256 校验。attach 之前的检查（JVM 版本、内存余量、attach 次数和间隔；L2 还包括目标 5 秒内的 CPU）和命令运行期间的监测（CPU、GC、可选的健康检查）可以拒绝或中止调用；`builtin_config` 只能收紧它们的默认值。L2 输出按 `secrets` 和 `pii` 脱敏。增强类的 L2 调用通常需要 40 到 50 秒，超过默认的 MCP 等待时间。主机需要安装 Arthas 软件包；没有它时，该动作报告为 `unsupported`。 |
 
-使用 `builtin_config` 收紧处理程序已定义的上限和资源允许列表。即使省略 `run_as`，数据库处理程序也会使用特权辅助程序读取主机本地凭据。不带 `run_as` 的 `log_search` 和 `http_get` 直接以 agent 身份运行。`log_search` 没有匹配时，以及 `http_get` 返回非成功 HTTP 状态时，退出码可能为零。请检查结果和 HTTP 状态，不要只看进程退出码。
+使用 `builtin_config` 收紧处理程序已定义的上限和资源允许列表。即使省略 `run_as`，数据库处理程序也会使用特权辅助程序读取主机本地凭据，`jvm_perfdata` 使用它读取其他进程的文件，`jvm_arthas` 使用它以 root 身份 attach。不带 `run_as` 的 `log_search` 和 `http_get` 直接以 agent 身份运行。`log_search` 没有匹配时，以及 `http_get` 返回非成功 HTTP 状态时，退出码可能为零。请检查结果和 HTTP 状态，不要只看进程退出码。
 
 不支持的可执行文件或功能会在主机上报告为 `unsupported`。目录加载成功不能证明每个动作都能执行。使用前，请评审源代码仓库中的[示例目录](https://github.com/liubing0806/allowops/tree/main/examples/catalog)和内置处理程序的配置参考。

@@ -1,0 +1,18 @@
+{
+  "body": {
+    "command": "sysprop no.such.key",
+    "jobId": 18,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "jobId": 18,
+        "message": "There is no property with the key no.such.key",
+        "statusCode": 1,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "01bce553-e289-4d1e-842a-62b724e54896",
+  "state": "SUCCEEDED"
+}

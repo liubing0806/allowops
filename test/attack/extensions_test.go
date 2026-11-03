@@ -15,6 +15,7 @@ import (
 func attackAction(argv []any) catalog.Action {
 	return catalog.Action{Name: "attack", Description: "attack", Risk: "read", Exec: argv, Timeout: "1s", MaxOutput: 1024}
 }
+
 func TestWrappedInterpreterAttacks(t *testing.T) {
 	for _, argv := range [][]any{
 		{"/usr/bin/docker", "exec", "-e", "X=echo", "container", "sh"},
@@ -48,6 +49,7 @@ func TestWrappedInterpreterAttacks(t *testing.T) {
 		}
 	}
 }
+
 func catalogWords(argv []any) []string {
 	out := []string{}
 	for _, value := range argv {
@@ -55,6 +57,7 @@ func catalogWords(argv []any) []string {
 	}
 	return out
 }
+
 func TestTTYAlwaysRejected(t *testing.T) {
 	for _, name := range []string{"docker", "kubectl"} {
 		for _, option := range []string{"-t", "-it", "-ti", "--tty", "--tty=true", "--tty=false"} {
@@ -76,6 +79,7 @@ func TestTTYAlwaysRejected(t *testing.T) {
 		t.Fatal("accepted tty after pod")
 	}
 }
+
 func TestRenderedWrapperAttack(t *testing.T) {
 	a := attackAction([]any{"/usr/bin/env", "{mode}", "sh"})
 	a.Params = map[string]params.Definition{"mode": {Type: params.Enum, Description: "mode", Values: []string{"-i", "LANG=C"}}}
@@ -83,6 +87,7 @@ func TestRenderedWrapperAttack(t *testing.T) {
 		t.Fatal("rendered interpreter accepted")
 	}
 }
+
 func TestURLBypassAttacks(t *testing.T) {
 	for _, value := range []string{
 		"https://example.com.evil/api", "https://example.com@evil/api", "https://evil@example.com/api",
@@ -94,6 +99,7 @@ func TestURLBypassAttacks(t *testing.T) {
 		}
 	}
 }
+
 func TestScriptCatalogSymlinkEscape(t *testing.T) {
 	dir := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "script.py")

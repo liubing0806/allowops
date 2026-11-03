@@ -1,0 +1,80 @@
+# runtime
+java_version	17.0.20.1
+java_home	/opt/java/openjdk
+os_name	Linux
+os_version	6.18.54-1-lts
+processors	4
+system_load_average	6.19
+uptime_seconds	830
+
+# memory
+type	name	used	total	max
+heap	heap	156213248	536870912	536870912
+heap	g1_eden_space	120586240	318767104	-1
+heap	g1_old_gen	15704064	198180864	536870912
+heap	g1_survivor_space	19922944	19922944	-1
+nonheap	nonheap	149836296	156303360	-1
+nonheap	codeheap_'non-nmethods'	1461504	2555904	5836800
+nonheap	metaspace	110429584	111017984	-1
+nonheap	codeheap_'profiled_nmethods'	15376768	19857408	122908672
+nonheap	compressed_class_space	13779832	14024704	1073741824
+nonheap	codeheap_'non-profiled_nmethods'	8788608	8847360	122912768
+buffer_pool	mapped	0	0	-1
+buffer_pool	direct	100761975	100761972	-1
+buffer_pool	mapped - 'non-volatile memory'	0	0	-1
+
+# gc
+name	collection_count	collection_time_ms
+g1_young_generation	19	182
+g1_old_generation	0	0
+
+# threads
+id	name	group	state	cpu_percent	delta_time_ms	time_ms	priority	daemon	interrupted
+34	DestroyJavaVM	main	RUNNABLE	0.00	0	3408	5	false	false
+32	http-nio-8080-Poller	main	RUNNABLE	0.00	0	996	5	true	false
+22	http-nio-8080-exec-1	main	TIMED_WAITING	0.00	0	960	5	true	false
+26	http-nio-8080-exec-5	main	TIMED_WAITING	0.00	0	942	5	true	false
+27	http-nio-8080-exec-6	main	TIMED_WAITING	0.00	0	923	5	true	false
+30	http-nio-8080-exec-9	main	RUNNABLE	0.00	0	918	5	true	false
+31	http-nio-8080-exec-10	main	TIMED_WAITING	0.00	0	909	5	true	false
+24	http-nio-8080-exec-3	main	TIMED_WAITING	0.00	0	907	5	true	false
+28	http-nio-8080-exec-7	main	TIMED_WAITING	0.00	0	905	5	true	false
+23	http-nio-8080-exec-2	main	RUNNABLE	0.00	0	900	5	true	false
+29	http-nio-8080-exec-8	main	TIMED_WAITING	0.00	0	866	5	true	false
+25	http-nio-8080-exec-4	main	TIMED_WAITING	0.00	0	832	5	true	false
+120	http-nio-8080-exec-11	main	TIMED_WAITING	0.00	0	638	5	true	false
+121	http-nio-8080-exec-12	main	TIMED_WAITING	0.00	0	545	5	true	false
+33	http-nio-8080-Acceptor	main	RUNNABLE	0.00	0	186	5	true	false
+116	arthas-command-execute	system	TIMED_WAITING	0.00	0	100	5	true	false
+18	Catalina-utility-2	main	TIMED_WAITING	0.00	0	42	1	false	false
+17	Catalina-utility-1	main	WAITING	0.00	0	40	1	false	false
+111	arthas-NettyWebsocketTtyBootstrap-3-3	system	RUNNABLE	0.00	0	30	5	true	false
+112	arthas-TermServer-1-1	system	RUNNABLE	0.00	0	27	5	true	false
+118	arthas-TermServer-1-3	system	TIMED_WAITING	0.00	0	27	5	true	false
+11	Notification Thread	system	RUNNABLE	0.00	0	16	9	true	false
+106	arthas-NettyWebsocketTtyBootstrap-3-1	system	RUNNABLE	0.00	0	16	5	true	false
+115	arthas-TermServer-1-2	system	RUNNABLE	0.00	0	16	5	true	false
+125	arthas-TermServer-1-5	system	RUNNABLE	0.00	0	11	5	true	false
+123	arthas-TermServer-1-4	system	RUNNABLE	0.00	0	10	5	true	false
+117	arthas-NettyWebsocketTtyBootstrap-3-5	system	RUNNABLE	0.00	0	7	5	true	false
+129	arthas-TermServer-1-8	system	RUNNABLE	0.00	0	7	5	true	false
+12	Common-Cleaner	InnocuousThreadGroup	TIMED_WAITING	0.00	0	6	8	true	false
+114	arthas-NettyWebsocketTtyBootstrap-3-4	system	RUNNABLE	0.00	0	6	5	true	false
+107	arthas-NettyWebsocketTtyBootstrap-3-2	system	RUNNABLE	0.00	0	5	5	true	false
+122	arthas-NettyWebsocketTtyBootstrap-3-6	system	RUNNABLE	0.00	0	5	5	true	false
+124	arthas-NettyWebsocketTtyBootstrap-3-7	system	RUNNABLE	0.00	0	4	5	true	false
+126	arthas-NettyWebsocketTtyBootstrap-3-8	system	RUNNABLE	0.00	0	4	5	true	false
+2	Reference Handler	system	RUNNABLE	0.00	0	3	10	true	false
+20	HikariPool-1 housekeeper	main	TIMED_WAITING	0.00	0	3	5	true	false
+35	Attach Listener	system	RUNNABLE	0.00	0	3	9	true	false
+127	arthas-TermServer-1-6	system	RUNNABLE	0.00	0	2	5	true	false
+113	ResultDistributor	system	TIMED_WAITING	0.00	0	1	5	true	false
+128	arthas-TermServer-1-7	system	RUNNABLE	0.00	0	1	5	true	false
+3	Finalizer	system	WAITING	0.00	0	0	8	true	false
+4	Signal Dispatcher	system	RUNNABLE	0.00	0	0	9	true	false
+19	container-0	main	TIMED_WAITING	0.00	0	0	5	false	false
+101	arthas-timer	system	WAITING	0.00	0	0	9	true	false
+104	Keep-Alive-Timer	InnocuousThreadGroup	TIMED_WAITING	0.00	0	0	8	true	false
+108	arthas-shell-server	system	TIMED_WAITING	0.00	0	0	9	true	false
+109	arthas-session-manager	system	TIMED_WAITING	0.00	0	0	9	true	false
+130	Timer-for-arthas-dashboard-deb40fe3-0d4d-4fea-a3fd-73623a48ffeb	system	RUNNABLE	0.00	0	0	5	true	false

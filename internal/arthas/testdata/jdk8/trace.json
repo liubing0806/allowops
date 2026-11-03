@@ -1,0 +1,117 @@
+{
+  "body": {
+    "jobId": 12,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "command": "trace demo.ApiController hot -n 1 -m 1 --timeout 5",
+        "jobId": 12,
+        "state": "SCHEDULED",
+        "type": "command"
+      },
+      {
+        "effect": {
+          "classCount": 1,
+          "cost": 49,
+          "listenerId": 3,
+          "methodCount": 1
+        },
+        "jobId": 12,
+        "success": true,
+        "type": "enhancer"
+      },
+      {
+        "jobId": 12,
+        "nodeCount": 2,
+        "root": {
+          "children": [
+            {
+              "children": [
+                {
+                  "className": "demo.HotService",
+                  "cost": 22077,
+                  "invoking": true,
+                  "lineNumber": 39,
+                  "maxCost": 22077,
+                  "methodName": "work",
+                  "minCost": 22077,
+                  "times": 1,
+                  "totalCost": 22077,
+                  "type": "method"
+                }
+              ],
+              "className": "demo.ApiController",
+              "cost": 92369,
+              "invoking": false,
+              "lineNumber": -1,
+              "maxCost": 92369,
+              "methodName": "hot",
+              "minCost": 92369,
+              "times": 1,
+              "totalCost": 92369,
+              "type": "method"
+            }
+          ],
+          "classloader": "org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@3b0090a4",
+          "daemon": true,
+          "priority": 5,
+          "threadId": 26,
+          "threadName": "http-nio-8080-exec-8",
+          "timestamp": "2026-10-26 04:30:25.464",
+          "type": "thread"
+        },
+        "type": "trace"
+      },
+      {
+        "jobId": 12,
+        "nodeCount": 2,
+        "root": {
+          "children": [
+            {
+              "children": [
+                {
+                  "className": "demo.HotService",
+                  "cost": 21686,
+                  "invoking": true,
+                  "lineNumber": 39,
+                  "maxCost": 21686,
+                  "methodName": "work",
+                  "minCost": 21686,
+                  "times": 1,
+                  "totalCost": 21686,
+                  "type": "method"
+                }
+              ],
+              "className": "demo.ApiController",
+              "cost": 86356,
+              "invoking": false,
+              "lineNumber": -1,
+              "maxCost": 86356,
+              "methodName": "hot",
+              "minCost": 86356,
+              "times": 1,
+              "totalCost": 86356,
+              "type": "method"
+            }
+          ],
+          "classloader": "org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@3b0090a4",
+          "daemon": true,
+          "priority": 5,
+          "threadId": 19,
+          "threadName": "http-nio-8080-exec-1",
+          "timestamp": "2026-10-26 04:30:25.464",
+          "type": "thread"
+        },
+        "type": "trace"
+      },
+      {
+        "jobId": 12,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "36730af1-7c7c-400c-aee6-352db90fbc22",
+  "state": "SUCCEEDED"
+}

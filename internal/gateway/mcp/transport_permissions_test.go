@@ -138,10 +138,8 @@ func TestSDKP4GatewayMCPALPN(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gateway := server.New(agent, f.gateway.TLS.Certificates[0])
+	gateway := server.New(agent, f.gateway.TLS.Certificates[0], server.WithIdentity(f.identity), server.WithMCP(f.service.Handler()))
 	gateway.Catalogs = f.catalogs
-	gateway.UseIdentity(f.identity)
-	gateway.MCP = f.service.Handler()
 	done := make(chan error, 1)
 	go func() { done <- gateway.Serve(listener) }()
 	t.Cleanup(func() {

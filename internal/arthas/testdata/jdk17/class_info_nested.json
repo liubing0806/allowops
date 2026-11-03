@@ -1,0 +1,837 @@
+{
+  "body": {
+    "command": "sc -d java.util.Map$Entry",
+    "jobId": 13,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "com.alibaba.arthas.deps.io.netty.handler.codec.DefaultHeaders$HeaderEntry",
+          "classLoaderHash": "41390d17",
+          "classloader": [
+            "com.taobao.arthas.agent.ArthasClassloader@41390d17",
+            "jdk.internal.loader.ClassLoaders$PlatformClassLoader@4684f314"
+          ],
+          "codeSource": "/opt/arthas-minlog/arthas-core.jar",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "protected,static",
+          "name": "com.alibaba.arthas.deps.io.netty.handler.codec.DefaultHeaders$HeaderEntry",
+          "primitive": false,
+          "simpleName": "HeaderEntry",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "com.alibaba.arthas.deps.io.netty.handler.codec.DefaultHeaders$HeaderEntry",
+          "classLoaderHash": "7b9d8c47",
+          "classloader": [
+            "com.taobao.arthas.agent.ArthasClassloader@7b9d8c47",
+            "jdk.internal.loader.ClassLoaders$PlatformClassLoader@4684f314"
+          ],
+          "codeSource": "/opt/arthas-minlog/arthas-core.jar",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "protected,static",
+          "name": "com.alibaba.arthas.deps.io.netty.handler.codec.DefaultHeaders$HeaderEntry",
+          "primitive": false,
+          "simpleName": "HeaderEntry",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "com.alibaba.arthas.deps.io.netty.handler.codec.DefaultHeaders$HeaderEntry",
+          "classLoaderHash": "1114cc81",
+          "classloader": [
+            "com.taobao.arthas.agent.ArthasClassloader@1114cc81",
+            "jdk.internal.loader.ClassLoaders$PlatformClassLoader@4684f314"
+          ],
+          "codeSource": "/opt/arthas-minlog/arthas-core.jar",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "protected,static",
+          "name": "com.alibaba.arthas.deps.io.netty.handler.codec.DefaultHeaders$HeaderEntry",
+          "primitive": false,
+          "simpleName": "HeaderEntry",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.lang.ProcessEnvironment$StringEntry",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "private,static",
+          "name": "java.lang.ProcessEnvironment$StringEntry",
+          "primitive": false,
+          "simpleName": "StringEntry",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.AbstractMap$SimpleImmutableEntry",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry",
+            "java.io.Serializable"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "public,static",
+          "name": "java.util.AbstractMap$SimpleImmutableEntry",
+          "primitive": false,
+          "simpleName": "SimpleImmutableEntry",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.Collections$UnmodifiableMap$UnmodifiableEntrySet$UnmodifiableEntry",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "private,static",
+          "name": "java.util.Collections$UnmodifiableMap$UnmodifiableEntrySet$UnmodifiableEntry",
+          "primitive": false,
+          "simpleName": "UnmodifiableEntry",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.EnumMap$EntryIterator$Entry",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "private",
+          "name": "java.util.EnumMap$EntryIterator$Entry",
+          "primitive": false,
+          "simpleName": "Entry",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.HashMap$Node",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "static",
+          "name": "java.util.HashMap$Node",
+          "primitive": false,
+          "simpleName": "Node",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.HashMap$TreeNode",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "final,static",
+          "name": "java.util.HashMap$TreeNode",
+          "primitive": false,
+          "simpleName": "TreeNode",
+          "superClass": [
+            "java.util.LinkedHashMap$Entry",
+            "java.util.HashMap$Node",
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.Hashtable$Entry",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "private,static",
+          "name": "java.util.Hashtable$Entry",
+          "primitive": false,
+          "simpleName": "Entry",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.IdentityHashMap$EntryIterator$Entry",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "private",
+          "name": "java.util.IdentityHashMap$EntryIterator$Entry",
+          "primitive": false,
+          "simpleName": "Entry",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [
+            "jdk.internal.ValueBased"
+          ],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.KeyValueHolder",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": false,
+          "modifier": "final",
+          "name": "java.util.KeyValueHolder",
+          "primitive": false,
+          "simpleName": "KeyValueHolder",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.LinkedHashMap$Entry",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "static",
+          "name": "java.util.LinkedHashMap$Entry",
+          "primitive": false,
+          "simpleName": "Entry",
+          "superClass": [
+            "java.util.HashMap$Node",
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.Map$Entry",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": true,
+          "interfaces": [],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "abstract,interface,public,static",
+          "name": "java.util.Map$Entry",
+          "primitive": false,
+          "simpleName": "Entry",
+          "superClass": [],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.TreeMap$Entry",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "final,static",
+          "name": "java.util.TreeMap$Entry",
+          "primitive": false,
+          "simpleName": "Entry",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.WeakHashMap$Entry",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "private,static",
+          "name": "java.util.WeakHashMap$Entry",
+          "primitive": false,
+          "simpleName": "Entry",
+          "superClass": [
+            "java.lang.ref.WeakReference",
+            "java.lang.ref.Reference",
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.concurrent.ConcurrentHashMap$ForwardingNode",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "final,static",
+          "name": "java.util.concurrent.ConcurrentHashMap$ForwardingNode",
+          "primitive": false,
+          "simpleName": "ForwardingNode",
+          "superClass": [
+            "java.util.concurrent.ConcurrentHashMap$Node",
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.concurrent.ConcurrentHashMap$MapEntry",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "final,static",
+          "name": "java.util.concurrent.ConcurrentHashMap$MapEntry",
+          "primitive": false,
+          "simpleName": "MapEntry",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.concurrent.ConcurrentHashMap$Node",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "static",
+          "name": "java.util.concurrent.ConcurrentHashMap$Node",
+          "primitive": false,
+          "simpleName": "Node",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.concurrent.ConcurrentHashMap$ReservationNode",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "final,static",
+          "name": "java.util.concurrent.ConcurrentHashMap$ReservationNode",
+          "primitive": false,
+          "simpleName": "ReservationNode",
+          "superClass": [
+            "java.util.concurrent.ConcurrentHashMap$Node",
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.concurrent.ConcurrentHashMap$TreeBin",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "final,static",
+          "name": "java.util.concurrent.ConcurrentHashMap$TreeBin",
+          "primitive": false,
+          "simpleName": "TreeBin",
+          "superClass": [
+            "java.util.concurrent.ConcurrentHashMap$Node",
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "java.util.concurrent.ConcurrentHashMap$TreeNode",
+          "classLoaderHash": "null",
+          "classloader": [],
+          "codeSource": "",
+          "enum": false,
+          "interface": false,
+          "interfaces": [],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "final,static",
+          "name": "java.util.concurrent.ConcurrentHashMap$TreeNode",
+          "primitive": false,
+          "simpleName": "TreeNode",
+          "superClass": [
+            "java.util.concurrent.ConcurrentHashMap$Node",
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "org.hibernate.engine.internal.EntityEntryContext$EntityEntryCrossRef",
+          "classLoaderHash": "2dda6444",
+          "classloader": [
+            "org.springframework.boot.loader.LaunchedURLClassLoader@2dda6444",
+            "jdk.internal.loader.ClassLoaders$AppClassLoader@67424e82",
+            "jdk.internal.loader.ClassLoaders$PlatformClassLoader@4684f314"
+          ],
+          "codeSource": "file:/app/app.jar!/BOOT-INF/lib/hibernate-core-5.6.15.Final.jar!/",
+          "enum": false,
+          "interface": true,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "abstract,interface,public,static",
+          "name": "org.hibernate.engine.internal.EntityEntryContext$EntityEntryCrossRef",
+          "primitive": false,
+          "simpleName": "EntityEntryCrossRef",
+          "superClass": [],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "org.hibernate.engine.internal.EntityEntryContext$EntityEntryCrossRefImpl",
+          "classLoaderHash": "2dda6444",
+          "classloader": [
+            "org.springframework.boot.loader.LaunchedURLClassLoader@2dda6444",
+            "jdk.internal.loader.ClassLoaders$AppClassLoader@67424e82",
+            "jdk.internal.loader.ClassLoaders$PlatformClassLoader@4684f314"
+          ],
+          "codeSource": "file:/app/app.jar!/BOOT-INF/lib/hibernate-core-5.6.15.Final.jar!/",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "org.hibernate.engine.internal.EntityEntryContext$EntityEntryCrossRef"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "private,static",
+          "name": "org.hibernate.engine.internal.EntityEntryContext$EntityEntryCrossRefImpl",
+          "primitive": false,
+          "simpleName": "EntityEntryCrossRefImpl",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "org.springframework.util.ConcurrentReferenceHashMap$Entry",
+          "classLoaderHash": "2dda6444",
+          "classloader": [
+            "org.springframework.boot.loader.LaunchedURLClassLoader@2dda6444",
+            "jdk.internal.loader.ClassLoaders$AppClassLoader@67424e82",
+            "jdk.internal.loader.ClassLoaders$PlatformClassLoader@4684f314"
+          ],
+          "codeSource": "file:/app/app.jar!/BOOT-INF/lib/spring-core-5.3.31.jar!/",
+          "enum": false,
+          "interface": false,
+          "interfaces": [
+            "java.util.Map$Entry"
+          ],
+          "localClass": false,
+          "memberClass": true,
+          "modifier": "final,protected,static",
+          "name": "org.springframework.util.ConcurrentReferenceHashMap$Entry",
+          "primitive": false,
+          "simpleName": "Entry",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 13,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "jobId": 13,
+        "rowCount": 25,
+        "type": "row_affect"
+      },
+      {
+        "jobId": 13,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "deb40fe3-0d4d-4fea-a3fd-73623a48ffeb",
+  "state": "SUCCEEDED"
+}

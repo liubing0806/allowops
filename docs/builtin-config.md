@@ -1,9 +1,12 @@
-# Redis 与 MySQL 的 builtin_config 收紧项
+# Redis、MySQL、StarRocks、Dremio、jvm_perfdata 与 jvm_arthas 的 builtin_config 收紧项
 
 目录校验和执行均验证以下字段。执行时在读取凭据和建立连接前拒绝越界参数。
-所有字段省略时保留处理器默认行为。显式 `null`、空列表、非字符串列表和非法成员均报错。
+所有字段省略时保留处理器默认行为。列表字段的显式 `null`、空列表、非字符串列表和非法成员均报错。
+`starrocks_query`、`starrocks_diag`、`dremio_query`、`dremio_diag` 的数值字段中，`max_bytes` 与 `max_profile_bytes` 为 `null` 报错，`max_rows` 与 `timeout` 为 `null` 按省略处理。
 重复成员不扩大范围。命令名、分区名、语句类型和 SHOW 种类不区分大小写；
 键前缀与数据库名按大小写敏感的字节比较。拒绝信息列出可用成员或格式规则。
+
+执行时处理器返回的错误（例如 sqlguard 拒绝、`statement_types` 不允许、路径超出 `allowed_roots`）经 executor 写入该任务的 stderr，调用方通过 `jobs_get` 和 MCP 摘要读取。文本为单行，经 action 的 `redact` 配置脱敏后截断到 1024 字节。处理器错误文本按设计不含 SQL、服务端原始消息和凭据，脱敏与长度上限是对这一设计的额外保护。
 
 ## redis_command
 
@@ -111,6 +114,345 @@ TABLE STATUS、CREATE VIEW、CREATE DATABASE、INDEX 等不属于配置后的合
 DESCRIBE 内部的 ShowColumns 不受 `show_types` 限制，DESCRIBE 有独立语句类型限制。
 配置 `show_types` 不会自动允许 SHOW；它与 `statement_types` 取交集。
 
+## starrocks_query
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `max_rows` | 0..500；省略或 0 为 500，只能收紧 |
+| `max_bytes` | 0..1 MiB，可写 `64KB` 等 B/KB/MB/GB 形式；省略或 0 为 1 MiB，只能收紧；限制 TSV 文本（含表头）的字节数，放不下的整行不返回 |
+| `timeout` | 1ms..10s；省略为 10s，只能收紧；同时以向上取整的秒数设置会话 `query_timeout` |
+| `statement_types` | SELECT、SHOW、DESCRIBE、EXPLAIN 的非空子集；省略时允许这四类；EXPLAIN 的目标语句也必须满足该列表 |
+| `show_types` | DATABASES、TABLES、TABLE STATUS、COLUMNS、CATALOGS、CREATE TABLE、CREATE VIEW、CREATE MATERIALIZED VIEW、CREATE DATABASE、PARTITIONS、TABLET、MATERIALIZED VIEWS、FUNCTIONS、VARIABLES、STATUS、PROCESSLIST、FRONTENDS、BACKENDS、COMPUTE NODES 的非空子集；省略时不增加种类限制 |
+| `allow_explain_analyze` | 布尔值，默认 false；为 true 时允许 `EXPLAIN ANALYZE` 加 SELECT 或 WITH 查询 |
+
+`starrocks_query` 没有 `databases` 和 `catalogs` 收紧项。SQL 校验是词法级的，不提取库名和表名，
+可读取的库表只由数据库账号的授权决定。`database` 参数只是默认库，不是授权边界。
+
+`PROFILELIST` 不是合法的 `show_types` 成员；`SHOW PROFILELIST` 和 `ANALYZE PROFILE` 无论如何配置都拒绝，
+它们会返回其他账号的查询文本。`EXPLAIN ANALYZE` 会执行目标查询，只有 `allow_explain_analyze` 为 true 且目标是 SELECT 或 WITH 时允许，INSERT 目标始终拒绝。
+
+`statement_types` 与 `show_types` 取交集：配置 `show_types` 不会自动允许 SHOW。
+`address` 只接受 `tcp://host:port`。其余规则和默认值见 [builtin-starrocks.md](builtin-starrocks.md)。
+
+## dremio_query
+
+Dremio 没有权限边界，`builtin_config` 没有 `databases` 之类限制读取范围的字段，也没有 `context` 参数。词法校验是 Dremio 一侧唯一的写入限制，范围见 `builtin-dremio.md` 的“安全边界”。
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `url` | 必填，`http://host:port` 或 `https://host:port`，不含用户信息、路径、查询和片段 |
+| `credential` | 必填，绝对路径，root 属主、0600 的 JSON 文件 |
+| `max_rows` | 0 到 500，省略为 500；Dremio 单次最多返回 500 行，因此是一页 |
+| `max_bytes` | 0 到 1 MiB，省略为 1 MiB；TSV 文本字节数，表头计入 |
+| `timeout` | 1ms 到 10s，省略为 10s |
+| `statement_types` | SELECT、SHOW、DESCRIBE、EXPLAIN 的非空子集；省略时允许全部。EXPLAIN 的目标语句也必须满足该限制（与 G31 相同），`EXPLAIN PLAN FOR SELECT ...` 需要同时列出 EXPLAIN 和 SELECT |
+| `show_types` | SCHEMAS、TABLES、VIEWS、PARTITIONS、FILES、CREATE TABLE、FUNCTIONS 的非空子集；省略时允许全部 |
+
+未知字段（包括 `address`、`databases`、`context`、`ca_file`）、列表字段的 `null`、空列表和非法成员均报错。收紧项只能在词法校验接受的范围内再缩小，不能放宽校验。动作参数只有 `sql`，最长 4000 字符。
+
+## starrocks_diag
+
+`starrocks_diag` 执行固定语句，没有 `statement_types`、`show_types`、`allow_explain_analyze`，出现这些字段报错。
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `max_rows` | 0..500；省略或 0 为 500，只能收紧；同时是 `limit` 参数的上限 |
+| `max_bytes` | 0..1 MiB，可写 `64KB` 等形式；省略或 0 为 1 MiB，只能收紧；限制 TSV 文本或摘要 JSON 的字节数 |
+| `max_profile_bytes` | 0..16 MiB；省略或 0 为 16 MiB，只能收紧；超过的 profile 文本不解析 |
+| `timeout` | 1ms..10s；省略为 10s，只能收紧；`profile_run` 的执行和轮询共用该时限 |
+| `audit_table` | `table` 或 `database.table`，各段匹配 `^[A-Za-z_][A-Za-z0-9_]{0,63}$`；省略为 `starrocks_audit_db__.starrocks_audit_tbl__` |
+| `audit_columns` | 逻辑列名到实际列名的映射，实际列名为标识符；逻辑列名为 `query_id`、`timestamp`、`user`、`db`、`state`、`query_time`、`scan_bytes`、`scan_rows`、`return_rows`、`cpu_cost_ns`、`mem_cost_bytes`、`stmt` |
+| `allow_profile_run` | 布尔值，默认 false；true 时 `op` 枚举增加 `profile_run`，并出现 `sql`、`database` 参数 |
+
+表名和列名只来自这里，调用方参数不能指定。`credential` 和 `address` 的规则同 `starrocks_query`。详见 [builtin-starrocks.md](builtin-starrocks.md) 的 starrocks_diag 一节。
+
+## dremio_diag
+
+固定请求的诊断处理器，不接受 SQL。凭据、网络和脱敏规则与 `dremio_query` 相同，说明见 `builtin-dremio.md` 的“dremio_diag 诊断”。
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `url` | 必填，规则同 `dremio_query` |
+| `credential` | 必填，绝对路径，root 属主、0600 的 JSON 文件 |
+| `max_rows` | 0 到 500，省略为 500；限制 sys 表行数和作业列表条数 |
+| `max_bytes` | 0 到 1 MiB，省略为 1 MiB；一次返回的文本字节数，profile 摘要计入 |
+| `timeout` | 1ms 到 10s，省略为 10s |
+| `max_profile_bytes` | 0 到 32 MiB，省略为 32 MiB；解压后的 profile JSON 字节上限 |
+| `ops` | `nodes`、`jobs`、`job`、`job_profile`、`reflections` 的非空子集；省略时允许全部。只有一个值时，`op` 参数可省略 |
+
+未知字段（包括 `statement_types`、`show_types`、`databases`）、`ops` 的 `null`、空列表和非法成员均报错。动作参数 `op`、`job_id`、`since`、`min_duration`、`state`、`user`、`limit`、`top_n` 由处理器声明，除 `op` 外都是可选的，不接受的组合在处理器内校验；目录中的参数覆盖只能增加 `regex` 或减小 `max_len`，不能限制枚举，固定 op 使用 `ops`。
+
+## jvm_perfdata
+
+读取 HotSpot 的 hsperfdata（PerfData）文件，输出堆、GC、类加载和线程数据。
+不 attach 到目标 JVM，不向目标发送信号，不写目标文件系统。
+目标 JVM 以 `-XX:-UsePerfData` 或 `-XX:+PerfDisableSharedMem` 启动时没有该文件，处理器返回错误，不尝试其他数据来源。
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `targets` | 必填。1..64 项的映射，键是调用方可选的目标名，匹配 `^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`。值只能是下面两种之一 |
+| `targets.<名>.systemd_unit` | systemd 服务单元名，以 `.service` 结尾，不以 `-` 开头，最长 128 字节。目标是该单元的 MainPID |
+| `targets.<名>.container` 与 `main_class` | 必须同时设置。`container` 是 Docker 容器名（最长 128 字节）；`main_class` 是该容器内 JVM 的 `sun.rt.javaCommand` 的第一个词（主类，`-jar` 启动时是 jar 路径），1..512 字节，不含空白和控制字符 |
+| `timeout` | 省略时 10s；只能收紧，上限 10s |
+
+目标项不接受其他字段。`pid`、`path` 等字段在目录校验时报错。
+
+调用方参数只有 `target`，是 `targets` 键名的枚举（按字典序）。没有 pid、路径或容器名参数；
+枚举以外的值、额外的参数名都在参数校验阶段拒绝。action 的 `params` 只能为 `target` 补充 description，其他参数名在目录校验时报错。
+
+### 目标解析
+
+- systemd：执行固定参数的 `systemctl show --property=MainPID -- <unit>`，不经过 shell；单元未运行（MainPID 为 0）时报错。
+- Docker：通过 `/var/run/docker.sock` 对 Engine API 发 `GET /containers/<name>/json`，只读取 `State.Pid`、`Running`、`Paused`、`Restarting`，不记录也不输出响应的其余部分（其中有容器环境变量）。
+  容器未运行时报错。在该容器的 PID 命名空间内（`/proc/<pid>/ns/pid` 相同）的进程里，选出 `sun.rt.javaCommand` 第一个词等于 `main_class` 的 JVM：
+  没有匹配、多于一个匹配分别报错。最多检查 1024 个进程。`javaCommand` 的其余部分可能含口令，不输出也不写入错误。
+  与处理器同一 PID 命名空间的容器（`--pid=host`）无法与宿主进程区分，拒绝。
+- 进程重用：解析时记录 `/proc/<pid>/stat` 的启动时间，读取文件前后各比较一次。pid 被其他进程占用或进程退出时返回 `process exited or was replaced`。
+
+### 文件读取
+
+文件路径是 `/proc/<pid>/root` 下的 `/tmp/hsperfdata_<用户>/<进程在其 PID 命名空间内的 pid>`。
+用户名来自容器内的 passwd，处理器未知，因此列出 `/tmp/hsperfdata_*` 目录（最多 64 个，按名称排序），
+取第一个满足下列条件的文件：普通文件，属主 uid 等于 JVM 的有效 uid，不大于 16MiB。
+
+容器内的符号链接不能把读取带到宿主文件系统。内核支持时（Linux 5.6 及以上）使用 `openat2(RESOLVE_IN_ROOT | RESOLVE_NO_MAGICLINKS)`；
+内核较旧时逐段以 `O_PATH | O_NOFOLLOW` 解析，绝对符号链接和 `..` 都在容器根内处理，链接最多 40 次。
+最后一段是符号链接、FIFO、设备或目录时拒绝，且 FIFO 和设备不会被打开。
+
+### 输出
+
+输出是缩进的 JSON：`target`、`pid`（宿主 PID 命名空间）、`jvm`（`java.version`、`java.vm.name`、`java.vm.version`）、`uptime_seconds`、
+`heap`（总计及各代、各空间的已用、容量、最大容量）、`metaspace`、`compressed_class_space`、`gc`（收集器策略，各收集器的次数和累计耗时 `time_ms`）、`classes`（已加载和已卸载的类数，包含从 CDS 归档读取的类，与 `jstat -class` 一致）、`threads`（`live`、`daemon`、`peak`、`started`）。
+G1 的各代都报告整个堆的最大值，堆的 `max_capacity` 取各代最大值；其他收集器取各代之和。
+输出不含 JVM 参数、`sun.rt.javaCommand`、`java.rt.vmArgs`、`java.rt.vmFlags` 和系统属性值（版本三项除外）。
+内部的 `sun.rt.jvmCapabilities` 等计数器不输出，保留给后续阶段使用。
+
+hsperfdata 缺失、无法解析或服务未运行等情况，退出码为 1，原因写入 stderr，不是处理器内部错误。stderr 同样不含上述敏感内容。
+
+### 运行条件
+
+- 读取其他用户的进程和容器根文件系统，需要 root。该 action 与 `mysql_query`、`redis_command` 相同，由 `allowops-exec` 以 root 执行，`run_as` 省略时按 root 处理。
+- 容器目标需要读取 `/var/run/docker.sock` 的权限；该套接字能控制 Docker，因此处理器只发送上述只读 GET 请求。
+- 容器目标需要内核提供 `/proc/<pid>/status` 的 `NSpid` 行（Linux 4.1 及以上）。CentOS 7（内核 3.10）没有该行，容器目标报错 `this kernel does not report NSpid`；
+  systemd 目标不受影响，因为 JVM 与处理器在同一 PID 命名空间。
+- `systemctl show --property=MainPID` 不使用 `--value`，systemd 219 可用。
+
+## jvm_arthas
+
+把 Arthas agent 加载（attach）到目标 JVM，执行一条固定的命令，再停止 agent 并卸载其端口和线程。L1 命令不增强（不修改）任何类。
+L2 命令中，`watch`、`trace`、`stack`、`monitor` 在限定时长内增强一个类的一个方法，结束后 `reset`；`jad` 反编译一个已加载的类，输出源码。
+一个 action 对应一条命令，命令写在 `builtin_config.command`，调用方不能选择命令。attach 使 JVM 加载 Arthas 的类，这些类不能卸载到进程结束，因此该 action 的 `risk` 是 `write`。
+L1、L2 的 action 都是 `write`，需要按 action 名分开授权，示例策略见 `examples/policy/java-diagnostics.yaml`。
+
+### 固定的 action 字段
+
+目录校验和执行都要求下列字段，缺少或取其他值时报错：
+
+| 字段 | 值 |
+| --- | --- |
+| `risk` | `write` |
+| `run_as` | `root`（`allowops-exec` 需要 root 才能 attach 并进入目标的挂载命名空间） |
+| `idempotent` | `false` |
+| `batch_size` | `1` |
+| `max_failures` | `1` |
+| `max_targets` | `1` |
+
+L2 命令（`watch`、`trace`、`stack`、`monitor`、`jad`）另外要求：
+
+- `redact` 显式写出，`redact.builtin` 同时含 `secrets` 和 `pii`，可另加 `custom` 规则。
+- `timeout` 不小于 `enhance_duration` + 60s（`watch`、`trace`、`stack`、`monitor`，默认配置下 90s）或 `exec_timeout` + 60s（`jad`，默认配置下 70s）。
+
+### builtin_config 字段
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `command` | 必填。取值：`dashboard`（`dashboard -n 1`）、`thread_top`（`thread -n <top>`）、`thread_blocking`（`thread -b`）、`thread_info`（`thread <thread_id>`）、`memory`、`jvm`、`class_info`（`sc -d <class>`）、`classloader_tree`（`classloader -t`）、`classloader_list`（`classloader -l`）、`method_info`（`sm -d <class> [method]`）、`sysprop`（`sysprop <key>`）、`version`；L2：`watch`、`trace`、`stack`、`monitor`、`jad`（生成的命令见“L2 命令”）。`logger` 暂停（A69）：调用后 Arthas 的类加载器不卸载，每次约 12 MiB 元空间直到 JVM 重启，原因查明前配置 `logger` 时目录校验报错 |
+| `targets` | 必填，格式与 jvm_perfdata 的 `targets` 相同（`systemd_unit`，或 `container` 加 `main_class`），1..64 项 |
+| `arthas_dir` | Arthas 文件目录，在目标进程的挂载命名空间内解析。省略时为 `/usr/share/allowops/arthas/4.3.5`。必须是不含 `..`、`;`、`%`、`=` 和结尾 `/` 的绝对路径，最长 255 字节 |
+| `sha256` | 必填。键必须恰为 `arthas-agent.jar`、`arthas-core.jar`、`arthas-spy.jar`、`arthas.properties`、`logback.xml`，值是 64 位小写十六进制 SHA-256。执行时在目标的挂载命名空间内按这些值校验文件，不一致时拒绝 |
+| `http_port_min`、`http_port_max` | Arthas 在目标网络命名空间内监听的端口范围，1024..65535，必须同时设置。省略时为 18563..18662 |
+| `exec_timeout` | 命令的执行时限。省略时 10s，上限 60s。L2 中是 `jad` 的执行时限；`watch`、`trace`、`stack`、`monitor` 只把它用于 `options` 命令，增强时长由 `enhance_duration` 决定 |
+| `sysprop_keys` | 仅 `sysprop` 命令使用且必填，1..64 个系统属性名；其他命令设置时报错。调用方只能从这个列表选择 |
+| `class_prefixes` | 仅 L2 命令使用且必填，1..32 项；其他命令设置时报错。每项是以 `.` 结尾的包名前缀（如 `com.example.`），匹配 `^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*\.$`，最长 255 字节，不能以禁止前缀开头。调用参数 `class` 必须以其中一项开头 |
+| `enhance_duration` | 仅 `watch`、`trace`、`stack`、`monitor` 使用。一次增强的最长时间，作为 Arthas 的 `--timeout`。省略时 30s，取值 1s..30s 的整秒，只能缩短；`monitor` 至少 2s，因为至少要有一个 1 秒的统计周期在增强结束前结束 |
+| `max_methods` | 仅 `watch`、`trace`、`stack`、`monitor` 使用。一次增强允许的方法数上限（同名的重载方法都会被增强）。省略时 5，取值 1..5，只能减小 |
+| `object_size_limit` | 仅 `watch` 使用。每个结果对象的大小上限，由 allowops 发送 `options object-size-limit <字节数>`。省略时 8KB，取值 256 字节..64KB |
+| `checks` | 执行前检查的阈值，见下表 |
+| `guard` | 运行期监测的阈值，见下表 |
+
+未知字段在目录校验时报错。字段用在不适用的命令上时也报错，例如 L1 命令设置 `class_prefixes`，`jad` 设置 `enhance_duration`。
+
+禁止前缀固定在代码中，配置不能修改：`java.`、`javax.`、`jdk.`、`sun.`、`com.sun.`、`com.taobao.arthas.`、`com.alibaba.arthas.`。调用参数 `class` 以这些前缀开头时一律拒绝，即使 `class_prefixes` 含更宽的前缀（如 `com.`）。
+
+### 阈值
+
+下表的默认值来自阶段 0 报告第 5.2 节，2026-10-24 采纳（A67）；`checks.max_old_gen_percent`、`checks.no_full_gc_within`、`checks.max_blocking_threads` 的默认值 2026-10-25 按阶段 2 验收报告第 6 节采纳（A69）。`builtin_config` 只能把阈值调得更严；比默认值宽松的值在目录校验时报错。表中“未配置”表示该检查关闭。
+
+| 字段 | 默认值 | 更严的方向 |
+| --- | --- | --- |
+| `checks.min_memory_headroom` | 256MB | 更大。目标 cgroup 的内存限额减去已用内存；cgroup 没有限额时用主机的可用内存 |
+| `checks.min_metaspace_headroom` | 64MB | 更大。`MaxMetaspaceSize` 减去已用元空间；JVM 没有 `MaxMetaspaceSize` 时跳过。已用元空间取 hsperfdata 的 `sun.gc.metaspace.used`，该计数器只在 GC 时更新：当前 GC 次数（所有 collector 的 `invocations` 之和）等于上次 attach 时记录的值时，自 GC 次数最后一次变化以来的每次 attach 按 20 MiB 计入已用量（A69） |
+| `checks.max_attaches` | 5 | 更小。该 JVM 进程已经 attach 的次数达到此值时拒绝 |
+| `checks.min_attach_interval` | 60s | 更长 |
+| `checks.max_blocking_threads` | 1000 | 更小。仅 `thread_blocking` 使用，比较 `java.threads.live` |
+| `checks.max_cpu_percent` | 50 | 更小，1..50。仅 L2 命令使用：attach 前采样目标进程 5 秒，平均 CPU 达到该值时拒绝，无法读取时也拒绝。百分比相对 cgroup CPU 限额与 cpuset 的较小者 |
+| `checks.max_old_gen_percent` | 85 | 更小，1..85。老年代已用量超过其上限的该百分比时拒绝；hsperfdata 中没有名为 `old` 的代时（Shenandoah）不适用，直接通过 |
+| `checks.no_full_gc_within` | 60s | 更长，至多 24h。最近一次 Full GC 结束在该时间内时拒绝；ZGC、Shenandoah 不适用，直接通过；其他收集器在 hsperfdata 中没有可识别的 Full GC 计数器时拒绝 |
+| `guard.max_cpu_percent` | 未配置 | JVM 一秒内的 CPU 时间，单位是一个 CPU 的百分比（100 为一个 CPU，400 为四个） |
+| `guard.max_gc_time_percent` | 未配置 | 一秒内垃圾回收耗时的百分比，0..100 |
+| `guard.max_gc_per_second` | 未配置 | 一秒内垃圾回收次数 |
+| `guard.settle` | 5s | 取值 0..60s，0 等同省略。attach 后这段时间内不评估运行期阈值；缩短使评估更早开始，延长则推迟。`watch`、`trace`、`stack`、`monitor` 从增强开始计时，有效值至少 5s，配置小于 5s 时按 5s 执行。每个 JVM 第一次增强的 CPU 升高可持续 5~10 秒，见“L2 命令”中对目标 JVM 的影响 |
+| `guard.health_check` | 未配置 | 见下 |
+
+这两项检查按 hsperfdata 中的收集器名（`sun.gc.collector.N.name`）和代名（`sun.gc.generation.N.name`）判断是否适用（A69）：
+
+| 收集器 | 识别方式 | `no_full_gc_within` | `max_old_gen_percent` |
+| --- | --- | --- | --- |
+| JDK 8、11 的 Serial、Parallel，JDK 8 的 CMS | 收集器名为 `MSC`、`PSParallelCompact`、`CMS` | 检查 | 检查 |
+| JDK 17 的 Serial、Parallel，G1 | 收集器名含 `full` 或 `marksweep`（不区分大小写） | 检查 | 检查 |
+| ZGC，包括分代 ZGC | 收集器名以 `Z ` 或 `ZGC ` 开头 | 不适用 | 检查 |
+| Shenandoah | 收集器名以 `Shenandoah` 开头 | 不适用 | 不适用，没有 `old` 代 |
+| 其他 | — | 拒绝 | 有 `old` 代时检查 |
+
+- CMS 的并发周期按 Full GC 计。
+- 在 JDK 17 上测试 Shenandoah 时，GC 日志只有一个并发周期、没有 Full GC，`Shenandoah full` 的调用次数为 10。该计数器因此不按 Full GC 计数器读取。
+- Shenandoah 退化为 stop-the-world Full GC 时，`no_full_gc_within` 不能识别。
+
+`guard.health_check` 每秒向目标发一次 GET 请求，规则与 `http_get` 相同：`url`、`allowed_prefixes` 必填，`url` 必须在某个前缀之下，不允许带用户名口令。
+`timeout` 省略时 2s，上限 10s；`max_failures`（连续失败次数，省略时 2，上限 10）；`max_latency`（慢于它的应答按失败计，省略时不限）。状态码不是 2xx 按失败计。
+
+### 调用参数
+
+调用参数由 `command` 决定，所有 action 都有 `target`（`targets` 键名的枚举，按字典序）：
+
+| 命令 | 参数 |
+| --- | --- |
+| `thread_top` | `top`：1..10 的整数 |
+| `thread_info` | `thread_id`：不小于 1 的整数 |
+| `class_info` | `class`：二进制类名（点分隔的 Java 标识符），不允许通配符，最长 255 字符 |
+| `method_info` | `class`（同上），`method`：可选，Java 标识符，省略时列出全部方法 |
+| `sysprop` | `key`：`sysprop_keys` 的枚举 |
+| `watch` | `class`、`method`（必填）、`express`、`expand`、`count`、`min_cost_ms`，见“L2 命令” |
+| `trace`、`stack` | `class`、`method`（必填）、`count`、`min_cost_ms` |
+| `monitor` | `class`、`method`（必填）、`cycle`（必填）、`count`、`min_cost_ms` |
+| `jad` | `class`，`method`：可选 |
+| 其他命令 | 无 |
+
+`class`、`method` 在参数校验阶段按上述规则拒绝，包含空白、引号、`;`、`|`、`#`、`*`、括号或 OGNL 表达式的值不会到达 Arthas。
+
+L1 命令对目标 JVM 的影响（Arthas 计划阶段 3 复核，[arthas-stage3-acceptance-report.md](arthas-stage3-acceptance-report.md)，JDK 8/11/17/21，4 CPU 容器，1000 请求/秒）：
+
+- 调用所在秒的最大延迟 ≤ 23 ms，下面两种情况除外。
+- `thread_blocking` 在线程多、栈深、持有监视器的线程多的 JVM 上更慢：JDK 17、1000 个线程、栈深 40 层时，每个 JVM 的第一次调用最大 101.5 ms，1500 个线程时 111.0 ms，之后的调用约 50 ms。
+- JDK 8 的 Parallel、Serial 收集器上，attach 加载 Arthas 的类可能触发一次 `Metadata GC Threshold` Full GC。测量的 6 次运行都出现，调用所在秒的最大延迟 71.6~117.8 ms。执行前检查不能预判这次 Full GC。
+- CMS 的并发周期按 Full GC 计，`recent_full_gc` 检查因此常拒绝 CMS 上的调用：老年代约 79% 时，24 次调用中 18 次被拒绝。
+
+### 调用流程
+
+1. 解析目标，获取该 JVM 的锁（按启动时间区分 pid 重用）。同一 JVM 同时只有一次调用，另一次返回 `busy`。
+2. 回收：先处理本 JVM 遗留的会话记录，再处理其他 JVM 遗留的记录（见“状态目录与恢复”）。本 JVM 的遗留会话无法结束时，拒绝本次调用（检查项 `previous_session`）。
+3. 执行前检查，按顺序：`attach_state`（JVM 允许 attach，运行时含 `java.instrument`，没有已存在的 Arthas 实例）、`jvm_version`、`architecture`、`memory_headroom`、`metaspace_headroom`、`attach_count`、`attach_interval`、`thread_count`、`old_gen_usage`、`recent_full_gc`；之后 `arthas_files`（在目标的挂载命名空间内校验 SHA-256）和 `http_port`（范围内没有空闲端口时）。L2 命令最后执行 `cpu_usage`（耗时 5 秒）。任一项不通过时不 attach。
+4. 选择端口，写会话记录，attach，等待端口监听，打开 Arthas 会话，执行命令。命令执行期间每秒采样一次，检查 `guard` 阈值。
+   `watch`、`trace`、`stack`、`monitor` 先发送 `options`，再以异步作业开始增强，并立即读取 Arthas 返回的影响范围（Affect）核对类数和方法数，不符合时进入清理。
+5. 清理（独立的时间预算，调用被取消或超时也会执行）：`interrupt_job`、`close_session`、`reset`、`stop`，然后确认端口已关闭且没有名称以 `arthas-` 开头的线程。`stop` 没有送达时（例如被取消的 attach 之后才加载的 Arthas 服务，线程先于 HTTP 端口出现），最多 10 秒内重复整个清理序列。确认后删除会话记录。
+
+`jvm_version` 接受 HotSpot 的 8、11、17、21 版本（按 feature release 判断，不区分更新号），`architecture` 只接受 amd64。
+阶段 0 只在 Temurin 8u504、11.0.32、17.0.20、21.0.12 上测试过；其他更新号未验证。
+
+### 输出
+
+stdout 以 `# call` 段开头，每行是用制表符分隔的键和值，值为空的行省略：
+
+| 键 | 含义 |
+| --- | --- |
+| `command`、`target`、`pid` | 命令、目标名、目标的宿主 pid |
+| `status` | `ok`、`refused`（执行前检查不通过）、`unsupported`（`jvm_version`、`architecture` 不满足，或 JVM 禁用了 attach、缺少 `java.instrument`、不处理 SIGQUIT）、`busy`（同一 JVM 有另一次调用）、`failed`、`timeout`、`cancelled`、`aborted_by_guard`（运行期阈值触发） |
+| `check` | `refused`、`unsupported`、`aborted_by_guard` 时触发的检查项名；L2 命令的 `failed` 也可能带检查项（见“L2 命令”） |
+| `reason` | 原因，一行，最长 400 字符 |
+| `attach` | 本次是该 JVM 的第几次 attach，格式 `N of M`（`M` 是 `max_attaches`） |
+| `earlier_sessions` | 本次调用开始时回收了多少遗留会话 |
+| `cpu_before` | L2 命令：执行前 CPU 检查的结果，如 `12% of the CPU limit (4.00 CPUs) over 5s` |
+| `affect` | `watch`、`trace`、`stack`、`monitor`：Arthas 返回的影响范围，如 `classes 1, methods 1` |
+| `enhanced_classes` | L2 命令：清理后 Arthas 报告的增强类数，如 `0 (reset restored 1)`；无法确认时为 `unconfirmed: <原因>` |
+| `cleanup` | 清理结果 |
+
+空行之后是 Arthas 命令的输出。`thread_blocking` 在没有线程阻塞其他线程时（Arthas 返回状态 1 和消息 `No most blocking thread found!`），`status` 为 `ok`，输出为 `# blocking lock` 段和值 `none`。`status` 不是 `ok` 时，退出码为 1，stderr 有一行 `jvm_arthas: <status> (<check>): <reason>`。清理未能确认时（端口仍开或仍有 `arthas-` 线程），退出码也是 1，stderr 另有一行 `cleanup failed`，会话记录保留，下次调用或 agent 启动时重试。
+输出按行应用 action 的 `redact` 规则；命令输出中的密码、令牌等按 `redact.builtin: [secrets]` 屏蔽。L2 命令的输出先经 `secrets`、`pii` 脱敏，再过滤、截断。
+
+### L2 命令
+
+`<D>` 是 `enhance_duration` 的秒数，`[...]` 是可选部分。
+
+| command | 生成的 Arthas 命令（按顺序在同一会话执行） |
+| --- | --- |
+| `watch` | `options disable-sub-class true`；`options object-size-limit <object_size_limit 的字节数>`；`watch <class> <method> {<express>} [#cost><min_cost_ms>] -n <count> -x <expand> -m 1 --timeout <D>` |
+| `trace` | `options disable-sub-class true`；`trace <class> <method> [#cost><min_cost_ms>] -n <count> -m 1 --timeout <D>` |
+| `stack` | `options disable-sub-class true`；`stack <class> <method> [#cost><min_cost_ms>] -n <count> -m 1 --timeout <D>` |
+| `monitor` | `options disable-sub-class true`；`monitor <class> <method> [#cost><min_cost_ms>] -c <cycle> -n <count> -m 1 --timeout <D>` |
+| `jad` | `jad --source-only <class> [<method>]` |
+
+- `options` 只由 allowops 发送，调用方不能选择。Arthas 停止后再次 attach 时，`options` 恢复默认值。
+- `disable-sub-class true` 使 Arthas 只增强指定的类本身，不增强其子类（如 Spring CGLIB 代理）。不设置时，有已加载子类的类匹配 2 个类，`-m 1` 使 Arthas 拒绝增强。
+- watch 用 `options object-size-limit` 限制结果大小，不用 `watch -M`：经 Arthas HTTP API 执行时 `-M` 不截断结果。
+- watch 的观察表达式始终带花括号（如 `{params,returnObj}`），输出为 `@ArrayList[...]`。
+- Arthas agent 参数 `disabledCommands` 只放行本次需要的命令：`watch`、`trace`、`stack`、`monitor` 放行该命令和 `options`，`jad` 放行 `jad`；`reset`、`stop` 始终放行。
+
+调用参数：
+
+| 参数 | 命令 | 类型与约束 |
+| --- | --- | --- |
+| `class` | 全部 L2 命令 | 必填，正则 `^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$`，最长 255。执行时还要以 `class_prefixes` 的一项开头，且不以禁止前缀开头 |
+| `method` | `watch`、`trace`、`stack`、`monitor` 必填；`jad` 可选 | 正则 `^[A-Za-z_$][A-Za-z0-9_$]*$`，最长 255 |
+| `express` | `watch` | 枚举：`params`、`returnObj`、`throwExp`、`params,returnObj`、`params,throwExp`、`returnObj,throwExp`、`params,returnObj,throwExp`。省略时 `params,returnObj` |
+| `expand` | `watch` | 1..2，省略时 1（`-x`） |
+| `count` | `watch`、`trace`、`stack`、`monitor` | 1..5，省略时 1（`-n`） |
+| `min_cost_ms` | `watch`、`trace`、`stack`、`monitor` | 可选，1..3600000。生成条件 `#cost><值>`，只记录耗时超过该毫秒数的调用 |
+| `cycle` | `monitor` | 必填，单位秒，1..`<D>`-1（`-c`）。另外要求 `count` × `cycle` < `<D>` |
+
+`count` × `cycle` 必须小于 `<D>`：Arthas 在每个周期结束后约 0.1 秒输出该周期，两者相等时最后一个周期的输出与 `--timeout` 结束作业同时发生。
+
+调用时长：`watch`、`trace`、`stack`、`monitor` 一次调用通常需要 40~50 秒（5 秒 CPU 采样、attach、增强时长、清理），超过 MCP `wait_seconds` 的默认值 30 秒。调用方传 `wait_seconds` 90（上限 120），或用 `jobs_get` 查询结果。
+
+拒绝与失败：
+
+| 情形 | 结果 | `check` |
+| --- | --- | --- |
+| 参数不合法：类名不在 `class_prefixes` 之下、以禁止前缀开头、含通配符，`count`、`expand`、`cycle`、`min_cost_ms` 超出范围，`count` × `cycle` ≥ `<D>` | 没有 `# call` 段，stderr 为 `jvm_arthas: arthas: ...`，退出码 1，不 attach | — |
+| 目标进程 5 秒平均 CPU 达到 `checks.max_cpu_percent`，或无法读取 | `refused` | `cpu_usage` |
+| Arthas 增强失败（包括匹配的类超过 `-m 1`、没有匹配的方法），类数大于 1，方法数大于 `max_methods`，或没有收到影响范围 | `failed`，立即清理（含 `reset`） | `affect` |
+| 原状态为 `ok`，清理后不能确认增强类数为 0 | `failed` | `enhanced_classes` |
+| 运行期监测超过阈值 | `aborted_by_guard` | `cpu`、`gc_time`、`gc_rate`、`health_check`、`sampling` |
+| 作业在 `<D>` + 10 秒内没有结束，或 action 超时 | `timeout` | — |
+| `jad` 找不到类，或类匹配多个类加载器 | `failed` | — |
+
+L1 的执行前检查（attach 状态、内存、元空间、attach 次数与间隔、老年代、Full GC 等）对 L2 同样适用，CPU 检查排在最后。
+
+对目标 JVM 的影响：
+
+- 增强开始后 1~4 秒内，整个 JVM 的 CPU 升高，所有接口的延迟可达数百毫秒（Arthas 计划阶段 0 实测，4 CPU 容器）。运行期监测在从增强开始计时的 `guard.settle`（至少 5 秒）内不评估阈值，目的是避免这段瞬态触发中止。
+- 每个 JVM 的第一次 L2 增强影响更大。阶段 3 验收（[arthas-stage3-l2-report.md](arthas-stage3-l2-report.md)，JDK 8/11/17/21，4 CPU 容器，1000 和 10000 次/秒）：第一次增强使所有接口的延迟升高 1~4 秒，最大 220~1127 ms，JVM CPU 在 5~10 秒内高于 100%（与其他进程争用 CPU 时更长）；后续增强影响 1~2 秒，最大延迟 ≤ 157 ms。
+- 增强开始 10 秒后，未被观察接口的 p99 增幅：后续增强最大 +15%，第一次增强的 24 次中 4 次为 +27%~+46%。被观察方法（1000 次/秒）的 p99 增幅：JDK 17、21 ≤ 20%；JDK 8 每组最大 +23%~+50%，JDK 8、11 的第一次增强 +21%~+30%。
+- 配置 `guard.max_cpu_percent` 时，第一次增强在增强开始 5~10 秒内的 JVM CPU 为 121%~266%（JVM 已使用 150% 时为 351%~362%），超过阈值即中止。阈值低于这个值时，每个 JVM 的第一次 L2 调用都会以 `aborted_by_guard` 结束。
+- 阶段 0 在 JDK 11、21 上观察到整个 JVM 最长 4.12 秒的暂停。原因是 JVM 线程写安全点日志或 hsperfdata 时等待文件系统 journal 提交（[arthas-jvm-pause-report.md](arthas-jvm-pause-report.md)）。暂停期间进程 CPU 接近 0，运行期监测不能发现。
+- `jad` 让目标 JVM 把类的当前字节码写到 `<Arthas 日志目录>/classdump/<类加载器类名>-<哈希>/<包路径>/<类名>.class`，默认日志目录是目标 JVM 用户的 `~/logs/arthas`。文件属主为目标 JVM 的用户。Arthas 和 allowops 都不删除这个文件，同一类再次 `jad` 时覆盖同一文件。反编译读取这个文件，目录不可写时 `jad` 失败。
+
+### 状态目录与恢复
+
+状态目录是 `/var/lib/allowops-exec/arthas/`，属主 root，权限 0700，路径中不能有符号链接。目录内的文件都是 0600：
+
+- `<boot id>-<pid>-<启动时间>.lock`：该 JVM 的 flock 锁。
+- `<boot id>-<pid>-<启动时间>.count`：该 JVM 的 attach 次数、上次 attach 时间、上次 attach 前的 GC 次数，以及自 GC 次数最后一次变化以来的 attach 次数。没有后两项的旧格式文件照常读取，其中的 attach 不计入元空间已用量。
+- `<boot id>-<pid>-<启动时间>.session`：会话记录（端口、随机密码、会话 ID）。attach 前写入，清理确认后删除。
+
+回收在每次调用开始时、`allowops-agent` 启动时执行。agent 启动时通过 `allowops-exec` 的 `arthas_recover` 请求（见 `protocol.md`）进行，仅在 Arthas 文件包已安装的主机上执行。
+对每个遗留记录：目标进程已不存在、不是同一进程（pid 或启动时间不同）或 Arthas 服务端不在监听时，只删除记录；仍在运行时，用记录中的密码按清理顺序停止。例外：记录在发送 load 命令前标为“load 未回复”，JVM 回复后清除。JVM 收到 load 命令后没有回复（调用在回复前被取消或超时，或 `allowops-exec` 在回复前退出），而 attach 后的观察时间内服务端没有出现时，记录保留，该次调用的 `cleanup` 为 `pending: …`，按清理失败报告。JVM 在 Arthas 绑定端口后才回复 load 命令，服务端可能在观察时间之后才启动。这类记录在截止时间（调用时长加 2 分钟）之前，服务端不在时不删除，回收报告失败，同一 JVM 的调用以 `refused`（`previous_session`）结束；服务端出现后按上面的方式停止；截止时间之后服务端仍不在时删除。服务端是否存在按监听端口和 `arthas-` 线程判断，Arthas 开始绑定端口后即有 `arthas-binding-thread`。残余风险：JVM 在创建该线程之前停止运行（例如容器被 `docker pause`）且超过截止时间，之后恢复运行并启动服务端时，记录已被删除，该服务端只能随 JVM 重启结束，期间同一 JVM 的调用被拒绝。调用仍持有锁的记录属于运行中的调用，不处理。进程已结束的 JVM 的计数文件和锁文件一并删除。
+
+### 运行条件
+
+- 需要 root：attach 要读取目标的 `/proc` 并进入其命名空间。`allowops-exec` 以 root 执行，不需要 `run_as` 以外的配置。
+- 主机需要安装 Arthas 文件包，五个文件都在 `/usr/share/allowops/arthas/4.3.5/`。缺少任何一个时，该 action 在目录加载阶段报告为主机不支持（`unsupported`），agent 的 hello 不列出 `jvm_arthas`。
+- 容器目标需要读取 `/var/run/docker.sock` 的权限，规则与 jvm_perfdata 相同。
+
 ## 本地目录校验配置
 
 以下 builtin_config 可用于两个独立 action。配置不包含凭据内容；目录校验不读取凭据或连接服务。
@@ -142,4 +484,109 @@ builtin_config:
   databases: [fixture]
   statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
   show_types: [TABLES, DATABASES, PROCESSLIST, VARIABLES, STATUS, CREATE TABLE, COLUMNS]
+```
+
+```yaml
+# builtin: starrocks_query
+builtin_config:
+  address: tcp://127.0.0.1:9030
+  credential: /etc/allowops/credentials/starrocks-query.json
+  max_rows: 200
+  max_bytes: 64KB
+  timeout: 10s
+  statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
+  show_types: [DATABASES, TABLES, COLUMNS, CREATE TABLE]
+```
+
+```yaml
+# builtin: dremio_query
+builtin_config:
+  url: http://127.0.0.1:9047
+  credential: /etc/allowops/credentials/dremio.json
+  max_rows: 500
+  max_bytes: 1MB
+  timeout: 10s
+  statement_types: [SELECT, SHOW, DESCRIBE, EXPLAIN]
+  show_types: [SCHEMAS, TABLES, VIEWS, PARTITIONS, FILES, CREATE TABLE, FUNCTIONS]
+```
+
+```yaml
+# builtin: starrocks_diag
+builtin_config:
+  address: tcp://127.0.0.1:9030
+  credential: /etc/allowops/credentials/starrocks-diag.json
+  max_rows: 200
+  max_bytes: 64KB
+  max_profile_bytes: 8MB
+  timeout: 10s
+  audit_table: starrocks_audit_db__.starrocks_audit_tbl__
+  allow_profile_run: false
+```
+
+```yaml
+# builtin: dremio_diag（固定一个 op）
+builtin_config:
+  ops: [job_profile]
+  url: http://127.0.0.1:9047
+  credential: /etc/allowops/credentials/dremio.json
+  max_rows: 100
+  max_bytes: 256KB
+  timeout: 10s
+  max_profile_bytes: 16MB
+```
+
+```yaml
+# builtin: jvm_perfdata
+builtin_config:
+  timeout: 5s
+  targets:
+    api:
+      systemd_unit: api.service
+    shop-web:
+      container: shop-web
+      main_class: com.example.shop.Main
+```
+
+```yaml
+# builtin: jvm_arthas（每个 action 一条命令）
+builtin_config:
+  command: thread_top
+  targets:
+    api:
+      systemd_unit: api.service
+  sha256:
+    arthas-agent.jar: b5bf8765c7621849889fb6522a296fa177ceb3f5c2c2b6d9f631d761ca9c04f9
+    arthas-core.jar: 7cbc3dc36ec29e96ae044845ad6b690b790a800e45d0694fcfbe90c9725de813
+    arthas-spy.jar: d11cfc1cee83eb46501d5b9719ea49117db2a9e7cbdab9e83e376716255380a6
+    arthas.properties: a507ed264d99387b6e1717f8ad6f257dba79de983f5b6617a8c63e38975acec1
+    logback.xml: e038b9c097cf0fe801483c65871565f6d120c1365c4d55b65666b05d533f7445
+  checks:
+    min_memory_headroom: 512MB
+    max_old_gen_percent: 80
+  guard:
+    max_cpu_percent: 300
+    health_check:
+      url: http://127.0.0.1:8080/health
+      allowed_prefixes: [http://127.0.0.1:8080/]
+```
+
+```yaml
+# builtin: jvm_arthas（L2 命令；该 action 的 timeout 至少为 enhance_duration + 60s，即 80s）
+builtin_config:
+  command: watch
+  targets:
+    api:
+      systemd_unit: api.service
+  sha256:
+    arthas-agent.jar: b5bf8765c7621849889fb6522a296fa177ceb3f5c2c2b6d9f631d761ca9c04f9
+    arthas-core.jar: 7cbc3dc36ec29e96ae044845ad6b690b790a800e45d0694fcfbe90c9725de813
+    arthas-spy.jar: d11cfc1cee83eb46501d5b9719ea49117db2a9e7cbdab9e83e376716255380a6
+    arthas.properties: a507ed264d99387b6e1717f8ad6f257dba79de983f5b6617a8c63e38975acec1
+    logback.xml: e038b9c097cf0fe801483c65871565f6d120c1365c4d55b65666b05d533f7445
+  class_prefixes: [com.example.order., com.example.payment.]
+  enhance_duration: 20s
+  max_methods: 2
+  object_size_limit: 4KB
+  checks:
+    max_cpu_percent: 30
 ```

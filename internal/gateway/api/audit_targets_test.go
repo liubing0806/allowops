@@ -39,6 +39,7 @@ func persistedTargets(t *testing.T, f *fixture, operation, decision string) []au
 	}
 	return events
 }
+
 func requireTarget(t *testing.T, events []audit.Payload, kind string, ids ...string) {
 	t.Helper()
 	if len(events) != len(ids) {
@@ -54,6 +55,7 @@ func requireTarget(t *testing.T, events []audit.Payload, kind string, ids ...str
 		}
 	}
 }
+
 func TestManagementResultAuditUsesActualTargets(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

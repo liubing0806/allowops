@@ -22,6 +22,7 @@ func nativeContent(t *testing.T, r *ToolResult) map[string]any {
 	}
 	return result
 }
+
 func TestNativeSummaryMappingPaginationAndBinding(t *testing.T) {
 	j := &v1.Job{JobId: "job-20261014-0001", Status: v1.JobStatus_JOB_STATUS_SUCCEEDED, TotalTasks: 60, Counts: []*v1.TaskCount{{Status: v1.TaskStatus_TASK_STATUS_SUCCEEDED, Count: 60}}}
 	summary := &v1.JobSummary{OutputTrust: v1.OutputTrust_OUTPUT_TRUST_UNTRUSTED, Truncated: true, OfflineHosts: []string{"offline-host"}}
@@ -77,6 +78,7 @@ func TestNativeSummaryMappingPaginationAndBinding(t *testing.T) {
 		t.Fatalf("hosts=%d offline=%d", len(seen), offline)
 	}
 }
+
 func TestNativeSummaryKeepsBackendGroupingAndFitsEscapedPreview(t *testing.T) {
 	j := &v1.Job{JobId: "job-20261014-0002", TotalTasks: 3}
 	summary := &v1.JobSummary{OutputTrust: v1.OutputTrust_OUTPUT_TRUST_UNTRUSTED, Groups: []*v1.OutputGroup{{HostCount: 3, Hosts: []string{"a", "b", "c"}, Stdout: strings.Repeat("\x00", 4096)}}}

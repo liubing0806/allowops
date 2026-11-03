@@ -69,6 +69,8 @@ redact:
 
 设置超时和 `max_output`。涉及扫描时，还要设置 `max_scan`。组合动作的 stdout/stderr 共享一个总输出预算。运行时调用方可以收紧分批和失败数上限，不能提高签名中的上限。stdout 按脱敏、过滤、截断的顺序处理。stderr 先脱敏，再截断。
 
+动作还可以设置 `max_targets`，取值为 1 到 2147483647 的整数；省略表示不限制。当一个 job 解析出的目标主机数超过 `max_targets` 时（选择器在解析后计数），网关在策略评估之前拒绝整个 job，不创建 job 和 task。该值是已签名动作摘要的一部分，调用方不能修改。只允许少数实例同时执行的动作可以使用它，例如诊断类动作设置 `max_targets: 1`。运行早于该字段的 agent 的主机无法加载使用该字段的目录，见[主机必须认识的字段](publishing.md#fields-that-hosts-must-understand)。
+
 `secrets` 默认启用，`pii` 为可选项。自定义规则使用 `redact.custom: [{name, regex, before_builtin}]`。自定义规则默认在内置规则之后执行；设置 `before_builtin: true` 的规则在内置规则之前执行，用于整体替换引号字符串的规则（例如 SQL 字面值），避免内置规则先消耗结束引号。动作级的脱敏配置会覆盖全局规则。因此，添加覆盖配置时，需要显式保留 `secrets`。脱敏并不完善。不要定义有意暴露凭据的动作。
 
 在评审和构建之前先进行校验：

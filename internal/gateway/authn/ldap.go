@@ -208,11 +208,13 @@ type loginKey struct {
 	username [sha256.Size]byte
 	ip       string
 }
+
 type loginWindow struct {
 	failures []time.Time
 	gate     chan struct{}
 	users    int
 }
+
 type loginLimiter struct {
 	mu         sync.Mutex
 	limit      RateLimit

@@ -20,6 +20,7 @@ import (
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authn"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"golang.org/x/oauth2"
 )
 
@@ -29,6 +30,7 @@ type OIDCProvider struct {
 	oauth    oauth2.Config
 	client   *http.Client
 }
+
 type LDAPProvider struct {
 	Method        *v1.LoginMethod
 	Authenticator *authn.LDAP
@@ -62,6 +64,7 @@ func (s *Service) AddOIDC(ctx context.Context, id, name, clientSecret string, cf
 	s.oidc[id] = &OIDCProvider{method: &v1.LoginMethod{ProviderId: id, DisplayName: name, Kind: "oidc"}, verifier: verifier, oauth: oauth2.Config{ClientID: cfg.ClientID, ClientSecret: clientSecret, Endpoint: endpoint, RedirectURL: s.Config.Origin + "/auth/oidc/callback", Scopes: []string{oidc.ScopeOpenID, "profile", "email", "groups"}}, client: cfg.HTTPClient}
 	return nil
 }
+
 func (s *Service) AddLDAP(id, name string, auth *authn.LDAP, directory authn.DirectoryCredentials) error {
 	if id == "" || auth == nil || s.oidc[id] != nil || s.ldap[id].Method != nil {
 		return errors.New("invalid LDAP provider")
@@ -69,6 +72,7 @@ func (s *Service) AddLDAP(id, name string, auth *authn.LDAP, directory authn.Dir
 	s.ldap[id] = LDAPProvider{Method: &v1.LoginMethod{ProviderId: id, DisplayName: name, Kind: "ldap"}, Authenticator: auth, Directory: directory}
 	return nil
 }
+
 func (s *Service) GetLoginMethods(context.Context, *connect.Request[v1.GetLoginMethodsRequest]) (*connect.Response[v1.GetLoginMethodsResponse], error) {
 	ids := []string{}
 	for id := range s.oidc {
@@ -87,6 +91,7 @@ func (s *Service) GetLoginMethods(context.Context, *connect.Request[v1.GetLoginM
 	}
 	return connect.NewResponse(&v1.GetLoginMethodsResponse{Methods: methods}), nil
 }
+
 func loopback(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "http" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "/callback" {
@@ -99,10 +104,12 @@ func loopback(raw string) bool {
 	port, err := strconv.Atoi(u.Port())
 	return err == nil && port > 0 && port <= 65535
 }
+
 func challenge(raw string) bool {
 	b, err := base64.RawURLEncoding.Strict().DecodeString(raw)
 	return err == nil && len(b) == sha256.Size
 }
+
 func verifier(raw string) bool {
 	if len(raw) < 43 || len(raw) > 128 {
 		return false
@@ -134,21 +141,22 @@ func (s *Service) BeginOidcLogin(ctx context.Context, r *connect.Request[v1.Begi
 	default:
 		return nil, failure(connect.CodeInvalidArgument, "login client required")
 	}
-	// A47: serialize admission across providers and gateway instances. Read
+	// Serialize OIDC login-transaction admission (shared cap of 10000 live transactions) across
+	// providers and gateway instances (design A47). Read
 	// Committed takes a fresh count snapshot after waiting for this shared lock.
 	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return nil, dbError(err)
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(418010)"); err != nil {
+	if err = lockOidcAdmission(ctx, tx); err != nil {
 		return nil, dbError(err)
 	}
-	if _, err = tx.Exec(ctx, "DELETE FROM oidc_transactions WHERE expires_at<=clock_timestamp()"); err != nil {
+	if err = purgeOidcTransactions(ctx, tx); err != nil {
 		return nil, dbError(err)
 	}
-	var live int
-	if err = tx.QueryRow(ctx, "SELECT count(*) FROM oidc_transactions WHERE expires_at>clock_timestamp()").Scan(&live); err != nil {
+	live, err := countOidcTransactions(ctx, tx)
+	if err != nil {
 		return nil, dbError(err)
 	}
 	if live >= 10000 {
@@ -159,7 +167,7 @@ func (s *Service) BeginOidcLogin(ctx context.Context, r *connect.Request[v1.Begi
 		return nil, failure(connect.CodeResourceExhausted, "OIDC login transaction capacity exhausted")
 	}
 	state := secret("")
-	_, err = tx.Exec(ctx, "INSERT INTO oidc_transactions(state_hash,provider_id,client,nonce,provider_verifier,loopback_uri,cli_state,cli_challenge,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)", hash(state), m.ProviderId, client, secret(""), oauth2.GenerateVerifier(), m.CliLoopbackUri, m.CliState, m.CliCodeChallenge, time.Now().Add(s.Config.LoginTTL))
+	err = insertOidcTransaction(ctx, tx, oidcTransaction{provider: m.ProviderId, client: client, nonce: secret(""), verifier: oauth2.GenerateVerifier(), loopback: m.CliLoopbackUri, cliState: m.CliState, challenge: m.CliCodeChallenge}, hash(state), time.Now().Add(s.Config.LoginTTL))
 	if err != nil {
 		return nil, dbError(err)
 	}
@@ -168,10 +176,11 @@ func (s *Service) BeginOidcLogin(ctx context.Context, r *connect.Request[v1.Begi
 	}
 	return connect.NewResponse(&v1.BeginOidcLoginResponse{AuthorizationUrl: s.Config.Origin + "/auth/oidc/start?state=" + url.QueryEscape(state)}), nil
 }
+
 func (s *Service) oidcStart(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	event := AuditEvent{ActorID: actorID(r.Context()), Operation: "/auth/oidc/start", Phase: "result", Outcome: "deny", SourceIP: transport(r.Context()).ip}
+	event := AuditEvent{ActorID: reqctx.ActorID(r.Context()), Operation: "/auth/oidc/start", Phase: "result", Outcome: "deny", SourceIP: transport(r.Context()).ip}
 	if r.Method != http.MethodGet || r.TLS == nil {
 		if err := s.AppendResultAudit(r.Context(), event); err != nil {
 			http.Error(w, "audit unavailable", http.StatusServiceUnavailable)
@@ -190,9 +199,8 @@ func (s *Service) oidcStart(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie("__Host-allowops-login"); err == nil && len(c.Value) == 43 {
 		binding = c.Value
 	}
-	var provider, nonce, pv string
 	state := r.URL.Query().Get("state")
-	err := s.Store.Pool.QueryRow(r.Context(), "UPDATE oidc_transactions SET binding_hash=$2 WHERE state_hash=$1 AND expires_at>now() AND binding_hash IS NULL RETURNING provider_id,nonce,provider_verifier", hash(state), hash(binding)).Scan(&provider, &nonce, &pv)
+	provider, nonce, pv, err := bindOidcTransaction(r.Context(), s.Store.Pool, hash(state), hash(binding))
 	if err == nil && s.oidc[provider] != nil {
 		event.Outcome = "allow"
 	}
@@ -208,6 +216,7 @@ func (s *Service) oidcStart(w http.ResponseWriter, r *http.Request) {
 	dest := s.oidc[provider].oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(pv))
 	http.Redirect(w, r, dest, http.StatusFound)
 }
+
 func (s *Service) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
@@ -220,6 +229,7 @@ func (s *Service) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	fragment := url.Values{"code": {r.URL.Query().Get("code")}, "state": {r.URL.Query().Get("state")}}.Encode()
 	http.Redirect(w, r, s.Config.Origin+"/auth/oidc/complete#"+fragment, http.StatusFound)
 }
+
 func (s *Service) oidcPage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet || r.TLS == nil {
 		http.Error(w, "invalid login", http.StatusBadRequest)
@@ -232,6 +242,7 @@ func (s *Service) oidcPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'nonce-"+nonce+"'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
 	fmt.Fprintf(w, `<!doctype html><title>allowops login</title><p id="status">Completing login</p><script nonce="%s">const p=new URLSearchParams(location.hash.slice(1));history.replaceState(null,'',location.pathname);fetch('/allowops.v1.AuthService/CompleteOidcLogin',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Connect-Protocol-Version':'1'},body:JSON.stringify({code:p.get('code'),state:p.get('state')})}).then(async r=>{if(!r.ok)throw Error();const v=await r.json();location.replace(v.redirectUri||v.redirect_uri)}).catch(()=>document.getElementById('status').textContent='Login failed');</script>`, nonce)
 }
+
 func (s *Service) CompleteOidcLogin(ctx context.Context, r *connect.Request[v1.CompleteOidcLoginRequest]) (*connect.Response[v1.CompleteOidcLoginResponse], error) {
 	t := transport(ctx)
 	if t == nil || r.Header().Get("Origin") != s.Config.Origin {
@@ -242,8 +253,8 @@ func (s *Service) CompleteOidcLogin(ctx context.Context, r *connect.Request[v1.C
 	if err != nil || c.Value == "" {
 		return nil, failure(connect.CodeUnauthenticated, "login browser binding required")
 	}
-	var provider, client, nonce, pv, loop, state, pkce string
-	err = s.Store.Pool.QueryRow(ctx, "DELETE FROM oidc_transactions WHERE state_hash=$1 AND binding_hash=$2 AND expires_at>now() RETURNING provider_id,client,nonce,provider_verifier,loopback_uri,cli_state,cli_challenge", hash(r.Msg.State), hash(c.Value)).Scan(&provider, &client, &nonce, &pv, &loop, &state, &pkce)
+	tr, err := takeOidcTransaction(ctx, s.Store.Pool, hash(r.Msg.State), hash(c.Value))
+	provider, client, nonce, pv, loop, state, pkce := tr.provider, tr.client, tr.nonce, tr.verifier, tr.loopback, tr.cliState, tr.challenge
 	if err != nil || s.oidc[provider] == nil {
 		return nil, failure(connect.CodeUnauthenticated, "invalid login state or browser binding")
 	}
@@ -267,7 +278,7 @@ func (s *Service) CompleteOidcLogin(ctx context.Context, r *connect.Request[v1.C
 	t.auditActor = u.UserId
 	if client == "cli" {
 		code := secret("")
-		if _, err := s.Store.Pool.Exec(ctx, "INSERT INTO cli_login_codes(code_hash,user_id,challenge,expires_at) VALUES ($1,$2,$3,$4)", hash(code), u.UserId, pkce, time.Now().Add(s.Config.CodeTTL)); err != nil {
+		if err := insertCliLoginCode(ctx, s.Store.Pool, hash(code), u.UserId, pkce, time.Now().Add(s.Config.CodeTTL)); err != nil {
 			return nil, dbError(err)
 		}
 		dest, _ := url.Parse(loop)
@@ -281,6 +292,7 @@ func (s *Service) CompleteOidcLogin(ctx context.Context, r *connect.Request[v1.C
 	s.sessionCookie(ctx, raw, sess.ExpiresAt.AsTime())
 	return connect.NewResponse(&v1.CompleteOidcLoginResponse{RedirectUri: s.Config.Origin + "/"}), nil
 }
+
 func (s *Service) ExchangeCliSession(ctx context.Context, r *connect.Request[v1.ExchangeCliSessionRequest]) (*connect.Response[v1.ExchangeCliSessionResponse], error) {
 	if !verifier(r.Msg.CodeVerifier) {
 		return nil, failure(connect.CodeUnauthenticated, "invalid PKCE verifier")
@@ -290,15 +302,15 @@ func (s *Service) ExchangeCliSession(ctx context.Context, r *connect.Request[v1.
 		return nil, dbError(err)
 	}
 	defer tx.Rollback(ctx)
-	var userID, pkce string
-	if err := tx.QueryRow(ctx, "SELECT user_id,challenge FROM cli_login_codes WHERE code_hash=$1 AND expires_at>clock_timestamp() FOR UPDATE", hash(r.Msg.Code)).Scan(&userID, &pkce); err != nil {
+	userID, pkce, err := lockCliLoginCode(ctx, tx, hash(r.Msg.Code))
+	if err != nil {
 		return nil, failure(connect.CodeUnauthenticated, "invalid or consumed login code")
 	}
 	got := base64.RawURLEncoding.EncodeToString(hash(r.Msg.CodeVerifier))
 	if subtle.ConstantTimeCompare([]byte(got), []byte(pkce)) != 1 {
 		return nil, failure(connect.CodeUnauthenticated, "PKCE mismatch")
 	}
-	if _, err := tx.Exec(ctx, "DELETE FROM cli_login_codes WHERE code_hash=$1", hash(r.Msg.Code)); err != nil {
+	if err := deleteCliLoginCode(ctx, tx, hash(r.Msg.Code)); err != nil {
 		return nil, dbError(err)
 	}
 	sess, token, err := s.issueSession(ctx, tx, userID, v1.LoginClient_LOGIN_CLIENT_CLI)
@@ -311,9 +323,11 @@ func (s *Service) ExchangeCliSession(ctx context.Context, r *connect.Request[v1.
 	transport(ctx).auditActor = userID
 	return connect.NewResponse(&v1.ExchangeCliSessionResponse{Session: sess, SessionToken: token}), nil
 }
+
 func (s *Service) sessionCookie(ctx context.Context, raw string, expires time.Time) {
 	http.SetCookie(transport(ctx).writer, &http.Cookie{Name: "__Host-allowops-session", Value: raw, Path: "/", HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode, Expires: expires, MaxAge: max(1, int(time.Until(expires).Seconds()))})
 }
+
 func (s *Service) LoginLdap(ctx context.Context, r *connect.Request[v1.LoginLdapRequest]) (*connect.Response[v1.LoginLdapResponse], error) {
 	p := s.ldap[r.Msg.ProviderId]
 	if p.Authenticator == nil {
@@ -354,8 +368,9 @@ func (s *Service) LoginLdap(ctx context.Context, r *connect.Request[v1.LoginLdap
 	}
 	return connect.NewResponse(response), nil
 }
+
 func (s *Service) GetCurrentSession(ctx context.Context, _ *connect.Request[v1.GetCurrentSessionRequest]) (*connect.Response[v1.GetCurrentSessionResponse], error) {
-	id, ok := FromContext(ctx)
+	id, ok := reqctx.FromContext(ctx)
 	if !ok || id.Session == nil {
 		return nil, failure(connect.CodeFailedPrecondition, "user session required")
 	}
@@ -365,12 +380,13 @@ func (s *Service) GetCurrentSession(ctx context.Context, _ *connect.Request[v1.G
 	}
 	return connect.NewResponse(&v1.GetCurrentSessionResponse{User: id.User, Client: id.Client, ExpiresAt: id.Session.ExpiresAt, CsrfToken: id.CSRF, GatewayVersion: s.buildVersion(), GatewayUpdate: update}), nil
 }
+
 func (s *Service) Logout(ctx context.Context, _ *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error) {
-	id, ok := FromContext(ctx)
+	id, ok := reqctx.FromContext(ctx)
 	if !ok || id.Session == nil {
 		return nil, failure(connect.CodeFailedPrecondition, "user session required")
 	}
-	if _, err := s.Store.Pool.Exec(ctx, "UPDATE identity_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE session_id=$1", id.Session.SessionId); err != nil {
+	if err := revokeSession(ctx, s.Store.Pool, id.Session.SessionId); err != nil {
 		return nil, dbError(err)
 	}
 	if id.Client == v1.LoginClient_LOGIN_CLIENT_CONSOLE {
@@ -378,8 +394,9 @@ func (s *Service) Logout(ctx context.Context, _ *connect.Request[v1.LogoutReques
 	}
 	return connect.NewResponse(&v1.LogoutResponse{}), nil
 }
+
 func (s *Service) sessionUser(ctx context.Context, userID string) (string, error) {
-	id, ok := FromContext(ctx)
+	id, ok := reqctx.FromContext(ctx)
 	if !ok || id.User == nil {
 		return "", failure(connect.CodePermissionDenied, "user session required")
 	}
@@ -400,37 +417,27 @@ func (s *Service) sessionUser(ctx context.Context, userID string) (string, error
 	}
 	return userID, nil
 }
+
 func (s *Service) ListCliSessions(ctx context.Context, r *connect.Request[v1.ListCliSessionsRequest]) (*connect.Response[v1.ListCliSessionsResponse], error) {
 	uid, err := s.sessionUser(ctx, r.Msg.UserId)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.Store.Pool.Query(ctx, "SELECT "+sessionColumns+" FROM identity_sessions WHERE user_id=$1 AND client='cli' ORDER BY session_id", uid)
+	items, err := listCliSessions(ctx, s.Store.Pool, uid)
 	if err != nil {
-		return nil, dbError(err)
-	}
-	defer rows.Close()
-	items := []*v1.CliSession{}
-	for rows.Next() {
-		t, err := scanSession(rows)
-		if err != nil {
-			return nil, dbError(err)
-		}
-		items = append(items, t)
-	}
-	if err := rows.Err(); err != nil {
 		return nil, dbError(err)
 	}
 	items, p, err := page(ctx, s.Config, "cli_sessions:"+uid, r.Msg.Page, items)
 	return connect.NewResponse(&v1.ListCliSessionsResponse{Sessions: items, Page: p}), err
 }
+
 func (s *Service) RevokeCliSession(ctx context.Context, r *connect.Request[v1.RevokeCliSessionRequest]) (*connect.Response[v1.RevokeCliSessionResponse], error) {
 	uid, err := s.sessionUser(ctx, r.Msg.UserId)
 	if err != nil {
 		return nil, err
 	}
-	tag, err := s.Store.Pool.Exec(ctx, "UPDATE identity_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE session_id=$1 AND user_id=$2 AND client='cli'", r.Msg.SessionId, uid)
-	if err == nil && tag.RowsAffected() == 0 {
+	revoked, err := revokeCliSession(ctx, s.Store.Pool, r.Msg.SessionId, uid)
+	if err == nil && revoked == 0 {
 		return nil, failure(connect.CodeNotFound, "session not found for user")
 	}
 	return connect.NewResponse(&v1.RevokeCliSessionResponse{}), dbError(err)

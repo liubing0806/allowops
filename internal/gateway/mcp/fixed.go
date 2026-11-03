@@ -2,7 +2,7 @@ package mcp
 
 import "github.com/liubing0806/allowops/internal/gateway/job"
 
-func fixedTools(cfg job.Config) []ToolDefinition {
+func fixedTools(cfg job.Config, sources ...string) []ToolDefinition {
 	text := func(description string) map[string]any {
 		return map[string]any{"type": "string", "description": description, "minLength": 1}
 	}
@@ -21,9 +21,17 @@ func fixedTools(cfg job.Config) []ToolDefinition {
 	}
 	tools := []ToolDefinition{
 		{Name: "hosts_search", Description: "Search hosts by a label selector or a hostname, not both; without either, list all hosts visible to this identity with pagination. Returns hostnames, labels, online status, total count and label distribution. Selector syntax is comma-separated key=value conjunctions. Labels exceeding the result budget are marked labels_truncated; label distributions use label_counts_truncated. Narrow the selector or use the console/CLI to inspect complete labels.", Annotations: ToolAnnotations{ReadOnlyHint: true}, InputSchema: object(map[string]any{"selector": text("Label selector (A10)."), "hostname": text("Globally unique hostname."), "next_cursor": cursor()})},
-		{Name: "jobs_get", Description: "Read a job summary. With host, read lossless paginated host output as data_base64 with encoding=base64; pass next_offset as offset to continue. Summary counts cover all tasks; groups and offline_hosts cover the current page. P6 summaries may already be truncated; the truncated marker is preserved. Composite action output requires step_index and is read one step at a time. Output additionally requires view_output authorization.", Annotations: ToolAnnotations{ReadOnlyHint: true}, InputSchema: object(map[string]any{"job_id": jobID(), "host": text("Hostname whose complete output is requested."), "wait_seconds": waitSchema(cfg), "response_format": formatSchema(), "next_cursor": cursor(), "stream": map[string]any{"type": "string", "description": "Host output stream.", "enum": []string{"stdout", "stderr"}, "default": "stdout"}, "step_index": outputStepSchema(), "offset": map[string]any{"type": "integer", "description": "Byte offset in stored output; use next_offset to continue.", "minimum": 0, "maximum": uint64(^uint64(0))}}, "job_id")},
+		{Name: "jobs_get", Description: "Read a job summary. With host, read lossless paginated host output as data_base64 with encoding=base64 (default); pass next_offset as offset to continue. With host and encoding=text, read the page as UTF-8 text in data; next_offset stops at a complete character, and output that is not valid UTF-8 returns ENCODING_NOT_TEXT, after which read it with encoding=base64. Summary counts cover all tasks; groups and offline_hosts cover the current page. P6 summaries may already be truncated; the truncated marker is preserved. Composite action output requires step_index and is read one step at a time. Output additionally requires view_output authorization.", Annotations: ToolAnnotations{ReadOnlyHint: true}, InputSchema: object(map[string]any{"job_id": jobID(), "host": text("Hostname whose complete output is requested."), "wait_seconds": waitSchema(cfg), "response_format": formatSchema(), "next_cursor": cursor(), "stream": map[string]any{"type": "string", "description": "Host output stream.", "enum": []string{"stdout", "stderr"}, "default": "stdout"}, "step_index": outputStepSchema(), "offset": map[string]any{"type": "integer", "description": "Byte offset in stored output; use next_offset to continue.", "minimum": 0, "maximum": uint64(^uint64(0))}, "encoding": map[string]any{"type": "string", "description": "Host output encoding: base64 returns data_base64; text returns UTF-8 data or ENCODING_NOT_TEXT. Only with host.", "enum": []string{"base64", "text"}, "default": "base64"}}, "job_id")},
 		{Name: "jobs_list", Description: "List recent jobs belonging to the current authenticated service account or CLI user.", Annotations: ToolAnnotations{ReadOnlyHint: true}, InputSchema: object(map[string]any{"next_cursor": cursor()})},
 		{Name: "jobs_cancel", Description: "Cancel a job: stop future batches and terminate running task process groups. Service accounts may only cancel their own jobs; users require execution authorization on every job host.", InputSchema: object(map[string]any{"job_id": jobID()}, "job_id")},
+	}
+	if len(sources) > 0 {
+		tools = append(tools, ToolDefinition{Name: "entities_search", Description: "Search inventory entities by exact kind and case-insensitive name substring. Dependencies refer to kind/name within the same source. Returned selectors and hostnames can be used as action targets; action authorization is checked separately. Results may be truncated; narrow the query for more detail.", Annotations: ToolAnnotations{ReadOnlyHint: true}, InputSchema: object(map[string]any{
+			"kind":    map[string]any{"type": "string", "description": "Exact entity kind; omit or leave empty for all kinds."},
+			"name":    map[string]any{"type": "string", "description": "Case-insensitive name substring; omit or leave empty for all names."},
+			"sources": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": sources}, "description": "Inventory instance IDs; omit or leave empty for all available sources."},
+			"limit":   map[string]any{"type": "integer", "minimum": 1, "maximum": 100, "default": 20},
+		})})
 	}
 	for i := range tools {
 		tools[i].Description += toolInstructions

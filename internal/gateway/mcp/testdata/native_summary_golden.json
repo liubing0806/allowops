@@ -1,0 +1,175 @@
+{
+ "bad format": [
+  "error: invalid_argument: response_format allowed: concise, detailed"
+ ],
+ "cursor duplicate member": [
+  "error: invalid_argument: summary cursor does not match identity, job, format or P6 snapshot; restart without next_cursor"
+ ],
+ "cursor extra member": [
+  "error: invalid_argument: summary cursor does not match identity, job, format or P6 snapshot; restart without next_cursor"
+ ],
+ "cursor not base64": [
+  "error: invalid_argument: invalid summary cursor; restart without next_cursor"
+ ],
+ "cursor not json": [
+  "error: invalid_argument: summary cursor does not match identity, job, format or P6 snapshot; restart without next_cursor"
+ ],
+ "cursor offset at end": [
+  "error: invalid_argument: summary cursor does not match identity, job, format or P6 snapshot; restart without next_cursor"
+ ],
+ "cursor offset negative": [
+  "error: invalid_argument: summary cursor does not match identity, job, format or P6 snapshot; restart without next_cursor"
+ ],
+ "cursor offset wrong type": [
+  "error: invalid_argument: summary cursor does not match identity, job, format or P6 snapshot; restart without next_cursor"
+ ],
+ "cursor offset zero": [
+  "error: invalid_argument: summary cursor does not match identity, job, format or P6 snapshot; restart without next_cursor"
+ ],
+ "cursor padded": [
+  "error: invalid_argument: invalid summary cursor; restart without next_cursor"
+ ],
+ "cursor too long": [
+  "error: invalid_argument: invalid summary cursor; restart without next_cursor"
+ ],
+ "cursor valid": [
+  "len=21613 sha256=f029a156ad540efc59a525ad557ef069d1a6506304b3c971d5d2e77d9383ae2d"
+ ],
+ "cursor wrong snapshot": [
+  "error: invalid_argument: summary cursor does not match identity, job, format or P6 snapshot; restart without next_cursor"
+ ],
+ "empty format": [
+  "error: invalid_argument: response_format allowed: concise, detailed"
+ ],
+ "empty scope": [
+  "error: unavailable: job summary unavailable"
+ ],
+ "huge hostnames": [
+  "error: resource_exhausted: job metadata exceeds 32KB"
+ ],
+ "huge metadata": [
+  "error: resource_exhausted: job metadata exceeds 32KB"
+ ],
+ "huge metadata with groups": [
+  "error: resource_exhausted: job metadata exceeds 32KB"
+ ],
+ "huge previews": [
+  "len=17791 sha256=3d94acd490fe7ce5238f79f27c3bb93a44c39dcffac3a565de9961bfa21cd074",
+  "len=17791 sha256=34a712ea7b30b10e27a76c0ce022b9eb500d3cee8d01d5561e2877fc1fe156e2",
+  "len=17791 sha256=effa34a5ebe54f2acbc7df9c58da230310bf360d2df0ae88674245792ad0a0a0",
+  "len=17791 sha256=50733f12251c2eafd1a02760544cbd29f2b70ba4edde76da2618670220fcf914",
+  "len=17791 sha256=1fced51643cdc7512a4c6c280a953ebe1aab89148d53b1f1786f34b6b8f4fb07",
+  "len=17543 sha256=5df7eb0608dddd8a817c686c7786bc2b9a6b10cac7e39c32f76a0c6409d584e9"
+ ],
+ "many concise": [
+  "len=21627 sha256=ae4a1e70cbc9ea839dfbf986326d02a1c73c32caebf9f5cadbe22dce3b7054a2",
+  "len=21627 sha256=08dadb4088ab4e294b73460bc9482fa7669331b55ca42906ffdbe50f0d1d8374",
+  "len=21627 sha256=cf9e61b6806544fc816191a0c174edd877d1b3a228f337c0a3f4abc1b64ad179",
+  "len=21627 sha256=eaccd589ef7c47c8a95af794b9d2df2a34fedf1d76e9892e1452db139a59b41e",
+  "len=21627 sha256=1c044c99b3ec16a8263becde21555eb475ac001bc6e8afed03a4119871ac6053",
+  "len=21627 sha256=c4c7017a7aa861f8429bea4034e53c66253e63efb72ed2fabca4368f86eae3ba",
+  "len=21627 sha256=08adab4d45635505e69253da005e0e011ea2efae9ca9bc8eb1318424b7ca75a0",
+  "len=21627 sha256=416f22def23e191fef8c870f9aee26fdf2aaf2641c22f13279e39be9a2086899",
+  "len=21627 sha256=faf130da7c9ab42bb0d487397479d98b7af48d137bf7b116304884551e0a1501",
+  "len=21631 sha256=512a07565ea416cfd943a0a4abf95c9b025d6d999f0166af2efbb91d5e333109",
+  "len=21633 sha256=e7ab34995430efef3a9e7dd50015becb97de9f95f8031c4ad1be9121020ae114",
+  "len=21633 sha256=f61f5443661f81ecbc015fd884551157a76dd7c3b386d70d61f952d6076df547",
+  "len=21633 sha256=452e8a0caf7d800833ae2c13423cf2c1651dc2cb8f5aafca6718772d4f170446",
+  "len=21633 sha256=87f74b50fa90471750053b3ddfdaaf07f60cd4ae6324ffb5cde378d1aee2b0de",
+  "len=21633 sha256=7021b9656228761fdbd04a60af768fe7ead2e713f786530b622d6336bd7252ee",
+  "len=21633 sha256=e8a2eacd7bee85f00e98c574c4f3710c9d951e15a36903754e8a71f9a58ca3ab",
+  "len=21633 sha256=d513266348db2bad406cfd38083208491db8be6100e97a2b1087b7f3dc24e98f",
+  "len=21633 sha256=791b171cec843c2ea2123afa15f93c16069881fc29a490a380ca48e646fa7a71",
+  "len=21633 sha256=30a5535cc0c2f63c096209d45aa85d28fa91afc8e6d3f9ff79f066f48c6728a6",
+  "len=21633 sha256=d96fdbd64744c5741052295a0ac1f729b6bde7c61c5c7d2bd9de2a3c3463d084",
+  "len=21633 sha256=116d41c090d9b843e8947aac34e4a083fb9c34b7fb86991ef3296288131db1e1",
+  "len=21633 sha256=47ff63647811329ae485f2b4efb57bda4afab99cb60ec047716f1133495bfc08",
+  "len=21633 sha256=ae4dc7a319c4e19abc2b95c460fddfc633a09f44001239aa6a20339367360404",
+  "len=21633 sha256=11ba98b432669d36a2e4c6eeaa5936627b1ccb66cd2323342d4a8ba7b9f79ebf",
+  "len=21633 sha256=ce967bfeb0abd86beb43b4b058d01ab991626ce2015699e8855b4146a0f8d3a8",
+  "len=21633 sha256=81b2c9b2fa5dc2074cba80bf672fb815cdd483c5d9e74d468ddda71c3f95cb94",
+  "len=21633 sha256=ab9ce7196138e0c6dfca99b2bb0a281f33789cba90525cfd97f74cae44abc557",
+  "len=21633 sha256=627a93bc5cd4c7558179633243a4fadc4e0d6aa43e6deb8b836c753d2f74fd83",
+  "len=21633 sha256=0ec631f545a13cae7b2712ddc12f9ea1eee954f36acccfb95c1b86773ab7d18b",
+  "len=21633 sha256=5635e96bda3f5cdf1d2bff0152346babdc78cdefdc1659a81fe1324094243a1a",
+  "len=21633 sha256=3312bc60594fa310d662269fffcee595688e43867659fcfb3b647fce2988be88",
+  "len=21633 sha256=3d4c12ccccf0c6383cc79d358c61d36b55ba0be33c92b357359129f10fa065a9",
+  "len=21633 sha256=9b3a22e32dbbcad31903e9facb1e41ca81a5f61c9071f15fcec3b1d14c404c84",
+  "len=21633 sha256=8c12b3da8a86a5130cc31b72d2d138e0417ea0bd9f04f5fd05b4cf8dbc289a42",
+  "len=21633 sha256=c5c7a563dd8103ad50b092f7fe9a49d090bd94fd008256d32e1f6765de13f669",
+  "len=21633 sha256=9111b6382c936d4abd0a8477679706d36ba90d479d5eb5c50efd4832c9b2c2d6",
+  "len=21633 sha256=f57d7f20c86792f031760d750e8b38e567d3a58cabc0c742614d330dfffe0740",
+  "len=21633 sha256=aa69508f6368ef560938af267015209b656ccb18fc867feaa2e0b2d7ee5ae711",
+  "len=21633 sha256=b22a579e23a1f10b3d7eb81e6711e5af263d269c6bdb8282db7057cdb8274067",
+  "len=21381 sha256=ba74e1926da89583bffa07719c67e182de8e8f0f1466ebacef39f7122c5c47fd"
+ ],
+ "many detailed": [
+  "len=21613 sha256=705d2972605354336332073743e60ae91dc7cfd0c0b2170e4b1d55423b96b454",
+  "len=21613 sha256=f029a156ad540efc59a525ad557ef069d1a6506304b3c971d5d2e77d9383ae2d",
+  "len=21613 sha256=ef533e0a1fec68ebd668390ec63d82f38c643a4d512f9752b5921798a8e6c8ba",
+  "len=21613 sha256=0c726dd5ffd40cffcef65c3e2876cf39e06c179647ba583882585e8eefbaec22",
+  "len=21617 sha256=1aca811e85c74c8e0be8d36a685b23c11a6edf0104b11f5ad8ed3be3f95a7f4a",
+  "len=21617 sha256=e53c9d04149341f4c8e4fc819f10757d9e77544faf58d955d900f93ae8008267",
+  "len=21617 sha256=a0ef2edb6699743467564b5f1c73f758dbdbaf5011840c46002c837e940e8043",
+  "len=21617 sha256=9e3c2ee652e0d4ffb1e75c2fd353972165f35c651f4d4a9be6f0e7cabfd697ed",
+  "len=21617 sha256=e81d12189861857b1d89912db7e2c2ea777112784b15ff06c13cf4703c9e190a",
+  "len=21617 sha256=46e589c63ab62081634e876999533301b5a51f7aed245bdff7cccf7419938008",
+  "len=21619 sha256=e29ee7fb54e6d12491dda0fb01a78a4924158f2578b3a9d568d732c38afce76b",
+  "len=21619 sha256=c6e7cb9d7a8cefc0e6332af3793d77c278558e6d3bebd1b1f40c978aa9200f3b",
+  "len=21619 sha256=c83dd55be6fd937a7aaee6a794379b90c361793a9f8fcc79bd4ac385ba566140",
+  "len=21619 sha256=f3f192ab0860e931ca0f9a6175b04c0d6e8090ee7a3666d0b479666caee95196",
+  "len=21619 sha256=319aefa2ff931d22b4f97c78c6812de8d529bbc817c96359455d0ff15fbb2052",
+  "len=21619 sha256=f70c8af2cb3549bda3e8a368c3b5b800dbf02d96b1f3dcd5ee18f2cfcf8b5645",
+  "len=21619 sha256=bdf67a29d2a5af875aac4f4b8713a278e376177923bd9ee856964c5e2d0be318",
+  "len=21619 sha256=b54e549e878a2afe071325400b64f65e9e19c66ad079bae308d29aad93e67538",
+  "len=21619 sha256=6280048b9f09e8ff9d0ce8ef405c6e28979126df04f662d68bb59cb81f5d376c",
+  "len=21619 sha256=1088b2b31994d9d588f485bd4b878778def8dc23ffd1d96d9433f7d49db953c7",
+  "len=21619 sha256=7a98b51e8aa2f381832f40d992d8b8253ecedfc43ad1659e7eed863ef7c89389",
+  "len=21619 sha256=becefbb220076306e6d7dbf55a8c05ffb17f27aaa11a0c5e68ade8465d125557",
+  "len=21619 sha256=6467ec42eeb32eb35ffc39975250adf2c2900c518e1b00bd4ff3c77e4ce22b0f",
+  "len=21619 sha256=f0b32ef36c06a849866a8d1a709ad5cd395f627cdb64f7b2145a39d2d8c92947",
+  "len=21619 sha256=c77344e2e7bf7b247819e3a6ff3100e390d655ec9b85b815702cdbe159512020",
+  "len=21619 sha256=39590c97d27d3a872055df696f2442a81c11da511d7c65956c336a9b8f5de329",
+  "len=21619 sha256=3a5c4bb7fea660972bcbfa291c62b876808424e39eedc5ba24522f64a246ce86",
+  "len=21619 sha256=00c068777e09e728b782e4897235b154f2eefd78c96ce3f4de1b2d3c5d75cd78",
+  "len=21619 sha256=c65129684b577f7c59417f5d3c974feb4e4f61f450282880901dfd772f99c4f4",
+  "len=21619 sha256=e23f11c14a5609451fae15b2521e21bcde72b648c01ebac6865165eca29edcb5",
+  "len=21619 sha256=77f1403eae792351d2906bb57038f91e0ec51546ce3bd3499ab543426b5efb1b",
+  "len=21619 sha256=b7db8c2b8b2df3b9071bba8d3e29f96b591bc5625551edacc1342154e977a246",
+  "len=21619 sha256=7871275e16a191563531a927e5bdde11ba0fc88a383ee453dc9ad418f7129d2b",
+  "len=21619 sha256=868cef0ccbc863d595c1ff63b09fa4bf771878f092457ce7acbcc581faa84a67",
+  "len=21619 sha256=ab12135650940c5c9af66be73d1640eccd4a13a8c395f42f6c2060608cd165fb",
+  "len=21619 sha256=ed300c9ee47b01e899f151198d5de58aaed99c0235bdd52cde751e146b412cea",
+  "len=21619 sha256=936fc5d1818598da711b1162675df932699e2f622a57926e5a824b144fc15f12",
+  "len=21619 sha256=7be03178b3eb11361645eb0b362c8275639cce4be17d43884a4baefd4cff60f1",
+  "len=21619 sha256=866ce70878746dfa7e435ed43ec6c1c07e18217602d40b9fbc6b63aa57df515c",
+  "len=21367 sha256=fbf0c10081f906392c6e51926ca50cbd8f6425c299862ef5d45c07fb7e56b92f"
+ ],
+ "many small concise": [
+  "len=21963 sha256=53401fbad7aa6f889f01ad4d251ec3e1249a065efa77b1cf342f2fc21a8701eb"
+ ],
+ "mixed concise": [
+  "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"allowops\",\"version\":\"1\"}},\"resultType\":\"complete\",\"content\":[{\"type\":\"text\",\"text\":\"{\\\"action\\\":\\\"logs_read\\\",\\\"counts\\\":{\\\"failed\\\":2,\\\"succeeded\\\":5},\\\"groups\\\":[{\\\"exit_code\\\":0,\\\"host_count\\\":3,\\\"sample_hosts\\\":[\\\"a\\\",\\\"b\\\"],\\\"stderr\\\":\\\"\\\",\\\"stdout\\\":\\\"ok\\\\n\\\",\\\"truncated\\\":false},{\\\"exit_code\\\":2,\\\"host_count\\\":2,\\\"sample_hosts\\\":[\\\"d\\\",\\\"e\\\"],\\\"stderr\\\":\\\"boom \\\\u0000 \\\\\\\"quoted\\\\\\\" \\\\u003ctag\\\\u003e\\\\n\\\",\\\"stdout\\\":\\\"partial\\\",\\\"truncated\\\":true},{\\\"host_count\\\":1,\\\"sample_hosts\\\":[\\\"f\\\"],\\\"stderr\\\":\\\"no exit code�\\\",\\\"stdout\\\":\\\"\\\",\\\"truncated\\\":false},{\\\"host_count\\\":1,\\\"sample_hosts\\\":null,\\\"stderr\\\":\\\"\\\",\\\"stdout\\\":\\\"\\\",\\\"truncated\\\":false}],\\\"hint\\\":\\\"Use jobs_get(job_id, host) for complete output; use next_cursor for remaining supplied groups. P6 may already have truncated the source summary.\\\",\\\"job_id\\\":\\\"job-20261014-0001\\\",\\\"offline_hosts\\\":[\\\"off-1\\\",\\\"off-2\\\"],\\\"output_trust\\\":\\\"untrusted\\\",\\\"status\\\":\\\"succeeded\\\",\\\"total\\\":7,\\\"truncated\\\":true}\"}],\"structuredContent\":{\"action\":\"logs_read\",\"counts\":{\"failed\":2,\"succeeded\":5},\"groups\":[{\"exit_code\":0,\"host_count\":3,\"sample_hosts\":[\"a\",\"b\"],\"stderr\":\"\",\"stdout\":\"ok\\n\",\"truncated\":false},{\"exit_code\":2,\"host_count\":2,\"sample_hosts\":[\"d\",\"e\"],\"stderr\":\"boom \\u0000 \\\"quoted\\\" \\u003ctag\\u003e\\n\",\"stdout\":\"partial\",\"truncated\":true},{\"host_count\":1,\"sample_hosts\":[\"f\"],\"stderr\":\"no exit code�\",\"stdout\":\"\",\"truncated\":false},{\"host_count\":1,\"sample_hosts\":null,\"stderr\":\"\",\"stdout\":\"\",\"truncated\":false}],\"hint\":\"Use jobs_get(job_id, host) for complete output; use next_cursor for remaining supplied groups. P6 may already have truncated the source summary.\",\"job_id\":\"job-20261014-0001\",\"offline_hosts\":[\"off-1\",\"off-2\"],\"output_trust\":\"untrusted\",\"status\":\"succeeded\",\"total\":7,\"truncated\":true}}"
+ ],
+ "mixed detailed": [
+  "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"allowops\",\"version\":\"1\"}},\"resultType\":\"complete\",\"content\":[{\"type\":\"text\",\"text\":\"{\\\"action\\\":\\\"logs_read\\\",\\\"counts\\\":{\\\"failed\\\":2,\\\"succeeded\\\":5},\\\"groups\\\":[{\\\"exit_code\\\":0,\\\"host_count\\\":3,\\\"hosts\\\":[\\\"a\\\",\\\"b\\\",\\\"c\\\"],\\\"stderr\\\":\\\"\\\",\\\"stdout\\\":\\\"ok\\\\n\\\",\\\"truncated\\\":false},{\\\"exit_code\\\":2,\\\"host_count\\\":2,\\\"hosts\\\":[\\\"d\\\",\\\"e\\\"],\\\"stderr\\\":\\\"boom \\\\u0000 \\\\\\\"quoted\\\\\\\" \\\\u003ctag\\\\u003e\\\\n\\\",\\\"stdout\\\":\\\"partial\\\",\\\"truncated\\\":true},{\\\"host_count\\\":1,\\\"hosts\\\":[\\\"f\\\"],\\\"stderr\\\":\\\"no exit code�\\\",\\\"stdout\\\":\\\"\\\",\\\"truncated\\\":false},{\\\"host_count\\\":1,\\\"hosts\\\":[],\\\"stderr\\\":\\\"\\\",\\\"stdout\\\":\\\"\\\",\\\"truncated\\\":false}],\\\"hint\\\":\\\"Use jobs_get(job_id, host) for complete output; use next_cursor for remaining supplied groups. P6 may already have truncated the source summary.\\\",\\\"job_id\\\":\\\"job-20261014-0001\\\",\\\"offline_hosts\\\":[\\\"off-1\\\",\\\"off-2\\\"],\\\"output_trust\\\":\\\"untrusted\\\",\\\"status\\\":\\\"succeeded\\\",\\\"total\\\":7,\\\"truncated\\\":true}\"}],\"structuredContent\":{\"action\":\"logs_read\",\"counts\":{\"failed\":2,\"succeeded\":5},\"groups\":[{\"exit_code\":0,\"host_count\":3,\"hosts\":[\"a\",\"b\",\"c\"],\"stderr\":\"\",\"stdout\":\"ok\\n\",\"truncated\":false},{\"exit_code\":2,\"host_count\":2,\"hosts\":[\"d\",\"e\"],\"stderr\":\"boom \\u0000 \\\"quoted\\\" \\u003ctag\\u003e\\n\",\"stdout\":\"partial\",\"truncated\":true},{\"host_count\":1,\"hosts\":[\"f\"],\"stderr\":\"no exit code�\",\"stdout\":\"\",\"truncated\":false},{\"host_count\":1,\"hosts\":[],\"stderr\":\"\",\"stdout\":\"\",\"truncated\":false}],\"hint\":\"Use jobs_get(job_id, host) for complete output; use next_cursor for remaining supplied groups. P6 may already have truncated the source summary.\",\"job_id\":\"job-20261014-0001\",\"offline_hosts\":[\"off-1\",\"off-2\"],\"output_trust\":\"untrusted\",\"status\":\"succeeded\",\"total\":7,\"truncated\":true}}"
+ ],
+ "nil group": [
+  "error: unavailable: job group unavailable"
+ ],
+ "nil job": [
+  "error: unavailable: job summary unavailable"
+ ],
+ "nil summary": [
+  "error: unavailable: job summary unavailable"
+ ],
+ "no groups concise": [
+  "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"allowops\",\"version\":\"1\"}},\"resultType\":\"complete\",\"content\":[{\"type\":\"text\",\"text\":\"{\\\"action\\\":\\\"logs_read\\\",\\\"counts\\\":{\\\"failed\\\":2,\\\"succeeded\\\":5},\\\"groups\\\":[],\\\"hint\\\":\\\"Use jobs_get(job_id, host) for complete output; use next_cursor for remaining supplied groups. P6 may already have truncated the source summary.\\\",\\\"job_id\\\":\\\"job-20261014-0001\\\",\\\"offline_hosts\\\":[],\\\"output_trust\\\":\\\"untrusted\\\",\\\"status\\\":\\\"succeeded\\\",\\\"total\\\":7,\\\"truncated\\\":false}\"}],\"structuredContent\":{\"action\":\"logs_read\",\"counts\":{\"failed\":2,\"succeeded\":5},\"groups\":[],\"hint\":\"Use jobs_get(job_id, host) for complete output; use next_cursor for remaining supplied groups. P6 may already have truncated the source summary.\",\"job_id\":\"job-20261014-0001\",\"offline_hosts\":[],\"output_trust\":\"untrusted\",\"status\":\"succeeded\",\"total\":7,\"truncated\":false}}"
+ ],
+ "no groups detailed offline": [
+  "{\"_meta\":{\"io.modelcontextprotocol/serverInfo\":{\"name\":\"allowops\",\"version\":\"1\"}},\"resultType\":\"complete\",\"content\":[{\"type\":\"text\",\"text\":\"{\\\"action\\\":\\\"logs_read\\\",\\\"counts\\\":{\\\"failed\\\":2,\\\"succeeded\\\":5},\\\"groups\\\":[],\\\"hint\\\":\\\"Use jobs_get(job_id, host) for complete output; use next_cursor for remaining supplied groups. P6 may already have truncated the source summary.\\\",\\\"job_id\\\":\\\"job-20261014-0001\\\",\\\"offline_hosts\\\":[\\\"x\\\",\\\"y\\\"],\\\"output_trust\\\":\\\"untrusted\\\",\\\"status\\\":\\\"succeeded\\\",\\\"total\\\":7,\\\"truncated\\\":true}\"}],\"structuredContent\":{\"action\":\"logs_read\",\"counts\":{\"failed\":2,\"succeeded\":5},\"groups\":[],\"hint\":\"Use jobs_get(job_id, host) for complete output; use next_cursor for remaining supplied groups. P6 may already have truncated the source summary.\",\"job_id\":\"job-20261014-0001\",\"offline_hosts\":[\"x\",\"y\"],\"output_trust\":\"untrusted\",\"status\":\"succeeded\",\"total\":7,\"truncated\":true}}"
+ ],
+ "trust unspecified": [
+  "error: unavailable: job summary unavailable"
+ ]
+}

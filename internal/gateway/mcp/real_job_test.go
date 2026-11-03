@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,9 +26,12 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/audit"
 	"github.com/liubing0806/allowops/internal/gateway/hostconn"
 	"github.com/liubing0806/allowops/internal/gateway/job"
+	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
 	"github.com/liubing0806/allowops/internal/gateway/server"
 	"github.com/liubing0806/allowops/internal/testseaweedfs"
+	_ "github.com/liubing0806/allowops/plugins/inventory/static"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"gopkg.in/yaml.v3"
 )
 
 func awaitJobCondition(t *testing.T, condition func() bool) {
@@ -112,11 +116,9 @@ func TestSDKRealJobBackendAgentsAndSeaweedFS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gateway := server.New(hosts, certificate)
+	gateway := server.New(hosts, certificate, server.WithIdentity(f.identity), server.WithMCP(mcpService.Handler()))
 	gateway.Jobs = jobs
 	gateway.Catalogs = f.catalogs
-	gateway.UseIdentity(f.identity)
-	gateway.MCP = mcpService.Handler()
 	f.identity.ConfigureJobDependencies(jobs, objects)
 	done := make(chan error, 1)
 	go func() { done <- gateway.Serve(listener) }()
@@ -365,4 +367,66 @@ func TestSDKRealJobBackendAgentsAndSeaweedFS(t *testing.T) {
 	if terminal.IsError || content(t, terminal)["status"] != "cancelled" || content(t, terminal)["counts"].(map[string]any)["cancelled"] != float64(2) {
 		t.Fatalf("cancelled job=%v", content(t, terminal))
 	}
+	t.Run("inventory selector executes a read-only action", func(t *testing.T) {
+		if _, err := f.db.Pool.Exec(ctx, `UPDATE hosts SET authorization_labels=authorization_labels || '{"inventory":"s1"}'::jsonb WHERE hostname='web-01'`); err != nil {
+			t.Fatal(err)
+		}
+		file := filepath.Join(t.TempDir(), "topology.yaml")
+		if err := os.WriteFile(file, []byte("entities:\n  - kind: service\n    name: inventory-test\n    hosts: [web-01]\n    selector: inventory=s1\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		var config yaml.Node
+		if err := config.Encode(map[string]string{"file": file}); err != nil {
+			t.Fatal(err)
+		}
+		inventoryHost, err := pluginhost.New(ctx, []pluginhost.Config{{ID: "static", Module: "inventory.static", Required: true, Config: config}}, pluginhost.Deps{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		inventoryMCP, err := New(f.identity, f.catalogs, jobs, Config{Inventory: inventoryHost})
+		if err != nil {
+			t.Fatal(err)
+		}
+		local := httptest.NewTLSServer(inventoryMCP.Handler())
+		defer local.Close()
+		client := sdk.NewClient(&sdk.Implementation{Name: "inventory-real-job", Version: "1"}, nil)
+		inventorySession, err := client.Connect(ctx, &sdk.StreamableClientTransport{Endpoint: local.URL + "/mcp", HTTPClient: &http.Client{Transport: &bearerTransport{base: local.Client().Transport, token: f.admin}}, DisableStandaloneSSE: true}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer inventorySession.Close()
+		found := call(t, inventorySession, "entities_search", map[string]any{"kind": "service", "sources": []string{"static"}})
+		data := content(t, found)
+		if found.IsError {
+			t.Fatal(data)
+		}
+		entities := data["entities"].([]any)
+		if len(entities) != 1 {
+			t.Fatal(data)
+		}
+		entity := entities[0].(map[string]any)
+		if entity["name"] != "inventory-test" || entity["source"] != "static" || entity["host_count"] != float64(1) {
+			t.Fatal(entity)
+		}
+		args := actionArgs()
+		args["targets"] = map[string]any{"selector": entity["selector"]}
+		args["expected_count"] = 1
+		args["wait_seconds"] = 5
+		run := call(t, inventorySession, "steps_read", args)
+		summary := content(t, run)
+		if run.IsError || summary["status"] != "succeeded" || summary["counts"].(map[string]any)["succeeded"] != float64(1) {
+			t.Fatalf("selector action=%v", summary)
+		}
+		jobID := summary["job_id"].(string)
+		awaitJobCondition(t, func() bool {
+			var stored bool
+			err := f.db.Pool.QueryRow(ctx, "SELECT output_stored FROM tasks WHERE job_id=$1", jobID).Scan(&stored)
+			return err == nil && stored
+		})
+		output := call(t, inventorySession, "jobs_get", map[string]any{"job_id": jobID, "host": "web-01", "step_index": 0, "encoding": "text", "wait_seconds": 0})
+		if output.IsError || content(t, output)["data"] != "step-zero" {
+			t.Fatalf("selector action output=%v", content(t, output))
+		}
+	})
+
 }

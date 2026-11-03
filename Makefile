@@ -5,12 +5,15 @@ STATICCHECK_VERSION := v0.8.2
 GOVULNCHECK_VERSION := v1.9.0
 GO_LICENSES_VERSION := v2.0.1
 GORELEASER_VERSION := v2.18.3
+# Keep NFPM_VERSION equal to the nfpm that GORELEASER_VERSION uses and SYFT_VERSION equal to .goreleaser.yaml.
+NFPM_VERSION := v2.47.0
+SYFT_VERSION := v1.54.1
 SQLC_VERSION := v1.30.0
 OPA_VERSION = $(shell go list -m -f '{{.Version}}' github.com/open-policy-agent/opa)
 FUZZTIME ?= 30s
 ALLOWED_LICENSES := MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0,ISC,MPL-2.0
 
-.PHONY: build $(BINARIES) test examples-check script-checks lint vuln generate web-build licenses package opa-test scale bench-opa vm fuzz e2e local-up local-down
+.PHONY: build $(BINARIES) test examples-check script-checks lint vuln generate web-build licenses package package-arthas opa-test scale bench-opa vm fuzz e2e local-up local-down
 
 build: $(BINARIES)
 
@@ -38,6 +41,12 @@ vm: build
 package:
 	GO_LICENSES_VERSION=$(GO_LICENSES_VERSION) go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION) release --snapshot --clean --skip=sign
 
+# Optional allowops-arthas deb and rpm into dist/arthas/packages. Downloads the pinned Arthas
+# archive from Maven Central once and checks its SHA-256. Not part of make package; run it
+# after make package, which empties dist/.
+package-arthas:
+	NFPM_VERSION=$(NFPM_VERSION) SYFT_VERSION=$(SYFT_VERSION) sh deploy/packaging/arthas/build.sh
+
 opa-test:
 	go run github.com/open-policy-agent/opa@$(OPA_VERSION) test internal/gateway/authz/
 
@@ -54,6 +63,7 @@ fuzz:
 # Python checks of the packaging scripts and the CI dist-drift check (needs PyYAML).
 script-checks:
 	python3 deploy/packaging/test-postinstall-nosudo.py
+	python3 -I deploy/packaging/arthas/test-stage.py
 	python3 test/ci-dist-check.py
 	python3 deploy/compose/test-local-up-bootstrap.py
 

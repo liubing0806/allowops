@@ -8,13 +8,21 @@
 
 | 角色 | 初始权限 |
 |---|---|
-| `admin` | 管理和读取权限，以及在带标签主机上执行所有动作的权限，包括危险动作。 |
-| `operator` | 主机管理和读取、join token、job 元数据和系统状态。 |
+| `admin` | 管理和读取权限（含资源清单），以及在带标签主机上执行所有动作的权限，包括危险动作。 |
+| `operator` | 主机管理和读取、join token、资源清单、job 元数据和系统状态。 |
 | `auditor` | 审计、job 元数据和输出。 |
-| `viewer` | 主机、目录和 job 的元数据。 |
+| `viewer` | 主机、目录和 job 的元数据，以及资源清单。 |
 | `publisher` | 发布目录。 |
 
 只有 admin 默认拥有执行权限。其他角色需要明确的动作规则。配置项 `bootstrap_admins` 保留修改策略的权限，作为恢复手段。它不是不受限制的执行身份。
+
+## 升级后的资源清单权限 {#inventory-access-after-an-upgrade}
+
+`entities_search` 需要 `view_inventory` 权限。首次初始化时，admin、operator 和 viewer 默认获得该权限。升级保留数据库中的已有策略，不会自动为现有角色增加权限。
+
+管理员先执行 `allowops policy get > rules.yaml` 导出现有策略。在需要查看资源清单的角色规则中增加 `view_inventory`，保留其他规则。先执行 `allowops policy test -f rules.yaml` 检查变化，再执行 `allowops policy apply -f rules.yaml --reason 'grant inventory access'`。也可以通过控制台编辑、试算并保存策略。
+
+`view_inventory` 是全局操作，带 `host_labels` 条件的规则不匹配该操作。资源清单中的主机名仍需逐台满足 `view_hosts` 权限。关联主机全部不可见的实体会被移除。配置中未关联主机的实体对具有 `view_inventory` 权限的调用者可见。使用返回的 selector 执行 action 时，仍会逐台检查执行权限。
 
 ## 规则结构 {#rule-shape}
 
@@ -32,9 +40,9 @@ rules:
       team: ops
 ```
 
-仅有这段片段不能替代一套安装所需的管理规则。[示例策略](https://github.com/liubing0806/allowops/blob/main/examples/policy/read-only.yaml)包含管理员恢复权限和一条单独的输出规则。`hours` 使用 `from`、`to`、`timezone`。它表示同一天内的左闭右开区间，要求 `0 <= from < to <= 24`。跨夜的时间窗口需要使用两条规则。请显式提供 IANA 时区。来源网络规则使用 CIDR 表示法。请自行选择网络，不要把部署环境的地址复制到公开的策略仓库中。
+仅有这段片段不能替代一套安装所需的管理规则。[示例策略](https://github.com/liubing0806/allowops/blob/main/examples/policy/read-only.yaml)包含管理员恢复权限和一条单独的输出规则。[Java 诊断示例](https://github.com/liubing0806/allowops/blob/main/examples/policy/java-diagnostics.yaml)把会增强类或反编译类的 Arthas L2 动作，在一个时间窗口内单独授予一个角色，与 Arthas L1 动作分开授权。`hours` 使用 `from`、`to`、`timezone`。它表示同一天内的左闭右开区间，要求 `0 <= from < to <= 24`。跨夜的时间窗口需要使用两条规则。请显式提供 IANA 时区。来源网络规则使用 CIDR 表示法。请自行选择网络，不要把部署环境的地址复制到公开的策略仓库中。
 
-操作名称包括 `execute_action`、`modify_policy`、`manage_service_accounts`、`manage_hosts`、`create_join_token`、`manage_user_roles`、`publish_catalog`、`view_hosts`、`view_catalog`、`view_jobs`、`view_output`、`view_audit` 和 `view_system`。
+操作名称包括 `execute_action`、`modify_policy`、`manage_service_accounts`、`manage_hosts`、`create_join_token`、`manage_user_roles`、`publish_catalog`、`view_hosts`、`view_inventory`、`view_catalog`、`view_jobs`、`view_output`、`view_audit` 和 `view_system`。
 
 ## 评审和应用 {#review-and-apply}
 

@@ -1,0 +1,2 @@
+<!-- Minimal settings: Maven Central only, so the user-level mirror settings do not apply. -->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"/>

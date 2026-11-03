@@ -35,7 +35,7 @@ func (s *Service) Start() {
 }
 
 // Drain stops admission and later batches, then waits for this instance's jobs
-// and the tasks on its current host connections. P4 owns deadline disconnects.
+// and the tasks on its current host connections. The host connection layer owns deadline disconnects (design P4).
 func (s *Service) Drain(ctx context.Context) error {
 	s.submitMu.Lock()
 	s.draining.Store(true)
@@ -43,8 +43,8 @@ func (s *Service) Drain(ctx context.Context) error {
 	tick := time.NewTicker(pollInterval)
 	defer tick.Stop()
 	for {
-		var tasks int
-		if err := s.Store.Pool.QueryRow(ctx, "SELECT count(*) FROM tasks t JOIN hosts h ON h.host_id=t.host_id WHERE t.status IN (1,2) AND t.dispatched AND h.instance_id=$1 AND h.connection_id=t.connection_id", s.instanceID).Scan(&tasks); err != nil {
+		tasks, err := countDrainTasks(ctx, s.Store.Pool, s.instanceID)
+		if err != nil {
 			return err
 		}
 		if tasks == 0 && s.activeJobs.Load() == 0 && s.activePersists.Load() == 0 {
@@ -58,7 +58,7 @@ func (s *Service) Drain(ctx context.Context) error {
 	}
 }
 
-// RecoverLostInstances implements G52. SKIP LOCKED elects one survivor per job;
+// RecoverLostInstances finishes jobs whose origin instance missed heartbeats (design G52). SKIP LOCKED elects one survivor per job;
 // task conditions retain any terminal state that won a completion race.
 func (s *Service) RecoverLostInstances(ctx context.Context) error {
 	for {
@@ -66,9 +66,7 @@ func (s *Service) RecoverLostInstances(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		var id, origin string
-		var version uint64
-		err = tx.QueryRow(ctx, "SELECT j.job_id,j.origin_instance,j.policy_version FROM jobs j JOIN gateway_instances i ON i.instance_id=j.origin_instance WHERE j.status IN (1,2) AND i.last_seen<now()-$1*interval '1 second' ORDER BY j.job_id FOR UPDATE OF j SKIP LOCKED LIMIT 1", s.lostAfter.Seconds()).Scan(&id, &origin, &version)
+		id, origin, version, err := lockLostInstanceJob(ctx, tx, s.lostAfter.Seconds())
 		if errors.Is(err, pgx.ErrNoRows) {
 			tx.Rollback(ctx)
 			return s.recoverLostOutputs(ctx)
@@ -91,26 +89,12 @@ func (s *Service) RecoverLostInstances(ctx context.Context) error {
 			{1, 7, v1.TaskStatus_TASK_STATUS_SKIPPED},
 			{2, 4, v1.TaskStatus_TASK_STATUS_FAILED},
 		} {
-			rows, err := tx.Query(ctx, "UPDATE tasks SET status=$3,result=$4,finished_at=now(),output_state='unavailable' WHERE job_id=$1 AND status=$2 RETURNING task_id", id, spec.from, spec.to, pendingResult(spec.status, "GATEWAY_INSTANCE_LOST"))
+			ids, err := recoverTasks(ctx, tx, id, spec.from, spec.to, pendingResult(spec.status, "GATEWAY_INSTANCE_LOST"))
 			if err != nil {
 				tx.Rollback(ctx)
 				return err
 			}
-			for rows.Next() {
-				var taskID string
-				if err := rows.Scan(&taskID); err != nil {
-					rows.Close()
-					tx.Rollback(ctx)
-					return err
-				}
-				recoveredTasks = append(recoveredTasks, taskID)
-			}
-			err = rows.Err()
-			rows.Close()
-			if err != nil {
-				tx.Rollback(ctx)
-				return err
-			}
+			recoveredTasks = append(recoveredTasks, ids...)
 		}
 		if err := s.finishJobTx(ctx, tx, id); err != nil {
 			tx.Rollback(ctx)
@@ -140,9 +124,7 @@ func (s *Service) recoverLostOutputs(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		var jobID, taskID, hostID, hostname, actor, action string
-		var version uint64
-		err = tx.QueryRow(ctx, "SELECT t.job_id,t.task_id,t.host_id,t.hostname,j.subject_id,j.action,j.policy_version FROM tasks t JOIN jobs j ON j.job_id=t.job_id JOIN gateway_instances i ON i.instance_id=t.output_instance WHERE t.output_state='pending' AND t.status>2 AND i.last_seen<now()-$1*interval '1 second' ORDER BY t.job_id,t.task_id FOR UPDATE OF t SKIP LOCKED LIMIT 1", s.lostAfter.Seconds()).Scan(&jobID, &taskID, &hostID, &hostname, &actor, &action, &version)
+		lost, err := lockLostOutputTask(ctx, tx, s.lostAfter.Seconds())
 		if errors.Is(err, pgx.ErrNoRows) {
 			tx.Rollback(ctx)
 			return nil
@@ -151,13 +133,13 @@ func (s *Service) recoverLostOutputs(ctx context.Context) error {
 			tx.Rollback(ctx)
 			return err
 		}
-		if _, err := tx.Exec(ctx, "UPDATE tasks SET output_state='unavailable' WHERE job_id=$1 AND task_id=$2", jobID, taskID); err != nil {
+		if err := markTaskOutputUnavailable(ctx, tx, lost.jobID, lost.taskID); err != nil {
 			tx.Rollback(ctx)
 			return err
 		}
 		// Audit before COMMIT: a failed append leaves the task pending for the
 		// next pass instead of an unavailable output without a record.
-		if _, err := s.Audit.Append(ctx, audit.Payload{SubjectID: actor, Operation: "store_output", Resource: hostID, Hostname: hostname, Decision: "deny", Reason: "OUTPUT_INSTANCE_LOST", JobID: jobID, TaskID: taskID, Action: action, PolicyVersion: version, Outputs: []audit.Output{}}); err != nil {
+		if _, err := s.Audit.Append(ctx, audit.Payload{SubjectID: lost.actor, Operation: "store_output", Resource: lost.hostID, Hostname: lost.hostname, Decision: "deny", Reason: "OUTPUT_INSTANCE_LOST", JobID: lost.jobID, TaskID: lost.taskID, Action: lost.action, PolicyVersion: lost.version, Outputs: []audit.Output{}}); err != nil {
 			tx.Rollback(ctx)
 			return err
 		}

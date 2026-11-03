@@ -30,6 +30,7 @@ func (a *identityAudit) Append(_ context.Context, e api.AuditEvent) error {
 	a.events = append(a.events, e)
 	return nil
 }
+
 func TestIdentityMountedOnP4TLS(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
@@ -53,12 +54,10 @@ func TestIdentityMountedOnP4TLS(t *testing.T) {
 		listener.Close()
 		t.Fatal(err)
 	}
-	native := server.New(agent, f.a.server.TLS.Certificates[0])
-	native.Audit = &auditstore.Service{Store: auditstore.New(f.store.Pool, auditstore.Config{})}
+	native := server.New(agent, f.a.server.TLS.Certificates[0], server.WithIdentity(identity), server.WithAudit(&auditstore.Service{Store: auditstore.New(f.store.Pool, auditstore.Config{})}))
 	if _, err := native.Audit.Store.Append(ctx, auditstore.Payload{SubjectID: "fixture", Operation: "fixture", Decision: "allow"}); err != nil {
 		t.Fatal(err)
 	}
-	native.UseIdentity(identity)
 	done := make(chan error, 1)
 	go func() { done <- native.Serve(listener) }()
 	defer func() {

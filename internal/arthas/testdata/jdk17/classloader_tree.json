@@ -1,0 +1,105 @@
+{
+  "body": {
+    "command": "classloader -t",
+    "jobId": 10,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "classLoaders": [
+          {
+            "hash": "null",
+            "loadedCount": 4501,
+            "name": "BootstrapClassLoader"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "hash": "378be3ec",
+                    "loadedCount": 28,
+                    "name": "com.alibaba.arthas.deps.com.alibaba.fastjson2.util.DynamicClassLoader@378be3ec",
+                    "parent": "com.taobao.arthas.agent.ArthasClassloader@1114cc81"
+                  }
+                ],
+                "hash": "1114cc81",
+                "loadedCount": 2142,
+                "name": "com.taobao.arthas.agent.ArthasClassloader@1114cc81",
+                "parent": "jdk.internal.loader.ClassLoaders$PlatformClassLoader@4684f314"
+              },
+              {
+                "children": [
+                  {
+                    "hash": "11bfe1c2",
+                    "loadedCount": 17,
+                    "name": "com.alibaba.arthas.deps.com.alibaba.fastjson2.util.DynamicClassLoader@11bfe1c2",
+                    "parent": "com.taobao.arthas.agent.ArthasClassloader@7b9d8c47"
+                  }
+                ],
+                "hash": "7b9d8c47",
+                "loadedCount": 1992,
+                "name": "com.taobao.arthas.agent.ArthasClassloader@7b9d8c47",
+                "parent": "jdk.internal.loader.ClassLoaders$PlatformClassLoader@4684f314"
+              },
+              {
+                "children": [
+                  {
+                    "hash": "3a4d629",
+                    "loadedCount": 29,
+                    "name": "com.alibaba.arthas.deps.com.alibaba.fastjson2.util.DynamicClassLoader@3a4d629",
+                    "parent": "com.taobao.arthas.agent.ArthasClassloader@41390d17"
+                  }
+                ],
+                "hash": "41390d17",
+                "loadedCount": 2138,
+                "name": "com.taobao.arthas.agent.ArthasClassloader@41390d17",
+                "parent": "jdk.internal.loader.ClassLoaders$PlatformClassLoader@4684f314"
+              },
+              {
+                "children": [
+                  {
+                    "children": [
+                      {
+                        "hash": "3954d008",
+                        "loadedCount": 1,
+                        "name": "net.bytebuddy.utility.dispatcher.JavaDispatcher$DynamicClassLoader@3954d008",
+                        "parent": "org.springframework.boot.loader.LaunchedURLClassLoader@2dda6444"
+                      }
+                    ],
+                    "hash": "2dda6444",
+                    "loadedCount": 10145,
+                    "name": "org.springframework.boot.loader.LaunchedURLClassLoader@2dda6444",
+                    "parent": "jdk.internal.loader.ClassLoaders$AppClassLoader@67424e82"
+                  }
+                ],
+                "hash": "67424e82",
+                "loadedCount": 59,
+                "name": "jdk.internal.loader.ClassLoaders$AppClassLoader@67424e82",
+                "parent": "jdk.internal.loader.ClassLoaders$PlatformClassLoader@4684f314"
+              }
+            ],
+            "hash": "4684f314",
+            "loadedCount": 134,
+            "name": "jdk.internal.loader.ClassLoaders$PlatformClassLoader@4684f314"
+          }
+        ],
+        "jobId": 10,
+        "tree": true,
+        "type": "classloader"
+      },
+      {
+        "jobId": 10,
+        "rowCount": 11,
+        "type": "row_affect"
+      },
+      {
+        "jobId": 10,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "deb40fe3-0d4d-4fea-a3fd-73623a48ffeb",
+  "state": "SUCCEEDED"
+}

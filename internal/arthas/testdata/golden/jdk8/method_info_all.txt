@@ -1,0 +1,4 @@
+# methods
+class	method	descriptor	modifier	constructor	return_type	parameters	exceptions	annotations	class_loader_hash
+demo.HotService	<init>	()V	public	true					31cefde0
+demo.HotService	work	(I)J	public	false	long	int			31cefde0

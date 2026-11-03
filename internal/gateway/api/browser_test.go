@@ -20,6 +20,7 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authn"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
 // Optional real-browser verification uses an isolated profile and an HTTP proxy
@@ -35,7 +36,7 @@ func TestBrowserStrictCookieOIDCCompletion(t *testing.T) {
 		return s.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/" {
 				rootRequested.Store(true)
-				id, ok := FromContext(r.Context())
+				id, ok := reqctx.FromContext(r.Context())
 				if ok && id.User != nil && id.User.Email == "oidc@example.org" {
 					authenticated.Store(true)
 					io.WriteString(w, "allowops browser login success")

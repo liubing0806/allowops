@@ -466,8 +466,8 @@ func RunRedacted(ctx context.Context, cfg Config, p Params, mask func(string) st
 		return r, errors.New("cannot encode Redis result")
 	}
 	output = append(output, '\n')
-	// INFO/SCAN cannot be size-checked before decoding. G13 limits their
-	// returned text here; GET/HGET/MGET are checked before reading instead.
+	// INFO/SCAN cannot be size-checked before decoding, so their returned text is
+	// limited here; GET/HGET/MGET are checked before reading instead (design G13).
 	if args[0] != "GET" && args[0] != "HGET" && args[0] != "MGET" && int64(len(output)) > cfg.MaxResponseBytes {
 		r.Truncated = true
 		r.ExitCode = builtin.ExitSuccess
@@ -635,9 +635,9 @@ func readResponse(ctx context.Context, client *redisclient.Client, args []any, l
 	if size > limit {
 		return nil, true, fmt.Errorf("%w: value exceeds %d bytes", ErrResponseLimit, limit)
 	}
-	// G13: the HGET preflight is not atomic. A value enlarged since then is
-	// refused by bulkLimitHook before it is allocated; this check covers
-	// callers that did not install the hook.
+	// The HGET preflight is not atomic. A value enlarged since then is refused by
+	// bulkLimitHook before it is allocated; this check covers callers that did
+	// not install the hook (design G13).
 	value, err := client.Do(ctx, args...).Result()
 	if errors.Is(err, ErrResponseLimit) {
 		return nil, true, err

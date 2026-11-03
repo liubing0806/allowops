@@ -96,6 +96,8 @@ message OutputGroup {
   string stdout = 6;
   string stderr = 7;
   bool truncated = 8;
+  // ExecutionResult.reason shared by the group; empty for success or old agents.
+  string reason = 9;
 }
 
 message JobSummary {

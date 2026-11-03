@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"time"
 
@@ -21,8 +23,9 @@ type BuiltinResult struct {
 	StatusCode      int
 }
 
-// BuiltinHandler is the registration boundary for P12B. Size fields in catalog
-// adapters must use Size/ParseSize before passing byte limits to handlers.
+// BuiltinHandler is the registration boundary for builtin handlers (design
+// P12B). Size fields in catalog adapters must use Size/ParseSize before passing
+// byte limits to handlers.
 type BuiltinHandler interface {
 	Parameters(map[string]any) (map[string]params.Definition, error)
 	ValidateConfig(map[string]any) error
@@ -36,8 +39,26 @@ type RedactingBuiltinHandler interface {
 	RunRedacted(context.Context, map[string]any, map[string]any, func(string) string) (BuiltinResult, error)
 }
 
+// ActionBuiltinValidator checks rules that depend on action fields outside
+// builtin_config. ValidateAction calls it after ValidateConfig succeeds.
+type ActionBuiltinValidator interface {
+	ValidateActionFields(Action) error
+}
+
+// BudgetedBuiltinHandler also receives the action's max_output and a
+// function that redacts multi-line text like the executor's stdout stream, so
+// it can drop whole records instead of having its JSON cut by the executor.
+type BudgetedBuiltinHandler interface {
+	RunBudgeted(ctx context.Context, config, values map[string]any, redact func(string) string, maxOutput int64) (BuiltinResult, error)
+}
+
 // Builtins is the process-local registration table; registration occurs at startup.
-var Builtins = map[string]BuiltinHandler{"mysql_query": mysqlHandler{}, "log_search": logSearchHandler{}, "http_get": httpGetHandler{}, "redis_command": redisHandler{}}
+var Builtins = map[string]BuiltinHandler{"mysql_query": mysqlHandler{}, "log_search": logSearchHandler{}, "log_query": logQueryHandler{}, "http_get": httpGetHandler{}, "redis_command": redisHandler{}, "prometheus_query": prometheusHandler{}, "alertmanager_alerts": alertmanagerHandler{}, "starrocks_query": starRocksHandler{}, "dremio_query": dremioHandler{}, "starrocks_diag": starRocksDiagHandler{}, "dremio_diag": dremioDiagHandler{}, "jvm_perfdata": jvmPerfdataHandler{}, "jvm_arthas": jvmArthasHandler{}}
+
+// BuiltinNames returns the registered builtin names in alphabetical order.
+func BuiltinNames() []string {
+	return slices.Sorted(maps.Keys(Builtins))
+}
 
 type mysqlHandler struct{}
 
@@ -112,10 +133,12 @@ func MySQLConfig(config map[string]any) (mysql.Config, error) {
 	}
 	return c, c.Validate()
 }
+
 func (mysqlHandler) ValidateConfig(config map[string]any) error {
 	_, err := MySQLConfig(config)
 	return err
 }
+
 func (mysqlHandler) Run(ctx context.Context, config map[string]any, values map[string]any) (BuiltinResult, error) {
 	return (mysqlHandler{}).RunRedacted(ctx, config, values, nil)
 }
@@ -126,7 +149,7 @@ func (mysqlHandler) RunRedacted(ctx context.Context, config map[string]any, valu
 		return BuiltinResult{ExitCode: 1}, err
 	}
 	r, err := mysql.RunRedacted(ctx, c, mysql.Params{Database: values["database"].(string), SQL: values["sql"].(string)}, mask)
-	// A16: execution errors use exit code 1; handler defaults remain unchanged.
+	// Execution errors use exit code 1; handler defaults remain unchanged (decisions A16).
 	if err != nil {
 		return BuiltinResult{ExitCode: 1}, err
 	}

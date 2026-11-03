@@ -11,8 +11,12 @@ import (
 
 	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/liubing0806/allowops/internal/builtin/httpget"
+	"github.com/liubing0806/allowops/internal/builtin/logquery"
 	"github.com/liubing0806/allowops/internal/builtin/logsearch"
 	redisbuiltin "github.com/liubing0806/allowops/internal/builtin/redis"
+	"github.com/liubing0806/allowops/internal/builtin/starrocks"
+	"github.com/liubing0806/allowops/internal/builtin/starrocksdiag"
+	"github.com/liubing0806/allowops/internal/builtin/starrocksprofile"
 	"github.com/liubing0806/allowops/internal/params"
 )
 
@@ -40,6 +44,7 @@ func builtinStringList(value any, name string) ([]string, error) {
 	}
 	return values, nil
 }
+
 func builtinTimeout(text string) (time.Duration, error) {
 	if text == "" {
 		return 0, nil
@@ -50,16 +55,19 @@ func builtinTimeout(text string) (time.Duration, error) {
 	}
 	return d, nil
 }
+
 func positiveBound(n, defaultValue int) int {
 	if n == 0 {
 		return defaultValue
 	}
 	return n
 }
+
 func integerDefinition(description string, min, max int, defaultValue any) params.Definition {
 	lower := int64(min)
 	return params.Definition{Type: params.Int, Description: description, Min: &lower, Max: max, Default: defaultValue}
 }
+
 func adaptBuiltinResult(r builtin.Result) BuiltinResult {
 	return BuiltinResult{Stdout: r.Stdout, ExitCode: r.ExitCode, ResourceLimited: r.Truncated}
 }
@@ -95,10 +103,12 @@ func logSearchConfig(input map[string]any) (logsearch.Config, error) {
 	}
 	return logsearch.Config{AllowedRoots: fields.AllowedRoots, MaxFiles: fields.MaxFiles, MaxScan: int64(fields.MaxScan), MaxMatches: fields.MaxMatches, MaxContext: fields.MaxContext, Timeout: timeout}, nil
 }
+
 func (logSearchHandler) ValidateConfig(input map[string]any) error {
 	_, err := logSearchConfig(input)
 	return err
 }
+
 func (logSearchHandler) Parameters(input map[string]any) (map[string]params.Definition, error) {
 	cfg, err := logSearchConfig(input)
 	if err != nil {
@@ -114,6 +124,7 @@ func (logSearchHandler) Parameters(input map[string]any) (map[string]params.Defi
 		"max_matches": integerDefinition("Maximum matches", 1, maxMatches, maxMatches),
 	}, nil
 }
+
 func (logSearchHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
 	cfg, err := logSearchConfig(input)
 	if err != nil {
@@ -121,6 +132,73 @@ func (logSearchHandler) Run(ctx context.Context, input, values map[string]any) (
 	}
 	exclude, _ := values["exclude"].(string)
 	r, err := logsearch.Run(ctx, cfg, logsearch.Params{PathGlob: values["path_glob"].(string), Pattern: values["pattern"].(string), Fixed: values["fixed"].(bool), Exclude: exclude, Context: int(values["context"].(int64)), MaxMatches: int(values["max_matches"].(int64))})
+	return adaptBuiltinResult(r), err
+}
+
+type logQueryHandler struct{}
+
+func logQueryConfig(input map[string]any) (logquery.Config, error) {
+	var fields struct {
+		Mode           string                     `json:"mode"`
+		Sources        map[string]logquery.Source `json:"sources"`
+		AllowedRoots   []string                   `json:"allowed_roots"`
+		MaxFiles       int                        `json:"max_files"`
+		MaxScan        Size                       `json:"max_scan"`
+		MaxWindow      string                     `json:"max_window"`
+		MaxPageRecords int                        `json:"max_page_records"`
+		MaxRecordBytes Size                       `json:"max_record_bytes"`
+		Timeout        string                     `json:"timeout"`
+	}
+	if err := decodeBuiltinConfig(input, &fields); err != nil {
+		return logquery.Config{}, err
+	}
+	timeout, err := builtinTimeout(fields.Timeout)
+	if err != nil {
+		return logquery.Config{}, err
+	}
+	var window time.Duration
+	if fields.MaxWindow != "" {
+		if window, err = time.ParseDuration(fields.MaxWindow); err != nil {
+			return logquery.Config{}, fmt.Errorf("log_query max_window requires a Go duration")
+		}
+	}
+	if fields.MaxRecordBytes > logquery.DefaultMaxRecordBytes {
+		return logquery.Config{}, fmt.Errorf("log_query max_record_bytes may only tighten default %d", logquery.DefaultMaxRecordBytes)
+	}
+	cfg := logquery.Config{Mode: fields.Mode, Sources: fields.Sources, AllowedRoots: fields.AllowedRoots, MaxFiles: fields.MaxFiles, MaxScan: int64(fields.MaxScan), MaxWindow: window,
+		MaxPageRecords: fields.MaxPageRecords, MaxRecordBytes: int(fields.MaxRecordBytes), Timeout: timeout}
+	return cfg, cfg.Validate()
+}
+func (logQueryHandler) ValidateConfig(input map[string]any) error {
+	_, err := logQueryConfig(input)
+	return err
+}
+func (logQueryHandler) Parameters(input map[string]any) (map[string]params.Definition, error) {
+	cfg, err := logQueryConfig(input)
+	if err != nil {
+		return nil, err
+	}
+	return logquery.Parameters(cfg), nil
+}
+func (h logQueryHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
+	return h.RunBudgeted(ctx, input, values, nil, 0)
+}
+func (h logQueryHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+	return h.RunBudgeted(ctx, input, values, mask, 0)
+}
+func (logQueryHandler) RunBudgeted(ctx context.Context, input, values map[string]any, redact func(string) string, maxOutput int64) (BuiltinResult, error) {
+	cfg, err := logQueryConfig(input)
+	if err != nil {
+		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
+	}
+	text := func(name string) string { s, _ := values[name].(string); return s }
+	flag := func(name string) bool { b, _ := values[name].(bool); return b }
+	limit, _ := values["limit"].(int64)
+	top, _ := values["top"].(int64)
+	level, _ := values["level"].([]string)
+	p := logquery.Params{Source: text("source"), Since: text("since"), Until: text("until"), Pattern: text("pattern"), Fixed: flag("fixed"), Exclude: text("exclude"),
+		IgnoreCase: flag("ignore_case"), Limit: int(limit), Order: text("order"), Cursor: text("cursor"), Level: level, Bucket: text("bucket"), Top: int(top)}
+	r, err := logquery.Run(ctx, cfg, p, redact, maxOutput)
 	return adaptBuiltinResult(r), err
 }
 
@@ -146,10 +224,12 @@ func httpGetConfig(input map[string]any) (httpget.Config, error) {
 	cfg := httpget.Config{AllowedPrefixes: fields.AllowedPrefixes, Headers: fields.Headers, Timeout: timeout, MaxResponseBytes: int64(fields.MaxResponseBytes)}
 	return cfg, cfg.Validate()
 }
+
 func (httpGetHandler) ValidateConfig(input map[string]any) error {
 	_, err := httpGetConfig(input)
 	return err
 }
+
 func (httpGetHandler) Parameters(input map[string]any) (map[string]params.Definition, error) {
 	cfg, err := httpGetConfig(input)
 	if err != nil {
@@ -157,6 +237,7 @@ func (httpGetHandler) Parameters(input map[string]any) (map[string]params.Defini
 	}
 	return map[string]params.Definition{"url": {Type: params.URL, Description: "GET URL", AllowedPrefixes: cfg.AllowedPrefixes}}, nil
 }
+
 func (httpGetHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
 	cfg, err := httpGetConfig(input)
 	if err != nil {
@@ -204,10 +285,12 @@ func redisConfig(input map[string]any) (redisbuiltin.Config, error) {
 	cfg := redisbuiltin.Config{Address: fields.Address, Credential: fields.Credential, DB: fields.DB, Timeout: timeout, MaxResponseBytes: int64(fields.MaxResponseBytes), MaxScanCount: fields.MaxScanCount, Commands: fields.Commands, KeyPrefixes: fields.KeyPrefixes, InfoSections: fields.InfoSections, ConfigParams: fields.ConfigParams}
 	return cfg, cfg.Validate()
 }
+
 func (redisHandler) ValidateConfig(input map[string]any) error {
 	_, err := redisConfig(input)
 	return err
 }
+
 func (redisHandler) Parameters(input map[string]any) (map[string]params.Definition, error) {
 	cfg, err := redisConfig(input)
 	if err != nil {
@@ -226,6 +309,7 @@ func (redisHandler) Parameters(input map[string]any) (map[string]params.Definiti
 		"args":    {Type: params.StringArray, Description: "Redis command arguments", MaxLen: 4096, MaxItems: 128, Optional: true},
 	}, nil
 }
+
 func (redisHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
 	return (redisHandler{}).RunRedacted(ctx, input, values, nil)
 }
@@ -238,4 +322,149 @@ func (redisHandler) RunRedacted(ctx context.Context, input, values map[string]an
 	args, _ := values["args"].([]string)
 	r, err := redisbuiltin.RunRedacted(ctx, cfg, redisbuiltin.Params{Command: values["command"].(string), Args: args}, mask)
 	return adaptBuiltinResult(r), err
+}
+
+type starRocksHandler struct{}
+
+func starRocksConfig(input map[string]any) (starrocks.Config, error) {
+	var fields struct {
+		Credential          string   `json:"credential"`
+		Address             string   `json:"address"`
+		MaxRows             int      `json:"max_rows"`
+		MaxBytes            Size     `json:"max_bytes"`
+		Timeout             string   `json:"timeout"`
+		StatementTypes      []string `json:"statement_types"`
+		ShowTypes           []string `json:"show_types"`
+		AllowExplainAnalyze bool     `json:"allow_explain_analyze"`
+	}
+	if err := decodeBuiltinConfig(input, &fields); err != nil {
+		return starrocks.Config{}, err
+	}
+	for _, list := range []struct {
+		name   string
+		values []string
+	}{{"statement_types", fields.StatementTypes}, {"show_types", fields.ShowTypes}} {
+		if _, present := input[list.name]; present && list.values == nil {
+			return starrocks.Config{}, fmt.Errorf("builtin_config.%s requires a nonempty list of strings", list.name)
+		}
+	}
+	timeout, err := builtinTimeout(fields.Timeout)
+	if err != nil {
+		return starrocks.Config{}, err
+	}
+	cfg := starrocks.Config{
+		Credential: fields.Credential, Address: fields.Address, MaxRows: fields.MaxRows, MaxBytes: int64(fields.MaxBytes), Timeout: timeout,
+		StatementTypes: fields.StatementTypes, ShowTypes: fields.ShowTypes, AllowExplainAnalyze: fields.AllowExplainAnalyze,
+	}
+	return cfg, cfg.Validate()
+}
+
+func (starRocksHandler) ValidateConfig(input map[string]any) error {
+	_, err := starRocksConfig(input)
+	return err
+}
+
+func (starRocksHandler) Parameters(map[string]any) (map[string]params.Definition, error) {
+	return map[string]params.Definition{
+		"database": {Type: params.String, Description: "Default database for unqualified table names; optional", Regex: `^[a-zA-Z0-9_]{1,64}$`, MaxLen: 64, Optional: true},
+		"sql":      {Type: params.String, Description: "Read-only StarRocks SQL: one SELECT, SHOW, DESC or EXPLAIN statement", MaxLen: 4000},
+	}, nil
+}
+
+func (h starRocksHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
+	return h.RunRedacted(ctx, input, values, nil)
+}
+
+func (starRocksHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+	cfg, err := starRocksConfig(input)
+	if err != nil {
+		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
+	}
+	database, _ := values["database"].(string)
+	sql, _ := values["sql"].(string)
+	r, err := starrocks.RunRedacted(ctx, cfg, starrocks.Params{Database: database, SQL: sql}, mask)
+	if err != nil {
+		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
+	}
+	return BuiltinResult{Stdout: r.Output, ResourceLimited: r.Truncated}, nil
+}
+
+type starRocksDiagHandler struct{}
+
+func starRocksDiagConfig(input map[string]any) (starrocksdiag.Config, error) {
+	var fields struct {
+		Credential      string            `json:"credential"`
+		Address         string            `json:"address"`
+		MaxRows         int               `json:"max_rows"`
+		MaxBytes        Size              `json:"max_bytes"`
+		MaxProfileBytes Size              `json:"max_profile_bytes"`
+		Timeout         string            `json:"timeout"`
+		AuditTable      string            `json:"audit_table"`
+		AuditColumns    map[string]string `json:"audit_columns"`
+		AllowProfileRun bool              `json:"allow_profile_run"`
+	}
+	if err := decodeBuiltinConfig(input, &fields); err != nil {
+		return starrocksdiag.Config{}, err
+	}
+	timeout, err := builtinTimeout(fields.Timeout)
+	if err != nil {
+		return starrocksdiag.Config{}, err
+	}
+	cfg := starrocksdiag.Config{
+		Credential: fields.Credential, Address: fields.Address, MaxRows: fields.MaxRows, MaxBytes: int64(fields.MaxBytes), MaxProfileBytes: int64(fields.MaxProfileBytes),
+		Timeout: timeout, AuditTable: fields.AuditTable, AuditColumns: fields.AuditColumns, AllowProfileRun: fields.AllowProfileRun,
+	}
+	return cfg, cfg.Validate()
+}
+
+func (starRocksDiagHandler) ValidateConfig(input map[string]any) error {
+	_, err := starRocksDiagConfig(input)
+	return err
+}
+
+// Parameters lists every parameter of the enabled ops. Which ones apply to an
+// op is checked by the handler, not by the tool schema.
+func (starRocksDiagHandler) Parameters(input map[string]any) (map[string]params.Definition, error) {
+	cfg, err := starRocksDiagConfig(input)
+	if err != nil {
+		return nil, err
+	}
+	maxRows := positiveBound(cfg.MaxRows, builtin.DefaultStarRocksMaxRows)
+	definitions := map[string]params.Definition{
+		"op":              {Type: params.Enum, Description: "Diagnostic operation", Values: starrocksdiag.Ops(cfg)},
+		"component":       {Type: params.Enum, Description: "cluster: node type to list", Values: []string{"all", "frontends", "backends", "compute_nodes"}, Default: "all"},
+		"since_minutes":   integerDefinition("slow_queries: time window in minutes", 1, starrocksdiag.MaxSinceMinutes, starrocksdiag.DefaultSinceMinute),
+		"min_duration_ms": integerDefinition("slow_queries: minimum query time in milliseconds", 0, starrocksdiag.MaxMinDurationMs, 0),
+		"state":           {Type: params.Enum, Description: "slow_queries: audit state filter", Values: starrocksdiag.States, Default: "any"},
+		"limit":           integerDefinition("slow_queries and profile_list: maximum rows", 1, maxRows, min(starrocksdiag.DefaultLimit, maxRows)),
+		"query_id":        {Type: params.String, Description: "profile_analyze and profile_summary: query ID in UUID format", Regex: starrocksdiag.QueryIDPattern, MaxLen: 36, Optional: true},
+		"top_n":           integerDefinition("Summary ops: number of slowest operators to list", 1, starrocksprofile.MaxTopN, starrocksprofile.DefaultTopN),
+	}
+	if cfg.AllowProfileRun {
+		definitions["sql"] = params.Definition{Type: params.String, Description: "profile_run: one read-only StarRocks SELECT statement; its rows are not returned", MaxLen: 4000, Optional: true}
+		definitions["database"] = params.Definition{Type: params.String, Description: "profile_run: default database for unqualified table names", Regex: `^[a-zA-Z0-9_]{1,64}$`, MaxLen: 64, Optional: true}
+	}
+	return definitions, nil
+}
+
+func (h starRocksDiagHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
+	return h.RunRedacted(ctx, input, values, nil)
+}
+
+func (starRocksDiagHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+	cfg, err := starRocksDiagConfig(input)
+	if err != nil {
+		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
+	}
+	text := func(name string) string { s, _ := values[name].(string); return s }
+	number := func(name string) int { n, _ := values[name].(int64); return int(n) }
+	p := starrocksdiag.Params{
+		Op: text("op"), Component: text("component"), SinceMinutes: number("since_minutes"), MinDurationMs: number("min_duration_ms"),
+		State: text("state"), Limit: number("limit"), QueryID: text("query_id"), TopN: number("top_n"), SQL: text("sql"), Database: text("database"),
+	}
+	r, err := starrocksdiag.RunRedacted(ctx, cfg, p, mask)
+	if err != nil {
+		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
+	}
+	return BuiltinResult{Stdout: r.Output, ResourceLimited: r.Truncated}, nil
 }

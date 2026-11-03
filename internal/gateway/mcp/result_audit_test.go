@@ -11,10 +11,12 @@ import (
 )
 
 type cancelResultKey struct{}
+
 type cancelResultRequest struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 }
+
 type cancelledToolAudit struct {
 	delegate api.Auditor
 	t        *testing.T
@@ -35,6 +37,7 @@ func (a cancelledToolAudit) Append(ctx context.Context, e api.AuditEvent) error 
 	}
 	return err
 }
+
 func TestSDKResultAuditSurvivesCancelledRequest(t *testing.T) {
 	f := newTransportFixture(t)
 	done := make(chan error, 1)

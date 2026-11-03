@@ -3,7 +3,7 @@ rules:
   - name: administrators
     effect: allow
     roles: [admin]
-    operations: [modify_policy, manage_service_accounts, manage_user_roles, manage_hosts, create_join_token, publish_catalog, view_hosts, view_catalog, view_jobs, view_output, view_audit, view_system]
+    operations: [modify_policy, manage_service_accounts, manage_user_roles, manage_hosts, create_join_token, publish_catalog, view_hosts, view_inventory, view_catalog, view_jobs, view_output, view_audit, view_system]
   - name: maintenance-inventory
     effect: allow
     roles: [ops-maintainer]

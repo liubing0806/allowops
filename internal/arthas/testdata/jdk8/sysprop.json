@@ -1,0 +1,24 @@
+{
+  "body": {
+    "command": "sysprop java.version",
+    "jobId": 17,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "jobId": 17,
+        "props": {
+          "java.version": "1.8.0_504"
+        },
+        "type": "sysprop"
+      },
+      {
+        "jobId": 17,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "01bce553-e289-4d1e-842a-62b724e54896",
+  "state": "SUCCEEDED"
+}

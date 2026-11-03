@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Defaults follow the confirmed Q1/A14 policy. Values may only tighten protocol caps.
+// Defaults follow the confirmed transport/pagination limits and default durations (design Q1, A14). Values may only tighten protocol caps.
 type Config struct {
 	Version                 string        `yaml:"version"`
 	CertificateTTL          time.Duration `yaml:"certificate_ttl"`

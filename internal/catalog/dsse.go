@@ -30,6 +30,7 @@ type SigningKey struct {
 	KeyID      string
 	PrivateKey ed25519.PrivateKey
 }
+
 type VerifyOptions struct {
 	Now            time.Time
 	HighestVersion int64
@@ -191,7 +192,7 @@ func validatePackage(p *Package) error {
 }
 
 // Verify authenticates the bytes before interpreting their metadata or actions.
-// HighestVersion is supplied by P3's separately protected persistent state.
+// HighestVersion is supplied by the host agent's separately protected persistent state (design P3).
 func Verify(e *Envelope, trusted map[string]ed25519.PublicKey, opts VerifyOptions) (*Package, error) {
 	if e == nil || e.PayloadType != PayloadType {
 		return nil, fmt.Errorf("unsupported DSSE payload type")

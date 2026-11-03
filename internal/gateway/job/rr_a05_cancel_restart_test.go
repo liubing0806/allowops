@@ -29,6 +29,7 @@ func (p *rrA05Tracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d pgx.Tr
 	}
 	return ctx
 }
+
 func (p *rrA05Tracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, d pgx.TraceQueryEndData) {
 	var pgerr *pgconn.PgError
 	if ctx.Value(rrA05Finish{}) == true && errors.As(d.Err, &pgerr) && pgerr.Code == "P0001" {

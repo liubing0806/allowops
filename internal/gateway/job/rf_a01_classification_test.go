@@ -14,6 +14,7 @@ type rfCancelErrorRouter struct{ err error }
 func (r rfCancelErrorRouter) Send(context.Context, string, *v1.ConnectResponse) (*v1.TaskCompleted, error) {
 	return nil, r.err
 }
+
 func TestRFA01CancellationErrorClassification(t *testing.T) {
 	s := concurrencyFixture(t)
 	for _, tc := range []struct {

@@ -1,4 +1,4 @@
-// This fixture runs the unchanged P3 agent as allowops inside a local container.
+// This fixture runs the unchanged host agent as allowops inside a local container (design P3).
 package main
 
 import (

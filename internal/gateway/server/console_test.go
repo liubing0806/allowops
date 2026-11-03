@@ -61,11 +61,10 @@ func TestConsoleHTTPSCookieAndCSRF(t *testing.T) {
 	}
 	defer identity.Close()
 	certificate, roots := managementTLS(t)
-	native := server.New(agent, certificate)
 	if err := identity.ConfigureManagement(api.ManagementConfig{Upstream: origin, CAPin: api.TLSCAPin(certificate.Certificate)}, agent, nil); err != nil {
 		t.Fatal(err)
 	}
-	native.UseIdentity(identity)
+	native := server.New(agent, certificate, server.WithIdentity(identity))
 	done := make(chan error, 1)
 	go func() { done <- native.Serve(listener) }()
 	defer func() {

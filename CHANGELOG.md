@@ -24,6 +24,35 @@ Changes on `main` since v0.1.0. They are not in a release yet.
 - The example actions `docker_stop` and `process_signal` are removed.
 - `k8s_configmap_view` prints each key as `### <key>=<value>` instead of a
   `### <key>` line followed by the value.
+- Grant `view_inventory` to the roles that need `entities_search`. Defaults
+  include admin, operator and viewer only on first initialization. Upgrades do
+  not change stored policies. Export the current policy with
+  `allowops policy get > rules.yaml`, add the operation to the appropriate rules,
+  retain the other rules, then run `allowops policy test -f rules.yaml` and
+  `allowops policy apply -f rules.yaml --reason 'grant inventory access'`.
+  You can also edit, simulate and save the policy in the console.
+- Rename any catalog action named `entities_search`, then sign and publish the
+  updated catalog. This name is now reserved and catalog validation rejects it.
+- Configure inventory instances and restart the gateway. Without an available
+  inventory instance, the MCP tool list is unchanged.
+
+### Gateway plugins
+
+- Add the experimental gateway plugin API in `plugin/` and the Inventory
+  extension point. Before 1.0, API changes may be incompatible and will be
+  recorded here.
+- Add `inventory.static` for a local topology YAML file and
+  `inventory.host_labels` for entities derived from active host labels.
+  Configure instances in `gateway.yaml` under `plugins`; see
+  [the configuration example](examples/gateway.yaml) and
+  [the topology example](examples/topology.yaml). Configuration and static file
+  changes require a gateway restart.
+- Add the read-only MCP tool `entities_search` when at least one inventory
+  instance is available. Results include source IDs, visible hosts and selectors.
+  The gateway redacts secrets and limits the complete tool result to 32KB.
+- Show configured plugin provisioning health in system dependencies. An optional
+  plugin that fails provisioning makes system status DEGRADED. A required plugin
+  that fails provisioning prevents startup. The readiness check is unchanged.
 
 ### Gateway and console
 
@@ -40,6 +69,8 @@ Changes on `main` since v0.1.0. They are not in a release yet.
   combinators.
 - A database failure during authentication is reported as unavailable.
 - Agent version rejections are logged by the gateway and in the agent journal.
+- A release manifest whose `published_at` is outside the year 1 to 9999 range
+  is refused as an invalid manifest.
 
 ### Reliability
 
@@ -71,9 +102,10 @@ Changes on `main` since v0.1.0. They are not in a release yet.
 
 - `agent_upgrade` (`risk: dangerous`) upgrades a host agent online from the
   package repository through a signed catalog action.
-- 41 new read-only actions for configuration, files, JAR entries, Dubbo QoS,
-  MySQL, Redis and Kubernetes. The catalog now has 91 actions: 90 read and
-  1 dangerous.
+- 66 new read-only actions, including configuration, files, JAR entries,
+  Dubbo QoS, MySQL, Redis and Kubernetes.
+- 17 `jvm_arthas_*` actions (`risk: write`) attach Arthas to a JVM.
+- The catalog now has 133 actions: 115 read, 17 write and 1 dangerous.
 - Redaction: the built-in secret rules cover more URL credential, DSN, query
   parameter, `NAME=value`, `NAME: value`, command-line password and SQL text
   forms, including URL passwords with escaped quotes. A skipped part of a line

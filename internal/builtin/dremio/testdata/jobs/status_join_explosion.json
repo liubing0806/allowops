@@ -1,0 +1,14 @@
+{
+ "id": "152329ac-17d7-f8d1-666d-80536bc40500",
+ "jobState": "COMPLETED",
+ "rowCount": 4,
+ "errorMessage": "",
+ "startedAt": "2026-10-24T16:01:23.618Z",
+ "endedAt": "2026-10-24T16:01:24.084Z",
+ "queryType": "REST",
+ "queueName": "SMALL",
+ "queueId": "SMALL",
+ "resourceSchedulingStartedAt": "2026-10-24T16:01:23.623Z",
+ "resourceSchedulingEndedAt": "2026-10-24T16:01:23.623Z",
+ "cancellationReason": ""
+}

@@ -27,6 +27,7 @@ func (p *rfDrainTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d pgx.
 	}
 	return ctx
 }
+
 func (*rfDrainTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
 func TestRFDrainAllowsExistingCancellation(t *testing.T) {

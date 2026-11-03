@@ -19,6 +19,7 @@ type wireResult struct {
 	StatusCode           int        `json:"status_code,omitempty"`
 	Steps                []wireStep `json:"steps,omitempty"`
 }
+
 type wireStep struct {
 	Index            int    `json:"index"`
 	Name             string `json:"name"`
@@ -30,6 +31,7 @@ type wireStep struct {
 	Truncated        bool   `json:"truncated"`
 	ScanLimitReached bool   `json:"scan_limit_reached"`
 }
+
 type wireResponse struct {
 	Result wireResult `json:"result"`
 	Reason string     `json:"reason,omitempty"`

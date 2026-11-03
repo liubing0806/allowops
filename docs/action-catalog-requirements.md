@@ -4,13 +4,15 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 91 个 action：90 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 133 个 action：115 个 risk: read，1 个 risk: dangerous（`agent_upgrade`），17 个 risk: write（`jvm_arthas_*`）；2026-10-23 起原 `log_search` 改名 `log_grep`，新的 `log_search` 和新增的 `log_sources`、`log_stats`、`log_patterns`、`log_search_containers`、`log_export` 使用内置 log_query 处理器；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90；2026-10-23 新增上述 6 个 log_query action，2026-10-24 新增第 6 节 `prometheus_query` 的 6 个 action 和 `alertmanager_alerts` 的 1 个 action，90 + 6 + 7 = 103 个 risk: read；2026-10-25 起示例目录另含 StarRocks 与 Dremio 的 11 个 action，104 + 11 = 115，见 `builtin-starrocks.md`、`builtin-dremio.md`；2026-10-23 新增内置处理器 `jvm_perfdata`（Arthas 引入计划阶段 1）的 1 个 action，115 + 1 = 116；2026-10-25 起另含 `jvm_arthas` 的 13 个 risk: write action（内置处理器，Arthas 引入计划阶段 2D），116 + 13 = 129；同日按 A69 删除 `jvm_arthas_logger`，129 - 1 = 128；2026-10-26 起另含 `jvm_arthas` 的 5 个 L2 risk: write action（Arthas 引入计划阶段 3），128 + 5 = 133）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
-`disk_usage_paths` 查询路径所在文件系统容量，`disk_dir_size` 统计目录文件大小，两者保留。`log_search_dir` 使用固定 grep 检索未压缩目录，`log_search` 使用内置处理器检索普通和 gzip 文件，两者保留。第 20 节 D3 已取代第 18 节“压缩日志不在 MVP”的旧限制；本目录包含 gzip 日志检索需求，不使用 zgrep。
+`disk_usage_paths` 查询路径所在文件系统容量，`disk_dir_size` 统计目录文件大小，两者保留。`log_search_dir` 使用固定 grep 检索未压缩目录，`log_grep` 使用内置 log_search 处理器按路径通配检索普通和 gzip 文件，`log_sources`、`log_search`、`log_stats`、`log_patterns` 使用内置 log_query 处理器按目录中声明的日志源和时间范围列出、检索、统计和聚类（设计见 `log-search-design.md` 第 6、7 节），`log_search_containers` 检索容器标准输出、容器内日志文件和 Pod 日志，`log_export` 按时间顺序导出日志文本（第 8 节），均保留。第 20 节 D3 已取代第 18 节“压缩日志不在 MVP”的旧限制；本目录包含 gzip 日志检索需求，不使用 zgrep。
 
 内置处理器的正式参数和配置 schema（字段结构及校验规则）由 `internal/catalog/builtin.go` 和 `builtin_adapters.go` 定义。P12D 已实现 G30 的 Redis/MySQL 收紧配置，语义见 `builtin-config.md`（含 G31、G34）；四个示例已恢复命令、键前缀、分区和库范围限制。内置参数默认值的剩余缺口见第 4 节。目录校验不检查目标主机的工具、凭据文件或外部服务，不据此宣称这些环境可执行全部 action。
+
+第 6 节记录 `prometheus_query`、`alertmanager_alerts` 内置处理器需求。两者均已实现：`prometheus_query` 的 6 个 action 和 `alertmanager_alerts` 的 1 个 action 计入上述 98 个。
 
 ## 2. 目录与通用规则
 
@@ -39,6 +41,7 @@ test/examples/check_examples.py
 
 - name 匹配 `^[a-z][a-z0-9_]{0,63}$`，文件名与 name 一致。保留工具名不得用于 action。action 和每个参数的 description 必填；示例 YAML 的 description 使用英文。
 - 执行方式恰好为 exec、steps、script、builtin 之一。exec 的首项及 exec_fallbacks 均为绝对路径；exec 不含提权命令，提权仅通过 run_as。省略 run_as 时使用 allowops 用户。
+- `max_targets` 为可选字段：1 到 2147483647 的整数，省略表示不限制；job 的目标主机数（`selector` 为解析后的数量）超过该值时，网关拒绝整个 job。需要限制同时作用的实例数时设置（如诊断类 action 设为 1）。字段受签名保护；不认识它的旧版主机端会拒绝整个目录包，发布前须先升级主机端（见 `docs/design.md` 第 4 节格式规则 12）。依据：`internal/catalog/catalog.go` 的 `validateLimits`，`internal/gateway/job/service.go` 的 `RunJob`。
 - 参数只替换完整 argv 元素 `{param}`。可选项使用子列表，缺失时省略整组；Go 格式模板按字面值传递。不执行 shell，不拼接选项或路径。
 - string、path 拒绝以连字符开头的值。未知参数、缺失必填值或类型错误一律拒绝。path 必须存在，解析符号链接后按路径分量检查 allowed_roots；它不单独拒绝所有 `..` 写法。内置 log_search 额外拒绝 `..` 分量；依据：`internal/params/params.go` 的 `ResolvePath`、`internal/builtin/logsearch/logsearch.go` 的 `files`。执行前还要通过属主与写权限检查，见第 4 节第 8 项。
 - 包装命令后真正执行的命令也必须通过解释器检查。Docker 示例不分配 TTY（终端）；不启用解释器覆盖。签名脚本是 D6 明确允许的例外，主机端须使用 Python -I。
@@ -52,7 +55,7 @@ filters 是允许 agent 传入的过滤参数集合，`[]` 表示不允许过滤
 
 处理顺序为 stdout → 脱敏 → match/exclude → head/tail/count → 截断。过滤不能查询未脱敏内容；stderr 脱敏并截断，不过滤。组合 action 按步骤 stdout 独立过滤，所有步骤的 stdout+stderr 共用 max_output；普通 exec/script/builtin 的 stdout、stderr 分别受 max_output 限制。max_scan 按每个步骤 stdout 原始字节计，超限报告 scan_limit_reached；输出或处理器资源上限报告 truncated，处理器另报告 resource_limit_reached。依据：A13、A17、`internal/executor/executor.go` 的 `RunWithFilters`、`processOutput`、`runCommand`。上述任一上限标记均表示结果可能不全。
 
-所有示例保留 secrets，没有示例关闭脱敏。action 的 redact 覆盖全局规则，因此覆盖时仍显式保留 secrets。额外启用 pii 的 action 共 36 个，读取日志、文件内容、配置文件、数据库值和 HTTP 响应体的 action 属于这一类；其余 54 个只保留 secrets，包括系统指标、进程和网络状态、Docker 与 K8s 元数据、jar 条目名和类成员、键名列表、`hosts_entries`（运行时地址和主机名不脱敏，不启用 pii）、除 `dubbo_qos_get_address`、`dubbo_qos_get_config` 之外的 Dubbo QoS、`mysql_variables`、`mysql_config_view`、`redis_config_file_view` 和 `redis_config_get`。这个划分以示例 YAML 为准，不表示后一类 action 的输出一定不含个人信息。pii 可能误伤数字标识，正则不能识别所有敏感内容；此目录不声称输出能全部去敏。设计规定运行时 IP 地址和主机名不脱敏，公开示例不包含任何实际环境数据。
+所有示例保留 secrets，没有示例关闭脱敏。action 的 redact 覆盖全局规则，因此覆盖时仍显式保留 secrets。额外启用 pii 的 action 共 48 个，读取日志、文件内容、配置文件、数据库值、HTTP 响应体、Prometheus 与 Alertmanager 查询结果的 action，以及输出方法参数、返回值和源码的 5 个 Arthas L2 action 属于这一类；其余 67 个只保留 secrets，包括系统指标、进程和网络状态、Docker 与 K8s 元数据、jar 条目名和类成员、`jvm_perfdata` 和 12 个 Arthas L1 action 的 JVM 状态与类信息、键名列表、`hosts_entries`（运行时地址和主机名不脱敏，不启用 pii）、除 `dubbo_qos_get_address`、`dubbo_qos_get_config` 之外的 Dubbo QoS、`mysql_variables`、`mysql_config_view`、`redis_config_file_view` 和 `redis_config_get`。这个划分以示例 YAML 为准，不表示后一类 action 的输出一定不含个人信息。pii 可能误伤数字标识，正则不能识别所有敏感内容；此目录不声称输出能全部去敏。设计规定运行时 IP 地址和主机名不脱敏，公开示例不包含任何实际环境数据。
 
 内置 secrets 规则集（`internal/redact/redact.go` 的 `secretRules`，按顺序执行）包含：阿里云和 AWS 访问密钥、JWT、`Authorization: Bearer`、URL 凭据（用户名可为空，如 `redis://:口令@host`；令牌作为唯一用户信息的 `https://ghp_xxx@github.com` 和 Go MySQL DSN `user:pass@tcp(host:3306)/db` 也识别；口令可含 `@`，取到 token 内最后一个 `@`；Oracle thin 的 `jdbc:oracle:thin:用户/口令@host`）、`MYSQL_PWD`、`REDISCLI_AUTH`、password、secret、token 后紧跟 `=` 的赋值、`Authorization` 与 `Proxy-Authorization` 头（识别条件见下文“Authorization 头”）、`X-*-Key/Token/Secret/Auth/Pass` 头及 nginx 的 `proxy_set_header`、`add_header` 等指令、htpasswd 哈希（apr1、`$1$`、`$5$`、`$6$`、bcrypt、yescrypt、`{SHA}`、`{SSHA}`）、名称以凭据词结尾的键（`DB_PASSWORD=x`、`access_token=x`）及冒号形式 `NAME: 值`（kubectl describe pod 的 Environment 段、YAML、JSON）、命令行口令（`--password`、`--token`、`--requirepass` 等长选项，`curl -u`、`curl -uUSER:PASS`、`--user`、`redis-cli -a`、`redis-cli -aPASS`、`sshpass -p`）和 `mysql -p`。因此 `file_view`、`log_*`、`docker_logs`、`k8s_pod_logs`、`crontab_list`、`k8s_describe_pod` 等只启用内置规则的 action 也覆盖这些形式。示例中的 `redact.custom` 规则保留，与内置规则叠加（内置先执行，自定义后执行；带 `before_builtin: true` 的自定义规则例外，在内置规则之前执行，目前只用于 `mysql_processlist`、`mysql_slow_log`、`mysql_error_log` 的 sql_text）；测试 `TestExampleCustomRulesComposeWithBuiltinRules` 验证两种顺序都不泄露、无嵌套标记、重复脱敏结果不变。
 
@@ -125,6 +128,31 @@ script:
   file: scripts/agent_upgrade.sh
   interpreter: /bin/sh
 args: ['{version}']
+```
+
+### `alertmanager_alerts`
+
+只读查询 Alertmanager 的当前告警（`GET /api/v2/alerts`）。参数、配置、输出格式和实现细节见 6.3。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 配置 credential 时为 root，否则省略；示例未配置 credential |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 执行限制 | timeout=15s；max_output=64KB |
+| CentOS 7 | 使用 Go 内置 HTTP 客户端，不依赖 curl；未验证 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: alertmanager_alerts
+builtin_config:
+  address: http://127.0.0.1:9093
+  timeout: 10s
+  max_alerts: 100
+  max_response_bytes: 4MB
 ```
 
 ### `app_config_keys`
@@ -1319,6 +1347,122 @@ argv 或 builtin_config（与示例 YAML 一致）：
 exec: [/usr/bin/journalctl, -u, '{service}', -n, '{lines}', --no-pager, [--since, '{since}']]
 ```
 
+### `jvm_arthas_*`（12 个 action）
+
+在白名单中一个 JVM 内执行一条固定的 Arthas L1 命令（不增强类）。每个 action 对应一条命令，命令写在 `builtin_config.command`，调用方不能选择。`logger` 暂停（A69）：调用后 Arthas 的类加载器不卸载，每次约 12 MiB 元空间直到 JVM 重启；原因查明前目录校验拒绝 `command: logger`，示例目录不提供 `jvm_arthas_logger`。
+
+| 项 | 需求 |
+|---|---|
+| risk | write（attach 使 JVM 加载 Arthas 的类，类不能卸载到进程结束） |
+| run_as | root |
+| idempotent | false |
+| batch_size / max_failures / max_targets | 1 / 1 / 1（目录校验强制；一次只对一个 JVM 执行一条命令） |
+| 执行方式 | builtin（`jvm_arthas`） |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D7 |
+| 执行限制 | timeout=60s（`exec_timeout` 省略时 10s，上限 60s）；max_output 见下表 |
+| 主机要求 | 主机装有 Arthas 文件包（`/usr/share/allowops/arthas/4.3.5/` 下五个文件）；JVM 为 HotSpot 8、11、17、21，主机为 amd64；目标进程能被 attach（未设 `-XX:+DisableAttachMechanism`，运行时含 `java.instrument`）。缺少文件包时 action 在主机上报告 unsupported，agent 的 hello 不列出 `jvm_arthas`。CentOS 7 未验证。 |
+| 安全说明 | 调用方只能选择 `builtin_config.targets` 的键名和各命令的结构化参数，没有 pid、路径或命令文本。`class`、`method` 按 Java 标识符规则校验，`sysprop` 的 `key` 只能取 `sysprop_keys` 中的值。Arthas 文件在目标挂载命名空间内按 `builtin_config.sha256` 校验。Arthas 服务端只监听目标网络命名空间的回环地址，使用每次随机的密码。执行前检查、运行期监测和会话回收的规则见 `builtin-config.md`；阈值只能比默认值更严（A67）。依据：`docs/java-diagnostics-arthas-plan.md` 第 1、3、4、5、6、8 节，`docs/arthas-stage0-report.md`，`internal/builtin/jvmarthas/`，`internal/arthas/`，`internal/jvmtarget/`。 |
+
+| action | Arthas 命令 | 参数（除 `target` 外） | max_output |
+|---|---|---|---|
+| `jvm_arthas_dashboard` | `dashboard -n 1` | 无 | 64KB |
+| `jvm_arthas_thread_top` | `thread -n <top>` | `top`：int，1..10 | 128KB |
+| `jvm_arthas_thread_blocking` | `thread -b` | 无；`java.threads.live` 超过 `checks.max_blocking_threads`（默认 1000）时拒绝 | 128KB |
+| `jvm_arthas_thread_info` | `thread <thread_id>` | `thread_id`：int，不小于 1 | 64KB |
+| `jvm_arthas_memory` | `memory` | 无 | 64KB |
+| `jvm_arthas_jvm` | `jvm` | 无 | 128KB |
+| `jvm_arthas_class_info` | `sc -d <class>` | `class`：string，二进制类名，不允许通配符 | 128KB |
+| `jvm_arthas_method_info` | `sm -d <class> [method]` | `class`（同上）；`method`：string，可选，Java 标识符 | 128KB |
+| `jvm_arthas_classloader_tree` | `classloader -t` | 无 | 256KB |
+| `jvm_arthas_classloader_list` | `classloader -l` | 无 | 256KB |
+| `jvm_arthas_sysprop` | `sysprop <key>` | `key`：enum，取自 `sysprop_keys` | 64KB |
+| `jvm_arthas_version` | `version` | 无 | 64KB |
+
+所有 action 都有参数 `target`：enum，`values: ['api', 'shop-web']`（取自 `builtin_config.targets` 的键，按字典序）；必填。
+
+argv 或 builtin_config（与示例 YAML 一致，以 `jvm_arthas_dashboard` 为例）：
+
+```yaml
+builtin: jvm_arthas
+builtin_config:
+  command: dashboard
+  targets:
+    api:
+      systemd_unit: api.service
+    shop-web:
+      container: shop-web
+      main_class: com.example.shop.Main
+  sha256:
+    arthas-agent.jar: b5bf8765c7621849889fb6522a296fa177ceb3f5c2c2b6d9f631d761ca9c04f9
+    arthas-core.jar: 7cbc3dc36ec29e96ae044845ad6b690b790a800e45d0694fcfbe90c9725de813
+    arthas-spy.jar: d11cfc1cee83eb46501d5b9719ea49117db2a9e7cbdab9e83e376716255380a6
+    arthas.properties: a507ed264d99387b6e1717f8ad6f257dba79de983f5b6617a8c63e38975acec1
+    logback.xml: e038b9c097cf0fe801483c65871565f6d120c1365c4d55b65666b05d533f7445
+```
+
+示例中的 SHA-256 是 `allowops-arthas` 文件包的值：三个 jar 取自 Arthas 4.3.5 发行包，`arthas.properties` 已删除 `arthas.mcpEndpoint` 和 `arthas.mcpProtocol`，`logback.xml` 取自发行包。使用其他文件包时必须替换这些值。
+
+### `jvm_arthas_*` 的 L2 命令（5 个 action）
+
+在白名单中一个 JVM 内执行一条固定的 Arthas L2 命令。`watch`、`trace`、`stack`、`monitor` 在限定时长内增强（修改字节码）一个类的一个方法，结束后 `reset`；`jad` 反编译一个已加载的类，输出业务源码。每个 action 对应一条命令，命令写在 `builtin_config.command`，调用方不能选择。这 5 个 action 与上一节的 L1 action 按 action 名分开授权，示例策略见 `examples/policy/java-diagnostics.yaml`。L1 的主机要求、执行前检查、运行期监测和清理对 L2 同样适用。
+
+| 项 | 需求 |
+|---|---|
+| risk | write（增强在调用期间改变方法的字节码；jad 使 JVM 重新转换（retransform）该类，并输出业务源码） |
+| run_as | root |
+| idempotent | false |
+| batch_size / max_failures / max_targets | 1 / 1 / 1（目录校验强制；一次只对一个 JVM 执行一条命令） |
+| 执行方式 | builtin（`jvm_arthas`） |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii（目录校验要求生效的 `redact.builtin` 同时含两者，action 未写 `redact` 时取目录级 `redact`；示例显式写出。输出含方法参数、返回值、调用栈和源码） |
+| 扩展能力 | D7 |
+| 执行限制 | timeout=90s（目录校验要求 watch、trace、stack、monitor 不小于 `enhance_duration` + 60s，默认配置下 90s；jad 不小于 `exec_timeout` + 60s，默认配置下 70s）；max_output=128KB（watch 最多 5 条结果，每条不超过 `object_size_limit`，默认 8KB） |
+| 主机要求 | 同 L1。jad 需要目标 JVM 的用户能写 Arthas 日志目录（默认为该用户的 `~/logs/arthas`），不可写时 jad 失败。 |
+| 安全说明 | `class` 是精确的二进制类名，必须以 `builtin_config.class_prefixes` 中的一项开头（示例为 `com.example.`），且不能以 `java.`、`javax.`、`jdk.`、`sun.`、`com.sun.`、`com.taobao.arthas.`、`com.alibaba.arthas.` 开头；这些禁止前缀固定在代码中，`class_prefixes` 含更宽的前缀（如 `com.`）时同样拒绝。`method` 是精确的 Java 标识符。不允许通配符和正则（`-E`）。watch 的观察表达式只能从固定组合中选择；条件表达式只开放 `#cost>` 加整数，由处理器根据 `min_cost_ms` 生成。`-n` ≤ 5，`-m 1`，`watch -x` ≤ 2。处理器先发送 `options disable-sub-class true`，只增强指定的类本身，不增强其子类（如 Spring CGLIB 代理）；watch 另发送 `options object-size-limit`，限制每个结果的大小。调用方不能发送 `options`。执行前检查最后一项是 CPU：目标进程 5 秒平均 CPU 达到 `checks.max_cpu_percent`（默认 50%，相对 cgroup CPU 限额与 cpuset 的较小者）时拒绝。增强后核对 Arthas 返回的影响范围（Affect）：类数超过 1、方法数超过 `max_methods` 或增强失败时立即 reset 并返回失败。清理后核对增强类数为 0。依据：`docs/java-diagnostics-arthas-plan.md` 第 4、5、8 节，`internal/builtin/jvmarthas/`。 |
+
+`<D>` 是 `enhance_duration` 的秒数（默认 30），`[...]` 是可选部分。
+
+| action | Arthas 命令 | 参数（除 `target`、`class` 外） | max_output |
+|---|---|---|---|
+| `jvm_arthas_watch` | `watch <class> <method> {<express>} [#cost><min_cost_ms>] -n <count> -x <expand> -m 1 --timeout <D>` | `method`：必填；`express`：enum，`params`、`returnObj`、`throwExp`、`params,returnObj`、`params,throwExp`、`returnObj,throwExp`、`params,returnObj,throwExp`，默认 `params,returnObj`；`expand`：int，1..2，默认 1；`count`：int，1..5，默认 1；`min_cost_ms`：int，1..3600000，可选 | 128KB |
+| `jvm_arthas_trace` | `trace <class> <method> [#cost><min_cost_ms>] -n <count> -m 1 --timeout <D>` | `method`：必填；`count`、`min_cost_ms`（同 watch） | 128KB |
+| `jvm_arthas_stack` | `stack <class> <method> [#cost><min_cost_ms>] -n <count> -m 1 --timeout <D>` | `method`：必填；`count`、`min_cost_ms`（同 watch） | 128KB |
+| `jvm_arthas_monitor` | `monitor <class> <method> [#cost><min_cost_ms>] -c <cycle> -n <count> -m 1 --timeout <D>` | `method`：必填；`cycle`：int，秒，1..`<D>`-1，必填；`count`、`min_cost_ms`（同 watch）；`count` × `cycle` 必须小于 `<D>` | 128KB |
+| `jvm_arthas_jad` | `jad --source-only <class> [<method>]` | `method`：可选 | 128KB |
+
+所有 action 都有参数 `target`：enum，`values: ['api', 'shop-web']`（取自 `builtin_config.targets` 的键，按字典序）；必填。`class`：string，正则 `^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$`，最长 255；必填。`method`：string，正则 `^[A-Za-z_$][A-Za-z0-9_$]*$`，最长 255。参数不合法时处理器不 attach，退出码为 1。
+
+一次调用的时长（其中约 5 秒是 CPU 采样）：watch、trace、stack 在方法被调用够 `count` 次时结束增强，方法在增强后很快被调用够次数时，一次调用约 10~15 秒；调用次数不足时，增强持续到 `enhance_duration`，一次调用约 40~50 秒（增强时长加 attach 和清理，默认配置）。monitor 在方法第一次被调用后才输出周期，第 `count` 次输出后再过一个周期结束；方法在增强后很快被调用时约 10 秒加 (`count` + 1) × `cycle` 秒，方法没有被调用时约 40~50 秒。jad 不增强，一次调用约 10 秒。本地真实 JVM 测试（JDK 8、11、17、21，每个命令每个 JDK 1 次，被增强的方法每秒约 50 次调用，默认配置）的结果：watch、trace、stack（`count` 1）9.9~12.3 秒，monitor（`count` 1，`cycle` 2）13.7~15.3 秒，jad（整个类）9.3~10.7 秒。40~50 秒超过 MCP `wait_seconds` 的默认值 30 秒，调用方传 `wait_seconds` 90（上限 120），或用 `jobs_get` 查询结果。
+
+对目标 JVM 的影响：增强开始后 1~4 秒内整个 JVM 的 CPU 升高，所有接口的延迟可达数百毫秒；每个 JVM 的第一次增强影响更大，JVM CPU 在 5~10 秒内高于 100%，最大延迟 220~1127 ms，之后的稳态增幅也更高（[arthas-stage3-l2-report.md](arthas-stage3-l2-report.md)）；Arthas 计划阶段 0 在 JDK 11、21 上观察到整个 JVM 最长 4.12 秒的暂停，原因是 JVM 线程写安全点日志或 hsperfdata 时等待文件系统 journal 提交（[arthas-jvm-pause-report.md](arthas-jvm-pause-report.md)）。详见 `builtin-config.md` jvm_arthas 一节的“L2 命令”。
+
+jad 的副作用：目标 JVM 把类的当前字节码写到 `<Arthas 日志目录>/classdump/<类加载器类名>-<哈希>/<包路径>/<类名>.class`，文件属主为目标 JVM 的用户。Arthas 和 allowops 都不删除这个文件，同一类再次 jad 时覆盖同一文件。
+
+argv 或 builtin_config（与示例 YAML 一致，以 `jvm_arthas_watch` 为例）：
+
+```yaml
+builtin: jvm_arthas
+builtin_config:
+  command: watch
+  targets:
+    api:
+      systemd_unit: api.service
+    shop-web:
+      container: shop-web
+      main_class: com.example.shop.Main
+  sha256:
+    arthas-agent.jar: b5bf8765c7621849889fb6522a296fa177ceb3f5c2c2b6d9f631d761ca9c04f9
+    arthas-core.jar: 7cbc3dc36ec29e96ae044845ad6b690b790a800e45d0694fcfbe90c9725de813
+    arthas-spy.jar: d11cfc1cee83eb46501d5b9719ea49117db2a9e7cbdab9e83e376716255380a6
+    arthas.properties: a507ed264d99387b6e1717f8ad6f257dba79de983f5b6617a8c63e38975acec1
+    logback.xml: e038b9c097cf0fe801483c65871565f6d120c1365c4d55b65666b05d533f7445
+  class_prefixes: [com.example.]
+```
+
+示例使用 `enhance_duration`、`max_methods`、`object_size_limit` 和 `checks.max_cpu_percent` 的默认值，键的含义见 `builtin-config.md` 的 jvm_arthas 一节。
+
 ### `jvm_gc_stats`
 
 查看容器内 JVM 垃圾回收指标有限样本。
@@ -1375,6 +1519,42 @@ argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
 exec: [/usr/bin/docker, exec, '{container}', jps, -l]
+```
+
+### `jvm_perfdata`
+
+读取白名单中一个 JVM 的 hsperfdata，输出堆、GC、类加载和线程数据。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（`jvm_perfdata`） |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D7 |
+| 执行限制 | timeout=10s（builtin_config.timeout=5s）；max_output=64KB |
+| CentOS 7 | systemd 目标可用（`systemctl show --property=MainPID` 不使用 `--value`，systemd 219 可用；内核 3.10 没有 `openat2`，逐段 `O_NOFOLLOW` 解析代替）。Docker 目标要求 `/proc/<pid>/status` 有 `NSpid` 行（Linux 4.1 及以上），内核 3.10 报错 `this kernel does not report NSpid`。不要求安装 JDK、jcmd 或 jstat，也不要求 JVM 开启任何选项；JVM 以 `-XX:-UsePerfData` 或 `-XX:+PerfDisableSharedMem` 启动时没有 hsperfdata，返回明确错误。 |
+| 安全说明 | 不 attach，不向目标发送信号（不创建 `.java_pid*` 套接字，不触发线程转储），不写目标文件系统。调用方只能从 `builtin_config.targets` 的键名中选择，没有 pid 和路径参数；目标是 systemd 服务的 MainPID，或 Docker 容器（`GET /containers/<name>/json` 的 `State.Pid`）内 `sun.rt.javaCommand` 第一个词等于 `main_class` 的 JVM。读取 `/proc/<pid>/root` 下 `/tmp/hsperfdata_<用户>/<容器内 pid>` 时，容器内的符号链接不能指向宿主路径（`openat2(RESOLVE_IN_ROOT)`，旧内核逐段 `O_NOFOLLOW`），只读取属主等于 JVM 有效 uid 的普通文件，大小上限 16MiB，所有长度和偏移做边界检查。读取前后比较 `/proc/<pid>/stat` 的启动时间，识别 pid 重用。输出不含 JVM 参数、`sun.rt.javaCommand`、`java.rt.vmArgs`、`java.rt.vmFlags` 和系统属性值。依据：`builtin-config.md`，`docs/java-diagnostics-arthas-plan.md` 第 8 节，`internal/jvmtarget/`，`internal/builtin/jvmperfdata/`。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `target` | enum | `values: ['api', 'shop-web']`（取自 `builtin_config.targets` 的键，按字典序）；必填 | 白名单中的 JVM 目标 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: jvm_perfdata
+builtin_config:
+  timeout: 5s
+  targets:
+    api:
+      systemd_unit: api.service
+    shop-web:
+      container: shop-web
+      main_class: com.example.shop.Main
 ```
 
 ### `jvm_thread_dump`
@@ -2083,9 +2263,9 @@ argv 或 builtin_config（与示例 YAML 一致）：
 exec: [/usr/bin/grep, -F, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
 ```
 
-### `log_search`
+### `log_grep`
 
-检索允许路径下的普通或 gzip 日志。
+检索允许路径下的普通或 gzip 日志，输出 `文件名:行号:内容` 文本。2026-10-23 前名为 `log_search`；`allowed_roots`、参数和内置处理器不变，按 `log-search-design.md` 6.8 节保留一个版本。
 
 | 项 | 需求 |
 |---|---|
@@ -2122,6 +2302,196 @@ builtin_config:
   max_matches: 500
 ```
 
+### `log_patterns`
+
+把日志源在时间范围内的记录聚类为模板（Drain 算法），返回条数最多的模板。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（log_query，mode: patterns） |
+| filters | 无（输出是 JSON） |
+| redact | secrets, pii |
+| 执行限制 | timeout=30s；max_output=64KB |
+| CentOS 7 | 由 Go 实现，不依赖外部命令；主机端须在能力中声明 `log_query`。 |
+| 安全说明 | 只使用每条记录的第一行（前 4KB）。聚类前把时间戳、UUID、IP 地址（可带端口）、十六进制串和数字替换为 `<_>`。模板和样例都先按 action 的脱敏规则逐行脱敏，再截到 1KB。不接受 `pattern`；`exclude` 和 `level` 仍在原文上匹配，调用方可以用 `records` 的变化试探原文，限制同第 4 节第 11 项。超过 2000 个模板后，新出现的模板计入 `unclustered`。按 max_output 从末尾减少模板数，减少的数量写入 `omitted`。路径规则同 `log_search`。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `source`、`since`、`until`、`exclude`、`level` | 同 `log_search` | 同 `log_search` | 同 `log_search` |
+| `top` | int | 处理器提供；`min: 1`；`max: 100`；默认 `20` | 返回的模板数 |
+
+builtin_config 为 `mode: patterns` 加上与 `log_search` 相同的 sources、allowed_roots、max_files、max_scan、max_window。
+
+### `log_search`
+
+按目录中声明的日志源名称和时间范围检索日志，返回分页的 JSON 记录。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（log_query，mode: search） |
+| filters | 无（输出是 JSON，match、exclude 等过滤没有意义） |
+| redact | secrets, pii |
+| 执行限制 | timeout=30s；max_output=64KB |
+| CentOS 7 | 由 Go 实现，不依赖 grep、zcat 或解释器；主机端须在能力中声明 `log_query`。 |
+| 安全说明 | 源的 `level.regex` 在签名校验时编译，必须含名为 `level` 的捕获组，只作用于记录第一行。日志源的 paths 在签名校验时检查 glob 文字前缀位于 allowed_roots 内；执行时逐个解析符号链接，解析后不在根目录内返回 `PATH_OUTSIDE_ROOTS`，非普通文件跳过并计入 `files.skipped_not_regular`；用 os.Root 打开并核验设备号和 inode。pattern、exclude 在原文上匹配（RE2），匹配之后逐条脱敏再编码，限制同第 4 节第 11 项。builtin 按 max_output 减少本页记录数，不截断 JSON。依据：`internal/builtin/logquery/`、`internal/catalog/builtin_adapters.go` 的 `logQueryConfig`。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `source` | enum | 处理器提供；值为 builtin_config.sources 的名称；必填 | 日志源名称 |
+| `since`、`until` | string | 处理器提供；RFC 3339 时间或正的 Go 时长（相对执行时刻）；可选 | 时间范围；省略 until 为执行时刻，省略 since 为 until 前 1 小时；范围不超过 max_window |
+| `pattern`、`exclude` | string | 处理器提供；`max_len: 200`；可选 | 匹配整条记录（含堆栈续行）的 RE2 模式、排除模式 |
+| `fixed`、`ignore_case` | bool | 处理器提供；默认 `false` | 按字面文本匹配；忽略大小写 |
+| `limit` | int | 处理器提供；`min: 1`；`max` 为 builtin_config 的 `max_page_records`（上限 500，示例为 200）；默认 `50` | 本页最多记录数 |
+| `order` | enum | 处理器提供；`desc`、`asc`；默认 `desc` | 新的在前或旧的在前 |
+| `cursor` | string | 处理器提供；`max_len: 4096`；可选 | 上一页的 next_cursor，其他参数须与上一页相同 |
+| `level` | string_array | 处理器提供；元素为 `ERROR`、`WARN`、`INFO`、`DEBUG`；`max_items: 4`；可选；只在至少一个源声明 `level.regex` 时提供 | 只保留第一行级别为其中之一的记录；所选源未声明 level 规则时返回 `LEVEL_UNSUPPORTED` |
+
+builtin_config（与示例 YAML 一致，`log_sources`、`log_stats`、`log_patterns` 使用相同的 sources）：
+
+```yaml
+builtin: log_query
+builtin_config:
+  mode: search
+  sources:
+    app:
+      type: file
+      paths: [/data/logs/app/*.log, /data/logs/app/*.log.*]
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+      level:
+        regex: '^\S+ \S+ \[[^\]]*\] (?P<level>[A-Z]+)'
+    nginx-access:
+      type: file
+      paths: [/var/log/nginx/access.log*]
+      timestamp:
+        layouts: ['02/Jan/2006:15:04:05 -0700']
+        bracketed: true
+      multiline: none
+    nginx-error:
+      type: file
+      paths: [/var/log/nginx/error.log*]
+      timestamp:
+        layouts: ['2006/01/02 15:04:05']
+      multiline: none
+      level:
+        regex: '^\S+ \S+ \[(?P<level>[a-z]+)\]'
+  allowed_roots: [/var/log, /data/logs]
+  max_files: 50
+  max_scan: 256MB
+  max_window: 24h
+  max_page_records: 200
+  max_record_bytes: 64KB
+```
+
+### `log_search_containers`
+
+按目录中声明的日志源名称和时间范围检索容器标准输出、容器内日志文件和 Kubernetes Pod 日志，返回分页的 JSON 记录。参数、输出和分页与 `log_search` 相同。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（log_query，mode: search） |
+| filters | 无 |
+| redact | secrets, pii |
+| 执行限制 | timeout=30s；max_output=64KB |
+| CentOS 7 | 由 Go 实现。`container_stdout` 和 `container_file` 通过 `/var/run/docker.sock` 调用 Docker Engine API（不带版本前缀，不传 `until`）；`k8s_pod` 读取节点的 `/var/log/pods`，不调用 kubectl。主机端须在能力中声明 `log_query`。 |
+| 安全说明 | 容器名、namespace、Pod 名前缀和容器内路径都写死在签名的 builtin_config 中，调用方只选择源名称。`container_stdout` 只发送 GET `/containers/{name}/json` 和 `/containers/{name}/logs?stdout=1&stderr=1&timestamps=1&since=…`，不传 `tail`，读取的字节计入 max_scan，记录时间取 Docker 记录的时间。`container_file` 的 paths 和 allowed_roots 是容器内路径；位于 bind mount 或卷内的根目录换算到挂载的宿主机路径，其他根目录使用 overlay2 的 `GraphDriver.Data.MergedDir`，两者都没有时（其他存储驱动、containerd 快照存储、tmpfs）返回 `SOURCE_UNSUPPORTED`。换算后的目录用 os.Root 打开，容器内的符号链接在该目录内解析，指向容器根目录以外（包括绝对路径 `/etc/passwd`）返回 `PATH_OUTSIDE_ROOTS`。`k8s_pod` 只读取 `<namespace>_<Pod 名前缀…>_<uid>/<container>/*.log*`，同样用 os.Root 打开。容器不存在或 Docker API 不可达返回 `SOURCE_UNAVAILABLE`。匹配与脱敏顺序同 `log_search`。依据：`internal/builtin/logquery/container.go`、`docker.go`、`k8s.go`。 |
+
+builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: log_query
+builtin_config:
+  mode: search
+  sources:
+    web-app-stdout:
+      type: container_stdout
+      container: web-app
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+    web-app-files:
+      type: container_file
+      container: web-app
+      paths: [/opt/app/logs/*.log, /opt/app/logs/*.log.*]
+      allowed_roots: [/opt/app/logs]
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+    web-app-pod:
+      type: k8s_pod
+      namespace: default
+      pod: web-app-
+      container: app
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+  max_files: 50
+  max_scan: 256MB
+  max_window: 24h
+  max_page_records: 200
+  max_record_bytes: 64KB
+```
+
+### `log_export`
+
+按时间顺序导出一个日志源在时间范围内的记录，每行一条：`<时间> <记录文本>`，记录内的反斜杠、换行、回车写成 `\\`、`\n`、`\r`。最后一行以 `# ` 开头，给出 `matched`、`scanned_bytes`、`scan_limit_reached`，还有剩余记录时给出 `next_cursor`。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（log_query，mode: export） |
+| filters | 无 |
+| redact | secrets, pii |
+| 执行限制 | timeout=60s；max_output=8MB |
+| CentOS 7 | 同 `log_search` 和 `log_search_containers`。 |
+| 安全说明 | 源和路径规则同 `log_search`、`log_search_containers`。记录逐条脱敏后再转义写出。builtin 按 max_output 在第一条放不下的记录处结束本页，并给出从该记录继续的 next_cursor；单条记录本身放不下时截短。导出作为普通作业记入审计。调用方用 `jobs_get encoding=text` 分页读取，或用 `allowops jobs output` 保存。 |
+
+参数：与 `log_search` 相同，但没有 `order`（固定从旧到新）；`limit` 的 `max` 和默认值为 100000，`cursor` 取上一页最后一行中的 `next_cursor`。
+
+builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: log_query
+builtin_config:
+  mode: export
+  sources:
+    app:
+      type: file
+      paths: [/data/logs/app/*.log, /data/logs/app/*.log.*]
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+    web-app-stdout:
+      type: container_stdout
+      container: web-app
+      timestamp:
+        layouts: ['2006-01-02 15:04:05.000', '2006-01-02 15:04:05,000']
+        timezone: Asia/Shanghai
+      multiline: timestamp_start
+  allowed_roots: [/data/logs]
+  max_files: 50
+  max_scan: 256MB
+  max_window: 24h
+  max_record_bytes: 64KB
+```
+
 ### `log_search_dir`
 
 递归检索允许目录下的未压缩日志。
@@ -2151,6 +2521,46 @@ argv 或 builtin_config（与示例 YAML 一致）：
 ```yaml
 exec: [/usr/bin/grep, -r, -E, -m, '{max_matches}', -e, '{pattern}', --, '{path}']
 ```
+
+### `log_sources`
+
+列出主机上的日志源，以及每个源的文件数、字节数和覆盖的时间范围。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（log_query，mode: sources） |
+| filters | 无 |
+| redact | secrets, pii |
+| 执行限制 | timeout=30s；max_output=64KB |
+| 安全说明 | 只读取每个文件的元数据和开头（最多 64 行、解压后 256KB），不扫描全文。路径规则同 `log_search`。输出 status 为 `ok`、`no_files`、`timestamp_unparsed` 之一；容器和 Pod 类型的源另有 `no_records`（容器没有输出）、`unavailable`、`unsupported`，后两者带 `reason`。 |
+
+参数：无（targets 等公共参数除外）。builtin_config 为 `mode: sources` 加上与 `log_search` 相同的 sources 和 allowed_roots。
+
+### `log_stats`
+
+统计日志源在时间范围内的命中数、时间分布、级别和文件分布，不返回日志内容。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（log_query，mode: stats） |
+| filters | 无（输出是 JSON） |
+| redact | secrets, pii（输出只有数字、时间、文件名和级别名） |
+| 执行限制 | timeout=30s；max_output=64KB |
+| CentOS 7 | 由 Go 实现，不依赖外部命令；主机端须在能力中声明 `log_query`。 |
+| 安全说明 | 从早到晚扫描整个时间范围，受 max_scan、max_files 限制；超限时 `scan_limit_reached` 为 true，`scanned_until` 为已扫描部分的结束时间。`pattern`、`exclude`、`level` 在原文上匹配，限制同第 4 节第 11 项。`by_level` 的键是提取到的级别转大写，提取结果不是 1 到 16 个字母时记为 `UNKNOWN`，所以输出不含日志正文。路径规则同 `log_search`。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `source`、`since`、`until`、`pattern`、`exclude`、`fixed`、`ignore_case`、`level` | 同 `log_search` | 同 `log_search` | 同 `log_search` |
+| `bucket` | string | 处理器提供；`regex: ^[1-9][0-9]{0,4}(s\|m\|h)$`；可选 | 直方图桶宽；省略时取使桶数不超过 60 的最小档位；给定值使桶数超过 720 时按省略处理 |
+
+builtin_config 为 `mode: stats` 加上与 `log_search` 相同的 sources、allowed_roots、max_files、max_scan、max_window。
 
 ### `log_tail_file`
 
@@ -2263,7 +2673,7 @@ redact:
 |---|---|---|---|
 | `path_glob` | string | `regex: ^/var/log/((mysql\|mariadb)/)?(error\|mysqld\|mariadb)[A-Za-z0-9_.*?-]*$`；`max_len: 128`；必填 | 错误日志路径通配 |
 | `pattern` | string | `regex: ^[^\r\n]+$`；`max_len: 200`；必填 | 不含换行的检索模式 |
-| `fixed`、`exclude`、`context`、`max_matches` | 处理器参数 | 同 `log_search`；`context` 最大 10，`max_matches` 最大 500 | 可选 |
+| `fixed`、`exclude`、`context`、`max_matches` | 处理器参数 | 同 `log_grep`；`context` 最大 10，`max_matches` 最大 500 | 可选 |
 
 argv 或 builtin_config（与示例 YAML 一致）：
 
@@ -2973,7 +3383,7 @@ exec: [/usr/bin/systemctl, status, '{service}', --no-pager]
 
 10. **写操作（已删除）**：2026-10-22 起示例目录不含任何 risk 不是 read 的 action，process_signal 和 docker_stop 已删除。写操作如需恢复，须单独评审授权范围（PID 复用、容器强制终止、Docker root 权限、容器挂载和容器内链接），本节点没有执行任何写 action。
 
-11. **按模式检索的 action 在原文上匹配（已确定）**：以下 action 把调用方给出的 pattern 交给 grep、journalctl 或内置 log_search，在未脱敏的原文上匹配，匹配之后才脱敏输出：`log_grep_file`、`log_grep_fixed`、`log_search_dir`、`log_search`、`journal_grep`、`docker_file_grep`、`k8s_pod_file_grep`、`mysql_error_log`。`mysql_slow_log` 在第四轮审阅（redaction/F2）中改为不接受 pattern，只读取文件末尾 N 行，脱敏后才由 match、exclude 过滤，已不属于此类。调用方可以用是否命中（退出码、输出是否为空、`count` 过滤的结果）判断原文是否含某字符串，逐字符试探即可还原被脱敏的值，脱敏规则不能阻止这一点。因此这些 action 的检索根目录只能放日志，不能放含凭据的配置文件：`docker_file_grep`、`k8s_pod_file_grep` 的根目录已去掉 `/etc/nginx`，其余 action 的根目录限于 `/var/log`、`/data/logs`（`journal_grep` 检索 journald）。日志本身可能含凭据，这类内容只能靠脱敏降低暴露，不能保证无法试探；运维评审 catalog 时须保证检索根目录内没有配置文件，也没有指向配置文件的符号链接。读取配置的 action（`app_config_view`、`docker_app_config_view`、`k8s_configmap_view`、`docker_jar_read_entry`、`k8s_pod_jar_read_entry`、`mysql_config_view`、`redis_config_file_view`、`mysql_slow_log`、`redis_log_view`）不接受 pattern，退出码与内容无关，match 与 exclude 只作用于脱敏之后的输出。数据库查询（`mysql_query_readonly`）的 WHERE 条件作用于原值，其范围由数据库账号的权限决定。依据：`docker_file_grep` 实测，`/etc/nginx/nginx.conf` 含 `proxy_set_header Authorization "Basic …";` 时，pattern 为其中的密文返回退出码 0，为不存在的字符串返回退出码 1，两种情况的输出都不含密文。
+11. **按模式检索的 action 在原文上匹配（已确定）**：以下 action 把调用方给出的 pattern 交给 grep、journalctl 或内置 log_search，在未脱敏的原文上匹配，匹配之后才脱敏输出：`log_grep_file`、`log_grep_fixed`、`log_search_dir`、`log_grep`、`log_search`、`log_stats`、`log_patterns`（`exclude`、`level`）、`journal_grep`、`docker_file_grep`、`k8s_pod_file_grep`、`mysql_error_log`。`mysql_slow_log` 在第四轮审阅（redaction/F2）中改为不接受 pattern，只读取文件末尾 N 行，脱敏后才由 match、exclude 过滤，已不属于此类。调用方可以用是否命中（退出码、输出是否为空、`count` 过滤的结果）判断原文是否含某字符串，逐字符试探即可还原被脱敏的值，脱敏规则不能阻止这一点。因此这些 action 的检索根目录只能放日志，不能放含凭据的配置文件：`docker_file_grep`、`k8s_pod_file_grep` 的根目录已去掉 `/etc/nginx`，其余 action 的根目录限于 `/var/log`、`/data/logs`（`journal_grep` 检索 journald）。日志本身可能含凭据，这类内容只能靠脱敏降低暴露，不能保证无法试探；运维评审 catalog 时须保证检索根目录内没有配置文件，也没有指向配置文件的符号链接。读取配置的 action（`app_config_view`、`docker_app_config_view`、`k8s_configmap_view`、`docker_jar_read_entry`、`k8s_pod_jar_read_entry`、`mysql_config_view`、`redis_config_file_view`、`mysql_slow_log`、`redis_log_view`）不接受 pattern，退出码与内容无关，match 与 exclude 只作用于脱敏之后的输出。数据库查询（`mysql_query_readonly`）的 WHERE 条件作用于原值，其范围由数据库账号的权限决定。依据：`docker_file_grep` 实测，`/etc/nginx/nginx.conf` 含 `proxy_set_header Authorization "Basic …";` 时，pattern 为其中的密文返回退出码 0，为不存在的字符串返回退出码 1，两种情况的输出都不含密文。
 
 ### G30 示例收紧结果（P12D）
 
@@ -2988,11 +3398,11 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 
 ## 5. 本地示例检查
 
-`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 91 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 133 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
 
 配置脱敏冒烟在同一临时目录中把 app_config_view、app_config_keys 的 allowed_roots 改为临时配置目录，写入 properties、JSON、XML 形式的凭据和 PEM 私钥：断言 app_config_view 输出不含凭据值、match 过滤命中与否都以退出码 0 返回，app_config_keys 只输出键名且不输出 PEM 内容。该检查依赖本机 grep 支持 -P 和 head。
 
-日志冒烟在自动删除的临时目录复制目录，仅替换 log_search 的 builtin_config.allowed_roots。它创建普通与 gzip 测试日志，并通过 catalog try 验证逐行结果、count=3、无匹配退出码 0、max_matches=1 的 truncated/resource_limit_reached。原始示例路径和文件不被修改；try 始终以当前用户执行，run_as 不在此检查中验证。检查不运行 Redis、MySQL、HTTP、Docker、Kubernetes、DNS 或任何写 action。check_agent_upgrade.py 用只记录调用的替身 dpkg-query、apt-get、rpm、yum、systemd-run 执行 agent_upgrade 脚本，检查升级、已是目标版本、拒绝降级和安装后版本不符四种情况的命令序列与退出码，不安装任何软件包。
+日志冒烟在自动删除的临时目录复制目录，仅替换 log_grep 的 builtin_config.allowed_roots。它创建普通与 gzip 测试日志，并通过 catalog try 验证逐行结果、count=3、无匹配退出码 0、max_matches=1 的 truncated/resource_limit_reached。log_sources、log_search 的冒烟把副本中的 allowed_roots 和源路径改到临时目录，写入一条带 Java 堆栈的 Logback 记录，断言 log_sources 的 app 源 status 为 ok，log_search 按堆栈中的一行命中整条记录且输出已脱敏；再写入第二条 ERROR 记录，断言 `level=["ERROR"]` 时 log_search 与 log_stats 的 matched 都为 2、直方图总数为 2、by_level 为 `{"ERROR": 2}` 且 log_stats 输出不含日志正文，log_patterns 把两条 ERROR 记录聚成一个模板且模板和样例不含口令原文。原始示例路径和文件不被修改；try 始终以当前用户执行，run_as 不在此检查中验证。检查不运行 Redis、MySQL、HTTP、Docker、Kubernetes、DNS 或任何写 action。check_agent_upgrade.py 用只记录调用的替身 dpkg-query、apt-get、rpm、yum、systemd-run 执行 agent_upgrade 脚本，检查升级、已是目标版本、拒绝降级和安装后版本不符四种情况的命令序列与退出码，不安装任何软件包。
 
 选择把 examples-check 作为 `make test` 的依赖。现有 `.github/workflows/ci.yml` 已执行 make test，因此无需改动工作流即可在本机和 CI 使用同一检查；检查失败会阻止 Go 测试目标继续。脚本 action 的签名风险警告属于预期输出，不表示校验失败。
 
@@ -3006,3 +3416,220 @@ make test lint
 ```
 
 本机依赖缓存只读时，可把 GOCACHE 和 STATICCHECK_CACHE 指向 /tmp 下的任务目录，并用已有模块下载缓存的 file:// 路径作为 GOPROXY。本节点的命令、被验证的提交 SHA、公开示例敏感字面值检查与剩余待确认项随交付报告提供。
+
+## 6. 待实现的内置处理器：Prometheus 与 Alertmanager
+
+状态：2026-10-23 需求已确认，2026-10-24 两个处理器均已实现。`prometheus_query`（6.2）：处理器提交 `f10ecff`，目录接入提交 `eb32cc8`，示例 YAML 为 `examples/catalog/actions/prometheus_*.yaml` 共 6 个；实现中确定的细节见 6.5。`alertmanager_alerts`（6.3）：示例 YAML 为 `examples/catalog/actions/alertmanager_alerts.yaml`。共 7 个 action，计入第 1 节的 98 个。
+
+### 6.1 范围与决定
+
+- 目的：让 AI agent 通过签名 action 只读查询客户已有的 Prometheus 和 Alertmanager，先定位异常的主机、服务和开始时间，再用第 3 节的主机 action 诊断原因。
+- allowops 不采集、不存储客户指标，不替代客户的监控体系。
+- 网关自身的 Prometheus 指标（`design.md` 第 3 节的选型）暂缓实现。网关继续提供 `/health/live`、`/health/ready`。
+- 查询由能访问客户 Prometheus/Alertmanager 的主机上的 agent 执行。网关不直接连接客户内网服务，执行路径与其他 action 相同。
+- 授权粒度：ABAC 判定的是执行 action 的主机，不是查询结果涉及的主机。一条 PromQL（Prometheus 查询语言）能读取该 Prometheus 账号可见的全部指标。第一阶段把每个 Prometheus/Alertmanager 当作一个整体数据源授权：给执行这些 action 的主机设置专用授权标签，为其单独编写策略规则。按主机限制查询范围见 6.4 第 2 项。
+- 实现之前的临时用法：现有 `http_get` 可以查询不需要认证的 Prometheus，例如 `allowed_prefixes: ['http://127.0.0.1:9090/api/v1/query']`，URL 参数携带 `?query=...`。依据：`internal/params/url.go` 的 `ParseURL` 只禁止前缀带查询串。限制：请求头只能写在签名目录中，需要 Bearer token 的 Prometheus 不应使用这种方式；响应体上限 64KB，没有序列数和数据点数限制，输出是原始 JSON。PromQL 编码后的查询串能否通过 `NormalizeURL` 的全部检查未做端到端验证。
+
+### 6.2 `prometheus_query`
+
+只读查询 Prometheus HTTP API v1。每个 action 通过 `builtin_config.api` 固定一个接口，处理器的 `Parameters` 按 api 返回对应的参数定义（与 `redisHandler.Parameters` 按配置收紧枚举的方式相同）。
+
+| api | 请求路径 | 用途 |
+|---|---|---|
+| `query` | `/api/v1/query` | 单个时间点的 PromQL 查询 |
+| `query_range` | `/api/v1/query_range` | 时间范围的 PromQL 查询 |
+| `series` | `/api/v1/series` | 按匹配器列出序列 |
+| `labels` | `/api/v1/labels` | 列出标签名 |
+| `label_values` | `/api/v1/label/<label>/values` | 列出标签值；`label=__name__` 列出指标名 |
+| `alerts` | `/api/v1/alerts` | 该 Prometheus 当前的告警 |
+| `rules` | `/api/v1/rules` | 告警规则和记录规则及其健康状态 |
+| `targets` | `/api/v1/targets` | 抓取目标及其健康状态 |
+
+- 处理器只请求上表路径。不请求 `/api/v1/admin/*`、`/api/v1/status/*`、`/api/v1/write`、`/federate`、`/-/reload`、`/-/quit`。`/api/v1/status/config` 会返回包含凭据的抓取配置，因此不支持。
+- 只发 GET，不跟随跳转，不使用代理。
+- `targets` 输出抓取地址和最近的抓取错误，会暴露内网地址；目录评审时单独决定是否提供。
+
+参数（处理器提供；YAML `params` 只能收紧正则或长度）：
+
+| 名称 | 类型 | 适用 api | 约束 | 用途 |
+|---|---|---|---|---|
+| `query` | string | query、query_range | 单行，`max_len: 2000`；必填。通用 string 检查拒绝以 `-` 开头的值，取负需写成 `0 - expr` 等形式 | PromQL 表达式 |
+| `time` | string | query | 时间格式见下文；可选，省略时为 `now` | 查询时间点 |
+| `start` | string | query_range、series、labels、label_values | 时间格式见下文；query_range 必填，其他可选，省略时为 `now-1h` | 起始时间 |
+| `end` | string | 同 `start` | 时间格式见下文；可选，省略时为 `now` | 结束时间 |
+| `step` | duration | query_range | 不小于 `min_step`；可选，省略时按 `max_points` 计算 | 采样间隔 |
+| `match` | string_array | series、labels、label_values | `max_items: 10`，每项 `max_len: 500`；series 必填，其他可选 | 序列选择器，例如 `up{job="api"}` |
+| `label` | string | label_values | `regex: ^[a-zA-Z_][a-zA-Z0-9_]*$`；必填 | 标签名 |
+| `summary` | bool | query_range | 可选，处理器默认 false | true 时每条序列只输出 min、avg、max、last，不输出逐点数据 |
+| `rule_type` | enum | rules | `alert`、`record`；可选 | 规则类型 |
+
+- 时间格式：`now`、`now-<整数><s|m|h|d>`，或 UTC 的 RFC 3339 时间（例如 `2026-10-23T03:12:00Z`）。主机按本机时钟解析 `now`，并在输出首行写出解析后的绝对时间。
+- `internal/params` 不支持跨参数约束。`start` 早于 `end`、范围不超过 `max_range`、点数不超过 `max_points` 由处理器检查，不满足时拒绝执行。
+
+`builtin_config`（只能收紧）：
+
+| 字段 | 默认值 / 上限 | 说明 |
+|---|---|---|
+| `api` | 必填 | 6.2 第一张表中的一个值 |
+| `address` | 必填 | http(s) 基础地址，可含反向代理路径前缀；按 `NormalizeURL` 规范化；拒绝用户信息、查询串、片段 |
+| `credential` | 可选 | 主机上 root 属主、0600 的 JSON 文件，最大 16KB；字段为 `bearer_token`，或 `username` 与 `password`，两种方式二选一。读取方式与 Redis/MySQL 凭据相同。配置 credential 的 action 须声明 `run_as: root`，由 allowops-exec 执行 |
+| `ca_file` | 可选 | PEM 格式 CA 文件的绝对路径。不提供跳过证书校验的选项 |
+| `timeout` | 10s / 30s | 客户端超时；同时作为 Prometheus 的 `timeout` 参数发送，让服务端停止超时的查询 |
+| `max_range` | 24h / 7d | `end - start` 的上限 |
+| `min_step` | 15s | `step` 的下限 |
+| `max_points` | 300 / 11000 | 每条序列的点数上限。11000 是 Prometheus 对 query_range 的服务端上限 |
+| `max_series` | 50 / 1000 | 返回的序列数、标签数或规则数上限，超出部分丢弃并标记截断 |
+| `max_response_bytes` | 4MB / 16MB | Prometheus 原始响应体上限，超出时停止读取并返回错误 |
+
+- series、labels、label_values 请求附带 `limit=max_series+1`，减少服务端返回量。该参数要求的最低 Prometheus 版本未核实，已在 v3.14.0 上验证有效；服务端不支持时由处理器在本地截断。
+
+输出（转为 TSV，降低 AI 的 token 消耗；先脱敏，再按 filters 过滤）：
+
+- 首行：`# api=<api> start=<UTC> end=<UTC> step=<间隔>`，各 api 只写适用的字段。
+- 标签集按 Prometheus 写法输出，标签名按字典序排列，例如 `up{instance="10.0.0.5:9100",job="node"}`。时间为 UTC 的 RFC 3339 秒级时间。值保留 Prometheus 返回的字符串，包括 `NaN`、`+Inf`。
+- 字段中的制表符、换行、回车和反斜线按反斜线转义，与 `mysql_query` 相同。
+
+| api | 每行字段 |
+|---|---|
+| query（vector） | 标签集、时间、值 |
+| query（scalar、string） | 时间、值 |
+| query（matrix，查询使用了范围选择器） | 标签集、时间、值，每个点一行 |
+| query_range | 标签集、时间、值，每个点一行；`summary=true` 时为标签集、min、avg、max、last |
+| series | 标签集 |
+| labels、label_values | 名称或值 |
+| alerts | alertname、state、active_at、value、标签集、annotations.summary |
+| rules | group、type、name、health、state、last_error、query |
+| targets | job、instance、health、last_scrape、last_error、scrape_url |
+
+- Prometheus 返回 `warnings` 时，每条写一行 `warning: ...` 到 stderr，退出码不变。
+- Prometheus 返回 `status: error` 或非 2xx 状态码时，退出码 1，stderr 写出 `errorType` 和 `error`。
+- 超出 `max_series` 时标记 truncated 和 resource_limit_reached，stderr 写出总数和返回数。
+- 原生直方图样本第一版只输出 count 和 sum，见 6.4 第 4 项。
+
+action 需求：
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | 配置 credential 时为 root；否则省略 |
+| 执行方式 | builtin |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii |
+| 执行限制 | timeout=15s；max_output=64KB |
+| CentOS 7 | 使用 Go 内置 HTTP 客户端，不依赖 curl；未验证 |
+| 兼容目标 | Prometheus 2.x、3.x 的 HTTP API v1；Thanos Query、VictoriaMetrics、Grafana Mimir 未验证 |
+
+计划提供的 action：
+
+| action | api | 说明 |
+|---|---|---|
+| `prometheus_query` | query | 单个时间点的查询 |
+| `prometheus_query_range` | query_range | 时间范围查询，配合 `summary` 使用 |
+| `prometheus_series` | series | 查找序列 |
+| `prometheus_label_values` | label_values | 查找标签值和指标名 |
+| `prometheus_alerts` | alerts | 单个 Prometheus 的当前告警 |
+| `prometheus_rules` | rules | 规则健康状态和最近错误 |
+
+示例（`examples/catalog/actions/prometheus_query_range.yaml` 与此一致，另有一行用法注释）：
+
+```yaml
+name: prometheus_query_range
+description: Run a bounded read-only PromQL range query against the configured Prometheus.
+risk: read
+run_as: root
+params: {}
+builtin: prometheus_query
+builtin_config:
+  api: query_range
+  address: http://127.0.0.1:9090
+  credential: /etc/allowops/credentials/prometheus-main.json
+  timeout: 10s
+  max_range: 24h
+  min_step: 15s
+  max_points: 300
+  max_series: 50
+  max_response_bytes: 4MB
+timeout: 15s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+redact:
+  builtin: [secrets, pii]
+```
+
+### 6.3 `alertmanager_alerts`
+
+只读查询 Alertmanager 当前的告警，只请求 `GET /api/v2/alerts`。
+
+- 与 `prometheus_alerts` 的区别：Alertmanager 汇总多个 Prometheus 的告警，去重后带有静默和抑制状态；`prometheus_alerts` 只包含单个 Prometheus 的告警。
+- 不发送 POST、DELETE，不访问 `/api/v2/silences`、`/api/v2/status`，不创建或修改静默。
+- 不支持 `/api/v1/*`。Alertmanager 0.27.0 起移除了 v1 API。依据：官方 CHANGELOG 的 0.27.0 / 2024-02-28 条目“[CHANGE] API: Removal of all `api/v1/` endpoints.”；2026-10-23 在本机用 `prom/alertmanager:v0.26.0` 和 `v0.27.0` 镜像各启动一次，`GET /api/v1/alerts` 分别返回 200 和 410，`GET /api/v2/alerts` 均返回 200。0.26.0 及更早版本仍提供 v2 API，可用；v1 API 的启用情况不影响本处理器。
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途 |
+|---|---|---|---|
+| `filter` | string_array | `max_items: 10`，每项 `max_len: 256`；可选 | Alertmanager 匹配器，例如 `alertname="HighLatency"`、`severity=~"critical\|warning"` |
+| `active` | bool | 可选，处理器默认 true | 包含活动告警 |
+| `silenced` | bool | 可选，处理器默认 false | 包含被静默的告警 |
+| `inhibited` | bool | 可选，处理器默认 false | 包含被抑制的告警 |
+
+`builtin_config`：`address`、`credential`、`ca_file` 与 `prometheus_query` 相同；`timeout` 默认 10s、上限 30s；`max_alerts` 默认 100、上限 1000；`max_response_bytes` 默认 4MB、上限 16MB。
+
+输出：按 `starts_at` 升序，每条告警一行，字段转义规则与 6.2 相同。
+
+| 字段 | 来源 |
+|---|---|
+| starts_at | `startsAt` |
+| state | `status.state`：active、suppressed、unprocessed |
+| alertname | `labels.alertname` |
+| severity | `labels.severity`，没有时为空 |
+| labels | 其余标签，按 Prometheus 标签集写法 |
+| summary | `annotations.summary` |
+| description | `annotations.description` |
+| silenced_by、inhibited_by | `status.silencedBy`、`status.inhibitedBy` |
+| expr | 从 `generatorURL` 的 `g0.expr` 参数解码出的 PromQL，没有时为空 |
+
+- `expr` 让 AI 可以直接把触发告警的表达式交给 `prometheus_query_range` 继续查询。
+- action 需求表与 6.2 相同；action 名为 `alertmanager_alerts`。
+
+实现状态与细节（2026-10-23，处理器 `internal/builtin/alertmanager` 在提交 `5c1ac5b`，目录接入 `internal/catalog/builtin_alertmanager.go` 在提交 `7914507`，均位于分支 `claude/prom-s2-alertmanager-3dd321`）：
+
+- 已实现。处理器经共享客户端 `internal/builtin/apiclient` 请求，凭据、CA、跳转和响应体上限按该包的规则处理。
+- 参数映射：`active`、`silenced`、`inhibited` 总是以 `true`/`false` 发送；`filter` 每项一个 `filter` 查询参数。不发送 `unprocessed`，沿用 Alertmanager 默认值（包含 unprocessed 状态的告警）。
+- 输出每行 10 个字段，顺序同上表，无表头；列顺序写在示例 YAML 的注释中。没有告警时输出为空，退出码 0。字段内容先经脱敏再转义；`labels` 字段逐个 `名称="值"` 脱敏后再拼接，避免一个标签触发行尾规则而吞掉其后的标签；转义规则同 `mysql_query`（`\`、制表符、换行、回车、NUL）。
+- `starts_at` 转为 UTC 的 RFC 3339 秒级时间，无法解析时保留原文。排序键为 `startsAt`，相同时按 `fingerprint`；`startsAt` 无法解析的告警排在所有合法时间之后（超过 `max_alerts` 时最先被丢弃），它们之间按原文排序。
+- `labels` 为去掉 `alertname`、`severity` 的标签集，按名称的字节序排列，值中的 `\`、换行、`"` 按 Prometheus 写法转义；不符合 `[a-zA-Z_][a-zA-Z0-9_]*` 的标签名加引号；没有其余标签时为 `{}`。
+- `expr` 取 `generatorURL` 查询串中第一个 `g0.expr` 并做 URL 解码（`+` 解码为空格）；`generatorURL` 缺失、无法解析、没有 `g0.expr` 或其值编码错误时为空。其他参数的编码错误不影响 `g0.expr`。
+- 响应体按元素逐个解码，只保留 `starts_at` 最早的 `max_alerts` 条，其余只计数，解码内存不随告警数增长。超过 `max_alerts` 时保留这些告警，标记 truncated 和 resource_limit_reached，stderr 写出 `truncated: returned N of M alerts (max_alerts=K)`。
+- 非 2xx 状态码：退出码 1，stdout 为空，stderr 为 `alertmanager returned HTTP <状态码> <状态文本>: <响应体前 512 字节，控制字符替换为空格>`。跳转、响应体超过 `max_response_bytes`、连接失败、超时、响应不是 JSON 数组按执行错误返回。
+- `credential` 与 `run_as`：目录校验时，配置了 `credential` 而 `run_as` 不是 `root` 的 action 被拒绝。未配置 `credential` 的 action 不要求 `run_as`，由 agent 直接执行。
+- 验证：`internal/builtin/alertmanager` 的单元测试用 httptest 覆盖参数映射、排序、转义、`expr`、截断和错误响应；集成测试用 testcontainers 启动 `prom/alertmanager:v0.34.1`，通过其 API 写入 3 条告警和 1 条静默（仅夹具写入，处理器只发 GET），验证 active/silenced 过滤、matcher、截断和 400/404 错误。Docker 不可用时集成测试 `t.Skip`。
+
+### 6.4 待确认项
+
+1. **PromQL 内部的时间范围（待确认）**：`max_range`、`max_points` 只约束请求参数。PromQL 中的范围选择器（`[30d]`）、子查询（`[30d:1m]`）和 `offset` 可以读取更长时间的数据，只受 `timeout` 和 Prometheus 服务端的 `--query.max-samples` 限制。第一版已实现为不解析 PromQL，依赖 `timeout`（同时作为 Prometheus 的 `timeout` 参数发送）和服务端限制；在 v3.14.0 上，覆盖全部序列的 `[1h:1ms]` 子查询在 1 秒超时内以 `errorType=timeout` 或客户端超时失败。是否引入 PromQL 解析器检查这些写法，参照 `builtin-mysql.md` 比较依赖体积后决定。
+2. **按主机限制查询范围（第一阶段不做）**：需要解析 PromQL，并在每个序列选择器上强制注入标签匹配器，把查询限制在策略允许的主机上。有客户提出需求时再评估。
+3. **兼容性与多租户请求头（未验证）**：Thanos Query、VictoriaMetrics、Grafana Mimir 的 API 兼容程度未验证。Mimir 需要 `X-Scope-OrgID` 请求头；第一版不提供自定义请求头。
+4. **原生直方图（第一版结论）**：每个直方图样本一行，值列写 `count=<count> sum=<sum>`，不输出桶；完整输出格式仍待确认。使用 httptest 响应验证，未在含原生直方图的 Prometheus 上验证。
+5. **DNS 解析后的地址检查**：与第 4 节第 3 项 `http_get` 的待确认项相同，按同一结论处理。`apiclient` 与 `http_get` 同样只对地址文本做 `NormalizeURL` 检查，不检查解析后的 IP。
+6. **实现时的验收**：增加示例 YAML 并更新第 1 节和第 5 节的 action 数量；参照 `builtin-mysql.md`，在本机 Docker 可用时用 testcontainers 启动 Prometheus 和 Alertmanager 验证查询、超时、截断和错误返回，Docker 不可用时明确跳过。`prometheus_query` 部分已完成（见 6.5），Alertmanager 部分待 `alertmanager_alerts` 实现。
+
+### 6.5 `prometheus_query` 实现说明
+
+以下是实现中对 6.2 未规定或有歧义之处的取舍。
+
+- 首行：`query` 写 `# api=query time=<UTC>`；`query_range` 写 `start`、`end`、`step`（如 `step=60s`）；`series`、`labels`、`label_values` 写 `start`、`end`；`alerts`、`rules`、`targets` 只写 `api`。首行不经过脱敏。
+- 请求参数：`query`、`query_range` 发送 `timeout`（秒，如 `10`、`2.5`）；`series`、`labels`、`label_values` 发送 `limit=max_series+1`，不发送 `timeout`；`rules` 发送 `exclude_alerts=true`，有 `rule_type` 时发送 `type=alert|record`；`targets` 发送 `state=active`，只输出 `activeTargets`。时间以 UTC RFC 3339 发送。
+- 时间：`now` 取整到秒；`now-<n><s|m|h|d>` 的 n 为 1 到 6 位整数且偏移不超过 100 年；绝对时间只接受 `YYYY-MM-DDTHH:MM:SSZ`，拒绝时区偏移和小数秒。
+- 默认起点：`start` 省略时为 `end` 之前 `min(1h, max_range)`。`max_range` 小于 1 小时时，规格的 `now-1h` 会使省略 `start` 的请求必然超出 `max_range`。
+- 显式给出的 `step` 为 `0s` 时拒绝（小于 `min_step`），不按省略处理。
+- `step` 省略时为 `ceil(范围秒数 / (max_points - 1))` 秒，不小于 `min_step`；点数按 `floor(范围 / step) + 1` 与 `max_points` 比较。`max_points` 不得小于 2，`min_step` 只能不小于 15s。`step` 参数的上限为 168h。
+- `max_series` 同样限制 `alerts`、`rules`、`targets` 的输出行数。超出时 stderr 写 `truncated: returned N of M results (max_series)`；`series`、`labels`、`label_values` 的总数受服务端 `limit` 影响，写 `returned N of at least M results (max_series)`。
+- `alerts` 的标签集列输出完整标签集（含 `alertname`）；`value` 保留 Prometheus 返回的字符串（如 `1e+00`）；`active_at`、`last_scrape` 转换为 UTC 秒级时间。`targets` 的 `job` 缺失时用 `scrapePool`。
+- `summary=true`：`min`、`avg`、`max` 不含 NaN 样本，`last` 保留最后一个样本的原始字符串；全部为 NaN 时四列均为 `NaN`；仅有原生直方图样本时前三列为空。
+- 脱敏：只有文本单元格经过 executor 的脱敏函数，之后做 TSV 转义；数值和时间列不脱敏（样本值、`summary` 的 min/avg/max/last、`alerts` 的 value，以及全部时间列），否则 11 位整数值会被 pii 规则当作手机号替换。不符合数字写法的样本值，以及 `resultType=string` 的值，仍然脱敏。标签集逐个 `name="value"` 脱敏后再拼接，指标名单独脱敏，使一个标签触发的“到行尾”规则不会吞掉后面的标签；同一序列的标签集只构造和脱敏一次。`label_values` 的每个值以 `<label>="<value>"` 交给脱敏函数，被替换时输出脱敏后的整段，否则输出原值。`mysql_query` 对整行做的第二遍脱敏在这里不做。
+- 名称写法（Prometheus 3）：标签名不匹配 `^[a-zA-Z_][a-zA-Z0-9_]*$` 时加双引号；指标名不匹配 `^[a-zA-Z_:][a-zA-Z0-9_:]*$` 时放进花括号首位并加引号，例如 `{"http.server.duration","service.name"="x"}`。与 `alertmanager_alerts` 的标签名写法一致。
+- 输出上限：格式化后的输出不超过 `max_response_bytes`（range 查询的每一行都重复标签集，输出可大于原始响应）。超出时在整行边界停止，标记 truncated 和 resource_limit_reached，stderr 写 `truncated: output reached max_response_bytes (N)`。依据：`http_get`、`redis_command` 同样把该字段作为资源上限并标记 resource_limit_reached；executor 的 `max_scan`（默认 256MB）对处理器不可见，不能作为处理器上限。每个结果循环在处理下一项前检查 context，超时或取消后不再继续格式化。
+- 错误：Prometheus 返回 `status: error`、非 2xx 或非 JSON 响应时，退出码 1，stderr 写 `error: HTTP <状态码> errorType=<类型> error=<信息>`，不复制非 JSON 响应体。重定向、响应体超过 `max_response_bytes` 和网络错误作为处理器错误返回，退出码 1。`warnings` 每条写一行 `warning: ...`，不改变退出码，也不输出 `infos`。
+- run_as：配置 `credential` 时目录校验要求 `run_as` 恰为 `root`（目录校验通过 `ActionBuiltinValidator` 接口，由处理器实现）。未配置 `credential` 时 `run_as` 可省略，此时 action 由 agent 用户直接执行，与 `http_get` 相同；与 `mysql_query`、`redis_command` 不同，后者即使省略 `run_as` 也经 allowops-exec 以 root 执行。
+- 集成测试：`internal/builtin/prometheus/integration_test.go` 用 testcontainers 启动 `prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0`，抓取自身（`127.0.0.1:9090`）并加载一条告警规则和一条记录规则。写法与 PostgreSQL、MySQL 测试一致：默认 bridge 网络、启用 Ryuk，端口只发布到 127.0.0.1 并通过 testcontainers 读取映射端口。Docker 不可用时 `t.Skip`。

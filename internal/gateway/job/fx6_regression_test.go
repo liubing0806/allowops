@@ -19,6 +19,7 @@ import (
 
 type vfx6PauseCommit struct{}
 type vfx6SQL struct{}
+
 type vfx6Tracer struct {
 	committed chan struct{}
 	release   chan struct{}
@@ -30,12 +31,14 @@ func (p *vfx6Tracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d pgx.Tra
 	}
 	return ctx
 }
+
 func (p *vfx6Tracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, d pgx.TraceQueryEndData) {
 	if ctx.Value(vfx6SQL{}) == true && d.Err == nil {
 		close(p.committed)
 		<-p.release
 	}
 }
+
 func TestVFX6TaskStartedAfterTerminalCleanupLeaksBuffer(t *testing.T) {
 	s := concurrencyFixture(t)
 	ctx := context.Background()
@@ -74,6 +77,7 @@ func TestVFX6TaskStartedAfterTerminalCleanupLeaksBuffer(t *testing.T) {
 		t.Errorf("terminal task recreated %d output buffer(s) after cleanup; want 0", n)
 	}
 }
+
 func TestVFX6FailedSetTerminalPreservesLiveOutput(t *testing.T) {
 	s := concurrencyFixture(t)
 	ctx := context.Background()
@@ -124,6 +128,7 @@ func TestVFX6FailedSetTerminalPreservesLiveOutput(t *testing.T) {
 	}
 
 }
+
 func TestVFX6CloseContextBeforeReservationPreservesPending(t *testing.T) {
 	s := concurrencyFixture(t)
 	ctx := context.Background()
@@ -331,6 +336,7 @@ func (p fx6DeadlineTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, d p
 	}
 	return ctx
 }
+
 func (fx6DeadlineTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
 func TestVFX6CancelledReservedDispatchBoundsTerminalWrite(t *testing.T) {
@@ -378,6 +384,7 @@ type fx6WaitingCancelRouter struct {
 func (r fx6WaitingCancelRouter) Send(context.Context, string, *v1.ConnectResponse) (*v1.TaskCompleted, error) {
 	return nil, errors.New("cancellation must remain generation-bound")
 }
+
 func (r fx6WaitingCancelRouter) SendToConnection(ctx context.Context, _, connection string, _ *v1.ConnectResponse) (*v1.TaskCompleted, error) {
 	deadline, ok := ctx.Deadline()
 	remaining := time.Duration(-1)

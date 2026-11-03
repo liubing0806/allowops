@@ -9,6 +9,7 @@ import (
 	"time"
 
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
+	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/execd"
 	"github.com/liubing0806/allowops/internal/executor"
@@ -138,6 +139,8 @@ func taskStatus(code int, err error) (v1.TaskStatus, string) {
 		return v1.TaskStatus_TASK_STATUS_CANCELLED, "CANCELLED"
 	case errors.Is(err, context.DeadlineExceeded):
 		return v1.TaskStatus_TASK_STATUS_TIMEOUT, "TIMEOUT"
+	case builtin.ReasonOf(err) != "":
+		return v1.TaskStatus_TASK_STATUS_FAILED, builtin.ReasonOf(err)
 	case err != nil:
 		return v1.TaskStatus_TASK_STATUS_FAILED, "EXECUTION_FAILED"
 	case code != 0:

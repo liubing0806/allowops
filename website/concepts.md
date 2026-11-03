@@ -39,8 +39,9 @@ identity; registering that hostname again creates a new host ID.
 
 A **job** is one action invocation over a target set. A **task** is the execution
 on one host. Select explicit hostnames or comma-separated `key=value` conditions
-that all must match. Selectors require an exact `expected_count`. A count mismatch
-or denial on any target rejects the whole request before dispatch.
+that all must match. Selectors require an exact `expected_count`. A count mismatch,
+a target count above the action's `max_targets`, or a denial on any target rejects
+the whole request before dispatch.
 
 Tasks run in batches. `batch_size` and `max_failures` may tighten the signed
 limits. Failed, timed-out and unsupported tasks count toward the failure limit;

@@ -1,0 +1,58 @@
+{
+  "body": {
+    "command": "thread 2",
+    "jobId": 4,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "all": false,
+        "jobId": 4,
+        "threadInfo": {
+          "blockedCount": 0,
+          "blockedTime": -1,
+          "daemon": true,
+          "inNative": false,
+          "lockOwnerId": -1,
+          "lockedMonitors": [],
+          "lockedSynchronizers": [],
+          "priority": 10,
+          "stackTrace": [
+            {
+              "fileName": "Reference.java",
+              "lineNumber": -2,
+              "className": "java.lang.ref.Reference",
+              "methodName": "waitForReferencePendingList"
+            },
+            {
+              "fileName": "Reference.java",
+              "lineNumber": 253,
+              "className": "java.lang.ref.Reference",
+              "methodName": "processPendingReferences"
+            },
+            {
+              "fileName": "Reference.java",
+              "lineNumber": 215,
+              "className": "java.lang.ref.Reference$ReferenceHandler",
+              "methodName": "run"
+            }
+          ],
+          "suspended": false,
+          "threadId": 2,
+          "threadName": "Reference Handler",
+          "threadState": "RUNNABLE",
+          "waitedCount": 0,
+          "waitedTime": -1
+        },
+        "type": "thread"
+      },
+      {
+        "jobId": 4,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "deb40fe3-0d4d-4fea-a3fd-73623a48ffeb",
+  "state": "SUCCEEDED"
+}

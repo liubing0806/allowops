@@ -1,0 +1,22 @@
+{
+  "body": {
+    "command": "version",
+    "jobId": 1,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "jobId": 1,
+        "type": "version",
+        "version": "4.3.5"
+      },
+      {
+        "jobId": 1,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "deb40fe3-0d4d-4fea-a3fd-73623a48ffeb",
+  "state": "SUCCEEDED"
+}

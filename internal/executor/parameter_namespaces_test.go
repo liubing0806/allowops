@@ -14,10 +14,13 @@ type filterParameterBuiltin struct{}
 func (filterParameterBuiltin) Parameters(map[string]any) (map[string]params.Definition, error) {
 	return map[string]params.Definition{"exclude": {Type: params.String, Description: "Handler exclude", MaxLen: 64}}, nil
 }
+
 func (filterParameterBuiltin) ValidateConfig(map[string]any) error { return nil }
+
 func (filterParameterBuiltin) Run(_ context.Context, _ map[string]any, values map[string]any) (catalog.BuiltinResult, error) {
 	return catalog.BuiltinResult{Stdout: values["exclude"].(string) + "\nkeep\npassword=secret\n"}, nil
 }
+
 func filterParameterAction(t *testing.T) catalog.Action {
 	t.Helper()
 	const name = "filter_parameter_fixture"
@@ -67,6 +70,7 @@ func (resourceLimitedBuiltin) Run(ctx context.Context, config map[string]any, va
 	r.ResourceLimited = true
 	return r, err
 }
+
 func TestBuiltinResourceLimitReportsTruncated(t *testing.T) {
 	a := filterParameterAction(t)
 	catalog.Builtins[a.Builtin] = resourceLimitedBuiltin{}

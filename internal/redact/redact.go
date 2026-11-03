@@ -31,6 +31,9 @@ type compiledRule struct {
 	name  string
 	re    *regexp.Regexp
 	valid func(string) bool
+	// token, set for a checksum rule, rejects a match that is part of a longer
+	// token or of a decimal number (see insideToken).
+	token bool
 	// keep reports that a matched text is known not to be a secret and must stay.
 	keep func(string) bool
 	// skip returns the length of a leading part of a matched text that is
@@ -52,6 +55,7 @@ type compiledRule struct {
 	// an option is only recognised after the command that gives it a password.
 	anchor *regexp.Regexp
 }
+
 type Redactor struct {
 	rules   []compiledRule
 	secrets bool
@@ -174,6 +178,15 @@ var secretRules = []secretRule{
 	// volume, so it is a key and not a quoted word inside a sentence. The
 	// kubelet event "failed for volume "x" : reason" is kept by skipVolumeEvent.
 	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, group: 1, skip: skipVolumeEvent, regex: jsonPrefix + `(` + jsonKey + lineValue + `)`, head: jsonPrefix + `(` + jsonKey + `)`},
+	// A map or Properties entry as Arthas prints an object (watch of the jvm_arthas builtin):
+	// @String[db.password]:@String[value]. A bare PWD key is the working directory, as above.
+	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: `(?i)@[A-Za-z0-9_$]+\[` + keyPrefix + `(?:` + credentialWords + `|[_.-]pwd)\]:` + lineValue},
+	// A credential and its name as two string literals, as decompiled source shows them:
+	// props.put("password", "value"). An option name such as "--password" is left to the
+	// cli_password rules.
+	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: `(?i)"` + keyPrefix + `(?:` + credentialWords + `|pwd)"\s*,\s*` + dqValue, keep: optionName},
+	// A setter called with a string literal in decompiled source: setPassword("value").
+	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: `(?i)\bset[A-Za-z0-9_]*?(?:` + setterWords + `)\(\s*` + dqValue + `\s*\)`},
 	// Command lines. Options that are also used with other meanings (-u, -a,
 	// -p) are only recognised after the command that gives them a password.
 	{name: "cli_password", needs: []string{"--"}, regex: `(?i)(?:^|\s)--` + optionWords + `(?:\s+|=)` + optionValue, keep: negatedOption, group: 1},
@@ -225,6 +238,12 @@ var volumeEvent = regexp.MustCompile(`(?i)^failed\s+for\s+volume\s+[^:]*:\s*`)
 
 func skipVolumeEvent(match string) int { return len(volumeEvent.FindString(match)) }
 
+// The last word of a setter that takes a credential.
+const setterWords = `password|passwd|passphrase|secret|token|credentials?|(?:api|access|secret|private|auth|signing|master|encrypt(?:ion)?)key|pwd`
+
+// optionName reports a quoted command-line option name such as "--password".
+func optionName(match string) bool { return strings.HasPrefix(match, `"-`) }
+
 // withoutColon reports a curl -u value that holds no user:password separator.
 func withoutColon(match string) bool { return !strings.Contains(match, ":") }
 
@@ -254,8 +273,8 @@ func New(config *Config) (*Redactor, error) {
 	if slices.Contains(builtins, "pii") {
 		// A digit boundary is checked separately, since Go RE2 has no lookbehind.
 		r.rules = append(r.rules,
-			compiledRule{name: "identity_card", re: regexp.MustCompile(`[0-9]{17}[0-9Xx]`), valid: validIdentity},
-			compiledRule{name: "bank_card", re: regexp.MustCompile(`[0-9]{13,19}`), valid: validLuhn},
+			compiledRule{name: "identity_card", re: regexp.MustCompile(`[0-9]{17}[0-9Xx]`), valid: validIdentity, token: true},
+			compiledRule{name: "bank_card", re: regexp.MustCompile(`[0-9]{13,19}`), valid: validLuhn, token: true},
 			compiledRule{name: "phone", re: regexp.MustCompile(`1[3-9][0-9]{9}`), valid: func(string) bool { return true }},
 		)
 	}
@@ -378,7 +397,7 @@ func applyRule(line string, rule compiledRule) string {
 			continue
 		}
 		if rule.valid != nil {
-			if (start > 0 && digit(line[start-1])) || (end < len(line) && digit(line[end])) || !rule.valid(line[start:end]) {
+			if (start > 0 && digit(line[start-1])) || (end < len(line) && digit(line[end])) || !rule.valid(line[start:end]) || (rule.token && insideToken(line, start, end)) {
 				continue
 			}
 		}
@@ -522,6 +541,27 @@ func (r *Redactor) Stream(input io.Reader, output io.Writer, maxLine int) error 
 			return nil
 		}
 	}
+}
+
+// insideToken reports that line[start:end] is not a standalone number: it
+// touches a letter or underscore (a node name such as sr-fe_9010_1729837261234,
+// a unit such as 1729837261234ms), or it is the integer or fraction part of a
+// decimal number (0.1234567890123452, 4532015112830366.25). A full stop that
+// ends a sentence, a comma, a quote, a colon and a space do not count.
+func insideToken(line string, start, end int) bool {
+	if start > 0 {
+		c := line[start-1]
+		if letter(c) || c == '_' || (c == '.' && start > 1 && digit(line[start-2])) {
+			return true
+		}
+	}
+	if end < len(line) {
+		c := line[end]
+		if letter(c) || c == '_' || (c == '.' && end+1 < len(line) && digit(line[end+1])) {
+			return true
+		}
+	}
+	return false
 }
 
 func validIdentity(s string) bool {

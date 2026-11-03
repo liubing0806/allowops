@@ -15,7 +15,7 @@ import (
 )
 
 func (s *Service) currentAction(ctx context.Context, name string) (catalog.Action, error) {
-	current, err := s.identity.Store.Queries.CurrentCatalogs(ctx)
+	current, err := s.identity.Database().Queries.CurrentCatalogs(ctx)
 	if err != nil {
 		return catalog.Action{}, accessError(connect.CodeUnavailable, "catalog unavailable")
 	}
@@ -23,7 +23,7 @@ func (s *Service) currentAction(ctx context.Context, name string) (catalog.Actio
 		if time.Now().After(c.ExpiresAt.Time.Add(catalog.ClockSkew)) {
 			continue
 		}
-		stored, err := s.identity.Store.Queries.GetCatalog(ctx, db.GetCatalogParams{CatalogID: c.CatalogID, Version: c.Version})
+		stored, err := s.identity.Database().Queries.GetCatalog(ctx, db.GetCatalogParams{CatalogID: c.CatalogID, Version: c.Version})
 		if err != nil {
 			return catalog.Action{}, accessError(connect.CodeUnavailable, "catalog unavailable")
 		}
@@ -44,6 +44,7 @@ func (s *Service) currentAction(ctx context.Context, name string) (catalog.Actio
 	}
 	return catalog.Action{}, accessError(connect.CodeNotFound, "action removed or expired; call tools/list to refresh")
 }
+
 func (s *Service) searchHosts(ctx context.Context, raw []byte) (*ToolResult, error) {
 	args, err := fixedArguments(raw, "hostname", "selector", "next_cursor")
 	if err != nil {
@@ -100,8 +101,8 @@ func (s *Service) searchHosts(ctx context.Context, raw []byte) (*ToolResult, err
 	if len(hosts) != 1 {
 		return nil, errors.New("host metadata exceeds 32KB result limit")
 	}
-	// G55: a single host can exceed the budget by itself. Keep its identity and
-	// online state, and fit a stable prefix of labels with an explicit marker.
+	// A single host can exceed the budget by itself. Keep its identity and
+	// online state, and fit a stable prefix of labels with an explicit marker (design G55).
 	host := hosts[0]
 	host["labels_truncated"] = true
 	type labelEntry struct{ field, key, value string }

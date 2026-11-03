@@ -1,0 +1,379 @@
+# Local-only target environment for the Arthas stage-0 measurements. Every port is bound to 127.0.0.1.
+#   docker compose up -d --build          starts jdk8, jdk11, jdk17, jdk21
+#   docker compose --profile jre up -d    adds the JRE-only images
+#   docker compose --profile variants up -d   adds the attach-mechanism, read-only, root, -Xrs and probe variants
+#   docker compose --profile jre --profile variants down -v   stops and removes everything
+# Two copies can run side by side: COMPOSE_PROJECT_NAME=jvm-arthas-b JA_PORT_PREFIX=28 make up publishes 28008 and so on
+# instead of 18008. Without the two variables the project is jvm-arthas and the ports start with 18.
+# Keep the prefix at 32 or lower: higher ports fall into the kernel's ephemeral range (32768-60999 by default),
+# where an outgoing connection can hold the port and make the start fail.
+# `make up` / `make down` wrap these. The run/<service>/logs directories must exist and be writable
+# for every uid (`make prepare`), otherwise Docker creates them as root and the JVM cannot log.
+name: jvm-arthas
+
+x-app: &app
+  init: true
+  mem_limit: ${APP_MEM:-1g}
+  memswap_limit: ${APP_MEM:-1g}
+  cpuset: ${APP_CPUS:-4-7}
+  cpu_shares: 262144   # maximum cgroup weight: other processes on the shared host run on the same cpus
+  user: "10001:10001"
+  restart: "no"
+  stop_grace_period: 10s
+  pull_policy: never
+  logging:
+    driver: json-file
+    options: {max-size: 200m, max-file: "2"}
+
+services:
+  jdk8:
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BASE: eclipse-temurin:8-jdk
+    image: jvmarthas/app:jdk8
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}008:8080
+    environment:
+      HEAP: "512m"
+    volumes:
+      - ./run/jdk8/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  jdk11:
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BASE: eclipse-temurin:11-jdk
+    image: jvmarthas/app:jdk11
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}011:8080
+    environment:
+      HEAP: "512m"
+    volumes:
+      - ./run/jdk11/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  jdk17:
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BASE: eclipse-temurin:17-jdk
+    image: jvmarthas/app:jdk17
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}017:8080
+    environment:
+      HEAP: "512m"
+    volumes:
+      - ./run/jdk17/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  jdk21:
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BASE: eclipse-temurin:21-jdk
+    image: jvmarthas/app:jdk21
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}021:8080
+    environment:
+      HEAP: "512m"
+    volumes:
+      - ./run/jdk21/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  jre8:
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BASE: eclipse-temurin:8-jre
+    image: jvmarthas/app:jre8
+    profiles: [jre]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}108:8080
+    environment:
+      HEAP: "512m"
+    volumes:
+      - ./run/jre8/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  jre17:
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BASE: eclipse-temurin:17-jre
+    image: jvmarthas/app:jre17
+    profiles: [jre]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}117:8080
+    environment:
+      HEAP: "512m"
+    volumes:
+      - ./run/jre17/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  jlink17:
+    <<: *app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.jlink
+    image: jvmarthas/app:jlink17
+    profiles: [variants]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}217:8080
+    environment:
+      HEAP: "512m"
+      MINI: "1"
+    volumes:
+      - ./run/jlink17/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  noattach8:
+    <<: *app
+    image: jvmarthas/app:jdk8
+    profiles: [variants]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}308:8080
+    environment:
+      HEAP: "512m"
+      JAVA_EXTRA: "-XX:+DisableAttachMechanism"
+    volumes:
+      - ./run/noattach8/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  noattach17:
+    <<: *app
+    image: jvmarthas/app:jdk17
+    profiles: [variants]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}317:8080
+    environment:
+      HEAP: "512m"
+      JAVA_EXTRA: "-XX:+DisableAttachMechanism"
+    volumes:
+      - ./run/noattach17/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  rofs8:
+    <<: *app
+    image: jvmarthas/app:jdk8
+    profiles: [variants]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}408:8080
+    environment:
+      HEAP: "512m"
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./run/rofs8/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  rofs17:
+    <<: *app
+    image: jvmarthas/app:jdk17
+    profiles: [variants]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}417:8080
+    environment:
+      HEAP: "512m"
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./run/rofs17/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  rofsnotmp17:
+    <<: *app
+    image: jvmarthas/app:jdk17
+    profiles: [variants]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}418:8080
+    environment:
+      HEAP: "512m"
+      # Tomcat needs a writable temp dir; /tmp itself stays read-only, which is where the JVM puts its attach socket
+      JAVA_EXTRA: "-Djava.io.tmpdir=/logs"
+    read_only: true
+    volumes:
+      - ./run/rofsnotmp17/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  nohome8:
+    <<: *app
+    image: jvmarthas/app:jdk8
+    profiles: [variants]
+    user: "10002:10002"
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}508:8080
+    environment:
+      HEAP: "512m"
+      UNSET_HOME: "1"
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./run/nohome8/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  nohome17:
+    <<: *app
+    image: jvmarthas/app:jdk17
+    profiles: [variants]
+    user: "10002:10002"
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}517:8080
+    environment:
+      HEAP: "512m"
+      UNSET_HOME: "1"
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./run/nohome17/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  root8:
+    <<: *app
+    image: jvmarthas/app:jdk8
+    profiles: [variants]
+    user: "0:0"
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}608:8080
+    environment:
+      HEAP: "512m"
+    volumes:
+      - ./run/root8/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  root17:
+    <<: *app
+    image: jvmarthas/app:jdk17
+    profiles: [variants]
+    user: "0:0"
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}617:8080
+    environment:
+      HEAP: "512m"
+    volumes:
+      - ./run/root17/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  xrs8:
+    <<: *app
+    image: jvmarthas/app:jdk8
+    profiles: [variants]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}708:8080
+    environment:
+      HEAP: "512m"
+      JAVA_EXTRA: "-Xrs"
+    volumes:
+      - ./run/xrs8/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  xrs17:
+    <<: *app
+    image: jvmarthas/app:jdk17
+    profiles: [variants]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}717:8080
+    environment:
+      HEAP: "512m"
+      JAVA_EXTRA: "-Xrs"
+    volumes:
+      - ./run/xrs17/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  pid1-17:
+    <<: *app
+    image: jvmarthas/app:jdk17
+    profiles: [variants]
+    init: false
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}817:8080
+    environment:
+      HEAP: "512m"
+    volumes:
+      - ./run/pid1-17/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  probe8:
+    <<: *app
+    image: jvmarthas/app:jdk8
+    profiles: [variants]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}908:8080
+    environment:
+      HEAP: "512m"
+      PROBE: "1"
+    volumes:
+      - ./run/probe8/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+
+  probe17:
+    <<: *app
+    image: jvmarthas/app:jdk17
+    profiles: [variants]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}917:8080
+    environment:
+      HEAP: "512m"
+      PROBE: "1"
+    volumes:
+      - ./run/probe17/logs:/logs
+      - ./run/arthas-stock:/opt/arthas-stock:ro
+      - ./run/arthas-min:/opt/arthas-min:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro

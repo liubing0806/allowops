@@ -32,7 +32,7 @@ type S3 struct {
 	Bucket string
 }
 
-// Check is a read-only dependency probe; caller bounds the context (G48).
+// Check is a read-only dependency probe; caller bounds the context (design G48).
 func (s *S3) Check(ctx context.Context) error {
 	_, err := s.Client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(s.Bucket)})
 	if err != nil {

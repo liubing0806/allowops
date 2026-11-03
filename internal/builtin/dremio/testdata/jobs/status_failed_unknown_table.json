@@ -1,0 +1,11 @@
+{
+ "id": "152329a8-8383-5979-8a88-3f083a7fb900",
+ "jobState": "FAILED",
+ "errorMessage": "Object 'no_such_table' not found within 'demo_src.demo_dw'. Please check that it exists in the selected context.",
+ "startedAt": "2026-10-24T16:01:26.430Z",
+ "endedAt": "2026-10-24T16:01:26.438Z",
+ "queryType": "REST",
+ "queueName": "",
+ "queueId": "",
+ "cancellationReason": ""
+}

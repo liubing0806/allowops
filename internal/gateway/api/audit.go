@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/liubing0806/allowops/internal/gateway/audit"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
 type auditAdapter struct{ appender audit.Appender }
@@ -36,7 +37,7 @@ func (s *Service) AppendResultAudit(ctx context.Context, e AuditEvent) error {
 	return nil
 }
 
-// NewAuditor adapts P7's real Append without changing its payload or storage.
+// NewAuditor adapts the audit module's real Append without changing its payload or storage (design P7).
 // A missing implementation remains nil so New refuses startup.
 func NewAuditor(appender audit.Appender) Auditor {
 	if appender == nil {
@@ -53,7 +54,7 @@ func (a auditAdapter) Append(ctx context.Context, e AuditEvent) error {
 	return err
 }
 
-// Authorize implements P7 Access. The shared middleware and interceptor supply
+// Authorize implements the audit module's Access (design P7). The shared middleware and interceptor supply
 // authentication, per-RPC auditing and CSRF before AuditService invokes it.
 func (s *Service) Authorize(ctx context.Context, _ http.Header, operation string) (string, error) {
 	if operation != string(authz.ViewAudit) {
@@ -62,7 +63,7 @@ func (s *Service) Authorize(ctx context.Context, _ http.Header, operation string
 	if _, err := s.Require(ctx, authz.ViewAudit, authz.Action{}, authz.Host{}); err != nil {
 		return "", err
 	}
-	return actorID(ctx), nil
+	return reqctx.ActorID(ctx), nil
 }
 
 var _ audit.Access = (*Service)(nil)

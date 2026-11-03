@@ -14,38 +14,23 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// PreviewSource is A23's replaceable cross-instance preview boundary.
+// PreviewSource is the replaceable boundary for reading output previews stored by other instances (design A23).
 // Implementations must return only redacted, filtered, bounded previews.
 type PreviewSource interface {
 	Load(context.Context, string) ([]Preview, error)
 }
+
 type Preview struct {
 	Task                   *v1.Task
 	Stdout, Stderr         []byte
 	StdoutHash, StderrHash []byte
 	StdoutSize, StderrSize uint64
 }
+
 type DatabasePreviews struct{ Store *store.Store }
 
 func (p *DatabasePreviews) Load(ctx context.Context, id string) ([]Preview, error) {
-	rows, err := p.Store.Pool.Query(ctx, "SELECT task_id,hostname,result,stdout_preview,stderr_preview,stdout_sha256,stderr_sha256,stdout_size,stderr_size FROM tasks WHERE job_id=$1 ORDER BY position", id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []Preview{}
-	for rows.Next() {
-		v := Preview{Task: &v1.Task{Result: &v1.ExecutionResult{}}}
-		var raw []byte
-		if err := rows.Scan(&v.Task.TaskId, &v.Task.Hostname, &raw, &v.Stdout, &v.Stderr, &v.StdoutHash, &v.StderrHash, &v.StdoutSize, &v.StderrSize); err != nil {
-			return nil, err
-		}
-		if err := proto.Unmarshal(raw, v.Task.Result); err != nil {
-			return nil, err
-		}
-		out = append(out, v)
-	}
-	return out, rows.Err()
+	return listJobTaskPreviews(ctx, p.Store.Pool, id)
 }
 
 func textPrefix(b []byte, n int) string {
@@ -68,32 +53,7 @@ func (s *Service) summary(ctx context.Context, j *v1.Job, f string) (*v1.JobSumm
 	if err != nil {
 		return nil, err
 	}
-	groups := map[string]*v1.OutputGroup{}
-	for _, p := range items {
-		if p.Task.Result.Status == v1.TaskStatus_TASK_STATUS_OFFLINE {
-			result.OfflineHosts = append(result.OfflineHosts, p.Task.Hostname)
-		}
-		if len(p.StdoutHash) != 32 || len(p.StderrHash) != 32 {
-			continue
-		}
-		exit := "absent"
-		if p.Task.Result.ExitCode != nil {
-			exit = fmt.Sprint(*p.Task.Result.ExitCode)
-		}
-		key := exit + ":" + hex.EncodeToString(p.StdoutHash) + ":" + hex.EncodeToString(p.StderrHash)
-		g := groups[key]
-		if g == nil {
-			stdout := textPrefix(p.Stdout, GroupBytes)
-			stderr := textPrefix(p.Stderr, GroupBytes-len(stdout))
-			g = &v1.OutputGroup{ExitCode: p.Task.Result.ExitCode, StdoutSha256: p.StdoutHash, StderrSha256: p.StderrHash, Stdout: stdout, Stderr: stderr, Truncated: p.Task.Result.Truncated || uint64(len(stdout)) < p.StdoutSize || uint64(len(stderr)) < p.StderrSize}
-			groups[key] = g
-			result.Groups = append(result.Groups, g)
-		}
-		g.HostCount++
-		if f == "detailed" || len(g.Hosts) < 2 {
-			g.Hosts = append(g.Hosts, p.Task.Hostname)
-		}
-	}
+	groupPreviews(result, items, f)
 	// Measure the entire protobuf JSON response, accounting for escaping/base64.
 	response := &v1.GetJobResponse{Job: j, Summary: result}
 	for {
@@ -126,4 +86,34 @@ func (s *Service) summary(ctx context.Context, j *v1.Job, f string) (*v1.JobSumm
 		}
 	}
 	return result, nil
+}
+
+// groupPreviews groups tasks with identical exit code, reason and output hashes.
+func groupPreviews(result *v1.JobSummary, items []Preview, f string) {
+	groups := map[string]*v1.OutputGroup{}
+	for _, p := range items {
+		if p.Task.Result.Status == v1.TaskStatus_TASK_STATUS_OFFLINE {
+			result.OfflineHosts = append(result.OfflineHosts, p.Task.Hostname)
+		}
+		if len(p.StdoutHash) != 32 || len(p.StderrHash) != 32 {
+			continue
+		}
+		exit := "absent"
+		if p.Task.Result.ExitCode != nil {
+			exit = fmt.Sprint(*p.Task.Result.ExitCode)
+		}
+		key := exit + ":" + p.Task.Result.Reason + ":" + hex.EncodeToString(p.StdoutHash) + ":" + hex.EncodeToString(p.StderrHash)
+		g := groups[key]
+		if g == nil {
+			stdout := textPrefix(p.Stdout, GroupBytes)
+			stderr := textPrefix(p.Stderr, GroupBytes-len(stdout))
+			g = &v1.OutputGroup{ExitCode: p.Task.Result.ExitCode, StdoutSha256: p.StdoutHash, StderrSha256: p.StderrHash, Stdout: stdout, Stderr: stderr, Truncated: p.Task.Result.Truncated || uint64(len(stdout)) < p.StdoutSize || uint64(len(stderr)) < p.StderrSize, Reason: p.Task.Result.Reason}
+			groups[key] = g
+			result.Groups = append(result.Groups, g)
+		}
+		g.HostCount++
+		if f == "detailed" || len(g.Hosts) < 2 {
+			g.Hosts = append(g.Hosts, p.Task.Hostname)
+		}
+	}
 }

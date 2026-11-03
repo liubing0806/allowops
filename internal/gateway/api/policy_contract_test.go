@@ -105,6 +105,7 @@ func TestPolicyHistoryRespectsWireBudgetAndRealCursor(t *testing.T) {
 		t.Fatalf("history versions=%v", seen)
 	}
 }
+
 func TestExistingHostsSimulationAndActionAuthorization(t *testing.T) {
 	f := newFixture(t)
 	populateResources(t, f)
@@ -141,9 +142,9 @@ func TestExistingHostsSimulationAndActionAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// S=2, A=1, H=1: S*(12+2H+3A+3AH); view_jobs/view_output add an empty-host input per action (RR-b-01).
-	if tested.Msg.Test.EvaluatedCount != 40 || tested.Msg.Test.ChangedCount != 1 {
-		t.Fatalf("existing-host trial=%v; want evaluated=40 changed=1", tested.Msg.Test)
+	// S=2, A=1, H=1: S*(13+2H+3A+3AH); view_jobs/view_output add an empty-host input per action (RR-b-01).
+	if tested.Msg.Test.EvaluatedCount != 42 || tested.Msg.Test.ChangedCount != 1 {
+		t.Fatalf("existing-host trial=%v; want evaluated=42 changed=1", tested.Msg.Test)
 	}
 	changes, err := p.GetPolicyTestChanges(ctx, connect.NewRequest(&v1.GetPolicyTestChangesRequest{TestId: tested.Msg.Test.TestId}))
 	if err != nil {
