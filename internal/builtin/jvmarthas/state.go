@@ -99,6 +99,20 @@ type Record struct {
 type Counter struct {
 	Attaches   int       `json:"attaches"`
 	LastAttach time.Time `json:"last_attach"`
+	// GCCount is the sum of the collector invocations that hsperfdata showed before the last attach.
+	GCCount int64 `json:"gc_count"`
+	// AttachesSinceGC is the number of the latest attaches that saw GCCount, the attaches since the
+	// count last changed. It is zero in a counter written before the field existed.
+	AttachesSinceGC int `json:"attaches_since_gc"`
+}
+
+// unseenAttaches returns the attaches whose metaspace hsperfdata may not show yet: no collection
+// happened since them, and sun.gc.metaspace.used changes at a collection only.
+func (c Counter) unseenAttaches(gcCount int64) int {
+	if gcCount != c.GCCount {
+		return 0
+	}
+	return c.AttachesSinceGC
 }
 
 // OpenState opens the state directory, creating it with mode 0700 when it is missing.
@@ -358,19 +372,25 @@ func (s *State) Counter(k Key) (Counter, error) {
 	if err != nil {
 		return c, err
 	}
-	if err := json.Unmarshal(data, &c); err != nil || c.Attaches < 0 {
+	if err := json.Unmarshal(data, &c); err != nil || c.Attaches < 0 || c.AttachesSinceGC < 0 || c.AttachesSinceGC > c.Attaches {
 		return Counter{}, fmt.Errorf("counter %s is damaged", k)
 	}
 	return c, nil
 }
 
-// AddAttach counts one attach at the given time and returns the new counter.
-func (s *State) AddAttach(k Key, at time.Time) (Counter, error) {
+// AddAttach counts one attach at the given time, with the sum of the collector invocations
+// that hsperfdata showed before it, and returns the new counter.
+func (s *State) AddAttach(k Key, at time.Time, gcCount int64) (Counter, error) {
 	c, err := s.Counter(k)
 	if err != nil {
 		return c, err
 	}
+	if gcCount != c.GCCount {
+		c.AttachesSinceGC = 0
+	}
 	c.Attaches++
+	c.AttachesSinceGC++
+	c.GCCount = gcCount
 	c.LastAttach = at.UTC()
 	data, err := json.Marshal(c)
 	if err != nil {

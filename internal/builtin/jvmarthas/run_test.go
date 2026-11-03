@@ -154,10 +154,10 @@ func TestRunRefusesBeforeTheAttach(t *testing.T) {
 		{"architecture", func(r *rig) { r.env.Arch = "arm64" }, StatusUnsupported, CheckArchitecture},
 		{"attach count", func(r *rig) {
 			for i := 0; i < 5; i++ {
-				r.state().AddAttach(r.key, time.Now().Add(-time.Hour))
+				r.state().AddAttach(r.key, time.Now().Add(-time.Hour), 0)
 			}
 		}, StatusRefused, CheckAttachCount},
-		{"attach interval", func(r *rig) { r.state().AddAttach(r.key, time.Now().Add(-5*time.Second)) }, StatusRefused, CheckAttachInterval},
+		{"attach interval", func(r *rig) { r.state().AddAttach(r.key, time.Now().Add(-5*time.Second), 0) }, StatusRefused, CheckAttachInterval},
 		{"attach disabled", func(r *rig) { r.jvm.checkErr = jvmtarget.ErrAttachDisabled }, StatusUnsupported, CheckAttachState},
 		{"no instrument module", func(r *rig) { r.jvm.checkErr = jvmtarget.ErrNoInstrument }, StatusUnsupported, CheckAttachState},
 		{"SIGQUIT not caught", func(r *rig) { r.jvm.checkErr = jvmtarget.ErrSigQuitNotCaught }, StatusUnsupported, CheckAttachState},
@@ -169,7 +169,7 @@ func TestRunRefusesBeforeTheAttach(t *testing.T) {
 		{"no free port", func(r *rig) { r.host.pickErr = jvmtarget.ErrNoFreePort }, StatusRefused, CheckPortRange},
 		{"thread count of thread -b", func(r *rig) {
 			r.cfg.Command = arthas.KindThreadBlocking
-			r.jvm.perf = perf(setLong("java.threads.live", 900))
+			r.jvm.perf = perf(setLong("java.threads.live", 1001))
 		}, StatusRefused, CheckThreadCount},
 	}
 	for _, tc := range tests {
@@ -228,6 +228,50 @@ func TestRunSecondCallInsideTheIntervalIsRefused(t *testing.T) {
 	}
 	if n := r.jvm.attachCount(); n != 1 {
 		t.Errorf("attach count = %d, want 1", n)
+	}
+}
+
+// hsperfdata updates sun.gc.metaspace.used at a collection only, so the metaspace that an attach loads is missing
+// from it until the next collection. Each attach since the collection count last changed counts 20 MiB.
+func TestRunCountsTheMetaspaceOfTheAttachesSinceTheLastCollection(t *testing.T) {
+	tests := []struct {
+		name string
+		// collections is the sum of the collector invocations that each of the three calls sees.
+		collections [3]int64
+		// third is the check that refuses the third call; empty when it passes.
+		third string
+	}{
+		{"no collection since the first attach", [3]int64{41, 41, 41}, CheckMetaspace},
+		{"a collection between the first two attaches", [3]int64{41, 42, 42}, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRig(t)
+			now := time.Now()
+			r.env.Now = func() time.Time { return now }
+			for i, n := range tc.collections {
+				// 256 MiB of MaxMetaspaceSize and 170 MiB in use leave 86 MiB, 64 MiB are required: one attach
+				// that is not counted yet fits, two do not. perf() has one full collection; the young ones make up the rest.
+				r.jvm.perf = perf(setText("java.rt.vmArgs", "-XX:MaxMetaspaceSize=256m"), setLong("sun.gc.metaspace.used", 170<<20),
+					setLong("sun.gc.collector.0.invocations", n-1))
+				r.host.root = openTestRoot(t, r.base) // a call closes the root it opened
+				res, err := r.run(context.Background())
+				if err != nil {
+					t.Fatal(err)
+				}
+				want, check := StatusOK, ""
+				if i == 2 && tc.third != "" {
+					want, check = StatusRefused, tc.third
+				}
+				if got, _ := rowOf(res.Stdout, "status"); got != want {
+					t.Fatalf("call %d: status %q, want %q\n%s", i+1, got, want, res.Stdout)
+				}
+				if got, _ := rowOf(res.Stdout, "check"); got != check {
+					t.Errorf("call %d: check %q, want %q", i+1, got, check)
+				}
+				now = now.Add(2 * time.Minute)
+			}
+		})
 	}
 }
 

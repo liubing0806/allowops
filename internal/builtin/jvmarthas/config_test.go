@@ -54,6 +54,7 @@ func TestValidateRejects(t *testing.T) {
 		want   string
 	}{
 		{"unknown command", func(c *Config) { c.Command = "ognl" }, "command"},
+		{"paused logger command", func(c *Config) { c.Command = arthas.KindLogger }, "logger is paused: after logger the class loader of Arthas is not unloaded"},
 		{"no command", func(c *Config) { c.Command = "" }, "command"},
 		{"no targets", func(c *Config) { c.Targets = nil }, "target"},
 		{"too many targets", func(c *Config) {
@@ -92,10 +93,13 @@ func TestValidateRejects(t *testing.T) {
 		{"negative attaches", func(c *Config) { c.Checks.MaxAttaches = -1 }, "max_attaches"},
 		{"attach interval below the default", func(c *Config) { c.Checks.MinAttachInterval = 59 * time.Second }, "min_attach_interval"},
 		{"negative attach interval", func(c *Config) { c.Checks.MinAttachInterval = -time.Second }, "min_attach_interval"},
-		{"more blocking threads than the default", func(c *Config) { c.Checks.MaxBlockingThreads = 501 }, "max_blocking_threads"},
+		{"more blocking threads than the default", func(c *Config) { c.Checks.MaxBlockingThreads = 1001 }, "max_blocking_threads"},
 		{"negative blocking threads", func(c *Config) { c.Checks.MaxBlockingThreads = -1 }, "max_blocking_threads"},
+		{"old generation above the default", func(c *Config) { c.Checks.MaxOldGenPercent = 86 }, "max_old_gen_percent"},
 		{"old generation above 100 percent", func(c *Config) { c.Checks.MaxOldGenPercent = 101 }, "max_old_gen_percent"},
 		{"negative old generation", func(c *Config) { c.Checks.MaxOldGenPercent = -1 }, "max_old_gen_percent"},
+		{"full gc window below the default", func(c *Config) { c.Checks.NoFullGCWithin = 59 * time.Second }, "no_full_gc_within"},
+		{"full gc window above a day", func(c *Config) { c.Checks.NoFullGCWithin = 24*time.Hour + time.Second }, "no_full_gc_within"},
 		{"negative full gc window", func(c *Config) { c.Checks.NoFullGCWithin = -time.Second }, "no_full_gc_within"},
 
 		{"negative cpu", func(c *Config) { c.Guard.MaxCPUPercent = -1 }, "max_cpu_percent"},
@@ -139,7 +143,7 @@ func TestValidateAcceptsTighterThresholds(t *testing.T) {
 	cfg.ExecTimeout = 60 * time.Second
 	cfg.Checks = Checks{
 		MinMemoryHeadroom: 512 << 20, MinMetaspaceHeadroom: 64 << 20, MaxAttaches: 3,
-		MinAttachInterval: 5 * time.Minute, MaxBlockingThreads: 100, MaxOldGenPercent: 100, NoFullGCWithin: 30 * time.Second,
+		MinAttachInterval: 5 * time.Minute, MaxBlockingThreads: 100, MaxOldGenPercent: 1, NoFullGCWithin: 24 * time.Hour,
 	}
 	cfg.Guard = Guard{
 		MaxCPUPercent: 300, MaxGCTimePercent: 50, MaxGCPerSecond: 5, Settle: 5 * time.Second,
@@ -154,7 +158,7 @@ func TestEffectiveFillsTheDefaults(t *testing.T) {
 	got := goodConfig().Effective()
 	want := Checks{
 		MinMemoryHeadroom: 256 << 20, MinMetaspaceHeadroom: 64 << 20, MaxAttaches: 5,
-		MinAttachInterval: 60 * time.Second, MaxBlockingThreads: 500,
+		MinAttachInterval: 60 * time.Second, MaxBlockingThreads: 1000, MaxOldGenPercent: 85, NoFullGCWithin: 60 * time.Second,
 	}
 	if got.Checks != want {
 		t.Errorf("checks = %+v, want %+v", got.Checks, want)
@@ -170,9 +174,6 @@ func TestEffectiveFillsTheDefaults(t *testing.T) {
 	}
 	if got.Guard.MaxCPUPercent != 0 || got.Guard.MaxGCTimePercent != 0 || got.Guard.MaxGCPerSecond != 0 || got.Guard.Health != nil {
 		t.Errorf("guard = %+v, want every check off", got.Guard)
-	}
-	if got.Checks.MaxOldGenPercent != 0 || got.Checks.NoFullGCWithin != 0 {
-		t.Error("the old generation and full collection checks must stay off without a threshold")
 	}
 }
 

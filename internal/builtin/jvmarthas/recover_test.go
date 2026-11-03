@@ -163,10 +163,10 @@ func TestRecoverReportsAnUnreadableRecord(t *testing.T) {
 func TestRecoverPrunesTheFilesOfEndedProcesses(t *testing.T) {
 	r := newRig(t)
 	ended := Key{BootID: r.key.BootID, PID: 31337, StartTime: 1}
-	if _, err := r.state().AddAttach(ended, time.Now()); err != nil {
+	if _, err := r.state().AddAttach(ended, time.Now(), 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.state().AddAttach(r.key, time.Now()); err != nil {
+	if _, err := r.state().AddAttach(r.key, time.Now(), 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Recover(context.Background(), r.env); err != nil {

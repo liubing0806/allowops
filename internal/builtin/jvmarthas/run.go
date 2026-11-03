@@ -417,7 +417,7 @@ func (c *call) prepare(ctx context.Context, state *State, proc *Process, key Key
 		c.fail("session record: %v", err)
 		return
 	}
-	counter, err = state.AddAttach(key, now)
+	counter, err = state.AddAttach(key, now, gcCount(check.PerfData))
 	if err != nil {
 		state.RemoveRecord(key)
 		c.fail("attach counter: %v", err)

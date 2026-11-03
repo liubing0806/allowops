@@ -951,5 +951,6 @@ params:
 | A66 | Arthas 引入（2026-10-23） | 按 `java-diagnostics-arthas-plan.md` 分阶段引入，取代 2026-10-22 的不集成决定。在 allowops-exec 中实现内置处理器 `jvm_arthas`，不采用在容器内运行 arthas-boot 的目录 action；Arthas action 的 risk 用 write，按 action 名授权；容器内的 Arthas 文件以预装为准，注入在安全路径解析验证后再开放；新增 action 字段 `max_targets`；首批目标为主机 JVM 和 Docker 容器，Kubernetes 以后评估；验收阈值在阶段 0 实测后确认 |
 | A67 | Arthas 验收阈值（2026-10-24） | 采纳 `arthas-stage0-report.md` 第 5 节的建议值，写入 `java-diagnostics-arthas-plan.md` 第 1 节和 3.2 节。状态为“估算”或“未验证”的项在阶段 2D 验收时核对 |
 | A68 | allowops-arthas 的第三方许可证（2026-10-24） | logback 1.2.13（EPL-1.0 或 LGPL-2.1）选 EPL-1.0，作为该包的许可证白名单例外，声明中附 EPL-1.0 全文和源码获取方式；javassist（MPL-1.1、LGPL-2.1、Apache-2.0 三选一）选 Apache-2.0；Arthas Web UI 文件（含 0BSD 许可的 tslib）和 JSON Schema 文件按上游条款写入声明；包元数据 License 字段使用复合表达式 |
+| A69 | Arthas 阶段 2 验收后的调整（2026-10-25） | 采纳 `arthas-stage2-acceptance-report.md` 第 6 节的建议：第 1 节阈值不变；`logger` 在类加载器不卸载的原因查明前暂停（内置处理器拒绝该命令，示例目录不提供 `jvm_arthas_logger`），50 次 attach 的元空间项按不含 `logger` 的 L1 命令判定；老年代检查默认启用（使用率 < 85%，60 秒内没有 Full GC）；`thread -b` 的线程数上限改为 1000；内存余量 256 MiB、元空间余量 64 MiB、attach 次数 < 5、间隔 60 秒保持，间隔的作用写为限制调用频率；元空间检查补偿 hsperfdata 计数器的滞后：自上次 attach 以来 GC 次数没有变化时，此后每次 attach 按 20 MiB 计入已用量；拒绝信息的内存单位写作 MiB。L1 延迟、`thread -b`、老年代的待定项在阶段 3 负载测试中复核。安全审阅的待定项（配置的 JVM 未运行时，同一容器或 unit 内主类相同的其他进程会被 attach）在阶段 2 作为残余风险保留，阶段 3 修改目标配置时处理 |
 
 总指挥在实施中按规则自行决定的实现细节（G7~G18）记录在计划库，不改变上表和 design.md 的行为。

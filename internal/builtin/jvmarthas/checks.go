@@ -71,7 +71,7 @@ func refuse(check, format string, args ...any) *Refusal {
 	return &Refusal{Check: check, Reason: fmt.Sprintf(format, args...)}
 }
 
-func mb(n int64) int64 { return n >> 20 }
+func mib(n int64) int64 { return n >> 20 }
 
 // supportedMajors are the feature releases of Java that Arthas 4.3.5 was tested with: Temurin
 // 8u504, 11.0.32, 17.0.20 and 21.0.12. Other updates of the same releases are accepted.
@@ -116,7 +116,7 @@ func checkMemory(in checkInput) *Refusal {
 		return refuse(CheckMemoryHeadroom, "cannot read the memory limit and usage of process %d: %v", in.PID, err)
 	}
 	if min := in.Config.Checks.MinMemoryHeadroom; room < min {
-		return refuse(CheckMemoryHeadroom, "%d MB of memory are left in the cgroup of the JVM, at least %d MB are required", mb(room), mb(min))
+		return refuse(CheckMemoryHeadroom, "%d MiB of memory are left in the cgroup of the JVM, at least %d MiB are required", mib(room), mib(min))
 	}
 	return nil
 }
@@ -161,6 +161,20 @@ func parseJVMSize(s string) (int64, bool) {
 	return n * unit, true
 }
 
+// metaspacePerAttach is the metaspace counted for each attach that hsperfdata does not show yet
+// (decision A69). One call added at most 19.4 MiB in the stage-2 acceptance.
+const metaspacePerAttach int64 = 20 << 20
+
+// gcCount returns the sum of the invocations of all collectors.
+func gcCount(p *perfdata.PerfData) int64 {
+	var n int64
+	for i := 0; i < maxCounterGroups; i++ {
+		v, _ := p.Long(fmt.Sprintf("sun.gc.collector.%d.invocations", i))
+		n += v
+	}
+	return n
+}
+
 func checkMetaspace(in checkInput) *Refusal {
 	limit, ok := maxMetaspaceSize(in.Perf)
 	if !ok {
@@ -170,8 +184,15 @@ func checkMetaspace(in checkInput) *Refusal {
 	if !ok {
 		return refuse(CheckMetaspace, "MaxMetaspaceSize is set but hsperfdata has no sun.gc.metaspace.used")
 	}
-	if room, min := limit-used, in.Config.Checks.MinMetaspaceHeadroom; room < min {
-		return refuse(CheckMetaspace, "%d MB of metaspace are left below MaxMetaspaceSize, at least %d MB are required", mb(room), mb(min))
+	// The counter changes at a collection only: what the attaches since the last one loaded is not in it.
+	unseen := in.Counter.unseenAttaches(gcCount(in.Perf))
+	pending := int64(unseen) * metaspacePerAttach
+	if room, min := limit-used-pending, in.Config.Checks.MinMetaspaceHeadroom; room < min {
+		reason := fmt.Sprintf("%d MiB of metaspace are left below MaxMetaspaceSize, at least %d MiB are required", mib(room), mib(min))
+		if unseen > 0 {
+			reason += fmt.Sprintf(" (attaches since the last garbage collection: %d, counted as %d MiB)", unseen, mib(pending))
+		}
+		return refuse(CheckMetaspace, "%s", reason)
 	}
 	return nil
 }
@@ -232,14 +253,12 @@ func oldGeneration(p *perfdata.PerfData) (used, limit int64, ok bool) {
 // maxCounterGroups bounds the numbered counter groups (generations, spaces, collectors) that are scanned.
 const maxCounterGroups = 16
 
+// checkOldGen does not apply to a JVM without an old generation, such as one with Shenandoah.
 func checkOldGen(in checkInput) *Refusal {
 	percent := in.Config.Checks.MaxOldGenPercent
-	if percent == 0 {
-		return nil
-	}
 	used, limit, ok := oldGeneration(in.Perf)
 	if !ok {
-		return refuse(CheckOldGenUsage, "hsperfdata has no old generation counters")
+		return nil
 	}
 	if limit <= 0 || used < 0 {
 		return refuse(CheckOldGenUsage, "the old generation has no usable limit (used %d, limit %d)", used, limit)
@@ -250,25 +269,42 @@ func checkOldGen(in checkInput) *Refusal {
 	return nil
 }
 
+// oldCollectors are the old generation collectors of JDK 8 and 11 whose names do not say so:
+// Parallel, Serial and CMS. A CMS cycle counts as a full collection, which errs on the safe side.
+var oldCollectors = []string{"PSParallelCompact", "MSC", "CMS"}
+
 func isFullCollector(name string) bool {
+	if slices.Contains(oldCollectors, name) {
+		return true
+	}
 	name = strings.ToLower(name)
 	return strings.Contains(name, "full") || strings.Contains(name, "marksweep")
 }
 
+// isConcurrentCollector reports the collectors of ZGC ("Z ", and "ZGC " when generational)
+// and Shenandoah. They collect the old generation concurrently, so there is no stop-the-world
+// full collection to wait for. On JDK 17 the invocations of "Shenandoah full" also grew with
+// concurrent cycles, so that counter is not read as one of full collections.
+func isConcurrentCollector(name string) bool {
+	return strings.HasPrefix(name, "Z ") || strings.HasPrefix(name, "ZGC ") || strings.HasPrefix(name, "Shenandoah")
+}
+
 func checkFullGC(in checkInput) *Refusal {
 	window := in.Config.Checks.NoFullGCWithin
-	if window == 0 {
-		return nil
-	}
 	frequency, okF := in.Perf.Long("sun.os.hrt.frequency")
 	ticks, okT := in.Perf.Long("sun.os.hrt.ticks")
 	if !okF || !okT || frequency <= 0 {
 		return refuse(CheckRecentFullGC, "hsperfdata has no clock counters, so the age of the last full collection is unknown")
 	}
-	found := false
+	found, concurrent := false, false
 	for i := 0; i < maxCounterGroups; i++ {
 		prefix := fmt.Sprintf("sun.gc.collector.%d.", i)
-		if name, _ := in.Perf.Text(prefix + "name"); !isFullCollector(name) {
+		name, _ := in.Perf.Text(prefix + "name")
+		if isConcurrentCollector(name) {
+			concurrent = true
+			continue
+		}
+		if !isFullCollector(name) {
 			continue
 		}
 		found = true
@@ -284,7 +320,7 @@ func checkFullGC(in checkInput) *Refusal {
 			return refuse(CheckRecentFullGC, "a full collection ended %s ago, within the last %s", age.Round(time.Second), window)
 		}
 	}
-	if !found {
+	if !found && !concurrent {
 		return refuse(CheckRecentFullGC, "this garbage collector publishes no full collection counter, so the check cannot be evaluated")
 	}
 	return nil

@@ -31,9 +31,13 @@ const (
 	DefaultMinMetaspaceHeadroom int64 = 64 << 20
 	// DefaultMaxAttaches is the number of attaches a JVM may have had during its life
 	// before a new one is refused.
-	DefaultMaxAttaches        = 5
-	DefaultMinAttachInterval  = 60 * time.Second
-	DefaultMaxBlockingThreads = 500
+	DefaultMaxAttaches       = 5
+	DefaultMinAttachInterval = 60 * time.Second
+	// DefaultMaxBlockingThreads is the largest java.threads.live for thread -b (decision A69).
+	DefaultMaxBlockingThreads = 1000
+	// DefaultMaxOldGenPercent and DefaultNoFullGCWithin are the old generation checks (decision A69).
+	DefaultMaxOldGenPercent = 85
+	DefaultNoFullGCWithin   = 60 * time.Second
 
 	DefaultExecTimeout = 10 * time.Second
 	DefaultHTTPPortMin = 18563
@@ -76,10 +80,9 @@ type Checks struct {
 	// MaxBlockingThreads is the largest java.threads.live for the thread_blocking command.
 	MaxBlockingThreads int
 	// MaxOldGenPercent refuses the call when the old generation is fuller than this
-	// percentage of its limit. Zero switches the check off.
+	// percentage of its limit.
 	MaxOldGenPercent int
 	// NoFullGCWithin refuses the call when a full collection ended within this time.
-	// Zero switches the check off.
 	NoFullGCWithin time.Duration
 }
 
@@ -113,6 +116,9 @@ type HealthCheck struct {
 
 // Validate checks the configuration.
 func (c Config) Validate() error {
+	if reason, paused := arthas.Paused(c.Command); paused {
+		return fmt.Errorf("jvm_arthas command %s is paused: %s", c.Command, reason)
+	}
 	if !slices.Contains(arthas.Kinds(), c.Command) {
 		return fmt.Errorf("jvm_arthas command %q is not one of: %s", c.Command, kindList())
 	}
@@ -242,10 +248,10 @@ func (k Checks) validate() error {
 		return fmt.Errorf("checks.min_attach_interval may only be raised above %s (at most 24h)", DefaultMinAttachInterval)
 	case k.MaxBlockingThreads != 0 && (k.MaxBlockingThreads < 1 || k.MaxBlockingThreads > DefaultMaxBlockingThreads):
 		return fmt.Errorf("checks.max_blocking_threads may only be lowered, to between 1 and %d", DefaultMaxBlockingThreads)
-	case k.MaxOldGenPercent < 0 || k.MaxOldGenPercent > 100:
-		return errors.New("checks.max_old_gen_percent must be between 0 and 100")
-	case k.NoFullGCWithin < 0 || k.NoFullGCWithin > 24*time.Hour:
-		return errors.New("checks.no_full_gc_within must be between 0s and 24h")
+	case k.MaxOldGenPercent != 0 && (k.MaxOldGenPercent < 1 || k.MaxOldGenPercent > DefaultMaxOldGenPercent):
+		return fmt.Errorf("checks.max_old_gen_percent may only be lowered, to between 1 and %d", DefaultMaxOldGenPercent)
+	case k.NoFullGCWithin != 0 && (k.NoFullGCWithin < DefaultNoFullGCWithin || k.NoFullGCWithin > 24*time.Hour):
+		return fmt.Errorf("checks.no_full_gc_within may only be raised above %s (at most 24h)", DefaultNoFullGCWithin)
 	}
 	return nil
 }
@@ -290,8 +296,8 @@ func (h HealthCheck) validate() error {
 	return nil
 }
 
-// Effective returns the configuration with the defaults filled in. The thresholds
-// that have no default stay zero, which keeps their checks off.
+// Effective returns the configuration with the defaults filled in. The guard
+// thresholds have no default and stay zero, which keeps their checks off.
 func (c Config) Effective() Config {
 	if c.ArthasDir == "" {
 		c.ArthasDir = DefaultDir
@@ -317,6 +323,12 @@ func (c Config) Effective() Config {
 	}
 	if k.MaxBlockingThreads == 0 {
 		k.MaxBlockingThreads = DefaultMaxBlockingThreads
+	}
+	if k.MaxOldGenPercent == 0 {
+		k.MaxOldGenPercent = DefaultMaxOldGenPercent
+	}
+	if k.NoFullGCWithin == 0 {
+		k.NoFullGCWithin = DefaultNoFullGCWithin
 	}
 	if c.Guard.Health != nil {
 		h := *c.Guard.Health

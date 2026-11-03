@@ -72,6 +72,7 @@ func TestJVMArthasConfigRejects(t *testing.T) {
 		"unknown guard field":  func(c map[string]any) { c["guard"] = map[string]any{"kill": true} },
 		"unknown command":      func(c map[string]any) { c["command"] = "ognl" },
 		"watch is not L1":      func(c map[string]any) { c["command"] = "watch" },
+		"logger is paused":     func(c map[string]any) { c["command"] = "logger" },
 		"missing command":      func(c map[string]any) { delete(c, "command") },
 		"command not a string": func(c map[string]any) { c["command"] = 1 },
 		"missing targets":      func(c map[string]any) { delete(c, "targets") },
@@ -110,9 +111,11 @@ func TestJVMArthasConfigRejects(t *testing.T) {
 		},
 		"interval text": func(c map[string]any) { c["checks"] = map[string]any{"min_attach_interval": "later"} },
 		"more blocking threads": func(c map[string]any) {
-			c["checks"] = map[string]any{"max_blocking_threads": 501}
+			c["checks"] = map[string]any{"max_blocking_threads": 1001}
 		},
+		"old gen above default": func(c map[string]any) { c["checks"] = map[string]any{"max_old_gen_percent": 86} },
 		"old gen above 100":     func(c map[string]any) { c["checks"] = map[string]any{"max_old_gen_percent": 101} },
+		"full gc below default": func(c map[string]any) { c["checks"] = map[string]any{"no_full_gc_within": "30s"} },
 		"negative full gc":      func(c map[string]any) { c["checks"] = map[string]any{"no_full_gc_within": "-1s"} },
 		"negative cpu":          func(c map[string]any) { c["guard"] = map[string]any{"max_cpu_percent": -1} },
 		"gc time above 100":     func(c map[string]any) { c["guard"] = map[string]any{"max_gc_time_percent": 101} },
@@ -147,7 +150,7 @@ func fullArthasConfig() map[string]any {
 		"arthas_dir": "/opt/arthas-minlog", "http_port_min": 20000, "http_port_max": 20010, "exec_timeout": "20s",
 		"checks": map[string]any{
 			"min_memory_headroom": "512MB", "min_metaspace_headroom": 128 << 20, "max_attaches": 3, "min_attach_interval": "5m",
-			"max_blocking_threads": 100, "max_old_gen_percent": 80, "no_full_gc_within": "30s",
+			"max_blocking_threads": 100, "max_old_gen_percent": 80, "no_full_gc_within": "2m",
 		},
 		"guard": map[string]any{
 			"max_cpu_percent": 300, "max_gc_time_percent": 50, "max_gc_per_second": 5, "settle": "8s",
@@ -175,7 +178,7 @@ func TestJVMArthasConfigAcceptsAndMapsTighterValues(t *testing.T) {
 		SyspropKeys: []string{"user.timezone", "java.version"},
 		Checks: jvmarthas.Checks{
 			MinMemoryHeadroom: 512 << 20, MinMetaspaceHeadroom: 128 << 20, MaxAttaches: 3, MinAttachInterval: 5 * time.Minute,
-			MaxBlockingThreads: 100, MaxOldGenPercent: 80, NoFullGCWithin: 30 * time.Second,
+			MaxBlockingThreads: 100, MaxOldGenPercent: 80, NoFullGCWithin: 2 * time.Minute,
 		},
 		Guard: jvmarthas.Guard{
 			MaxCPUPercent: 300, MaxGCTimePercent: 50, MaxGCPerSecond: 5, Settle: 8 * time.Second,
@@ -246,7 +249,6 @@ func TestJVMArthasParametersPerCommand(t *testing.T) {
 		arthas.KindJVM:             {},
 		arthas.KindClassLoaderTree: {},
 		arthas.KindClassLoaderList: {},
-		arthas.KindLogger:          {},
 		arthas.KindVersion:         {},
 		arthas.KindThreadTop:       {"top": {Type: params.Int, Min: &one, Max: int64(10)}},
 		arthas.KindThreadInfo:      {"thread_id": {Type: params.Int, Min: &one}},

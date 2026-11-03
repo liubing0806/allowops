@@ -1,6 +1,6 @@
 # Java 诊断深化与 Arthas 引入计划
 
-状态：已确认（2026-10-23，决定记录第 21 节 A66）。验收阈值 2026-10-24 确认（A67）。第 9 节全部按推荐选项采纳，取代 2026-10-22“不集成 Arthas”的决定。
+状态：已确认（2026-10-23，决定记录第 21 节 A66）。验收阈值 2026-10-24 确认（A67）。阶段 2 验收后的调整 2026-10-25 确认（A69）。第 9 节全部按推荐选项采纳，取代 2026-10-22“不集成 Arthas”的决定。
 
 依据：
 
@@ -36,13 +36,13 @@
 |---|---|---|
 | L1 命令期间，压测接口的延迟 | 按“调用相关秒”（attach、命令、stop 所在的秒）判定，不按 60 秒窗口的合并 p99 判定。除 `thread -b` 外：调用相关秒的 p99 ≤ 4 倍基线 p99，最大延迟 ≤ 50 ms；其余秒的典型 p99 与基线相差在 ±5% 内（至少 3 次重复）。`thread -b`：最大延迟 ≤ 100 ms | 实测；4 倍、50 ms、100 ms 为估算。阶段 2 验收：结论待定（3.1），除 `thread -b` 外的 168 次调用中 1 次最大延迟 166.9 ms，来自一个 `Cleanup` 安全点，与调用的关系原因未查明 |
 | L2 命令期间，未被观察的接口 p99 增幅 | 增强开始 10 秒后：≤ 15%，3 次以上重复的中位数 ≤ 5% | 实测，样本少 |
-| L2 增强开始后的瞬态 | 影响的秒数 ≤ 5 秒；这些秒内所有接口的最大延迟 ≤ 2 秒。L2 命令的风险说明写明增强开始后 1~4 秒的整个 JVM 延迟，以及 JDK 11、21 上观察到的最长 4.12 秒暂停 | 实测；JDK 11、21 的暂停超出 2 秒，原因未查明 |
+| L2 增强开始后的瞬态 | 影响的秒数 ≤ 5 秒；这些秒内所有接口的最大延迟 ≤ 2 秒。L2 命令的风险说明写明增强开始后 1~4 秒的整个 JVM 延迟，以及 JDK 11、21 上观察到的最长 4.12 秒暂停 | 实测；JDK 11、21 的暂停超出 2 秒：JVM 线程写安全点日志或 hsperfdata 时等待 ext4 journal 提交，这一机制在 JDK 11、17、21 上已重现，阶段 0 的事件由此造成为推断（[arthas-jvm-pause-report.md](arthas-jvm-pause-report.md)）。增强开始瞬态是另一现象，阶段 3 单独测量 |
 | L2 命令期间，被观察方法 p99 增幅 | 被观察方法 ≤ 1000 次/秒时 ≤ 20%，只在会话期间；更高速率不承诺 | 实测，样本少；速率上限为估算 |
 | 错误率 | 不增加 | 实测 |
 | 会话结束后的 Arthas 监听端口、Arthas 线程、增强类 | 均为 0。`stop` 返回后 10 秒内端口关闭，`arthas-` 线程数为 0 | 实测。阶段 2 验收：达到（3.3） |
 | 目标容器内新增的 JVM 进程 | 0 | 实测。阶段 2 验收：达到（3.3） |
 | L1 单次调用总时长（含 attach 和清理） | ≤ 15 秒，在 MCP `wait_seconds` 默认值 30 秒内返回 | 实测。阶段 2 验收：达到（3.2） |
-| 50 次 attach/stop、3 次 Full GC 后的元空间使用量 | ≤ 基线 + 25 MB；不对提交量设阈值 | 实测；25 MB 为估算。阶段 2 验收：未达到（3.4），含 `logger` 时 +56.3~+69.5 MiB，不含 `logger` 时 +8.9~+20.0 MiB |
+| 50 次 attach/stop、3 次 Full GC 后的元空间使用量 | ≤ 基线 + 25 MB；不对提交量设阈值 | 实测；25 MB 为估算。阶段 2 验收：未达到（3.4），含 `logger` 时 +56.3~+69.5 MiB，不含 `logger` 时 +8.9~+20.0 MiB。A69：`logger` 暂停，本项按不含 `logger` 的 L1 命令判定，达到 |
 
 L1、L2 的定义见第 4 节。
 
@@ -98,7 +98,7 @@ L1、L2 的定义见第 4 节。
 
 数据来自 `/proc` 和 hsperfdata，都不需要 attach。阈值写在 builtin_config 中，签名目录只能收紧默认值。
 
-“默认值”列来自阶段 0 报告第 5.2 节，2026-10-24 负责人采纳（A67）。状态的含义见第 1 节。状态为“估算”或“未验证”的项在阶段 2D 验收时核对，“阶段 2 验收”之后为阶段 2 验收报告（[arthas-stage2-acceptance-report.md](arthas-stage2-acceptance-report.md)）的结论和章节。默认值没有因验收修改。
+“默认值”列来自阶段 0 报告第 5.2 节，2026-10-24 负责人采纳（A67）。状态的含义见第 1 节。状态为“估算”或“未验证”的项在阶段 2D 验收时核对，“阶段 2 验收”之后为阶段 2 验收报告（[arthas-stage2-acceptance-report.md](arthas-stage2-acceptance-report.md)）的结论和章节。验收后的默认值调整见 A69（2026-10-25）。
 
 | 检查 | 默认值 | 状态 | 不通过时 |
 |---|---|---|---|
@@ -108,15 +108,15 @@ L1、L2 的定义见第 4 节。
 | 运行时包含 `java.instrument`：`<JAVA_HOME>/lib/libinstrument.so`（JDK 8 为 `lib/amd64/libinstrument.so`）存在，或 `release` 文件的 `MODULES` 含 `java.instrument` | — | 实测 | unsupported |
 | attach 文件位置：目标工作目录或 `/tmp` 至少一处可写 | — | 实测 | 拒绝 |
 | 目标 JVM 中没有已存在的 Arthas 实例：没有名称以 `arthas-` 开头的线程，也没有 Arthas 监听端口。已打开的 jar 和内存映射只说明曾经加载过，不作为判据 | — | 实测 | 拒绝。已有实例会忽略 allowops 的启动参数 |
-| 容器内存余量：cgroup 内存限额减去 `memory.current` | ≥ 256 MB | 实测。阶段 2 验收：达到（3.5） | 拒绝 |
-| 元空间余量：`MaxMetaspaceSize` 减去已用量；未设上限时跳过 | ≥ 64 MB | 实测。阶段 2 验收：达到（3.5、3.6）；读取的 hsperfdata 计数器落后于实际使用量（第 5 节） | 拒绝 |
-| 老年代使用率低于阈值，且最近 N 秒内没有 Full GC | 无默认值，阶段 2D 验收时确定 | 未验证。阶段 2 验收：结论待定，已测量依据，建议值待负责人确认（3.8） | 拒绝 |
+| 容器内存余量：cgroup 内存限额减去 `memory.current` | ≥ 256 MiB | 实测。阶段 2 验收：达到（3.5） | 拒绝 |
+| 元空间余量：`MaxMetaspaceSize` 减去已用量；未设上限时跳过。hsperfdata 的已用量只在 GC 时更新：自上次 attach 以来 GC 次数没有变化时，此后每次 attach 按 20 MiB 计入已用量（A69） | ≥ 64 MiB | 实测。阶段 2 验收：达到（3.5、3.6）；读取的 hsperfdata 计数器落后于实际使用量（第 5 节）；补偿方式未验证 | 拒绝 |
+| 老年代使用率低于阈值，且最近 N 秒内没有 Full GC。Full GC 一项对 ZGC、Shenandoah 不适用；老年代使用率一项对没有老年代计数器的 Shenandoah 不适用（A69 实施） | 使用率 < 85%，60 秒内没有 Full GC（A69） | 实测，样本少（2 个 JDK，各 1 次运行）；85% 与 60 秒为估算（3.8） | 拒绝 |
 | 目标进程 CPU 使用率（5 秒平均，相对 cgroup CPU 限额） | L2：< 50% | 未验证 | 拒绝 |
-| 距同一 JVM 上次 attach 的时间 | ≥ 60 秒 | 估算。阶段 2 验收：结论待定，60 秒内内存和元空间不回落（3.9） | 拒绝 |
+| 距同一 JVM 上次 attach 的时间。作用是限制调用频率（A69） | ≥ 60 秒 | 估算。阶段 2 验收：60 秒内内存和元空间不回落，间隔不减少累计增量（3.9） | 拒绝 |
 | 该 JVM 生命周期内的 attach 次数 | < 5 | 实测。阶段 2 验收：达到（3.9） | 拒绝 |
-| `thread -b`：hsperfdata 的 `java.threads.live` | ≤ 500 | 未验证。阶段 2 验收：结论待定，1000 个线程以内 `ThreadDump` 安全点不随线程数增加（3.7） | 拒绝该命令 |
+| `thread -b`：hsperfdata 的 `java.threads.live` | ≤ 1000（A69） | 实测（1000 个线程以内，只测了栈很浅的线程）。阶段 2 验收：`ThreadDump` 安全点不随线程数增加（3.7）；超过 1000 未测 | 拒绝该命令 |
 
-attach 次数设上限的原因：阶段 0 实测每次 attach/stop 使元空间使用量增加约 12 MB，类加载器在两次 Full GC 后才卸载；内存限额 1 GB 的容器在 14~25 次循环后被 OOM killer 结束。
+attach 次数设上限的原因：阶段 0 实测每次 attach/stop 使元空间使用量增加约 12 MB；内存限额 1 GB 的容器在 14~25 次循环后被 OOM killer 结束。阶段 2 验收中，类加载器要多次 Full GC 才全部卸载，原因未查明；`logger` 之后不卸载（验收报告 3.4.2）。
 
 ### 3.3 运行期监测与中止
 
@@ -129,7 +129,7 @@ attach 次数设上限的原因：阶段 0 实测每次 attach/stop 使元空间
 任一项超过阈值时，按 3.1 第 8 步的清理顺序执行。结果中标记 `aborted_by_guard` 和触发的检查项。
 
 - 增强开始后的 5 秒内不评估 CPU 和健康检查阈值。阶段 0 实测：增强开始后 1~4 秒内 JVM CPU 达到 178%~378%（4 CPU 容器），所有接口的延迟达到数百毫秒。这段时间内评估，每次增强都会触发中止。
-- 监测不能发现阶段 0 在 JDK 11、21 上观察到的整个 JVM 暂停（最长 4.12 秒，原因未查明）：暂停期间进程 CPU 接近 0。
+- 监测不能发现阶段 0 在 JDK 11、21 上观察到的整个 JVM 暂停（最长 4.12 秒）：暂停期间进程 CPU 接近 0。暂停来自 JVM 线程等待文件系统 journal 提交，见 [arthas-jvm-pause-report.md](arthas-jvm-pause-report.md)。
 
 ### 3.4 残留回收
 
@@ -144,7 +144,7 @@ attach 次数设上限的原因：阶段 0 实测每次 attach/stop 使元空间
 | 级别 | 命令 | allowops risk | 阶段 |
 |---|---|---|---|
 | L0：不 attach | 新内置 `jvm_perfdata`（读取 hsperfdata）；现有 `jvm_list`、`jvm_gc_stats`、`jvm_thread_dump` | read | 1 |
-| L1：attach，不增强 | `dashboard -n 1`、`thread -n <1~10>`、`thread -b`、`thread <id>`、`memory`、`jvm`、`sc -d <类>`、`sm -d <类> [方法]`、`classloader -t`、`classloader -l`、`logger`（只列出）、`sysprop <白名单内的键>`、`version` | write | 2 |
+| L1：attach，不增强 | `dashboard -n 1`、`thread -n <1~10>`、`thread -b`、`thread <id>`、`memory`、`jvm`、`sc -d <类>`、`sm -d <类> [方法]`、`classloader -t`、`classloader -l`、`sysprop <白名单内的键>`、`version`。`logger`（只列出）暂停：调用后 Arthas 的类加载器不卸载，每次约 12 MiB 元空间直到 JVM 重启，原因查明前不提供（A69）。原因已查明：`logger` 把辅助类定义到应用的类加载器中，所用保护域引用当次 attach 的 `ArthasClassloader`（[arthas-logger-classloader-report.md](arthas-logger-classloader-report.md)）；Arthas 4.3.5 和上游 master 相同，继续暂停 | write | 2 |
 | L2：增强 | `watch`、`trace`、`stack`、`monitor`；`jad`（触发 retransform，并输出业务源码） | write，ABAC 单独授权 | 3 |
 | 禁止 | `ognl`、`vmtool`、`redefine`、`retransform`、`mc`、`groovy`、`heapdump`、`dump`、`profiler`、`jfr`、`tt`、`getstatic`、`sysenv`、`mbean`、`tee`；不带参数的 `sysprop`；带值的 `sysprop`、`vmoption`、`options`、`logger --level`；管道、重定向、后台作业 | 不提供 | — |
 
@@ -275,9 +275,13 @@ allowops-exec 新增以下能力。SECURITY.md 的威胁模型已更新（T6、T
   - 人为提高目标 CPU 时，监测中止会话并完成清理。
 - 执行前检查：每个拒绝条件各有一个测试用例。
 
+状态：2026-10-25 框架、L1 命令、`max_targets`、`allowops-arthas` 可选包、SECURITY.md 和安全审阅、本地验收（[arthas-stage2-acceptance-report.md](arthas-stage2-acceptance-report.md)）已完成。验收后的调整（A69）已实现，由单元测试覆盖，并在真实 JVM 上复核：JDK 8/11/17/21 及只读文件系统、root 运行等 16 种 JVM 的 attach、`internal/arthas` 真实测试和 `make real-test` 全部通过，默认的老年代检查没有拒绝正常调用。
+
 ### 阶段 3：Arthas L2 命令
 
 内容：watch、trace、stack、monitor、jad；第 4 节的 L2 限制；ABAC 示例策略（只授权指定角色，可按时间段限制）。
+
+开始前：查明阶段 0 在 JDK 11、21 上观察到的整个 JVM 暂停（第 1 节）。2026-10-25 已完成（[arthas-jvm-pause-report.md](arthas-jvm-pause-report.md)）。阶段 3 的测量按该报告的建议：测试 JVM 的日志放在 tmpfs 上或使用 `-Xlog:async`，`/tmp` 放在 tmpfs 上，测量时同时运行主机 I/O 探针，把写入等待造成的延迟单独列出。阶段 2 验收中结论待定的项（L1 延迟、`thread -b` 线程数、老年代）在阶段 3 的负载测试中复核（A69）。
 
 完成条件：
 
@@ -294,7 +298,7 @@ allowops-exec 新增以下能力。SECURITY.md 的威胁模型已更新（T6、T
 
 ## 9. 负责人确认的事项
 
-2026-10-23 负责人全部按推荐选项采纳（A66）。第 7 项的阈值：2026-10-24 负责人采纳阶段 0 报告第 5 节的建议值（A67），数值见第 1 节和 3.2 节。
+2026-10-23 负责人全部按推荐选项采纳（A66）。第 7 项的阈值：2026-10-24 负责人采纳阶段 0 报告第 5 节的建议值（A67），数值见第 1 节和 3.2 节。2026-10-25 负责人采纳阶段 2 验收报告第 6 节的建议和安全审阅的处理建议（A69）。
 
 
 1. 是否撤销 2026-10-22 的不集成决定，按本计划从阶段 0 开始。

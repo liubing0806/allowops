@@ -10,7 +10,7 @@
 // change what the checks see, and only for measurements the defaults would refuse:
 //
 //	-state fresh      every call gets a new state directory, so the attach count and interval checks pass
-//	-threads-live N   the checks read N as java.threads.live (thread -b on JVMs with more than 500 threads)
+//	-threads-live N   the checks read N as java.threads.live (thread -b on JVMs with more than 1000 threads)
 //
 // Usage:
 //
@@ -77,8 +77,8 @@ func main() {
 	flag.StringVar(&o.label, "label", "", "label copied into every record")
 	flag.Int64Var(&o.threadsLive, "threads-live", 0, "value of java.threads.live the checks see (0: the real one)")
 	flag.Int64Var(&o.threadID, "thread-id", 2, "thread id for thread_info")
-	flag.IntVar(&o.maxOldGen, "max-old-gen", 0, "checks.max_old_gen_percent (0: off)")
-	flag.DurationVar(&o.noFullGCWithin, "no-full-gc-within", 0, "checks.no_full_gc_within (0: off)")
+	flag.IntVar(&o.maxOldGen, "max-old-gen", 0, "checks.max_old_gen_percent (0: the default, 85)")
+	flag.DurationVar(&o.noFullGCWithin, "no-full-gc-within", 0, "checks.no_full_gc_within (0: the default, 60s)")
 	flag.BoolVar(&o.snapshot, "snapshot", false, "print one snapshot of the JVM and exit")
 	flag.StringVar(&o.diag, "diag", "", "URL of the /diag endpoint of the sample application, read before and after every call")
 	flag.Parse()

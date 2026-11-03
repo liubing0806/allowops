@@ -60,8 +60,27 @@ func TestBuildCommands(t *testing.T) {
 			t.Errorf("kind %s has no case", k)
 		}
 	}
-	if len(Kinds()) != 13 {
-		t.Errorf("Kinds() = %v, want 13 kinds", Kinds())
+	if len(Kinds()) != 12 {
+		t.Errorf("Kinds() = %v, want 12 kinds", Kinds())
+	}
+}
+
+// logger is paused: Build still makes the command, but it is not offered (decision A69).
+func TestLoggerIsPaused(t *testing.T) {
+	reason, ok := Paused(KindLogger)
+	if !ok || !strings.Contains(reason, "class loader") || !strings.Contains(reason, "12 MiB") {
+		t.Errorf("Paused(logger) = %q, %v", reason, ok)
+	}
+	for _, k := range Kinds() {
+		if k == KindLogger {
+			t.Error("Kinds() offers logger")
+		}
+		if reason, ok := Paused(k); ok {
+			t.Errorf("offered kind %s is paused: %s", k, reason)
+		}
+	}
+	if _, ok := Paused("ognl"); ok {
+		t.Error("an unknown kind is reported as paused")
 	}
 }
 

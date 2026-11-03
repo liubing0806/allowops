@@ -25,14 +25,21 @@ sample() {
 
 sample jdk8-parallel eclipse-temurin:8-jre -XX:+UseParallelGC
 sample jdk8-g1 eclipse-temurin:8-jre -XX:+UseG1GC
+sample jdk8-serial eclipse-temurin:8-jre -XX:+UseSerialGC
+sample jdk8-cms eclipse-temurin:8-jre -XX:+UseConcMarkSweepGC
 sample jdk11-g1 eclipse-temurin:11-jre
+sample jdk11-parallel eclipse-temurin:11-jre -XX:+UseParallelGC
+sample jdk11-serial eclipse-temurin:11-jre -XX:+UseSerialGC
 sample jdk17-g1 eclipse-temurin:17-jre
 sample jdk17-serial eclipse-temurin:17-jre -XX:+UseSerialGC
 sample jdk17-parallel eclipse-temurin:17-jre -XX:+UseParallelGC
+sample jdk17-shenandoah eclipse-temurin:17-jre -XX:+UseShenandoahGC
 sample jdk21-g1 eclipse-temurin:21-jre
 sample jdk21-zgc eclipse-temurin:21-jre -XX:+UseZGC
+sample jdk21-zgc-generational eclipse-temurin:21-jre -XX:+UseZGC -XX:+ZGenerational
 
 sleep 8
-for name in jdk8-parallel jdk8-g1 jdk11-g1 jdk17-g1 jdk17-serial jdk17-parallel jdk21-g1 jdk21-zgc; do
+for name in jdk8-parallel jdk8-g1 jdk8-serial jdk8-cms jdk11-g1 jdk11-parallel jdk11-serial jdk17-g1 jdk17-serial jdk17-parallel \
+	jdk17-shenandoah jdk21-g1 jdk21-zgc jdk21-zgc-generational; do
 	docker exec "hsperf-sample-$name" cat /tmp/hsperfdata_root/1 >"$here/$name.hsperf"
 done

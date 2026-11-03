@@ -26,12 +26,18 @@ var samples = []struct {
 }{
 	{"jdk8-parallel", "1.8.0_", "PSScavenge"},
 	{"jdk8-g1", "1.8.0_", "G1 incremental collections"},
+	{"jdk8-serial", "1.8.0_", "Copy"},
+	{"jdk8-cms", "1.8.0_", "PCopy"},
 	{"jdk11-g1", "11.0.", "G1 incremental collections"},
+	{"jdk11-parallel", "11.0.", "PSScavenge"},
+	{"jdk11-serial", "11.0.", "Copy"},
 	{"jdk17-g1", "17.0.", "G1 young collection pauses"},
 	{"jdk17-serial", "17.0.", "Serial young collection pauses"},
 	{"jdk17-parallel", "17.0.", "Parallel young collection pauses"},
+	{"jdk17-shenandoah", "17.0.", "Shenandoah partial"},
 	{"jdk21-g1", "21.0.", "G1 young collection pauses"},
 	{"jdk21-zgc", "21.0.", "Z concurrent cycle pauses"},
+	{"jdk21-zgc-generational", "21.0.", "ZGC minor collection pauses"},
 }
 
 func TestParseSamples(t *testing.T) {

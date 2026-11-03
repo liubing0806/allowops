@@ -24,7 +24,7 @@ const (
 	KindMethodInfo      Kind = "method_info"      // sm -d <class> [method]
 	KindClassLoaderTree Kind = "classloader_tree" // classloader -t
 	KindClassLoaderList Kind = "classloader_list" // classloader -l
-	KindLogger          Kind = "logger"           // logger
+	KindLogger          Kind = "logger"           // logger; paused, see Paused
 	KindSysprop         Kind = "sysprop"          // sysprop <allowed key>
 	KindVersion         Kind = "version"          // version
 )
@@ -85,11 +85,24 @@ type Command struct {
 
 var allKinds = []Kind{
 	KindDashboard, KindThreadTop, KindThreadBlocking, KindThreadInfo, KindMemory, KindJVM, KindClassInfo,
-	KindMethodInfo, KindClassLoaderTree, KindClassLoaderList, KindLogger, KindSysprop, KindVersion,
+	KindMethodInfo, KindClassLoaderTree, KindClassLoaderList, KindSysprop, KindVersion,
 }
 
-// Kinds returns every supported Kind.
+// paused are the kinds that Build still accepts but that are not offered, with the reason. Their
+// parsing and rendering stay, so that a kind can return once its problem is solved.
+var paused = map[Kind]string{
+	KindLogger: "after logger the class loader of Arthas is not unloaded, so every call keeps about 12 MiB of " +
+		"metaspace until the JVM restarts; the command stays paused until the cause is known",
+}
+
+// Kinds returns every offered Kind; the paused kinds are not among them.
 func Kinds() []Kind { return slices.Clone(allKinds) }
+
+// Paused returns why a kind is not offered, and false for a kind that is offered or unknown.
+func Paused(k Kind) (reason string, ok bool) {
+	reason, ok = paused[k]
+	return reason, ok
+}
 
 // Build validates the request against the policy and returns the command.
 // The command text is assembled from fixed words and arguments that matched a

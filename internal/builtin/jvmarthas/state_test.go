@@ -286,21 +286,88 @@ func TestCounter(t *testing.T) {
 		t.Fatalf("new counter = %+v, %v", c, err)
 	}
 	t1 := time.Unix(1_700_000_000, 0).UTC()
-	if c, err = s.AddAttach(testKey, t1); err != nil || c.Attaches != 1 || !c.LastAttach.Equal(t1) {
+	if c, err = s.AddAttach(testKey, t1, 41); err != nil || c.Attaches != 1 || !c.LastAttach.Equal(t1) {
 		t.Fatalf("first attach: %+v, %v", c, err)
 	}
 	t2 := t1.Add(2 * time.Minute)
-	if c, err = s.AddAttach(testKey, t2); err != nil || c.Attaches != 2 || !c.LastAttach.Equal(t2) {
+	if c, err = s.AddAttach(testKey, t2, 41); err != nil || c.Attaches != 2 || !c.LastAttach.Equal(t2) {
 		t.Fatalf("second attach: %+v, %v", c, err)
 	}
 	got, err := s.Counter(testKey)
-	if err != nil || got.Attaches != 2 || !got.LastAttach.Equal(t2) {
-		t.Errorf("stored counter = %+v, %v", got, err)
+	if want := (Counter{Attaches: 2, LastAttach: t2, GCCount: 41, AttachesSinceGC: 2}); err != nil || got != want {
+		t.Errorf("stored counter = %+v, %v; want %+v", got, err, want)
 	}
 	other := testKey
 	other.StartTime++
 	if c, _ := s.Counter(other); c.Attaches != 0 {
 		t.Error("a process with another start time shares the counter")
+	}
+}
+
+// The counter keeps the collection count of the last attach and the number of attaches since the count changed.
+func TestCounterCountsTheAttachesSinceTheCollectionCountChanged(t *testing.T) {
+	s, _ := openTestState(t)
+	at := time.Unix(1_700_000_000, 0).UTC()
+	for i, step := range []struct {
+		gcCount   int64
+		sinceGC   int
+		unseenNow int // unseenAttaches with the count of this attach, as the next call would see it
+	}{
+		{41, 1, 1},
+		{41, 2, 2},
+		{43, 1, 1},
+		{43, 2, 2},
+		{44, 1, 1},
+	} {
+		c, err := s.AddAttach(testKey, at.Add(time.Duration(i)*time.Minute), step.gcCount)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.Attaches != i+1 || c.GCCount != step.gcCount || c.AttachesSinceGC != step.sinceGC {
+			t.Errorf("attach %d: %+v, want %d attaches since the count %d", i+1, c, step.sinceGC, step.gcCount)
+		}
+		if got := c.unseenAttaches(step.gcCount); got != step.unseenNow {
+			t.Errorf("attach %d: %d unseen attaches without a collection, want %d", i+1, got, step.unseenNow)
+		}
+		if got := c.unseenAttaches(step.gcCount + 1); got != 0 {
+			t.Errorf("attach %d: %d unseen attaches after a collection, want 0", i+1, got)
+		}
+	}
+}
+
+// Counters written before the collection count existed are read; their attaches count as seen.
+func TestCounterReadsTheFormatWithoutTheCollectionCount(t *testing.T) {
+	s, path := openTestState(t)
+	old := `{"attaches":2,"last_attach":"2023-11-14T22:13:20Z"}`
+	if err := os.WriteFile(filepath.Join(path, testKey.String()+".count"), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Counter(testKey)
+	if want := (Counter{Attaches: 2, LastAttach: time.Unix(1_700_000_000, 0).UTC()}); err != nil || c != want {
+		t.Fatalf("counter = %+v, %v; want %+v", c, err, want)
+	}
+	if n := c.unseenAttaches(0); n != 0 {
+		t.Errorf("%d unseen attaches in a counter without a collection count", n)
+	}
+	if c, err = s.AddAttach(testKey, time.Unix(1_700_000_120, 0), 0); err != nil || c.Attaches != 3 || c.AttachesSinceGC != 1 {
+		t.Errorf("next attach: %+v, %v", c, err)
+	}
+}
+
+func TestCounterRejectsADamagedFile(t *testing.T) {
+	for _, content := range []string{
+		`{"attaches":-1}`,
+		`{"attaches":2,"attaches_since_gc":3}`,
+		`{"attaches":2,"attaches_since_gc":-1}`,
+		`not json`,
+	} {
+		s, path := openTestState(t)
+		if err := os.WriteFile(filepath.Join(path, testKey.String()+".count"), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if c, err := s.Counter(testKey); err == nil {
+			t.Errorf("%s read as %+v", content, c)
+		}
 	}
 }
 
@@ -311,7 +378,7 @@ func TestPruneRemovesFilesOfEndedProcesses(t *testing.T) {
 	held := Key{BootID: testKey.BootID, PID: 3, StartTime: 3}
 	withRecord := Key{BootID: testKey.BootID, PID: 4, StartTime: 4}
 	for _, k := range []Key{gone, alive, held, withRecord} {
-		if _, err := s.AddAttach(k, time.Now()); err != nil {
+		if _, err := s.AddAttach(k, time.Now(), 0); err != nil {
 			t.Fatal(err)
 		}
 		l, err := s.TryLock(k)
@@ -366,7 +433,7 @@ func TestListingTwiceSeesTheSameFiles(t *testing.T) {
 	}
 	// Prune lists the directory as well, after Records did.
 	other := Key{BootID: testKey.BootID, PID: 5, StartTime: 5}
-	if _, err := s.AddAttach(other, time.Now()); err != nil {
+	if _, err := s.AddAttach(other, time.Now(), 0); err != nil {
 		t.Fatal(err)
 	}
 	removed, err := s.Prune(func(Key) bool { return false })

@@ -2,6 +2,8 @@ package jvmarthas
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -190,6 +192,43 @@ func TestCheckMetaspaceHeadroom(t *testing.T) {
 	})
 }
 
+// perf() shows 41 collections: 40 young and 1 full.
+const perfGCCount = 41
+
+func TestCheckMetaspaceCountsTheAttachesSinceTheLastCollection(t *testing.T) {
+	unseen := func(used int64, attaches, sinceGC int, gcCount int64) func(*checkInput) {
+		return func(in *checkInput) {
+			in.Perf = perf(setText("java.rt.vmArgs", "-XX:MaxMetaspaceSize=256m"), setLong("sun.gc.metaspace.used", used))
+			in.Counter = Counter{Attaches: attaches, LastAttach: checkNow.Add(-time.Hour), GCCount: gcCount, AttachesSinceGC: sinceGC}
+		}
+	}
+	runCheckCases(t, []checkCase{
+		{"one attach fits exactly", unseen(172<<20, 1, 1, perfGCCount), "", ""},
+		{"one attach and one byte more", unseen(172<<20+1, 1, 1, perfGCCount), CheckMetaspace,
+			"63 MiB of metaspace are left below MaxMetaspaceSize, at least 64 MiB are required (attaches since the last garbage collection: 1, counted as 20 MiB)"},
+		{"two attaches", unseen(150<<20, 2, 2, perfGCCount), "", ""},
+		{"two attaches do not fit", unseen(153<<20, 2, 2, perfGCCount), CheckMetaspace, "collection: 2, counted as 40 MiB"},
+		{"only the attaches since the count changed", unseen(172<<20, 4, 1, perfGCCount), "", ""},
+		{"a collection since the last attach", unseen(190<<20, 3, 3, perfGCCount-1), "", ""},
+		{"a counter without the collection count", unseen(190<<20, 3, 0, 0), "", ""},
+		{"no MaxMetaspaceSize", func(in *checkInput) {
+			in.Perf = perf(setLong("sun.gc.metaspace.used", 900<<20))
+			in.Counter = Counter{Attaches: 4, LastAttach: checkNow.Add(-time.Hour), GCCount: perfGCCount, AttachesSinceGC: 4}
+		}, "", ""},
+	})
+}
+
+// The checks count memory in units of 2^20 bytes, so the refusals name the unit MiB.
+func TestRefusalsGiveMemoryInMiB(t *testing.T) {
+	runCheckCases(t, []checkCase{
+		{"memory headroom", func(in *checkInput) { in.Host = &fakeHost{headroom: 100 << 20} }, CheckMemoryHeadroom,
+			"100 MiB of memory are left in the cgroup of the JVM, at least 256 MiB are required"},
+		{"metaspace headroom", func(in *checkInput) {
+			in.Perf = perf(setText("java.rt.vmArgs", "-XX:MaxMetaspaceSize=256m"), setLong("sun.gc.metaspace.used", 200<<20))
+		}, CheckMetaspace, "56 MiB of metaspace are left below MaxMetaspaceSize, at least 64 MiB are required"},
+	})
+}
+
 func TestCheckAttachCount(t *testing.T) {
 	count := func(n int) func(*checkInput) {
 		return func(in *checkInput) { in.Counter = Counter{Attaches: n, LastAttach: checkNow.Add(-time.Hour)} }
@@ -234,8 +273,8 @@ func TestCheckThreadCountOnlyForThreadBlocking(t *testing.T) {
 		in.Perf = perf(setLong("java.threads.live", live))
 	}
 	runCheckCases(t, []checkCase{
-		{"500 threads", func(in *checkInput) { blocking(in, 500) }, "", ""},
-		{"501 threads", func(in *checkInput) { blocking(in, 501) }, CheckThreadCount, "501"},
+		{"1000 threads", func(in *checkInput) { blocking(in, 1000) }, "", ""},
+		{"1001 threads", func(in *checkInput) { blocking(in, 1001) }, CheckThreadCount, "at most 1000"},
 		{"lowered limit", func(in *checkInput) { in.Config.Checks.MaxBlockingThreads = 50; blocking(in, 51) }, CheckThreadCount, "50"},
 		{"no thread counter", func(in *checkInput) { blocking(in, 0); in.Perf = perf(drop("java.threads.live")) }, CheckThreadCount, "java.threads.live"},
 		{"another command is not limited", func(in *checkInput) { in.Perf = perf(setLong("java.threads.live", 5000)) }, "", ""},
@@ -249,53 +288,136 @@ func TestCheckOldGeneration(t *testing.T) {
 			in.Perf = perf(setLong("sun.gc.generation.1.space.0.used", used))
 		}
 	}
+	defaultOld := func(used int64) func(*checkInput) {
+		return func(in *checkInput) { in.Perf = perf(setLong("sun.gc.generation.1.space.0.used", used)) }
+	}
 	runCheckCases(t, []checkCase{
-		{"not configured, nearly full", func(in *checkInput) { in.Perf = perf(setLong("sun.gc.generation.1.space.0.used", 510<<20)) }, "", ""},
+		{"default threshold, nearly full", defaultOld(510 << 20), CheckOldGenUsage, "85%"},
+		{"default threshold, at 85 percent", defaultOld((512 << 20) * 85 / 100), "", ""},
+		{"default threshold, above 85 percent", defaultOld((512<<20)*85/100 + 1<<20), CheckOldGenUsage, "85%"},
 		{"below the threshold", old(400 << 20), "", ""},
 		{"at the threshold", old((512 << 20) * 8 / 10), "", ""},
 		{"above the threshold", old(420 << 20), CheckOldGenUsage, "80"},
 		{"full", old(512 << 20), CheckOldGenUsage, ""},
-		{"no old generation counters", func(in *checkInput) {
-			in.Config.Checks.MaxOldGenPercent = 80
-			in.Perf = perf(drop("sun.gc.generation.1.name"))
-		}, CheckOldGenUsage, "old generation"},
-		{"old generation without a limit", func(in *checkInput) {
-			in.Config.Checks.MaxOldGenPercent = 80
-			in.Perf = perf(setLong("sun.gc.generation.1.maxCapacity", 0))
-		}, CheckOldGenUsage, "limit"},
+		{"no old generation, as under Shenandoah", func(in *checkInput) { in.Perf = perf(drop("sun.gc.generation.1.name")) }, "", ""},
+		{"old generation without a limit", func(in *checkInput) { in.Perf = perf(setLong("sun.gc.generation.1.maxCapacity", 0)) }, CheckOldGenUsage, "limit"},
 	})
 }
 
 func TestCheckRecentFullGC(t *testing.T) {
-	ended := func(ago time.Duration) func(*checkInput) {
+	defaultEnded := func(ago time.Duration) func(*checkInput) {
 		return func(in *checkInput) {
-			in.Config.Checks.NoFullGCWithin = 30 * time.Second
 			in.Perf = perf(setLong("sun.gc.collector.1.lastExitTime", 1_000_000_000_000-int64(ago)))
 		}
 	}
+	ended := func(ago time.Duration) func(*checkInput) {
+		return func(in *checkInput) {
+			in.Config.Checks.NoFullGCWithin = 2 * time.Minute
+			defaultEnded(ago)(in)
+		}
+	}
 	runCheckCases(t, []checkCase{
-		{"not configured, just ended", func(in *checkInput) { in.Perf = perf(setLong("sun.gc.collector.1.lastExitTime", 1_000_000_000_000)) }, "", ""},
+		{"default window, just ended", defaultEnded(0), CheckRecentFullGC, "1m0s"},
+		{"default window, ended 59 seconds ago", defaultEnded(59 * time.Second), CheckRecentFullGC, "59s"},
+		{"default window, ended 60 seconds ago", defaultEnded(60 * time.Second), "", ""},
 		{"ended long ago", ended(10 * time.Minute), "", ""},
-		{"ended exactly the window ago", ended(30 * time.Second), "", ""},
-		{"ended inside the window", ended(10 * time.Second), CheckRecentFullGC, "10s"},
+		{"ended exactly the window ago", ended(2 * time.Minute), "", ""},
+		{"ended inside the raised window", ended(90 * time.Second), CheckRecentFullGC, "1m30s"},
 		{"never happened", func(in *checkInput) {
 			ended(time.Second)(in)
 			in.Perf = perf(setLong("sun.gc.collector.1.invocations", 0), setLong("sun.gc.collector.1.lastExitTime", 1_000_000_000_000))
 		}, "", ""},
 		{"parallel collector names", func(in *checkInput) {
-			in.Config.Checks.NoFullGCWithin = 30 * time.Second
 			in.Perf = perf(setText("sun.gc.collector.1.name", "Parallel full collection pauses"), setLong("sun.gc.collector.1.lastExitTime", 1_000_000_000_000-int64(5*time.Second)))
 		}, CheckRecentFullGC, ""},
 		{"mark sweep names of JDK 8", func(in *checkInput) {
-			in.Config.Checks.NoFullGCWithin = 30 * time.Second
 			in.Perf = perf(setText("sun.gc.collector.1.name", "PSMarkSweep"), setLong("sun.gc.collector.1.lastExitTime", 1_000_000_000_000-int64(5*time.Second)))
 		}, CheckRecentFullGC, ""},
-		{"a collector without full collections", func(in *checkInput) {
-			in.Config.Checks.NoFullGCWithin = 30 * time.Second
+		{"ZGC", func(in *checkInput) {
 			in.Perf = perf(drop("sun.gc.collector.1.name", "sun.gc.collector.1.invocations", "sun.gc.collector.1.lastExitTime"),
 				setText("sun.gc.collector.2.name", "Z concurrent cycle pauses"))
+		}, "", ""},
+		{"generational ZGC", func(in *checkInput) {
+			in.Perf = perf(setText("sun.gc.collector.1.name", "ZGC major collection pauses"), setLong("sun.gc.collector.1.lastExitTime", 1_000_000_000_000-int64(5*time.Second)))
+		}, "", ""},
+		{"Shenandoah counts its pauses as full", func(in *checkInput) {
+			in.Perf = perf(setText("sun.gc.collector.1.name", "Shenandoah full"), setLong("sun.gc.collector.1.lastExitTime", 1_000_000_000_000-int64(5*time.Second)))
+		}, "", ""},
+		{"an unknown collector", func(in *checkInput) {
+			in.Perf = perf(drop("sun.gc.collector.1.name", "sun.gc.collector.1.invocations", "sun.gc.collector.1.lastExitTime"),
+				setText("sun.gc.collector.2.name", "Concurrent cycle pauses"))
 		}, CheckRecentFullGC, "full collection"},
 	})
+}
+
+// samplePerf reads the hsperfdata of a real JVM from the samples of the perfdata parser
+// (internal/jvmtarget/perfdata/testdata/generate.sh).
+func samplePerf(t *testing.T, name string) *perfdata.PerfData {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "jvmtarget", "perfdata", "testdata", name+".hsperf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := perfdata.Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// later moves the clock of the hsperfdata forward, as if it had been read d after the sample was taken.
+func later(p *perfdata.PerfData, d time.Duration) *perfdata.PerfData {
+	frequency, _ := p.Long("sun.os.hrt.frequency")
+	ticks, _ := p.Long("sun.os.hrt.ticks")
+	setLong("sun.os.hrt.ticks", ticks+int64(d.Seconds()*float64(frequency)))(p.Entries)
+	return p
+}
+
+// The sample program calls System.gc() a few seconds before its hsperfdata is taken, so every sample of a
+// collector with stop-the-world full collections shows one that just ended. The full collector must be
+// found in the names of every JDK: the call is refused as taken and passes two minutes later.
+func TestCheckRecentFullGCFindsTheFullCollectorOfRealJVMs(t *testing.T) {
+	for _, name := range []string{
+		"jdk8-parallel", "jdk8-serial", "jdk8-cms", "jdk8-g1", "jdk11-parallel", "jdk11-serial", "jdk11-g1",
+		"jdk17-parallel", "jdk17-serial", "jdk17-g1", "jdk21-g1",
+	} {
+		t.Run(name, func(t *testing.T) {
+			in := passingInput(t)
+			in.Perf = samplePerf(t, name)
+			if r := checkFullGC(in); r == nil || !strings.Contains(r.Reason, "a full collection ended") {
+				t.Errorf("as taken: %v; want a refusal for the full collection of System.gc()", r)
+			}
+			in.Perf = later(samplePerf(t, name), 2*time.Minute)
+			if r := checkFullGC(in); r != nil {
+				t.Errorf("two minutes later: %v", r)
+			}
+		})
+	}
+}
+
+// ZGC and Shenandoah collect the old generation concurrently; the samples were taken some
+// seconds after System.gc(). The old generation check still applies where there is an old
+// generation: with a limit of 1 percent it refuses the samples of ZGC.
+func TestGCChecksOfZGCAndShenandoah(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		hasOld bool
+	}{{"jdk21-zgc", true}, {"jdk21-zgc-generational", true}, {"jdk17-shenandoah", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := passingInput(t)
+			in.Perf = samplePerf(t, tc.name)
+			if r := checkFullGC(in); r != nil {
+				t.Errorf("full collection check: %v", r)
+			}
+			if r := checkOldGen(in); r != nil {
+				t.Errorf("old generation check with the default limit: %v", r)
+			}
+			in.Config.Checks.MaxOldGenPercent = 1
+			if r := checkOldGen(in); (r != nil) != tc.hasOld {
+				t.Errorf("old generation check with a limit of 1 percent: %v, want a refusal: %v", r, tc.hasOld)
+			}
+		})
+	}
 }
 
 func TestCheckOrderPutsTheCheapAndDefiniteChecksFirst(t *testing.T) {

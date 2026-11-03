@@ -465,7 +465,7 @@ func TestExampleChecksumsMatchThePackage(t *testing.T) {
 // as long as the JVM runs; Spring Boot ends the main thread after the start.
 var referenceHandlerID = map[string]int{"jdk8": 2, "jdk11": 2, "jdk17": 2, "jdk21": 9}
 
-// actionCases are the 13 example actions with their arguments and texts that the output must contain.
+// actionCases are the 12 example actions with their arguments and texts that the output must contain.
 var actionCases = []struct {
 	name   string
 	params func(s service) map[string]any
@@ -483,7 +483,6 @@ var actionCases = []struct {
 	}, []string{"# methods", "length"}},
 	{"jvm_arthas_classloader_tree", nil, []string{"# classloaders", "BootstrapClassLoader"}},
 	{"jvm_arthas_classloader_list", nil, []string{"# classloaders", "BootstrapClassLoader"}},
-	{"jvm_arthas_logger", nil, []string{"# loggers", "ROOT"}},
 	{"jvm_arthas_sysprop", func(service) map[string]any { return map[string]any{"key": "java.version"} }, []string{"java.version"}},
 	{"jvm_arthas_version", nil, []string{"version\t" + arthas.Version}},
 }

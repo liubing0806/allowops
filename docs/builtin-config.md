@@ -259,7 +259,7 @@ hsperfdata 缺失、无法解析或服务未运行等情况，退出码为 1，�
 
 | 字段 | 合法配置与省略时的行为 |
 | --- | --- |
-| `command` | 必填。取值：`dashboard`（`dashboard -n 1`）、`thread_top`（`thread -n <top>`）、`thread_blocking`（`thread -b`）、`thread_info`（`thread <thread_id>`）、`memory`、`jvm`、`class_info`（`sc -d <class>`）、`classloader_tree`（`classloader -t`）、`classloader_list`（`classloader -l`）、`method_info`（`sm -d <class> [method]`）、`logger`、`sysprop`（`sysprop <key>`）、`version` |
+| `command` | 必填。取值：`dashboard`（`dashboard -n 1`）、`thread_top`（`thread -n <top>`）、`thread_blocking`（`thread -b`）、`thread_info`（`thread <thread_id>`）、`memory`、`jvm`、`class_info`（`sc -d <class>`）、`classloader_tree`（`classloader -t`）、`classloader_list`（`classloader -l`）、`method_info`（`sm -d <class> [method]`）、`sysprop`（`sysprop <key>`）、`version`。`logger` 暂停（A69）：调用后 Arthas 的类加载器不卸载，每次约 12 MiB 元空间直到 JVM 重启，原因查明前配置 `logger` 时目录校验报错 |
 | `targets` | 必填，格式与 jvm_perfdata 的 `targets` 相同（`systemd_unit`，或 `container` 加 `main_class`），1..64 项 |
 | `arthas_dir` | Arthas 文件目录，在目标进程的挂载命名空间内解析。省略时为 `/usr/share/allowops/arthas/4.3.5`。必须是不含 `..`、`;`、`%`、`=` 和结尾 `/` 的绝对路径，最长 255 字节 |
 | `sha256` | 必填。键必须恰为 `arthas-agent.jar`、`arthas-core.jar`、`arthas-spy.jar`、`arthas.properties`、`logback.xml`，值是 64 位小写十六进制 SHA-256。执行时在目标的挂载命名空间内按这些值校验文件，不一致时拒绝 |
@@ -273,22 +273,36 @@ hsperfdata 缺失、无法解析或服务未运行等情况，退出码为 1，�
 
 ### 阈值
 
-下表的默认值来自阶段 0 报告第 5.2 节，2026-10-24 采纳（A67）。`builtin_config` 只能把阈值调得更严；比默认值宽松的值在目录校验时报错。表中“未配置”表示该检查关闭。
+下表的默认值来自阶段 0 报告第 5.2 节，2026-10-24 采纳（A67）；`checks.max_old_gen_percent`、`checks.no_full_gc_within`、`checks.max_blocking_threads` 的默认值 2026-10-25 按阶段 2 验收报告第 6 节采纳（A69）。`builtin_config` 只能把阈值调得更严；比默认值宽松的值在目录校验时报错。表中“未配置”表示该检查关闭。
 
 | 字段 | 默认值 | 更严的方向 |
 | --- | --- | --- |
 | `checks.min_memory_headroom` | 256MB | 更大。目标 cgroup 的内存限额减去已用内存；cgroup 没有限额时用主机的可用内存 |
-| `checks.min_metaspace_headroom` | 64MB | 更大。`MaxMetaspaceSize` 减去已用元空间；JVM 没有 `MaxMetaspaceSize` 时跳过 |
+| `checks.min_metaspace_headroom` | 64MB | 更大。`MaxMetaspaceSize` 减去已用元空间；JVM 没有 `MaxMetaspaceSize` 时跳过。已用元空间取 hsperfdata 的 `sun.gc.metaspace.used`，该计数器只在 GC 时更新：当前 GC 次数（所有 collector 的 `invocations` 之和）等于上次 attach 时记录的值时，自 GC 次数最后一次变化以来的每次 attach 按 20 MiB 计入已用量（A69） |
 | `checks.max_attaches` | 5 | 更小。该 JVM 进程已经 attach 的次数达到此值时拒绝 |
 | `checks.min_attach_interval` | 60s | 更长 |
-| `checks.max_blocking_threads` | 500 | 更小。仅 `thread_blocking` 使用，比较 `java.threads.live` |
-| `checks.max_old_gen_percent` | 未配置 | 1..100。老年代已用量超过其上限的该百分比时拒绝 |
-| `checks.no_full_gc_within` | 未配置 | 最近一次 Full GC 结束在该时间内时拒绝 |
+| `checks.max_blocking_threads` | 1000 | 更小。仅 `thread_blocking` 使用，比较 `java.threads.live` |
+| `checks.max_old_gen_percent` | 85 | 更小，1..85。老年代已用量超过其上限的该百分比时拒绝；hsperfdata 中没有名为 `old` 的代时（Shenandoah）不适用，直接通过 |
+| `checks.no_full_gc_within` | 60s | 更长，至多 24h。最近一次 Full GC 结束在该时间内时拒绝；ZGC、Shenandoah 不适用，直接通过；其他收集器在 hsperfdata 中没有可识别的 Full GC 计数器时拒绝 |
 | `guard.max_cpu_percent` | 未配置 | JVM 一秒内的 CPU 时间，单位是一个 CPU 的百分比（100 为一个 CPU，400 为四个） |
 | `guard.max_gc_time_percent` | 未配置 | 一秒内垃圾回收耗时的百分比，0..100 |
 | `guard.max_gc_per_second` | 未配置 | 一秒内垃圾回收次数 |
 | `guard.settle` | 5s | 取值 0..60s，0 等同省略。attach 后这段时间内不评估运行期阈值；缩短使评估更早开始，延长则推迟 |
 | `guard.health_check` | 未配置 | 见下 |
+
+这两项检查按 hsperfdata 中的收集器名（`sun.gc.collector.N.name`）和代名（`sun.gc.generation.N.name`）判断是否适用（A69）：
+
+| 收集器 | 识别方式 | `no_full_gc_within` | `max_old_gen_percent` |
+| --- | --- | --- | --- |
+| JDK 8、11 的 Serial、Parallel，JDK 8 的 CMS | 收集器名为 `MSC`、`PSParallelCompact`、`CMS` | 检查 | 检查 |
+| JDK 17 的 Serial、Parallel，G1 | 收集器名含 `full` 或 `marksweep`（不区分大小写） | 检查 | 检查 |
+| ZGC，包括分代 ZGC | 收集器名以 `Z ` 或 `ZGC ` 开头 | 不适用 | 检查 |
+| Shenandoah | 收集器名以 `Shenandoah` 开头 | 不适用 | 不适用，没有 `old` 代 |
+| 其他 | — | 拒绝 | 有 `old` 代时检查 |
+
+- CMS 的并发周期按 Full GC 计。
+- 在 JDK 17 上测试 Shenandoah 时，GC 日志只有一个并发周期、没有 Full GC，`Shenandoah full` 的调用次数为 10。该计数器因此不按 Full GC 计数器读取。
+- Shenandoah 退化为 stop-the-world Full GC 时，`no_full_gc_within` 不能识别。
 
 `guard.health_check` 每秒向目标发一次 GET 请求，规则与 `http_get` 相同：`url`、`allowed_prefixes` 必填，`url` 必须在某个前缀之下，不允许带用户名口令。
 `timeout` 省略时 2s，上限 10s；`max_failures`（连续失败次数，省略时 2，上限 10）；`max_latency`（慢于它的应答按失败计，省略时不限）。状态码不是 2xx 按失败计。
@@ -341,7 +355,7 @@ stdout 以 `# call` 段开头，每行是用制表符分隔的键和值，值为
 状态目录是 `/var/lib/allowops-exec/arthas/`，属主 root，权限 0700，路径中不能有符号链接。目录内的文件都是 0600：
 
 - `<boot id>-<pid>-<启动时间>.lock`：该 JVM 的 flock 锁。
-- `<boot id>-<pid>-<启动时间>.count`：该 JVM 的 attach 次数和上次 attach 时间。
+- `<boot id>-<pid>-<启动时间>.count`：该 JVM 的 attach 次数、上次 attach 时间、上次 attach 前的 GC 次数，以及自 GC 次数最后一次变化以来的 attach 次数。没有后两项的旧格式文件照常读取，其中的 attach 不计入元空间已用量。
 - `<boot id>-<pid>-<启动时间>.session`：会话记录（端口、随机密码、会话 ID）。attach 前写入，清理确认后删除。
 
 回收在每次调用开始时、`allowops-agent` 启动时执行。agent 启动时通过 `allowops-exec` 的 `arthas_recover` 请求（见 `protocol.md`）进行，仅在 Arthas 文件包已安装的主机上执行。
@@ -462,7 +476,7 @@ builtin_config:
     logback.xml: e038b9c097cf0fe801483c65871565f6d120c1365c4d55b65666b05d533f7445
   checks:
     min_memory_headroom: 512MB
-    max_old_gen_percent: 85
+    max_old_gen_percent: 80
   guard:
     max_cpu_percent: 300
     health_check:
