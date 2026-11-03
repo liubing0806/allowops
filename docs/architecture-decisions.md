@@ -947,5 +947,6 @@ params:
 | A40 | 控制台视觉风格（2026-10-20） | 控制台前端重写（UI2）：shadcn/ui Nova 样式（radix-nova）+ neutral 默认主题，不再使用 magpie 色值（A39 作废）；图标 Lucide、动画 Motion、分栏 react-resizable-panels、拖拽 dnd-kit、客户端状态 Zustand；每类能力只用一个库 |
 | A41 | 前端重写与发布顺序 | UI2 及其验证 V-UI2 完成后才进行 V-MVP 和 REL-MVP |
 | A58 | 项目许可（2026-10-21） | 改为 MIT，版权人 liubing；不再使用 PolyForm 二选一与商业许可（A36 作废） |
+| A66 | Arthas 引入（2026-10-23） | 按 `java-diagnostics-arthas-plan.md` 分阶段引入，取代 2026-10-22 的不集成决定。在 allowops-exec 中实现内置处理器 `jvm_arthas`，不采用在容器内运行 arthas-boot 的目录 action；Arthas action 的 risk 用 write，按 action 名授权；容器内的 Arthas 文件以预装为准，注入在安全路径解析验证后再开放；新增 action 字段 `max_targets`；首批目标为主机 JVM 和 Docker 容器，Kubernetes 以后评估；验收阈值在阶段 0 实测后确认 |
 
 总指挥在实施中按规则自行决定的实现细节（G7~G18）记录在计划库，不改变上表和 design.md 的行为。
