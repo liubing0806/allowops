@@ -1,0 +1,7 @@
+# Build outputs and local run state; raw data is kept outside the repository.
+run/
+results/
+bin/
+app/target/
+probe/probe.jar
+__pycache__/

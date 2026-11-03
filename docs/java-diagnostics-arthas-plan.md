@@ -1,6 +1,6 @@
 # Java 诊断深化与 Arthas 引入计划
 
-状态：已确认（2026-10-23，决定记录第 21 节 A66）。第 9 节全部按推荐选项采纳，取代 2026-10-22“不集成 Arthas”的决定。
+状态：已确认（2026-10-23，决定记录第 21 节 A66）。验收阈值 2026-10-24 确认（A67）。第 9 节全部按推荐选项采纳，取代 2026-10-22“不集成 Arthas”的决定。
 
 依据：
 
@@ -23,18 +23,26 @@
 1. 目标 JVM 及其用户：诊断期间业务请求的延迟和错误率不明显变化；诊断结束后 JVM 内不留 Arthas 端口、线程和增强代码。
 2. 安装 allowops-agent 的主机：主安装包的大小和依赖不变；未启用 Arthas 的主机行为不变；主机上不需要安装 JDK。
 
-建议验收阈值（阶段 0 实测后由负责人确定）：
+验收阈值：2026-10-24 负责人采纳阶段 0 报告（[arthas-stage0-report.md](arthas-stage0-report.md)）第 5.1 节的建议值（A67）。状态为“估算”或“未验证”的项在阶段 2D 验收时核对。
 
-| 项 | 建议值 |
-|---|---|
-| L1 命令执行期间，压测接口 p99 延迟增幅 | ≤ 5% |
-| L2 命令执行期间，未被观察的接口 p99 增幅 | ≤ 5% |
-| L2 命令执行期间，被观察方法 p99 增幅 | ≤ 20%，只在会话期间 |
-| 错误率 | 不增加 |
-| 会话结束后的 Arthas 监听端口、Arthas 线程、增强类 | 均为 0 |
-| 目标容器内新增的 JVM 进程 | 0 |
-| L1 单次调用总时长（含 attach 和清理） | ≤ 15 秒，在 MCP `wait_seconds` 默认值 30 秒内返回 |
-| 50 次 attach/stop 后的元空间增量 | 阶段 0 测量后确定 |
+状态的含义与报告相同：
+- 实测：阈值来自阶段 0 的测量。
+- 估算：阈值由测量值乘以安全系数得出，阈值本身未验证。
+- 未验证：没有测量依据。
+
+阶段 0 的测量条件：4 CPU 容器，512 MB 堆，G1，基线 p99 约 1.2 ms，1000 请求/秒。
+
+| 项 | 阈值 | 状态 |
+|---|---|---|
+| L1 命令期间，压测接口的延迟 | 按“调用相关秒”（attach、命令、stop 所在的秒）判定，不按 60 秒窗口的合并 p99 判定。除 `thread -b` 外：调用相关秒的 p99 ≤ 4 倍基线 p99，最大延迟 ≤ 50 ms；其余秒的典型 p99 与基线相差在 ±5% 内（至少 3 次重复）。`thread -b`：最大延迟 ≤ 100 ms | 实测；4 倍、50 ms、100 ms 为估算 |
+| L2 命令期间，未被观察的接口 p99 增幅 | 增强开始 10 秒后：≤ 15%，3 次以上重复的中位数 ≤ 5% | 实测，样本少 |
+| L2 增强开始后的瞬态 | 影响的秒数 ≤ 5 秒；这些秒内所有接口的最大延迟 ≤ 2 秒。L2 命令的风险说明写明增强开始后 1~4 秒的整个 JVM 延迟，以及 JDK 11、21 上观察到的最长 4.12 秒暂停 | 实测；JDK 11、21 的暂停超出 2 秒，原因未查明 |
+| L2 命令期间，被观察方法 p99 增幅 | 被观察方法 ≤ 1000 次/秒时 ≤ 20%，只在会话期间；更高速率不承诺 | 实测，样本少；速率上限为估算 |
+| 错误率 | 不增加 | 实测 |
+| 会话结束后的 Arthas 监听端口、Arthas 线程、增强类 | 均为 0。`stop` 返回后 10 秒内端口关闭，`arthas-` 线程数为 0 | 实测 |
+| 目标容器内新增的 JVM 进程 | 0 | 实测 |
+| L1 单次调用总时长（含 attach 和清理） | ≤ 15 秒，在 MCP `wait_seconds` 默认值 30 秒内返回 | 实测 |
+| 50 次 attach/stop、3 次 Full GC 后的元空间使用量 | ≤ 基线 + 25 MB；不对提交量设阈值 | 实测；25 MB 为估算 |
 
 L1、L2 的定义见第 4 节。
 
@@ -65,33 +73,49 @@ L1、L2 的定义见第 4 节。
 3. 执行前检查：见 3.2。任一项不通过即返回原因，不 attach。
 4. 准备 Arthas 文件：见第 6 节。
 5. attach：allowops-exec 用 Go 实现 HotSpot attach 协议，不启动 JVM。
-   - 读取 `/proc/<pid>/status` 的 `SigCgt`，确认目标已捕获 SIGQUIT。未捕获时拒绝。SIGQUIT 的默认动作是终止进程并转储 core。
-   - 按 HotSpot 的查找顺序创建 `.attach_pid<容器内 pid>` 文件，发送 SIGQUIT，等待 `.java_pid<容器内 pid>` 套接字出现。
-   - 以目标 JVM 的 uid/gid 连接该套接字，发送 `load instrument false <arthas-agent.jar>=<参数>`。
-   - 参数的键名与 `arthas.properties` 相同（见第 10 节）：`telnetPort=-1`（不监听 telnet）、`httpPort=<allowops 选定的端口>`、`ip=127.0.0.1`、`password=<每次随机生成>`、`localConnectionNonAuth=false`、`mcpEndpoint=`（空值，不启动 Arthas 自带的 MCP 服务）、`disabledCommands=<本次不需要的全部命令>`、`sessionTimeout=<略大于调用时长>`。
-   - 密码经 attach 套接字传递，不出现在任何进程的命令行中。
+   - 发送信号前确认以下各项，任一项不满足时拒绝，不发送信号：
+     - hsperfdata 的 `sun.rt.jvmCapabilities` 首字符为 `1`（JVM 允许 attach）。
+     - `/proc/<pid>/status` 的 `SigCgt` 含 SIGQUIT，或 `/tmp/.java_pid<容器内 pid>` 套接字已存在（`-Xrs` 的 JVM 不捕获 SIGQUIT，但套接字可能已存在）。SIGQUIT 的默认动作是终止进程并转储 core。
+     - 目标工作目录或 `/tmp` 至少一处可写。没有 attach 文件时，SIGQUIT 使目标向标准输出打印线程转储。
+   - 按 HotSpot 的查找顺序创建 `.attach_pid<容器内 pid>` 文件，发送 SIGQUIT，等待 `.java_pid<容器内 pid>` 套接字出现。套接字已存在时不发送信号。
+   - 连接该套接字，发送 `load instrument false <arthas-agent.jar>=<参数>`。JDK 8 要求 attach 文件属主和连接的 uid 都等于目标 JVM 的有效 uid，因此 allowops-exec 用 `fchown` 设置文件属主，并在锁定的 OS 线程上切换到目标的 uid/gid 后连接；JDK 11 及以上接受 root 连接。
+   - 参数的键名与 `arthas.properties` 相同（见第 10 节）：`telnetPort=-1`（不监听 telnet）、`httpPort=<allowops 选定的端口>`、`ip=127.0.0.1`、`password=<每次随机生成>`、`localConnectionNonAuth=false`、`disabledCommands=<本次不需要的全部命令>`、`sessionTimeout=<略大于调用时长>`。
+   - `localConnectionNonAuth=false` 必需。缺少它时，来自 127.0.0.1 的连接不需要密码。
+   - 参数先经 URL 解码，因此密码只用字母和数字。参数总长度不超过 1024 个字符。
+   - 参数 `mcpEndpoint=`（空值）不能关闭 Arthas 自带的 MCP 服务，原因未查明。关闭 MCP 依靠包内的 `arthas.properties` 删除 `arthas.mcpEndpoint` 和 `arthas.mcpProtocol` 两个键（第 6 节）。
+   - 密码经 attach 套接字传递，不出现在任何进程的命令行中。阶段 0 实测：密码没有出现在标准输出、Arthas 日志、容器文件和 `/proc` 中。
    - 端口的选择方式（读取目标网络命名空间的 `/proc/<pid>/net/tcp` 选空闲端口，或传 0 后查询）在阶段 2 确定。
-6. 执行：allowops-exec 在锁定的 OS 线程上进入目标网络命名空间（setns），连接 Arthas HTTP API，使用 Basic 认证。Go 代码按白名单把结构化参数拼成命令，每条命令设置 `execTimeout`。返回的 JSON 转成文本后，按“脱敏 → 过滤 → 截断”处理。
+6. 执行：allowops-exec 在锁定的 OS 线程上进入目标网络命名空间（setns），连接 Arthas HTTP API，使用 Basic 认证。Go 代码按白名单把结构化参数拼成命令，每条命令设置 `execTimeout`（上限 60 秒）。HTTP 连接断开不终止 Arthas 作业，作业持续到 `execTimeout` 到期，因此 `execTimeout` 也是 allowops-exec 异常退出后作业的最长运行时间。返回的 JSON 转成文本后，按“脱敏 → 过滤 → 截断”处理。
 7. 运行期监测：见 3.3。
-8. 清理：无论成功、超时、取消还是监测中止，都执行 `reset` 和 `stop`。清理使用独立的时间预算，不受 action context 取消的影响。清理后检查该端口已关闭，并删除注入的文件。
-9. 会话记录：attach 前写入 `/var/lib/allowops-exec/arthas/`（root，0600），内容为 pid、JVM 启动时间、端口、密码、截止时间。清理成功后删除。
+8. 清理：无论成功、超时、取消还是监测中止，都按以下顺序执行：中断作业（`interrupt_job`）→ `close_session` → `reset` → `stop`。清理使用独立的时间预算，不受 action context 取消的影响。
+   - 作业运行期间不能先执行 `reset`。阶段 0 实测：此时 `reset` 之后类仍处于增强状态，而 Arthas 不再记录这次增强。
+   - `stop` 请求返回 `unexpected EOF` 属正常。是否停止以端口关闭和 `arthas-` 线程数为 0 判定，期限为 `stop` 返回后 10 秒（实测 3.1~3.3 秒）。
+   - 最后删除注入的文件。
+9. 会话记录：attach 前写入 `/var/lib/allowops-exec/arthas/`（root，0600），内容为 pid、JVM 启动时间、端口、密码、截止时间；`init_session` 之后补记会话 ID。清理成功后删除。
 
 ### 3.2 执行前检查
 
 数据来自 `/proc` 和 hsperfdata，都不需要 attach。阈值写在 builtin_config 中，签名目录只能收紧默认值。
 
-| 检查 | 不通过时 |
-|---|---|
-| 目标是 HotSpot JVM：hsperfdata 文件存在，`SigCgt` 含 SIGQUIT | 拒绝 |
-| JVM 版本在已验证的范围内（hsperfdata 的 `java.property.java.version`） | unsupported |
-| JVM 允许 attach（hsperfdata 的 `sun.rt.jvmCapabilities`，jps 用同一计数器判断；需实测） | unsupported |
-| 运行时包含 `java.instrument`（jlink 精简运行时可能没有） | unsupported |
-| 目标 JVM 中没有已存在的 Arthas 实例；检测方式（已打开的 arthas-core.jar、Arthas 线程名、监听端口）在阶段 0 确定 | 拒绝。已有实例会忽略 allowops 的启动参数 |
-| 容器内存余量：cgroup 内存限额减去当前 working set ≥ 阈值 | 拒绝 |
-| 元空间余量：`MaxMetaspaceSize` 减去已用量 ≥ 阈值；未设上限时跳过 | 拒绝 |
-| 老年代使用率低于阈值，且最近 N 秒内没有 Full GC | 拒绝 |
-| 目标进程 CPU 使用率（5 秒采样）低于阈值 | 拒绝 |
-| 距同一 JVM 上次 attach 已超过冷却时间；该 JVM 生命周期内的 attach 次数低于上限 | 拒绝 |
+“默认值”列来自阶段 0 报告第 5.2 节，2026-10-24 负责人采纳（A67）。状态的含义见第 1 节。状态为“估算”或“未验证”的项在阶段 2D 验收时核对。
+
+| 检查 | 默认值 | 状态 | 不通过时 |
+|---|---|---|---|
+| 目标是 HotSpot JVM：hsperfdata 文件存在；`SigCgt` 含 SIGQUIT，或 `/tmp/.java_pid<容器内 pid>` 已存在 | — | 实测 | 拒绝 |
+| JVM 版本在已验证的范围内（hsperfdata 的 `java.property.java.version`） | Temurin 8u504、11.0.32、17.0.20、21.0.12（x86_64） | 实测 | unsupported |
+| JVM 允许 attach：hsperfdata 的 `sun.rt.jvmCapabilities` 首字符为 `1`（jps 用同一计数器判断） | — | 实测 | unsupported |
+| 运行时包含 `java.instrument`：`<JAVA_HOME>/lib/libinstrument.so`（JDK 8 为 `lib/amd64/libinstrument.so`）存在，或 `release` 文件的 `MODULES` 含 `java.instrument` | — | 实测 | unsupported |
+| attach 文件位置：目标工作目录或 `/tmp` 至少一处可写 | — | 实测 | 拒绝 |
+| 目标 JVM 中没有已存在的 Arthas 实例：没有名称以 `arthas-` 开头的线程，也没有 Arthas 监听端口。已打开的 jar 和内存映射只说明曾经加载过，不作为判据 | — | 实测 | 拒绝。已有实例会忽略 allowops 的启动参数 |
+| 容器内存余量：cgroup 内存限额减去 `memory.current` | ≥ 256 MB | 估算 | 拒绝 |
+| 元空间余量：`MaxMetaspaceSize` 减去已用量；未设上限时跳过 | ≥ 64 MB | 估算 | 拒绝 |
+| 老年代使用率低于阈值，且最近 N 秒内没有 Full GC | 无默认值，阶段 2D 验收时确定 | 未验证 | 拒绝 |
+| 目标进程 CPU 使用率（5 秒平均，相对 cgroup CPU 限额） | L2：< 50% | 未验证 | 拒绝 |
+| 距同一 JVM 上次 attach 的时间 | ≥ 60 秒 | 估算 | 拒绝 |
+| 该 JVM 生命周期内的 attach 次数 | < 5 | 估算 | 拒绝 |
+| `thread -b`：hsperfdata 的 `java.threads.live` | ≤ 500 | 未验证 | 拒绝该命令 |
+
+attach 次数设上限的原因：阶段 0 实测每次 attach/stop 使元空间使用量增加约 12 MB，类加载器在两次 Full GC 后才卸载；内存限额 1 GB 的容器在 14~25 次循环后被 OOM killer 结束。
 
 ### 3.3 运行期监测与中止
 
@@ -101,13 +125,17 @@ L1、L2 的定义见第 4 节。
 - GC 次数和时间（hsperfdata）。
 - 可选的健康检查地址。它与 `http_get` 的限制相同：只发 GET，地址受 `allowed_prefixes` 限制。
 
-任一项超过阈值时，依次执行 `interrupt_job`、`reset`、`stop`。结果中标记 `aborted_by_guard` 和触发的检查项。
+任一项超过阈值时，按 3.1 第 8 步的清理顺序执行。结果中标记 `aborted_by_guard` 和触发的检查项。
+
+- 增强开始后的 5 秒内不评估 CPU 和健康检查阈值。阶段 0 实测：增强开始后 1~4 秒内 JVM CPU 达到 178%~378%（4 CPU 容器），所有接口的延迟达到数百毫秒。这段时间内评估，每次增强都会触发中止。
+- 监测不能发现阶段 0 在 JDK 11、21 上观察到的整个 JVM 暂停（最长 4.12 秒，原因未查明）：暂停期间进程 CPU 接近 0。
 
 ### 3.4 残留回收
 
-- JVM 侧：`sessionTimeout` 到期会关闭会话。它是否停止服务端、是否还原增强代码，未验证，阶段 0 实测。
-- 主机侧：每次 `jvm_arthas` 调用开始时，以及 allowops-agent 启动时，allowops-exec 检查过期的会话记录。目标仍是同一进程（pid 和启动时间一致）时，用记录中的密码执行 `stop`，然后删除记录。
-- allowops-exec 被 SIGKILL 结束时，Arthas 服务端仍在运行，但连接需要随机密码。增强代码是否残留取决于上一条的实测结果。
+- JVM 侧：阶段 0 实测，`sessionTimeout` 只回收空闲会话。运行中的作业不受它影响，作业结束后类仍处于增强状态。增强只由 `reset` 还原。因此 `sessionTimeout` 不能作为回收手段。
+- 主机侧：每次 `jvm_arthas` 调用开始时，以及 allowops-agent 启动时，allowops-exec 检查过期的会话记录。目标仍是同一进程（pid 和启动时间一致）时，用记录中的密码连接，按 `interrupt_job`、`close_session`、`reset`、`stop` 的顺序清理，然后删除记录。
+- allowops-exec 被 SIGKILL 结束时，Arthas 服务端仍在运行，但连接需要随机密码。运行中的作业持续到 `execTimeout` 到期，类保持增强，直到回收流程执行 `reset`。
+- 增强已失去 Arthas 记录时（作业运行期间先执行了 `reset` 或 `stop`），恢复方法是：重新 attach，对该类执行一次 `watch ... -n 1`，再执行 `reset`。阶段 0 在 JDK 8、17 上验证。正常的清理顺序不会产生这种状态。
 - 触发回收的协议形式（allowops-exec 的新请求类型，或一个固定 action）在阶段 2 设计时确定。
 
 ## 4. 命令分级
@@ -146,7 +174,7 @@ L2 的限制：
 ## 6. Arthas 文件的分发与校验
 
 - Arthas 文件不进 allowops-agent 主安装包。另出可选包 `allowops-arthas`（rpm、deb），安装到 `/usr/share/allowops/arthas/<版本>/`，属主 root。
-- 包内只放 `arthas-agent.jar`、`arthas-core.jar`、`arthas-spy.jar` 和删除 `mcpEndpoint` 后的 `arthas.properties`。不放 arthas-boot、arthas-client 和 async-profiler 原生库。
+- 包内只放 `arthas-agent.jar`、`arthas-core.jar`、`arthas-spy.jar`、`logback.xml` 和删除 `arthas.mcpEndpoint`、`arthas.mcpProtocol` 两个键后的 `arthas.properties`。阶段 0 实测：只删 `mcpEndpoint` 或在参数中传空值，MCP 服务仍会启动；缺少 `logback.xml` 时，Arthas 向目标进程的标准输出打印 DEBUG 日志和 `[ERROR] can not find arthas logging config`（报告第 3.1 节变体 g）。不放 arthas-boot、arthas-client 和 async-profiler 原生库。
 - 版本固定，来源为 Maven Central 的 `arthas-packaging-<版本>-bin.zip`。各文件的 SHA-256 写入签名目录的 builtin_config，allowops-exec 使用前校验。不联网下载。
 - 只有安装了该包的主机上报 `jvm_arthas` 能力。未安装的主机上，该 action 为 `unsupported`。
 - 目标在容器内时，JVM 只能加载其挂载命名空间内可见的文件。有两种方式：
@@ -194,9 +222,11 @@ allowops-exec 新增以下能力。需要更新 SECURITY.md 的威胁模型（T5
   6. 只读根文件系统和没有 HOME 的容器中，Arthas 日志（`~/logs/arthas/`）的行为。
   7. 已存在 Arthas 实例的检测方式。
   8. 对照：方案 A（arthas-boot）在容器内的内存占用。
-- 输出：实测报告写入 docs，并给出第 1 节阈值和 3.2 检查阈值的建议值。
+- 输出：实测报告写入 docs，并给出第 1 节阈值和 3.2 检查阈值的建议值。实测报告：[arthas-stage0-report.md](arthas-stage0-report.md)。
 
 完成条件：上述 8 项都有数据和结论；负责人确认阈值。
+
+状态：已完成。8 项的数据和结论于 2026-10-23 完成；阈值于 2026-10-24 由负责人采纳（A67）。实测对本计划的修正已写入 3.1~3.4 节和第 6 节。
 
 ### 阶段 1：不 attach 的 JVM 读取
 
@@ -252,7 +282,7 @@ allowops-exec 新增以下能力。需要更新 SECURITY.md 的威胁模型（T5
 
 ## 9. 负责人确认的事项
 
-2026-10-23 负责人全部按推荐选项采纳（A66）。第 7 项的阈值在阶段 0 完成后另行确认。
+2026-10-23 负责人全部按推荐选项采纳（A66）。第 7 项的阈值：2026-10-24 负责人采纳阶段 0 报告第 5 节的建议值（A67），数值见第 1 节和 3.2 节。
 
 
 1. 是否撤销 2026-10-22 的不集成决定，按本计划从阶段 0 开始。
@@ -272,9 +302,9 @@ allowops-exec 新增以下能力。需要更新 SECURITY.md 的威胁模型（T5
 | 目标 JVM 中已有 Arthas 实例时，`getInstance` 直接返回该实例，新参数不生效 | 同上 |
 | `telnetPort`、`httpPort` 小于 0 时不监听，等于 0 时使用随机端口 | `ArthasBootstrap.java` 375~383 行、450~467 行 |
 | `localConnectionNonAuth` 为 true 时，来自 127.0.0.1 的连接免认证；为 false 时按用户名和密码认证 | `security/AuthUtils.java`、`Configure.isLocalConnectionNonAuth` |
-| `mcpEndpoint` 为空时不启动 MCP 服务 | `ArthasBootstrap.java` 487~492 行 |
+| `mcpEndpoint` 为空时不启动 MCP 服务。阶段 0 实测：包内 `arthas.properties` 含 `arthas.mcpEndpoint` 时，参数 `mcpEndpoint=` 不生效，MCP 服务仍启动，原因未查明 | `ArthasBootstrap.java` 487~492 行 |
 | 只有在监听 0.0.0.0 且未设密码时，Arthas 才生成密码并写入日志；用户指定的密码在这段代码中不写日志 | `ArthasBootstrap.java` 415~426 行 |
 | watch 有 `-M/--sizeLimit` 选项 | `WatchCommand.java` 99 行 |
 | arthas-boot 用 `ProcessBuilder` 启动 arthas-core 子进程执行 attach | `boot/.../ProcessUtils.startArthasCore` |
 
-以上只是源码阅读的结论，没有运行验证。运行行为在阶段 0 实测。
+以上是源码阅读的结论。运行行为见阶段 0 报告；与上表不一致的一行已在表中注明。
