@@ -219,7 +219,7 @@ def safe(name):
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
 
 
-def run_one(svc, name, rep, profile, phase, warm, out_root, sampler=False, tripwire=False):
+def run_one(svc, name, rep, profile, phase, warm, out_root, sampler=False, tripwire=False, watch=False):
     d = out_root / "bench" / svc / f"{safe(name)}__{profile}" / f"rep{rep}"
     if (d / "done").exists():
         log("skip", d)
@@ -241,6 +241,11 @@ def run_one(svc, name, rep, profile, phase, warm, out_root, sampler=False, tripw
         subprocess.Popen(["sudo", "-n", "taskset", "-c", "12-15", sys.executable, str(pathlib.Path(__file__).resolve().parent / "stall_tripwire.py"),
                           str(pid), str(d / "tripwire.jsonl"), str(total),
                           "--probe-dir", str(RUN / "fsync-probe"), "--probe-dir", str(out_root / "fsync-probe")])
+    if watch:
+        # JVM threads that stay in a write-type system call or in uninterruptible sleep for 100 ms, with their kernel stacks
+        # (pause_watch.py reads /proc, it does not touch the JVM and does no I/O of its own besides its output file)
+        subprocess.Popen(["sudo", "-n", "taskset", "-c", "12-15", sys.executable, str(pathlib.Path(__file__).resolve().parent / "pause_watch.py"),
+                          str(pid), str(d / "watch.jsonl"), str(total)])
     events = []
     ev = lambda what: events.append({"t": time.time(), "what": what})
     calls = Calls(d / "calls.jsonl")
@@ -307,6 +312,7 @@ if __name__ == "__main__":
     ap.add_argument("--profile", default="p1k")
     ap.add_argument("--sampler", action="store_true", help="also record the state of every JVM thread at 10 Hz during the middle window (threads.jsonl)")
     ap.add_argument("--tripwire", action="store_true", help="also record, for the whole run, the kernel state of the JVM's threads while it makes no cpu progress (tripwire.jsonl)")
+    ap.add_argument("--watch", action="store_true", help="also record, for the whole run, the JVM threads that stay 100 ms in a write-type system call or in state D (watch.jsonl)")
     a = ap.parse_args()
     out_root = OUT
     for name in a.scenario.split(","):
@@ -315,4 +321,4 @@ if __name__ == "__main__":
             prof = a.profile
             if name.startswith(("l2:", "l2keep:", "l2stuck:")) and "@" in name:
                 name, prof = name.split("@")
-            run_one(a.svc, name, rep, prof, a.phase, a.warm, out_root, a.sampler, a.tripwire)
+            run_one(a.svc, name, rep, prof, a.phase, a.warm, out_root, a.sampler, a.tripwire, a.watch)

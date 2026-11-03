@@ -5,3 +5,4 @@ bin/
 app/target/
 probe/probe.jar
 __pycache__/
+app/target-log4j2/

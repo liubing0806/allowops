@@ -23,7 +23,7 @@
 1. 目标 JVM 及其用户：诊断期间业务请求的延迟和错误率不明显变化；诊断结束后 JVM 内不留 Arthas 端口、线程和增强代码。
 2. 安装 allowops-agent 的主机：主安装包的大小和依赖不变；未启用 Arthas 的主机行为不变；主机上不需要安装 JDK。
 
-验收阈值：2026-10-24 负责人采纳阶段 0 报告（[arthas-stage0-report.md](arthas-stage0-report.md)）第 5.1 节的建议值（A67）。状态为“估算”或“未验证”的项在阶段 2D 验收时核对。
+验收阈值：2026-10-24 负责人采纳阶段 0 报告（[arthas-stage0-report.md](arthas-stage0-report.md)）第 5.1 节的建议值（A67）。状态为“估算”或“未验证”的项在阶段 2D 验收时核对，核对结果见阶段 2 验收报告（[arthas-stage2-acceptance-report.md](arthas-stage2-acceptance-report.md)）。状态列中“阶段 2 验收”之后为该报告的结论和章节；阈值没有因验收修改，建议值见该报告第 6 节。
 
 状态的含义与报告相同：
 - 实测：阈值来自阶段 0 的测量。
@@ -34,15 +34,15 @@
 
 | 项 | 阈值 | 状态 |
 |---|---|---|
-| L1 命令期间，压测接口的延迟 | 按“调用相关秒”（attach、命令、stop 所在的秒）判定，不按 60 秒窗口的合并 p99 判定。除 `thread -b` 外：调用相关秒的 p99 ≤ 4 倍基线 p99，最大延迟 ≤ 50 ms；其余秒的典型 p99 与基线相差在 ±5% 内（至少 3 次重复）。`thread -b`：最大延迟 ≤ 100 ms | 实测；4 倍、50 ms、100 ms 为估算 |
+| L1 命令期间，压测接口的延迟 | 按“调用相关秒”（attach、命令、stop 所在的秒）判定，不按 60 秒窗口的合并 p99 判定。除 `thread -b` 外：调用相关秒的 p99 ≤ 4 倍基线 p99，最大延迟 ≤ 50 ms；其余秒的典型 p99 与基线相差在 ±5% 内（至少 3 次重复）。`thread -b`：最大延迟 ≤ 100 ms | 实测；4 倍、50 ms、100 ms 为估算。阶段 2 验收：结论待定（3.1），除 `thread -b` 外的 168 次调用中 1 次最大延迟 166.9 ms，来自一个 `Cleanup` 安全点，与调用的关系原因未查明 |
 | L2 命令期间，未被观察的接口 p99 增幅 | 增强开始 10 秒后：≤ 15%，3 次以上重复的中位数 ≤ 5% | 实测，样本少 |
 | L2 增强开始后的瞬态 | 影响的秒数 ≤ 5 秒；这些秒内所有接口的最大延迟 ≤ 2 秒。L2 命令的风险说明写明增强开始后 1~4 秒的整个 JVM 延迟，以及 JDK 11、21 上观察到的最长 4.12 秒暂停 | 实测；JDK 11、21 的暂停超出 2 秒，原因未查明 |
 | L2 命令期间，被观察方法 p99 增幅 | 被观察方法 ≤ 1000 次/秒时 ≤ 20%，只在会话期间；更高速率不承诺 | 实测，样本少；速率上限为估算 |
 | 错误率 | 不增加 | 实测 |
-| 会话结束后的 Arthas 监听端口、Arthas 线程、增强类 | 均为 0。`stop` 返回后 10 秒内端口关闭，`arthas-` 线程数为 0 | 实测 |
-| 目标容器内新增的 JVM 进程 | 0 | 实测 |
-| L1 单次调用总时长（含 attach 和清理） | ≤ 15 秒，在 MCP `wait_seconds` 默认值 30 秒内返回 | 实测 |
-| 50 次 attach/stop、3 次 Full GC 后的元空间使用量 | ≤ 基线 + 25 MB；不对提交量设阈值 | 实测；25 MB 为估算 |
+| 会话结束后的 Arthas 监听端口、Arthas 线程、增强类 | 均为 0。`stop` 返回后 10 秒内端口关闭，`arthas-` 线程数为 0 | 实测。阶段 2 验收：达到（3.3） |
+| 目标容器内新增的 JVM 进程 | 0 | 实测。阶段 2 验收：达到（3.3） |
+| L1 单次调用总时长（含 attach 和清理） | ≤ 15 秒，在 MCP `wait_seconds` 默认值 30 秒内返回 | 实测。阶段 2 验收：达到（3.2） |
+| 50 次 attach/stop、3 次 Full GC 后的元空间使用量 | ≤ 基线 + 25 MB；不对提交量设阈值 | 实测；25 MB 为估算。阶段 2 验收：未达到（3.4），含 `logger` 时 +56.3~+69.5 MiB，不含 `logger` 时 +8.9~+20.0 MiB |
 
 L1、L2 的定义见第 4 节。
 
@@ -78,7 +78,7 @@ L1、L2 的定义见第 4 节。
      - `/proc/<pid>/status` 的 `SigCgt` 含 SIGQUIT，或 `/tmp/.java_pid<容器内 pid>` 套接字已存在（`-Xrs` 的 JVM 不捕获 SIGQUIT，但套接字可能已存在）。SIGQUIT 的默认动作是终止进程并转储 core。
      - 目标工作目录或 `/tmp` 至少一处可写。没有 attach 文件时，SIGQUIT 使目标向标准输出打印线程转储。
    - 按 HotSpot 的查找顺序创建 `.attach_pid<容器内 pid>` 文件，发送 SIGQUIT，等待 `.java_pid<容器内 pid>` 套接字出现。套接字已存在时不发送信号。
-   - 连接该套接字，发送 `load instrument false <arthas-agent.jar>=<参数>`。JDK 8 要求 attach 文件属主和连接的 uid 都等于目标 JVM 的有效 uid，因此 allowops-exec 用 `fchown` 设置文件属主，并在锁定的 OS 线程上切换到目标的 uid/gid 后连接；JDK 11 及以上接受 root 连接。
+   - 连接该套接字，发送 `load instrument false <arthas-agent.jar>=<参数>`。JDK 8 要求 attach 文件属主和连接的 uid 都等于目标 JVM 的有效 uid，因此 allowops-exec 在锁定的 OS 线程上切换到目标的有效 uid/gid 后创建 attach 文件和连接；文件只能建在该用户可以创建文件的目录中，与 HotSpot 自带的 attach 客户端相同。JDK 11 及以上接受 root 连接。
    - 参数的键名与 `arthas.properties` 相同（见第 10 节）：`telnetPort=-1`（不监听 telnet）、`httpPort=<allowops 选定的端口>`、`ip=127.0.0.1`、`password=<每次随机生成>`、`localConnectionNonAuth=false`、`disabledCommands=<本次不需要的全部命令>`、`sessionTimeout=<略大于调用时长>`。
    - `disabledCommands` 不能包含 `reset` 和 `stop`。阶段 2 实测：两者被禁用后清理无法停止服务端，HTTP API 也没有其他停止服务端的方式。
    - `localConnectionNonAuth=false` 必需。缺少它时，来自 127.0.0.1 的连接不需要密码。
@@ -98,7 +98,7 @@ L1、L2 的定义见第 4 节。
 
 数据来自 `/proc` 和 hsperfdata，都不需要 attach。阈值写在 builtin_config 中，签名目录只能收紧默认值。
 
-“默认值”列来自阶段 0 报告第 5.2 节，2026-10-24 负责人采纳（A67）。状态的含义见第 1 节。状态为“估算”或“未验证”的项在阶段 2D 验收时核对。
+“默认值”列来自阶段 0 报告第 5.2 节，2026-10-24 负责人采纳（A67）。状态的含义见第 1 节。状态为“估算”或“未验证”的项在阶段 2D 验收时核对，“阶段 2 验收”之后为阶段 2 验收报告（[arthas-stage2-acceptance-report.md](arthas-stage2-acceptance-report.md)）的结论和章节。默认值没有因验收修改。
 
 | 检查 | 默认值 | 状态 | 不通过时 |
 |---|---|---|---|
@@ -108,13 +108,13 @@ L1、L2 的定义见第 4 节。
 | 运行时包含 `java.instrument`：`<JAVA_HOME>/lib/libinstrument.so`（JDK 8 为 `lib/amd64/libinstrument.so`）存在，或 `release` 文件的 `MODULES` 含 `java.instrument` | — | 实测 | unsupported |
 | attach 文件位置：目标工作目录或 `/tmp` 至少一处可写 | — | 实测 | 拒绝 |
 | 目标 JVM 中没有已存在的 Arthas 实例：没有名称以 `arthas-` 开头的线程，也没有 Arthas 监听端口。已打开的 jar 和内存映射只说明曾经加载过，不作为判据 | — | 实测 | 拒绝。已有实例会忽略 allowops 的启动参数 |
-| 容器内存余量：cgroup 内存限额减去 `memory.current` | ≥ 256 MB | 估算 | 拒绝 |
-| 元空间余量：`MaxMetaspaceSize` 减去已用量；未设上限时跳过 | ≥ 64 MB | 估算 | 拒绝 |
-| 老年代使用率低于阈值，且最近 N 秒内没有 Full GC | 无默认值，阶段 2D 验收时确定 | 未验证 | 拒绝 |
+| 容器内存余量：cgroup 内存限额减去 `memory.current` | ≥ 256 MB | 实测。阶段 2 验收：达到（3.5） | 拒绝 |
+| 元空间余量：`MaxMetaspaceSize` 减去已用量；未设上限时跳过 | ≥ 64 MB | 实测。阶段 2 验收：达到（3.5、3.6）；读取的 hsperfdata 计数器落后于实际使用量（第 5 节） | 拒绝 |
+| 老年代使用率低于阈值，且最近 N 秒内没有 Full GC | 无默认值，阶段 2D 验收时确定 | 未验证。阶段 2 验收：结论待定，已测量依据，建议值待负责人确认（3.8） | 拒绝 |
 | 目标进程 CPU 使用率（5 秒平均，相对 cgroup CPU 限额） | L2：< 50% | 未验证 | 拒绝 |
-| 距同一 JVM 上次 attach 的时间 | ≥ 60 秒 | 估算 | 拒绝 |
-| 该 JVM 生命周期内的 attach 次数 | < 5 | 估算 | 拒绝 |
-| `thread -b`：hsperfdata 的 `java.threads.live` | ≤ 500 | 未验证 | 拒绝该命令 |
+| 距同一 JVM 上次 attach 的时间 | ≥ 60 秒 | 估算。阶段 2 验收：结论待定，60 秒内内存和元空间不回落（3.9） | 拒绝 |
+| 该 JVM 生命周期内的 attach 次数 | < 5 | 实测。阶段 2 验收：达到（3.9） | 拒绝 |
+| `thread -b`：hsperfdata 的 `java.threads.live` | ≤ 500 | 未验证。阶段 2 验收：结论待定，1000 个线程以内 `ThreadDump` 安全点不随线程数增加（3.7） | 拒绝该命令 |
 
 attach 次数设上限的原因：阶段 0 实测每次 attach/stop 使元空间使用量增加约 12 MB，类加载器在两次 Full GC 后才卸载；内存限额 1 GB 的容器在 14~25 次循环后被 OOM killer 结束。
 
@@ -188,18 +188,27 @@ L2 的限制：
 
 ## 7. 安全模型的变化
 
-allowops-exec 新增以下能力。需要更新 SECURITY.md 的威胁模型（T5~T7），并单独做安全审阅：
+allowops-exec 新增以下能力。SECURITY.md 的威胁模型已更新（T6、T7 和 “Java diagnostics with Arthas” 一节；T5 不涉及），安全审阅已完成：
 
 - 向目标进程发送 SIGQUIT。
-- 在目标挂载命名空间内创建文件（attach 文件；注入方式下的 jar）。
+- 在目标挂载命名空间内创建文件（attach 文件；注入方式下的 jar，注入方式尚未实现）。
 - 进入目标网络命名空间建立 TCP 连接。
 - 以目标 JVM 的 uid/gid 连接 attach 套接字。
 - 向目标 JVM 加载代码。
 
-残余风险（在文档中写明）：
+安全审阅后增加的措施：
 
-- 会话期间，同一网络命名空间内的进程可以连接 Arthas 端口，但执行命令需要随机密码。
-- 已控制目标容器的攻击者可以替换预装的 jar。该攻击者本来就能控制这个 JVM，不因此获得新权限。
+- Arthas HTTP 响应的状态行和头部也计入读取上限（响应体上限加 64 KiB）。目标网络命名空间内应答的进程不可信。
+- 只连接由目标 JVM 自己持有的监听套接字：连接前比对 `/proc/<pid>/net/tcp`、`tcp6` 中该端口监听套接字的 inode 与 `/proc/<pid>/fd`。同一命名空间内抢先绑定该端口的进程收不到密码。
+- attach 文件以目标 JVM 的有效 uid/gid 创建（第 3.1 节第 5 步），不再由 root 创建后改属主。
+
+残余风险（已写入 SECURITY.md）：
+
+- 会话期间，同一网络命名空间内的进程可以连接 Arthas 端口，但执行命令需要随机密码。该命名空间内有 `CAP_NET_RAW` 的进程可以从回环流量中获取密码；JVM 自身的 attach 记录（如 JFR 的 `jdk.JavaAgent` 事件）也含密码。密码只在会话期间有效，只能执行本次命令、`reset` 和 `stop`。
+- 监听套接字检查与连接之间，JVM 可能关闭监听，另一个进程可能在这一刻绑定该端口。
+- 同一网络命名空间内的进程可以占用配置范围内的端口，使调用和清理失败。
+- 能写目标文件系统中 Arthas 目录的人可以让 JVM 在 attach 时加载其代码：文件可以在 SHA-256 校验后被替换，Arthas 还会加载该目录下 `commands` 目录中的 jar，后者不校验。allowops-exec 不检查该目录的属主和权限，该目录应只允许 root 写入。
+- 配置的 JVM 没有运行或不发布 hsperfdata 时，同一容器或 unit 内主类相同的其他进程会被 attach，调用报告该进程的结果。
 - L2 的输出含真实业务数据，脱敏规则不能识别所有敏感内容。
 - attach 后 arthas-spy 类常驻目标 JVM，直到进程退出。
 
