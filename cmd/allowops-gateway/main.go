@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/tls"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
@@ -22,9 +24,12 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/job"
 	"github.com/liubing0806/allowops/internal/gateway/mcp"
 	"github.com/liubing0806/allowops/internal/gateway/output"
+	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
 	"github.com/liubing0806/allowops/internal/gateway/server"
 	"github.com/liubing0806/allowops/internal/gateway/updatecheck"
 	"github.com/liubing0806/allowops/internal/store"
+	"github.com/liubing0806/allowops/plugin"
+	_ "github.com/liubing0806/allowops/plugins/standard"
 	"gopkg.in/yaml.v3"
 )
 
@@ -61,6 +66,7 @@ type configuration struct {
 	Management api.ManagementConfig `yaml:"management"`
 	Identity   api.Config           `yaml:"identity"`
 	Providers  []api.ProviderConfig `yaml:"providers"`
+	Plugins    []pluginhost.Config  `yaml:"plugins"`
 	Jobs       job.Config           `yaml:"jobs"`
 	Output     output.Config        `yaml:"output"`
 	// Opt-in: the gateway makes no outbound request unless enabled.
@@ -187,6 +193,28 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 	if err != nil {
 		return err
 	}
+	inventoryHost, err := pluginhost.New(ctx, cfg.Plugins, pluginhost.Deps{Logger: slog.Default(), Hosts: func(ctx context.Context) ([]plugin.HostInfo, error) {
+		rows, err := db.Queries.ListActiveHostLabels(ctx)
+		if err != nil {
+			return nil, err
+		}
+		hosts := make([]plugin.HostInfo, 0, len(rows))
+		for _, row := range rows {
+			host := plugin.HostInfo{Hostname: row.Hostname}
+			if err := json.Unmarshal(row.AuthorizationLabels, &host.Labels); err != nil {
+				return nil, err
+			}
+			if err := json.Unmarshal(row.ReportedLabels, &host.ReportedLabels); err != nil {
+				return nil, err
+			}
+			hosts = append(hosts, host)
+		}
+		return hosts, nil
+	}})
+	if err != nil {
+		return err
+	}
+	identity.ConfigurePluginHealth(inventoryHost.Health)
 	agent, objects, jobs, err := newJobServices(ctx, db, identity, ca, cfg, auditStore, trusted)
 	if err != nil {
 		return err
@@ -196,7 +224,7 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 	if err != nil {
 		return err
 	}
-	srv, err := newGatewayServer(&cfg, db, identity, agent, listener, certificate, trusted, auditStore, objects, jobs)
+	srv, err := newGatewayServer(&cfg, db, identity, agent, listener, certificate, trusted, auditStore, objects, jobs, inventoryHost)
 	if err != nil {
 		return err
 	}
@@ -274,7 +302,7 @@ func startJobServices(identity *api.Service, agent *hostconn.Service, objects *o
 
 // newGatewayServer configures management and MCP and assembles the server.
 // On failure it closes the agent and the listener.
-func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service, agent *hostconn.Service, listener net.Listener, certificate tls.Certificate, trusted map[string]ed25519.PublicKey, auditStore *audit.Store, objects *output.S3, jobs *job.Service) (*server.Server, error) {
+func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service, agent *hostconn.Service, listener net.Listener, certificate tls.Certificate, trusted map[string]ed25519.PublicKey, auditStore *audit.Store, objects *output.S3, jobs *job.Service, inventoryHost *pluginhost.Host) (*server.Server, error) {
 	catalogs := &catalogsvc.Service{Store: db, Trusted: trusted, MaxEnvelopeBytes: cfg.Gateway.EnvelopeBytes, MaxActionBytes: cfg.Gateway.ActionBytes, MaxReferenceBytes: cfg.Gateway.MessageBytes - cfg.Gateway.ChunkBytes - 1024}
 	if cfg.Management.CAPin == "" {
 		cfg.Management.CAPin = api.TLSCAPin(certificate.Certificate)
@@ -287,7 +315,7 @@ func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service
 		listener.Close()
 		return nil, err
 	}
-	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcp.Config{Jobs: cfg.Jobs})
+	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcp.Config{Jobs: cfg.Jobs, Inventory: inventoryHost})
 	if err != nil {
 		agent.Close()
 		listener.Close()
