@@ -1,0 +1,58 @@
+{
+  "body": {
+    "command": "sc -d demo.HotService",
+    "jobId": 12,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "classInfo": {
+          "annotation": false,
+          "annotations": [
+            "org.springframework.stereotype.Service"
+          ],
+          "anonymousClass": false,
+          "array": false,
+          "classInfo": "demo.HotService",
+          "classLoaderHash": "31cefde0",
+          "classloader": [
+            "org.springframework.boot.loader.LaunchedURLClassLoader@31cefde0",
+            "sun.misc.Launcher$AppClassLoader@70dea4e",
+            "sun.misc.Launcher$ExtClassLoader@7586beff"
+          ],
+          "codeSource": "file:/app/app.jar!/BOOT-INF/classes!/",
+          "enum": false,
+          "interface": false,
+          "interfaces": [],
+          "localClass": false,
+          "memberClass": false,
+          "modifier": "public",
+          "name": "demo.HotService",
+          "primitive": false,
+          "simpleName": "HotService",
+          "superClass": [
+            "java.lang.Object"
+          ],
+          "synthetic": false
+        },
+        "detailed": true,
+        "jobId": 12,
+        "segment": 0,
+        "type": "sc",
+        "withField": false
+      },
+      {
+        "jobId": 12,
+        "rowCount": 1,
+        "type": "row_affect"
+      },
+      {
+        "jobId": 12,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "01bce553-e289-4d1e-842a-62b724e54896",
+  "state": "SUCCEEDED"
+}

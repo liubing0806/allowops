@@ -1,0 +1,3 @@
+# sysprop
+key	value
+java.version	17.0.20.1

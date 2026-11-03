@@ -1,0 +1,57 @@
+{
+  "body": {
+    "command": "sm -d demo.HotService",
+    "jobId": 16,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "detail": true,
+        "jobId": 16,
+        "methodInfo": {
+          "annotations": [],
+          "classLoaderHash": "2dda6444",
+          "constructor": true,
+          "declaringClass": "demo.HotService",
+          "descriptor": "()V",
+          "exceptions": [],
+          "methodName": "<init>",
+          "modifier": "public",
+          "parameters": []
+        },
+        "type": "sm"
+      },
+      {
+        "detail": true,
+        "jobId": 16,
+        "methodInfo": {
+          "annotations": [],
+          "classLoaderHash": "2dda6444",
+          "constructor": false,
+          "declaringClass": "demo.HotService",
+          "descriptor": "(I)J",
+          "exceptions": [],
+          "methodName": "work",
+          "modifier": "public",
+          "parameters": [
+            "int"
+          ],
+          "returnType": "long"
+        },
+        "type": "sm"
+      },
+      {
+        "jobId": 16,
+        "rowCount": 2,
+        "type": "row_affect"
+      },
+      {
+        "jobId": 16,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "deb40fe3-0d4d-4fea-a3fd-73623a48ffeb",
+  "state": "SUCCEEDED"
+}

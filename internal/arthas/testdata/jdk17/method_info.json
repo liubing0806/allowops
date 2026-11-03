@@ -1,0 +1,41 @@
+{
+  "body": {
+    "command": "sm -d demo.HotService work",
+    "jobId": 15,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "detail": true,
+        "jobId": 15,
+        "methodInfo": {
+          "annotations": [],
+          "classLoaderHash": "2dda6444",
+          "constructor": false,
+          "declaringClass": "demo.HotService",
+          "descriptor": "(I)J",
+          "exceptions": [],
+          "methodName": "work",
+          "modifier": "public",
+          "parameters": [
+            "int"
+          ],
+          "returnType": "long"
+        },
+        "type": "sm"
+      },
+      {
+        "jobId": 15,
+        "rowCount": 1,
+        "type": "row_affect"
+      },
+      {
+        "jobId": 15,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "deb40fe3-0d4d-4fea-a3fd-73623a48ffeb",
+  "state": "SUCCEEDED"
+}

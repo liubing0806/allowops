@@ -1,0 +1,15 @@
+# memory
+type	name	used	total	max
+heap	heap	255303680	536870912	536870912
+heap	g1_eden_space	220200960	318767104	-1
+heap	g1_old_gen	15704064	198180864	536870912
+heap	g1_survivor_space	19398656	19922944	-1
+nonheap	nonheap	147341080	154402816	-1
+nonheap	codeheap_'non-nmethods'	1461504	2555904	5836800
+nonheap	metaspace	109259920	109772800	-1
+nonheap	codeheap_'profiled_nmethods'	14668288	19857408	122908672
+nonheap	compressed_class_space	13657224	13893632	1073741824
+nonheap	codeheap_'non-profiled_nmethods'	8294144	8323072	122912768
+buffer_pool	mapped	0	0	-1
+buffer_pool	direct	100761741	100761738	-1
+buffer_pool	mapped - 'non-volatile memory'	0	0	-1

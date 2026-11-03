@@ -1,0 +1,120 @@
+{
+  "body": {
+    "command": "memory",
+    "jobId": 7,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "jobId": 7,
+        "memoryInfo": {
+          "heap": [
+            {
+              "max": 536870912,
+              "name": "heap",
+              "total": 536870912,
+              "type": "heap",
+              "used": 255303680
+            },
+            {
+              "max": -1,
+              "name": "g1_eden_space",
+              "total": 318767104,
+              "type": "heap",
+              "used": 220200960
+            },
+            {
+              "max": 536870912,
+              "name": "g1_old_gen",
+              "total": 198180864,
+              "type": "heap",
+              "used": 15704064
+            },
+            {
+              "max": -1,
+              "name": "g1_survivor_space",
+              "total": 19922944,
+              "type": "heap",
+              "used": 19398656
+            }
+          ],
+          "nonheap": [
+            {
+              "max": -1,
+              "name": "nonheap",
+              "total": 154402816,
+              "type": "nonheap",
+              "used": 147341080
+            },
+            {
+              "max": 5836800,
+              "name": "codeheap_'non-nmethods'",
+              "total": 2555904,
+              "type": "nonheap",
+              "used": 1461504
+            },
+            {
+              "max": -1,
+              "name": "metaspace",
+              "total": 109772800,
+              "type": "nonheap",
+              "used": 109259920
+            },
+            {
+              "max": 122908672,
+              "name": "codeheap_'profiled_nmethods'",
+              "total": 19857408,
+              "type": "nonheap",
+              "used": 14668288
+            },
+            {
+              "max": 1073741824,
+              "name": "compressed_class_space",
+              "total": 13893632,
+              "type": "nonheap",
+              "used": 13657224
+            },
+            {
+              "max": 122912768,
+              "name": "codeheap_'non-profiled_nmethods'",
+              "total": 8323072,
+              "type": "nonheap",
+              "used": 8294144
+            }
+          ],
+          "buffer_pool": [
+            {
+              "max": -9223372036854775808,
+              "name": "mapped",
+              "total": 0,
+              "type": "buffer_pool",
+              "used": 0
+            },
+            {
+              "max": -9223372036854775808,
+              "name": "direct",
+              "total": 100761738,
+              "type": "buffer_pool",
+              "used": 100761741
+            },
+            {
+              "max": -9223372036854775808,
+              "name": "mapped - 'non-volatile memory'",
+              "total": 0,
+              "type": "buffer_pool",
+              "used": 0
+            }
+          ]
+        },
+        "type": "memory"
+      },
+      {
+        "jobId": 7,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "deb40fe3-0d4d-4fea-a3fd-73623a48ffeb",
+  "state": "SUCCEEDED"
+}
