@@ -260,7 +260,15 @@ func (c *Client) roundTrip(ctx context.Context, timeout time.Duration, req apiRe
 	if err := httpReq.Write(conn); err != nil {
 		return nil, fail(false, err)
 	}
-	resp, err := http.ReadResponse(bufio.NewReader(conn), httpReq)
+	limit := c.cfg.MaxResponseBytes
+	// The server is inside the target and may send anything. http.ReadResponse reads a status
+	// line and header lines of any length, so the connection itself is bounded too.
+	bounded := &boundedReader{
+		r:    conn,
+		left: limit + maxResponseHead,
+		err:  fmt.Errorf("%w (limit %d bytes)", ErrResponseTooLarge, limit+maxResponseHead),
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(bounded), httpReq)
 	if err != nil {
 		return nil, fail(true, err)
 	}
@@ -271,7 +279,6 @@ func (c *Client) roundTrip(ctx context.Context, timeout time.Duration, req apiRe
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("arthas %s: unexpected HTTP status %s", req.Action, resp.Status)
 	}
-	limit := c.cfg.MaxResponseBytes
 	tooLarge := fmt.Errorf("arthas %s: %w (limit %d bytes)", req.Action, ErrResponseTooLarge, limit)
 	if resp.ContentLength > limit {
 		return nil, tooLarge
@@ -288,6 +295,29 @@ func (c *Client) roundTrip(ctx context.Context, timeout time.Duration, req apiRe
 		return nil, fmt.Errorf("arthas %s: decode response: %w", req.Action, err)
 	}
 	return &out, nil
+}
+
+// maxResponseHead is what a response may have beyond its body: the status line, the headers and
+// the framing of a chunked body. Arthas sends a few hundred bytes.
+const maxResponseHead = 64 << 10
+
+// boundedReader reads at most left bytes and then fails with err.
+type boundedReader struct {
+	r    io.Reader
+	left int64
+	err  error
+}
+
+func (b *boundedReader) Read(p []byte) (int, error) {
+	if b.left <= 0 {
+		return 0, b.err
+	}
+	if int64(len(p)) > b.left {
+		p = p[:b.left]
+	}
+	n, err := b.r.Read(p)
+	b.left -= int64(n)
+	return n, err
 }
 
 // call sends a request and turns every state except SUCCEEDED into a StateError.

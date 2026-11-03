@@ -3,12 +3,15 @@
 #   make down    stop and remove all services, including the optional profiles
 #   make up-all  start every service and variant
 #   make bench   latency matrix of item 5 (about 3 hours, needs JA_OUT=<raw data dir> and an otherwise idle cpuset 4-9)
+#   make real-test  run the jvm_arthas builtin against the running jdk8, jdk11, jdk17 and jdk21 services (root through sudo;
+#                   set JA_EVIDENCE=<directory> to keep the output of every call)
 SHELL := /bin/sh
 ROOT := $(CURDIR)
+REPO := $(abspath $(ROOT)/../..)
 PROFILES := --profile jre --profile variants
 SERVICES := jdk8 jdk11 jdk17 jdk21 jre8 jre17 jlink17 noattach8 noattach17 rofs8 rofs17 rofsnotmp17 nohome8 nohome17 root8 root17 xrs8 xrs17 pid1-17 probe8 probe17
 
-.PHONY: app probe arthas tools prepare build up up-all down ps bench
+.PHONY: app probe arthas tools prepare build up up-all down ps bench real-test
 
 app:
 	cd app && mvn -q -s $(ROOT)/app/settings.xml -Dmaven.repo.local=$(ROOT)/run/m2 clean package -DskipTests
@@ -47,3 +50,8 @@ ps:
 bench: tools
 	for set in main17 jdk8 jdk11 jdk21; do scripts/run_bench.sh $$set || exit 1; done
 	python3 scripts/analyze.py $(JA_OUT)/bench --md > $(JA_OUT)/bench/summary.md
+
+real-test:
+	mkdir -p bin
+	cd $(REPO) && go test -c -o $(ROOT)/bin/real.test ./test/jvm-arthas/real
+	cd real && sudo -n env ALLOWOPS_REAL_ARTHAS=1 COMPOSE_PROJECT_NAME=$(COMPOSE_PROJECT_NAME) JA_PORT_PREFIX=$(JA_PORT_PREFIX) JA_EVIDENCE=$(JA_EVIDENCE) $(ROOT)/bin/real.test -test.v -test.timeout 90m

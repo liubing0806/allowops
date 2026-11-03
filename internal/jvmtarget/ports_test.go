@@ -169,3 +169,35 @@ func TestPortsOfThisProcess(t *testing.T) {
 		t.Errorf("IsListening(%d) = %v, %v for an IPv6 listener", port6, ok, err)
 	}
 }
+
+// Every socket that listens on the port must be one of the process's: a socket of another process
+// on [::]:<port> takes the connections to 127.0.0.1:<port> as well when it is dual-stack.
+func TestCheckListener(t *testing.T) {
+	root := t.TempDir()
+	p := Proc{Root: root}
+	writeTCP(t, root, 42, tcpLine(0, 18563, "0A")+tcpLine(1, 18564, "0A")+tcpLine(2, 40000, "01"),
+		tcp6Line(0, 18564, "0A"))
+	holdSocket(t, root, 42, 3, 9000) // 127.0.0.1:18563
+	holdSocket(t, root, 42, 4, 9001) // 127.0.0.1:18564; [::]:18564 (inode 9500) is not the process's
+	holdSocket(t, root, 42, 5, 9002) // the connection on port 40000 is not a listener
+	if err := p.CheckListener(42, 18563); err != nil {
+		t.Errorf("own listener: %v", err)
+	}
+	if err := p.CheckListener(42, 18564); !errors.Is(err, ErrForeignListener) {
+		t.Errorf("a second listener of another process: %v; want ErrForeignListener", err)
+	}
+	if err := p.CheckListener(42, 40000); !errors.Is(err, ErrNotListening) {
+		t.Errorf("an established connection: %v; want ErrNotListening", err)
+	}
+	// A line without the inode column cannot be matched with a descriptor.
+	writeTCP(t, root, 43, "   0: 0100007F:4883 00000000:0000 0A 00000000:00000000\n", "-")
+	holdSocket(t, root, 43, 3, 0)
+	if err := p.CheckListener(43, 18563); !errors.Is(err, ErrForeignListener) {
+		t.Errorf("listener without inode: %v; want ErrForeignListener", err)
+	}
+	// A process without the descriptor directory is gone.
+	writeTCP(t, root, 44, tcpLine(0, 18563, "0A"), "-")
+	if err := p.CheckListener(44, 18563); !errors.Is(err, ErrProcessChanged) {
+		t.Errorf("no fd directory: %v; want ErrProcessChanged", err)
+	}
+}

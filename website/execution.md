@@ -87,11 +87,12 @@ Known limits of the wrapped-command check:
 | `dremio_query` | One SELECT, SHOW, DESCRIBE or EXPLAIN PLAN statement run as a Dremio job through the REST API (`http(s)://host:port`): login, submit, poll, read the first page (at most 500 rows, 1 MiB, 10 s), then cancel and log out. Dremio 24.1 has no permission boundary: every account is an administrator. The lexical SQL guard is the only write restriction on the Dremio side, and each data source behind Dremio must use a read-only account. |
 | `dremio_diag` | Fixed Dremio requests: nodes and memory, job list, one job, a job profile summary with rule findings, and reflections. The caller supplies no SQL; `builtin_config.ops` can pin an action to a single `op`. Dremio has no permission boundary, so the fixed requests are the write restriction. |
 | `jvm_perfdata` | Heap, GC, class and thread figures of an allowlisted JVM (systemd unit, or Docker container and main class) read from its hsperfdata. No attach, no signal, no write to the target; JVM arguments and system properties are never output. |
+| `jvm_arthas` | One fixed read-only Arthas command (13 kinds, one action each, no class is enhanced) run in an allowlisted JVM. Each call attaches the Arthas agent, runs the command and stops the agent again, so the action has `risk: write`, `run_as: root`, `max_targets: 1` and `batch_size: 1`. The Arthas files are checked by SHA-256 inside the target's mount namespace. Checks before the attach (JVM version, memory headroom, attach count and interval) and a guard while the command runs (CPU, GC, optional health check) can refuse or abort a call; `builtin_config` can only tighten their defaults. The host needs the Arthas package; without it the action is reported `unsupported`. |
 
 Use `builtin_config` to narrow the handler's defined limits and resource
 allowlists. Database handlers (`mysql_query`, `redis_command`, `starrocks_query`,
 `starrocks_diag`, `dremio_query` and `dremio_diag`) use the privileged helper to
-read host-local credentials, and `jvm_perfdata` uses it to read other processes' files, even if `run_as` is omitted. `log_search`, `http_get` and
+read host-local credentials, and `jvm_perfdata` uses it to read other processes' files, even if `run_as` is omitted. `jvm_arthas` uses it to attach as root. `log_search`, `http_get` and
 `alertmanager_alerts` without `run_as` run directly as the agent. `log_search` with no matches and `http_get`
 with a non-success HTTP status can return exit code zero; inspect the result
 and HTTP status, not just the process exit code.

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -247,6 +248,56 @@ func TestResponseJustWithinTheLimit(t *testing.T) {
 	c = f.client(t, func(cfg *Config) { cfg.MaxResponseBytes = int64(len(body)) - 1 })
 	if _, err := c.InitSession(context.Background()); !errors.Is(err, ErrResponseTooLarge) {
 		t.Fatalf("error = %v, want ErrResponseTooLarge", err)
+	}
+}
+
+// The server listens inside the target and is not trusted to answer with a bounded head:
+// http.ReadResponse takes a status line and header lines of any length. The client stops reading
+// once the response passes its limit, instead of buffering whatever the server sends until the
+// request times out.
+func TestResponseHeadLimit(t *testing.T) {
+	const flood = 64 << 20
+	for name, prefix := range map[string]string{
+		"status line": "HTTP/1.1 200 ",
+		"header":      "HTTP/1.1 200 OK\r\nX-Filler: ",
+	} {
+		t.Run(name, func(t *testing.T) {
+			var written atomic.Int64
+			c, err := NewClient(Config{
+				Dial: func(context.Context) (net.Conn, error) {
+					client, server := net.Pipe()
+					go func() {
+						defer server.Close()
+						go io.Copy(io.Discard, server) // the request
+						if _, err := io.WriteString(server, prefix); err != nil {
+							return
+						}
+						chunk := []byte(strings.Repeat("a", 32<<10))
+						for written.Load() < flood {
+							n, err := server.Write(chunk)
+							written.Add(int64(n))
+							if err != nil {
+								return
+							}
+						}
+					}()
+					return client, nil
+				},
+				Password:         testPassword,
+				MaxResponseBytes: 1 << 20,
+				RequestTimeout:   30 * time.Second,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = c.InitSession(context.Background())
+			if !errors.Is(err, ErrResponseTooLarge) {
+				t.Errorf("error = %v, want ErrResponseTooLarge", err)
+			}
+			if n := written.Load(); n > 4<<20 {
+				t.Errorf("the client read %d bytes of a response limited to %d", n, 1<<20)
+			}
+		})
 	}
 }
 

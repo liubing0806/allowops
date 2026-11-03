@@ -23,7 +23,7 @@ import (
 // The real JVM tests attach to the JVMs of test/jvm-arthas. They need root, Docker, the images of
 // that environment and its Arthas files. They are skipped unless ALLOWOPS_REAL_JVM=1:
 //
-//	COMPOSE_PROJECT_NAME=jvm-arthas-s2a JA_PORT_PREFIX=38 make -C test/jvm-arthas up-all
+//	COMPOSE_PROJECT_NAME=jvm-arthas-s2a JA_PORT_PREFIX=28 make -C test/jvm-arthas up-all
 //	go test -c -o /tmp/jvmtarget.test ./internal/jvmtarget
 //	sudo -n env ALLOWOPS_REAL_JVM=1 ALLOWOPS_JVM_ARTHAS_PROJECT=jvm-arthas-s2a /tmp/jvmtarget.test -test.run TestRealAttach -test.v
 //

@@ -1,4 +1,4 @@
-# Build outputs and local run state; raw data is kept outside the repository.
+# Build outputs and local run state; raw measurement data stays outside the repository.
 run/
 results/
 bin/

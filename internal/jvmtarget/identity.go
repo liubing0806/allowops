@@ -90,3 +90,15 @@ func dialUnixAs(ctx context.Context, path string, uid, gid uint32) (net.Conn, er
 		return d.DialContext(ctx, "unix", path)
 	})
 }
+
+// createAs makes the empty file name in dir of the root (see Root.Create) as the user uid and
+// group gid, so the permissions of that user decide whether the file can be made. The directory
+// descriptor that the file keeps was opened by the thread, and works for any thread after it.
+func createAs(root *Root, dir, name string, uid, gid uint32) (*CreatedFile, error) {
+	return onLockedThread(func() (*CreatedFile, error) {
+		if err := switchIdentity(uid, gid); err != nil {
+			return nil, err
+		}
+		return root.Create(dir, name, 0o600, uid, gid)
+	})
+}

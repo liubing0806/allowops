@@ -31,8 +31,8 @@ import (
 // network namespace), Docker and the environment of that directory, and are
 // skipped unless ALLOWOPS_REAL_ARTHAS=1:
 //
-//	cd test/jvm-arthas && COMPOSE_PROJECT_NAME=jvm-arthas-s2b JA_PORT_PREFIX=48 make build tools
-//	COMPOSE_PROJECT_NAME=jvm-arthas-s2b JA_PORT_PREFIX=48 docker compose up -d jdk8 jdk17
+//	cd test/jvm-arthas && COMPOSE_PROJECT_NAME=jvm-arthas-s2b JA_PORT_PREFIX=32 make build tools
+//	COMPOSE_PROJECT_NAME=jvm-arthas-s2b JA_PORT_PREFIX=32 docker compose up -d jdk8 jdk17
 //	go test -c -o /tmp/arthas.test ./internal/arthas
 //	sudo -n env ALLOWOPS_REAL_ARTHAS=1 COMPOSE_PROJECT_NAME=jvm-arthas-s2b /tmp/arthas.test -test.run TestRealArthas -test.v
 //

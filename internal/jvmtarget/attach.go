@@ -369,11 +369,15 @@ func (j *JVM) attach(ctx context.Context, st *attachState, res *AttachResult, re
 // of /tmp does not depend on where the working directory link leads. The working directory is
 // used when /tmp refuses the file. The file is made by creating it, because that is the only
 // check that is not racy: a read-only file system, a full one or a missing permission all show.
+//
+// The file is made with the ids of the JVM's user (see createAs), so only where HotSpot's own
+// attach client, which runs as that user, could make it. The user can take the name in /tmp
+// first and so choose the working directory; as root the file would land there in any case.
 func (j *JVM) createAttachFiles(st *attachState) ([]*CreatedFile, error) {
 	name := ".attach_pid" + strconv.Itoa(j.NSPid)
 	var reasons []string
 	try := func(dir string) *CreatedFile {
-		f, err := st.root.Create(dir, name, 0o600, st.status.EUID, st.status.EGID)
+		f, err := createAs(st.root, dir, name, st.status.EUID, st.status.EGID)
 		if err != nil {
 			reasons = append(reasons, dir+": "+errText(err))
 			return nil

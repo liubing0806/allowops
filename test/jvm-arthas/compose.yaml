@@ -5,6 +5,8 @@
 #   docker compose --profile jre --profile variants down -v   stops and removes everything
 # Two copies can run side by side: COMPOSE_PROJECT_NAME=jvm-arthas-b JA_PORT_PREFIX=28 make up publishes 28008 and so on
 # instead of 18008. Without the two variables the project is jvm-arthas and the ports start with 18.
+# Keep the prefix at 32 or lower: higher ports fall into the kernel's ephemeral range (32768-60999 by default),
+# where an outgoing connection can hold the port and make the start fail.
 # `make up` / `make down` wrap these. The run/<service>/logs directories must exist and be writable
 # for every uid (`make prepare`), otherwise Docker creates them as root and the JVM cannot log.
 name: jvm-arthas

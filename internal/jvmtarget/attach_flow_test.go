@@ -142,6 +142,72 @@ func TestAttachWithoutTmpAndWithoutAWorkingDirectory(t *testing.T) {
 	}
 }
 
+// HotSpot's own attach client runs as the JVM's user, so it makes the attach file only where that
+// user may create files. allowops-exec is root and must not do more. Otherwise the JVM's user can
+// have a file of its own made in a directory that it cannot write: it takes the name in /tmp first,
+// so that the working directory is used, and the JVM's working directory can be any directory.
+// Run as root, or in a user namespace that maps more ids than root, from the package directory:
+//
+//	go test -c -o /tmp/jvmtarget.test .
+//	unshare --map-auto --map-root-user /tmp/jvmtarget.test -test.run TestAttachFileNeedsThePermissionOfTheJVMsUser
+func TestAttachFileNeedsThePermissionOfTheJVMsUser(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("needs root, or a user namespace with more mapped ids")
+	}
+	const uid, gid = 4321, 4321
+	eachResolver(t, func(t *testing.T) {
+		e := newAttachEnv(t, attachOpts{})
+		app := filepath.Join(e.root, "app")
+		if err := os.Chmod(e.tmp, 0o1777); err != nil {
+			t.Fatal(err)
+		}
+		// The JVM's user took the name in /tmp; /app belongs to root and only root may write it.
+		taken := filepath.Join(e.tmp, ".attach_pid7")
+		writeFile(t, taken, "")
+		if err := os.Lchown(taken, uid, gid); err != nil {
+			t.Fatal(err)
+		}
+		root, err := OpenRoot(e.jvm.rootPath())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer root.Close()
+		st := &attachState{status: Status{UID: uid, EUID: uid, GID: gid, EGID: gid}, root: root}
+		paths := func(files []*CreatedFile) []string {
+			var out []string
+			for _, f := range files {
+				out = append(out, f.Path)
+				f.Remove()
+			}
+			return out
+		}
+		created, err := e.jvm.createAttachFiles(st)
+		if made := paths(created); !errors.Is(err, ErrNoAttachFile) {
+			t.Errorf("err = %v, files %v; want ErrNoAttachFile: the JVM's user may not create files in /app", err, made)
+		}
+		if _, err := os.Lstat(filepath.Join(app, ".attach_pid7")); err == nil {
+			t.Error("the attach file was made in /app")
+		}
+
+		// Where the user may create files, the file is made, and it is the user's.
+		if err := os.Remove(taken); err != nil {
+			t.Fatal(err)
+		}
+		var owner uint32
+		created, err = e.jvm.createAttachFiles(st)
+		if err == nil {
+			var info unix.Stat_t
+			if err := unix.Lstat(taken, &info); err != nil {
+				t.Fatal(err)
+			}
+			owner = info.Uid
+		}
+		if made := paths(created); err != nil || len(made) != 1 || made[0] != "/tmp/.attach_pid7" || owner != uid {
+			t.Errorf("err = %v, files %v, owner %d; want /tmp/.attach_pid7 of uid %d", err, made, owner, uid)
+		}
+	})
+}
+
 func TestAttachArgumentIsCheckedBeforeAnythingHappens(t *testing.T) {
 	jar := "/opt/arthas/arthas-agent.jar="
 	long := func(n int) string { return jar + strings.Repeat("a", n-len(jar)) }
