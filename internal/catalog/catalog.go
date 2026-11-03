@@ -266,7 +266,7 @@ func validateAction(a Action, allowUnsupported bool) ([]string, error) {
 }
 
 func validateIdentity(a Action) error {
-	if !actionName.MatchString(a.Name) || slices.Contains([]string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel"}, a.Name) {
+	if !actionName.MatchString(a.Name) || slices.Contains([]string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "entities_search"}, a.Name) {
 		return fmt.Errorf("invalid or reserved action name %q", a.Name)
 	}
 	if strings.TrimSpace(a.Description) == "" {

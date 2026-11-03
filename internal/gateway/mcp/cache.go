@@ -57,7 +57,11 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	definitions, available, unsupported, err := visibleTools(ctx, engine, snap.id, actions, s.config.Jobs)
+	var sources []string
+	if s.config.Inventory != nil {
+		sources = s.config.Inventory.InventorySources()
+	}
+	definitions, available, unsupported, err := visibleTools(ctx, engine, snap.id, actions, s.config.Jobs, sources...)
 	if err != nil {
 		return nil, err
 	}
@@ -162,8 +166,8 @@ func projectRules(rules []authz.Rule) ruleSnapshot {
 
 // visibleTools returns the tool definitions to register, plus the set of
 // callable names and the subset whose schema the SDK cannot register.
-func visibleTools(ctx context.Context, engine *authz.Engine, id *reqctx.Identity, actions map[string]catalog.Action, cfg job.Config) ([]ToolDefinition, map[string]bool, map[string]bool, error) {
-	definitions := fixedTools(cfg)
+func visibleTools(ctx context.Context, engine *authz.Engine, id *reqctx.Identity, actions map[string]catalog.Action, cfg job.Config, sources ...string) ([]ToolDefinition, map[string]bool, map[string]bool, error) {
+	definitions := fixedTools(cfg, sources...)
 	names := slices.Collect(maps.Keys(actions))
 	slices.Sort(names)
 	available := map[string]bool{}
