@@ -282,3 +282,36 @@ func TestEnvelopeErrorsOmitContent(t *testing.T) {
 		}
 	}
 }
+
+// TestLabelValuesUnderCredentialKeys groups hosts by labels the redactor
+// treats as credential keys only together with the value.
+func TestLabelValuesUnderCredentialKeys(t *testing.T) {
+	const secret = "synthetic-demo-credential"
+	for _, label := range []string{"password", "master_key", "--bindpw", "-p", "reported.--bindpw", "reported.password"} {
+		t.Run(label, func(t *testing.T) {
+			key := strings.TrimPrefix(label, "reported.")
+			info := plugin.HostInfo{Hostname: "h1", Labels: map[string]string{key: secret}}
+			if key != label {
+				info = plugin.HostInfo{Hostname: "h1", ReportedLabels: map[string]string{key: secret}}
+			}
+			deps := testDeps()
+			deps.Hosts = func(context.Context) ([]plugin.HostInfo, error) { return []plugin.HostInfo{info}, nil }
+			c := Config{ID: "labels", Module: "inventory.host_labels"}
+			c.Config.Encode(map[string]string{"label": label})
+			h, err := New(context.Background(), []Config{c}, deps)
+			if err != nil || len(h.InventorySources()) != 1 {
+				t.Fatalf("instance unavailable: %v %v", err, h.Health())
+			}
+			for _, name := range []string{"", "synthetic"} {
+				results, errs := h.SearchInventory(context.Background(), Query{Name: name}, nil)
+				data, _ := json.Marshal(results)
+				if len(errs) != 0 || strings.Contains(string(data), "synthetic") {
+					t.Fatalf("name=%q: %s %v", name, data, errs)
+				}
+				if name == "" && (len(results) != 1 || results[0].Hosts[0] != "h1") {
+					t.Fatalf("hosts lost: %s", data)
+				}
+			}
+		})
+	}
+}
