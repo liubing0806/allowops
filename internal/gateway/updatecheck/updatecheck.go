@@ -17,6 +17,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // lockKey is the advisory lock key; 418001-418010 are taken elsewhere.
@@ -197,6 +198,11 @@ func (c *Checker) fetch(ctx context.Context) (latest string, published *time.Tim
 		PublishedAt *time.Time `json:"published_at"`
 	}
 	if json.Unmarshal(body, &m) != nil {
+		return "", nil, "invalid manifest"
+	}
+	// The console sends published_at as a google.protobuf.Timestamp, which
+	// cannot encode times before year 1 or after year 9999 UTC.
+	if m.PublishedAt != nil && timestamppb.New(*m.PublishedAt).CheckValid() != nil {
 		return "", nil, "invalid manifest"
 	}
 	v, err := semver.StrictNewVersion(m.Version)
