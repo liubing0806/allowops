@@ -215,9 +215,9 @@ func (h *Host) SearchInventory(ctx context.Context, q Query, sources []string) (
 6. 按 `Kind` 再过滤一次。
 7. 脱敏，使用 `redact.New(nil)` 得到的 secrets 规则：
    - `Name`：用 `Redactor.Line` 处理，然后按 `q.Name` 过滤。过滤在脱敏之后，原因见第 5 节。
-   - `Attrs`：键本身经 `Redactor.Line` 处理后有变化（例如键是一个 JWT）时，删除该项。其余键值对处理字符串 `<键>=<值>`。结果仍以 `<键>=` 开头时，取其后部分作为值；否则值替换为 `[REDACTED]`。这样 `password: x` 这类凭据由键名识别。
-   - `Selector`：经 `Redactor.Line` 处理后有变化时清空，只保留 `Hosts`。脱敏后的 selector 语法仍然合法，但会选中另一组主机。例如标签值 `https://u:p@x` 脱敏后为 `[REDACTED:url_credentials]x`。
-   - `DependsOn` 的每一项：直接用 `Redactor.Line` 处理。
+   - `Attrs`：键本身经 `Redactor.Line` 处理后有变化（例如键是一个 JWT）时，删除该项。其余键值对处理字符串 `<键>=<值>`。结果仍以 `<键>=` 开头时，取其后部分再单独用 `Redactor.Line` 处理一次作为值；否则值替换为 `[REDACTED]`。这样 `password: x` 这类凭据由键名识别，`-p<密码>` 这类只在值开头才匹配的凭据由第二次处理识别。
+   - `Selector`：整串、每个条件、每个条件的键和值分别经 `Redactor.Line` 处理，任一有变化时清空，只保留 `Hosts`。脱敏后的 selector 语法仍然合法，但会选中另一组主机。例如标签值 `https://u:p@x` 脱敏后为 `[REDACTED:url_credentials]x`。
+   - `DependsOn` 的每一项：`/` 之后的名称部分先单独处理，再处理整项。
 8. 按 `Kind`、`Name`、`Source` 排序。
 
 `SearchInventory` 不截断。截断在 MCP 层权限过滤之后进行。
@@ -261,6 +261,7 @@ entities:
 ```
 
 - `Provision` 读取文件：用 `O_NONBLOCK` 打开，再检查打开的文件是普通文件。不加 `O_NONBLOCK` 时，打开一个没有写入方的 FIFO 会一直阻塞，`Provision` 的超时无法中断它。最多读 4MB，超过时报错。用 `KnownFields(true)` 严格解码，检查第 5 节的字段规则和 `(kind, name)` 唯一。
+- YAML 解码错误只保留行号（`inventory file: invalid YAML at line N`）。`yaml.v3` 的原始错误会引用文件中的键和值。
 - 校验错误只用序号标识实体（如 `inventory entity #2: duplicate kind and name`），不含名称、键或值。这些字段可能含有凭据，而错误会写入日志或网关的启动错误输出。
 - 文件在启动时读取一次。修改后需要重启网关。
 - `Resolve` 按 `Kind` 过滤，返回实体的拷贝，不返回内部缓存的 map 和 slice。
@@ -435,3 +436,10 @@ Astra 审计实现（2026-11-03，基于 `2708d6e`）。每条必须修改项都
 | 4MB 测试因 YAML 解析失败而通过，不能证明大小检查；名称脱敏和 selector 测试绕过宿主 | 采纳。改为合法 YAML 的边界测试；新增经 `SearchInventory` 的测试（第 11 节） |
 | 不响应 ctx 的插件在超时后留下 goroutine | 不采纳。限制已在第 6.3 节第 2 步写明；并发上限列为推迟项（第 1 节） |
 | 两处字段校验代码重复 | 不采纳。插件不导入 `internal/`（第 3 节），两处规则目前一致 |
+
+Astra 第二轮复核（2026-11-03，基于 `ebf2f30`）。上表 5 条确认关闭。新发现 2 条，失败测试 `3abbed0`，修复在其后一个提交：
+
+| 意见 | 处理 |
+| --- | --- |
+| `-p<密码>` 单独作为名称时被脱敏，放在 `memo=`、`service=`、`service/` 之后不被识别，经 selector、`Attrs` 值和 `DependsOn` 返回 | 采纳。值、selector 条件和依赖名称部分单独再脱敏（第 6.3 节） |
+| `yaml.v3` 解码错误引用文件中的值，进入日志和启动错误 | 采纳。只保留行号（第 7.1 节） |
