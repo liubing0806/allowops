@@ -470,6 +470,9 @@ type outcome struct {
 	session string
 	// mayExist tells that an Arthas server may be running and has to be shut down.
 	mayExist bool
+	// pending tells that no server is there yet but the JVM may still start one: it got the load
+	// command and did not answer. The record stays for the recovery.
+	pending bool
 }
 
 // serve attaches, runs the command and shuts the server down.
@@ -481,6 +484,10 @@ func (c *call) serve(ctx context.Context, state *State, proc *Process, rec Recor
 	}
 	c.rep.status, c.rep.check, c.rep.reason, c.rep.body = out.status, out.check, out.reason, out.body
 	key := rec.Key()
+	if out.pending {
+		c.rep.cleanup, c.rep.cleanupFailed = "pending: the JVM did not answer the load command and may still start the server; the session record is kept for the recovery", true
+		return
+	}
 	if !out.mayExist {
 		state.RemoveRecord(key)
 		return
@@ -518,7 +525,15 @@ func (c *call) attachAndRun(ctx context.Context, state *State, proc *Process, cl
 	if _, err := proc.JVM.Attach(ctx, jvmtarget.AttachRequest{Agent: arg}); err != nil {
 		// The load can have worked although the reply did not arrive.
 		present := waitPresent(bg, c.env, proc, rec.Port, c.env.AttachSettle)
-		return outcome{status: StatusFailed, reason: "attach: " + err.Error(), mayExist: present}
+		out := outcome{status: StatusFailed, reason: "attach: " + err.Error(), mayExist: present}
+		if !present && errors.Is(err, jvmtarget.ErrLoadUnanswered) {
+			rec.LoadUnanswered = true
+			if werr := state.WriteRecord(*rec); werr != nil {
+				out.reason += "; session record: " + werr.Error()
+			}
+			out.pending = true
+		}
+		return out
 	}
 	if err := waitListening(ctx, c.env, proc, rec.Port); err != nil {
 		return outcome{status: StatusFailed, reason: err.Error(), mayExist: serverPresent(c.env, proc, rec.Port)}

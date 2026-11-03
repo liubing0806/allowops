@@ -470,7 +470,11 @@ func (j *JVM) exchange(ctx context.Context, st *attachState, uid, gid uint32, ar
 	}
 	raw, err := io.ReadAll(io.LimitReader(conn, maxAttachReply))
 	if err != nil {
-		return nil, j.exchangeError("reading the answer", err, ctx)
+		err = j.exchangeError("reading the answer", err, ctx)
+		if !errors.Is(err, ErrAttachRefused) {
+			err = fmt.Errorf("%w; %w", err, ErrLoadUnanswered)
+		}
+		return nil, err
 	}
 	return raw, nil
 }

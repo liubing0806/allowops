@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"strings"
+	"time"
 
 	"github.com/liubing0806/allowops/internal/jvmtarget"
 )
@@ -134,6 +135,9 @@ func recoverKey(ctx context.Context, env Env, state *State, boot string, key Key
 		return nothing, fmt.Errorf("process %d: %w", rec.PID, err)
 	}
 	if !serverPresent(env, proc, rec.Port) {
+		if rec.LoadUnanswered && !rec.Expired(env.Now()) {
+			return nothing, fmt.Errorf("process %d did not answer the load command of an earlier call and may still start its Arthas server; the record is kept until %s", rec.PID, rec.Deadline.Format(time.RFC3339))
+		}
 		return stale, state.RemoveRecord(key)
 	}
 	res := shutdown(ctx, env, proc, rec.Port, newClient(proc, rec.Port, rec.Password), rec.SessionID, false)
