@@ -86,11 +86,12 @@ Known limits of the wrapped-command check:
 | `starrocks_diag` | Fixed diagnostics for a StarRocks frontend: cluster status, running queries, slow queries from the audit table, profile list, `ANALYZE PROFILE` and a profile summary with rule findings. The handler builds every statement; the caller chooses an `op` and bounded parameters. The account needs SYSTEM-level OPERATE, so use a separate account from `starrocks_query`. The optional `profile_run` op runs a caller's SELECT, is off by default and passes the SQL guard first. |
 | `dremio_query` | One SELECT, SHOW, DESCRIBE or EXPLAIN PLAN statement run as a Dremio job through the REST API (`http(s)://host:port`): login, submit, poll, read the first page (at most 500 rows, 1 MiB, 10 s), then cancel and log out. Dremio 24.1 has no permission boundary: every account is an administrator. The lexical SQL guard is the only write restriction on the Dremio side, and each data source behind Dremio must use a read-only account. |
 | `dremio_diag` | Fixed Dremio requests: nodes and memory, job list, one job, a job profile summary with rule findings, and reflections. The caller supplies no SQL; `builtin_config.ops` can pin an action to a single `op`. Dremio has no permission boundary, so the fixed requests are the write restriction. |
+| `jvm_perfdata` | Heap, GC, class and thread figures of an allowlisted JVM (systemd unit, or Docker container and main class) read from its hsperfdata. No attach, no signal, no write to the target; JVM arguments and system properties are never output. |
 
 Use `builtin_config` to narrow the handler's defined limits and resource
 allowlists. Database handlers (`mysql_query`, `redis_command`, `starrocks_query`,
 `starrocks_diag`, `dremio_query` and `dremio_diag`) use the privileged helper to
-read host-local credentials even if `run_as` is omitted. `log_search`, `http_get` and
+read host-local credentials, and `jvm_perfdata` uses it to read other processes' files, even if `run_as` is omitted. `log_search`, `http_get` and
 `alertmanager_alerts` without `run_as` run directly as the agent. `log_search` with no matches and `http_get`
 with a non-success HTTP status can return exit code zero; inspect the result
 and HTTP status, not just the process exit code.

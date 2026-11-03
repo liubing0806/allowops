@@ -4,7 +4,7 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 104 个 action：103 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-23 起原 `log_search` 改名 `log_grep`，新的 `log_search` 和新增的 `log_sources`、`log_stats`、`log_patterns`、`log_search_containers`、`log_export` 使用内置 log_query 处理器；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90；2026-10-23 新增上述 6 个 log_query action，2026-10-24 新增第 6 节 `prometheus_query` 的 6 个 action 和 `alertmanager_alerts` 的 1 个 action，90 + 6 + 7 = 103 个 risk: read；2026-10-25 起示例目录另含 StarRocks 与 Dremio 的 11 个 action，104 + 11 = 115，见 `builtin-starrocks.md`、`builtin-dremio.md`）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 104 个 action：103 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-23 起原 `log_search` 改名 `log_grep`，新的 `log_search` 和新增的 `log_sources`、`log_stats`、`log_patterns`、`log_search_containers`、`log_export` 使用内置 log_query 处理器；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90；2026-10-23 新增上述 6 个 log_query action，2026-10-24 新增第 6 节 `prometheus_query` 的 6 个 action 和 `alertmanager_alerts` 的 1 个 action，90 + 6 + 7 = 103 个 risk: read；2026-10-25 起示例目录另含 StarRocks 与 Dremio 的 11 个 action，104 + 11 = 115，见 `builtin-starrocks.md`、`builtin-dremio.md`；2026-10-23 新增内置处理器 `jvm_perfdata`（Arthas 引入计划阶段 1）的 1 个 action，115 + 1 = 116）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
@@ -1402,6 +1402,42 @@ argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
 exec: [/usr/bin/docker, exec, '{container}', jps, -l]
+```
+
+### `jvm_perfdata`
+
+读取白名单中一个 JVM 的 hsperfdata，输出堆、GC、类加载和线程数据。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（`jvm_perfdata`） |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D7 |
+| 执行限制 | timeout=10s（builtin_config.timeout=5s）；max_output=64KB |
+| CentOS 7 | systemd 目标可用（`systemctl show --property=MainPID` 不使用 `--value`，systemd 219 可用；内核 3.10 没有 `openat2`，逐段 `O_NOFOLLOW` 解析代替）。Docker 目标要求 `/proc/<pid>/status` 有 `NSpid` 行（Linux 4.1 及以上），内核 3.10 报错 `this kernel does not report NSpid`。不要求安装 JDK、jcmd 或 jstat，也不要求 JVM 开启任何选项；JVM 以 `-XX:-UsePerfData` 或 `-XX:+PerfDisableSharedMem` 启动时没有 hsperfdata，返回明确错误。 |
+| 安全说明 | 不 attach，不向目标发送信号（不创建 `.java_pid*` 套接字，不触发线程转储），不写目标文件系统。调用方只能从 `builtin_config.targets` 的键名中选择，没有 pid 和路径参数；目标是 systemd 服务的 MainPID，或 Docker 容器（`GET /containers/<name>/json` 的 `State.Pid`）内 `sun.rt.javaCommand` 第一个词等于 `main_class` 的 JVM。读取 `/proc/<pid>/root` 下 `/tmp/hsperfdata_<用户>/<容器内 pid>` 时，容器内的符号链接不能指向宿主路径（`openat2(RESOLVE_IN_ROOT)`，旧内核逐段 `O_NOFOLLOW`），只读取属主等于 JVM 有效 uid 的普通文件，大小上限 16MiB，所有长度和偏移做边界检查。读取前后比较 `/proc/<pid>/stat` 的启动时间，识别 pid 重用。输出不含 JVM 参数、`sun.rt.javaCommand`、`java.rt.vmArgs`、`java.rt.vmFlags` 和系统属性值。依据：`builtin-config.md`，`docs/java-diagnostics-arthas-plan.md` 第 8 节，`internal/jvmtarget/`，`internal/builtin/jvmperfdata/`。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `target` | enum | `values: ['api', 'shop-web']`（取自 `builtin_config.targets` 的键，按字典序）；必填 | 白名单中的 JVM 目标 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: jvm_perfdata
+builtin_config:
+  timeout: 5s
+  targets:
+    api:
+      systemd_unit: api.service
+    shop-web:
+      container: shop-web
+      main_class: com.example.shop.Main
 ```
 
 ### `jvm_thread_dump`
@@ -3245,7 +3281,7 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 
 ## 5. 本地示例检查
 
-`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 115 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 116 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
 
 配置脱敏冒烟在同一临时目录中把 app_config_view、app_config_keys 的 allowed_roots 改为临时配置目录，写入 properties、JSON、XML 形式的凭据和 PEM 私钥：断言 app_config_view 输出不含凭据值、match 过滤命中与否都以退出码 0 返回，app_config_keys 只输出键名且不输出 PEM 内容。该检查依赖本机 grep 支持 -P 和 head。
 

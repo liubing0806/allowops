@@ -1,4 +1,4 @@
-# Redis、MySQL、StarRocks 与 Dremio 的 builtin_config 收紧项
+# Redis、MySQL、StarRocks、Dremio 与 jvm_perfdata 的 builtin_config 收紧项
 
 目录校验和执行均验证以下字段。执行时在读取凭据和建立连接前拒绝越界参数。
 所有字段省略时保留处理器默认行为。列表字段的显式 `null`、空列表、非字符串列表和非法成员均报错。
@@ -182,6 +182,61 @@ Dremio 没有权限边界，`builtin_config` 没有 `databases` 之类限制读�
 
 未知字段（包括 `statement_types`、`show_types`、`databases`）、`ops` 的 `null`、空列表和非法成员均报错。动作参数 `op`、`job_id`、`since`、`min_duration`、`state`、`user`、`limit`、`top_n` 由处理器声明，除 `op` 外都是可选的，不接受的组合在处理器内校验；目录中的参数覆盖只能增加 `regex` 或减小 `max_len`，不能限制枚举，固定 op 使用 `ops`。
 
+## jvm_perfdata
+
+读取 HotSpot 的 hsperfdata（PerfData）文件，输出堆、GC、类加载和线程数据。
+不 attach 到目标 JVM，不向目标发送信号，不写目标文件系统。
+目标 JVM 以 `-XX:-UsePerfData` 或 `-XX:+PerfDisableSharedMem` 启动时没有该文件，处理器返回错误，不尝试其他数据来源。
+
+| 字段 | 合法配置与省略时的行为 |
+| --- | --- |
+| `targets` | 必填。1..64 项的映射，键是调用方可选的目标名，匹配 `^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`。值只能是下面两种之一 |
+| `targets.<名>.systemd_unit` | systemd 服务单元名，以 `.service` 结尾，不以 `-` 开头，最长 128 字节。目标是该单元的 MainPID |
+| `targets.<名>.container` 与 `main_class` | 必须同时设置。`container` 是 Docker 容器名（最长 128 字节）；`main_class` 是该容器内 JVM 的 `sun.rt.javaCommand` 的第一个词（主类，`-jar` 启动时是 jar 路径），1..512 字节，不含空白和控制字符 |
+| `timeout` | 省略时 10s；只能收紧，上限 10s |
+
+目标项不接受其他字段。`pid`、`path` 等字段在目录校验时报错。
+
+调用方参数只有 `target`，是 `targets` 键名的枚举（按字典序）。没有 pid、路径或容器名参数；
+枚举以外的值、额外的参数名都在参数校验阶段拒绝。action 的 `params` 只能为 `target` 补充 description，其他参数名在目录校验时报错。
+
+### 目标解析
+
+- systemd：执行固定参数的 `systemctl show --property=MainPID -- <unit>`，不经过 shell；单元未运行（MainPID 为 0）时报错。
+- Docker：通过 `/var/run/docker.sock` 对 Engine API 发 `GET /containers/<name>/json`，只读取 `State.Pid`、`Running`、`Paused`、`Restarting`，不记录也不输出响应的其余部分（其中有容器环境变量）。
+  容器未运行时报错。在该容器的 PID 命名空间内（`/proc/<pid>/ns/pid` 相同）的进程里，选出 `sun.rt.javaCommand` 第一个词等于 `main_class` 的 JVM：
+  没有匹配、多于一个匹配分别报错。最多检查 1024 个进程。`javaCommand` 的其余部分可能含口令，不输出也不写入错误。
+  与处理器同一 PID 命名空间的容器（`--pid=host`）无法与宿主进程区分，拒绝。
+- 进程重用：解析时记录 `/proc/<pid>/stat` 的启动时间，读取文件前后各比较一次。pid 被其他进程占用或进程退出时返回 `process exited or was replaced`。
+
+### 文件读取
+
+文件路径是 `/proc/<pid>/root` 下的 `/tmp/hsperfdata_<用户>/<进程在其 PID 命名空间内的 pid>`。
+用户名来自容器内的 passwd，处理器未知，因此列出 `/tmp/hsperfdata_*` 目录（最多 64 个，按名称排序），
+取第一个满足下列条件的文件：普通文件，属主 uid 等于 JVM 的有效 uid，不大于 16MiB。
+
+容器内的符号链接不能把读取带到宿主文件系统。内核支持时（Linux 5.6 及以上）使用 `openat2(RESOLVE_IN_ROOT | RESOLVE_NO_MAGICLINKS)`；
+内核较旧时逐段以 `O_PATH | O_NOFOLLOW` 解析，绝对符号链接和 `..` 都在容器根内处理，链接最多 40 次。
+最后一段是符号链接、FIFO、设备或目录时拒绝，且 FIFO 和设备不会被打开。
+
+### 输出
+
+输出是缩进的 JSON：`target`、`pid`（宿主 PID 命名空间）、`jvm`（`java.version`、`java.vm.name`、`java.vm.version`）、`uptime_seconds`、
+`heap`（总计及各代、各空间的已用、容量、最大容量）、`metaspace`、`compressed_class_space`、`gc`（收集器策略，各收集器的次数和累计耗时 `time_ms`）、`classes`（已加载和已卸载的类数，包含从 CDS 归档读取的类，与 `jstat -class` 一致）、`threads`（`live`、`daemon`、`peak`、`started`）。
+G1 的各代都报告整个堆的最大值，堆的 `max_capacity` 取各代最大值；其他收集器取各代之和。
+输出不含 JVM 参数、`sun.rt.javaCommand`、`java.rt.vmArgs`、`java.rt.vmFlags` 和系统属性值（版本三项除外）。
+内部的 `sun.rt.jvmCapabilities` 等计数器不输出，保留给后续阶段使用。
+
+hsperfdata 缺失、无法解析或服务未运行等情况，退出码为 1，原因写入 stderr，不是处理器内部错误。stderr 同样不含上述敏感内容。
+
+### 运行条件
+
+- 读取其他用户的进程和容器根文件系统，需要 root。该 action 与 `mysql_query`、`redis_command` 相同，由 `allowops-exec` 以 root 执行，`run_as` 省略时按 root 处理。
+- 容器目标需要读取 `/var/run/docker.sock` 的权限；该套接字能控制 Docker，因此处理器只发送上述只读 GET 请求。
+- 容器目标需要内核提供 `/proc/<pid>/status` 的 `NSpid` 行（Linux 4.1 及以上）。CentOS 7（内核 3.10）没有该行，容器目标报错 `this kernel does not report NSpid`；
+  systemd 目标不受影响，因为 JVM 与处理器在同一 PID 命名空间。
+- `systemctl show --property=MainPID` 不使用 `--value`，systemd 219 可用。
+
 ## 本地目录校验配置
 
 以下 builtin_config 可用于两个独立 action。配置不包含凭据内容；目录校验不读取凭据或连接服务。
@@ -262,4 +317,16 @@ builtin_config:
   max_bytes: 256KB
   timeout: 10s
   max_profile_bytes: 16MB
+```
+
+```yaml
+# builtin: jvm_perfdata
+builtin_config:
+  timeout: 5s
+  targets:
+    api:
+      systemd_unit: api.service
+    shop-web:
+      container: shop-web
+      main_class: com.example.shop.Main
 ```
