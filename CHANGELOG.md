@@ -11,6 +11,12 @@ jobs list, and fixes from two external code reviews.
 - Run `allowops-gateway migrate` before starting the new gateway. Three
   migrations are added (`00007_jobs_created_index`, `00008_task_output_instance`,
   `00009_gateway_update_check`); the schema version goes from 6 to 9.
+- Set `gateway.version` in `gateway.yaml` to `0.2.0` or remove it; without the
+  key the gateway uses its build version. The gateway refuses agents newer than
+  this value, so with `gateway.version: '0.1.0'` an agent upgraded to 0.2.0 is
+  refused with `agent version unsupported` and cannot reconnect.
+- With a separate runtime database role, grant it `SELECT`, `INSERT` and
+  `UPDATE` on `gateway_update_check` before enabling `update_check`.
 - Path parameters are now refused unless every component is owned by root or
   the run-as user, is not a symlink, and is not group- or world-writable
   (sticky directories excepted). Paths under group-writable directories, such
