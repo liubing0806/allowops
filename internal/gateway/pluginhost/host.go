@@ -250,7 +250,8 @@ func (h *Host) SearchInventory(ctx context.Context, q Query, sources []string) (
 
 // redactEntity redacts e in place. An attribute value that is redacted only
 // together with its key (password=x, --bindpw=x) is a secret wherever it
-// appears, so the name, selector and dependencies holding it are hidden too.
+// appears, so the other attributes, name, selector and dependencies holding it
+// are hidden too.
 func (h *Host) redactEntity(e *inventory.Entity) {
 	var secrets []string
 	for k, v := range e.Attrs {
@@ -278,6 +279,13 @@ func (h *Host) redactEntity(e *inventory.Entity) {
 	}
 	holds := func(s string) bool {
 		return slices.ContainsFunc(secrets, func(secret string) bool { return strings.Contains(s, secret) })
+	}
+	for k, v := range e.Attrs {
+		if holds(k) {
+			delete(e.Attrs, k)
+		} else if holds(v) {
+			e.Attrs[k] = "[REDACTED]"
+		}
 	}
 	e.Name = h.redactor.Line(e.Name)
 	if holds(e.Name) {
