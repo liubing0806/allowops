@@ -52,6 +52,8 @@ type Resolver struct {
 
 	// afterRead runs after hsperfdata was read and before the process is checked again (tests).
 	afterRead func()
+	// beforeConnect runs between opening the attach socket and connecting to it (tests).
+	beforeConnect func()
 }
 
 // NewResolver returns a Resolver for the local host.

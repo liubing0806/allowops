@@ -15,6 +15,8 @@ var (
 	ErrSymlink = errors.New("path ends in a symbolic link")
 	// ErrNotRegular is returned when a file to read is not a regular file.
 	ErrNotRegular = errors.New("not a regular file")
+	// ErrNotSocket is returned when a path that must be a socket is something else.
+	ErrNotSocket = errors.New("not a socket")
 )
 
 // A Root resolves paths of another mount namespace through /proc/<pid>/root.
@@ -29,8 +31,9 @@ var (
 // with a stack of directory descriptors, so no step ever uses a name the
 // container could redirect.
 //
-// Nothing is created or written. Special files are never opened: opening
-// a device node or FIFO that a container made can have side effects on the host.
+// Nothing is written. Create makes an empty file, for the attach trigger file, and
+// special files are never opened: opening a device node or FIFO that a container made
+// can have side effects on the host.
 
 const (
 	// maxPath is the kernel's PATH_MAX; it also bounds a path after links are expanded.
@@ -89,10 +92,19 @@ func (r *Root) OpenDir(path string) (*os.File, error) {
 	return r.open(path, unix.S_IFDIR, unix.O_RDONLY|unix.O_DIRECTORY, true)
 }
 
+// validPath rejects what no lookup accepts. A trailing slash is rejected because it would
+// make the kernel follow a symbolic link at the end.
+func validPath(path string) error {
+	if path == "" || len(path) > maxPath || strings.ContainsRune(path, 0) || strings.HasSuffix(path, "/") {
+		return unix.EINVAL
+	}
+	return nil
+}
+
 func (r *Root) open(path string, kind uint32, flags int, followLast bool) (*os.File, error) {
 	fail := func(err error) (*os.File, error) { return nil, &os.PathError{Op: "open", Path: path, Err: err} }
-	if path == "" || len(path) > maxPath || strings.ContainsRune(path, 0) || strings.HasSuffix(path, "/") {
-		return fail(unix.EINVAL)
+	if err := validPath(path); err != nil {
+		return fail(err)
 	}
 	// O_PATH first: it opens nothing, so a FIFO or device cannot do anything
 	// before the type is known.
@@ -122,6 +134,127 @@ func (r *Root) open(path string, kind uint32, flags int, followLast bool) (*os.F
 		return fail(err)
 	}
 	return os.NewFile(uintptr(fd), path), nil
+}
+
+// Stat describes path. A symbolic link at the end of the path is described itself, not
+// followed, unless follow is set; links elsewhere are followed inside the root.
+func (r *Root) Stat(path string, follow bool) (unix.Stat_t, error) {
+	var st unix.Stat_t
+	if err := validPath(path); err != nil {
+		return st, &os.PathError{Op: "stat", Path: path, Err: err}
+	}
+	fd, err := r.resolve(path, follow)
+	if err != nil {
+		return st, &os.PathError{Op: "stat", Path: path, Err: err}
+	}
+	defer unix.Close(fd)
+	if err := unix.Fstat(fd, &st); err != nil {
+		return st, &os.PathError{Op: "stat", Path: path, Err: err}
+	}
+	return st, nil
+}
+
+// OpenSocket returns an O_PATH descriptor of the socket at path. It fails with ErrSymlink when
+// the path ends in a symbolic link, with ErrNotSocket for any other file type and with
+// errForeignOwner when uid does not own the socket. The caller closes the descriptor.
+// Connecting to /proc/self/fd/<fd> reaches the inode that was checked, not whatever the
+// name leads to later. Connecting through /proc/<pid>/root/<path> would resolve the
+// absolute symbolic links of the container in the host's root.
+func (r *Root) OpenSocket(path string, uid uint32) (int, error) {
+	fail := func(err error) (int, error) { return -1, &os.PathError{Op: "open", Path: path, Err: err} }
+	if err := validPath(path); err != nil {
+		return fail(err)
+	}
+	fd, err := r.resolve(path, false)
+	if err != nil {
+		return fail(err)
+	}
+	var st unix.Stat_t
+	if err := unix.Fstat(fd, &st); err != nil {
+		unix.Close(fd)
+		return fail(err)
+	}
+	switch {
+	case st.Mode&unix.S_IFMT == unix.S_IFLNK:
+		err = ErrSymlink
+	case st.Mode&unix.S_IFMT != unix.S_IFSOCK:
+		err = ErrNotSocket
+	case st.Uid != uid:
+		err = errForeignOwner
+	}
+	if err != nil {
+		unix.Close(fd)
+		return fail(err)
+	}
+	return fd, nil
+}
+
+// A CreatedFile is an empty file made by Root.Create. It keeps the directory open, so Remove
+// deletes the name in the directory where the file was made, whatever happened to the path
+// since. A CreatedFile is not safe for concurrent use.
+type CreatedFile struct {
+	// Path is the path in the root, for messages.
+	Path    string
+	dirfd   int
+	name    string
+	removed bool
+}
+
+// Create makes the file name, owned by uid and gid, in the directory dir of the root. A
+// symbolic link at the end of dir is followed inside the root, like one in the middle. The
+// file must not exist: a name that exists, as a file or as a link, fails with EEXIST, and the
+// existing file is never opened or changed.
+func (r *Root) Create(dir, name string, mode, uid, gid uint32) (*CreatedFile, error) {
+	path := strings.TrimRight(dir, "/") + "/" + name
+	fail := func(err error) (*CreatedFile, error) { return nil, &os.PathError{Op: "create", Path: path, Err: err} }
+	if name == "" || name == "." || name == ".." || len(name) > 255 || strings.ContainsAny(name, "/\x00") {
+		return fail(unix.EINVAL)
+	}
+	if dir == "/" {
+		dir = "." // the root itself
+	} else if err := validPath(dir); err != nil {
+		return fail(err)
+	}
+	dirfd, err := r.resolve(dir, true)
+	if err != nil {
+		return fail(err)
+	}
+	var st unix.Stat_t
+	if err := unix.Fstat(dirfd, &st); err != nil {
+		unix.Close(dirfd)
+		return fail(err)
+	}
+	if st.Mode&unix.S_IFMT != unix.S_IFDIR {
+		unix.Close(dirfd)
+		return fail(unix.ENOTDIR)
+	}
+	fd, err := unix.Openat(dirfd, name, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, mode)
+	if err != nil {
+		unix.Close(dirfd)
+		return fail(err)
+	}
+	err = unix.Fchown(fd, int(uid), int(gid))
+	unix.Close(fd)
+	if err != nil {
+		unix.Unlinkat(dirfd, name, 0)
+		unix.Close(dirfd)
+		return fail(err)
+	}
+	return &CreatedFile{Path: path, dirfd: dirfd, name: name}, nil
+}
+
+// Remove deletes the file. A file that is already gone is not an error. Remove can be called again.
+func (c *CreatedFile) Remove() error {
+	if c == nil || c.removed {
+		return nil
+	}
+	err := unix.Unlinkat(c.dirfd, c.name, 0)
+	unix.Close(c.dirfd)
+	c.removed = true
+	if err != nil && err != unix.ENOENT {
+		return &os.PathError{Op: "remove", Path: c.Path, Err: err}
+	}
+	return nil
 }
 
 // resolve returns an O_PATH descriptor for path, resolved in the root. A

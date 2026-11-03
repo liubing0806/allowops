@@ -68,6 +68,11 @@ type process struct {
 	euid  uint32
 	ns    string
 	root  string
+	// egid defaults to the test's group, sigCgt to the mask of a JVM that handles SIGQUIT.
+	egid   uint32
+	sigCgt uint64
+	// cwd is the target of the cwd link: a path inside the process's root.
+	cwd string
 }
 
 func (h *host) addProcess(p process) {
@@ -93,7 +98,14 @@ func (h *host) addProcess(p process) {
 	for i, id := range p.nspid {
 		ids[i] = fmt.Sprint(id)
 	}
-	writeFile(h.t, filepath.Join(dir, "status"), fmt.Sprintf("Name:\tjava\nNSpid:\t%s\nUid:\t%d\t%d\t%d\t%d\n", strings.Join(ids, "\t"), p.euid, p.euid, p.euid, p.euid))
+	if p.egid == 0 {
+		p.egid = uint32(os.Getgid())
+	}
+	if p.sigCgt == 0 {
+		p.sigCgt = 0x5ccf
+	}
+	writeFile(h.t, filepath.Join(dir, "status"), fmt.Sprintf("Name:\tjava\nNSpid:\t%s\nUid:\t%d\t%d\t%d\t%d\nGid:\t%d\t%d\t%d\t%d\nSigCgt:\t%016x\n",
+		strings.Join(ids, "\t"), p.euid, p.euid, p.euid, p.euid, p.egid, p.egid, p.egid, p.egid, p.sigCgt))
 	if err := os.Symlink(p.ns, filepath.Join(dir, "ns", "pid")); err != nil {
 		h.t.Fatal(err)
 	}
@@ -102,6 +114,11 @@ func (h *host) addProcess(p process) {
 	}
 	if err := os.Symlink(p.root, filepath.Join(dir, "root")); err != nil {
 		h.t.Fatal(err)
+	}
+	if p.cwd != "" {
+		if err := os.Symlink(p.cwd, filepath.Join(dir, "cwd")); err != nil {
+			h.t.Fatal(err)
+		}
 	}
 }
 

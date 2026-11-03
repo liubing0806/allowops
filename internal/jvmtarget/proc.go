@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // Proc reads process metadata below a procfs mount. Root is /proc except in tests.
@@ -22,9 +24,21 @@ type Status struct {
 	// NSPid lists the pid in each PID namespace, outermost first. The last
 	// element is the pid the process sees itself, and the name of its hsperfdata file.
 	NSPid []int
-	UID   uint32
-	EUID  uint32
+	// UID and GID are the real ids, EUID and EGID the effective ids. HotSpot compares the
+	// effective ones with the owner of the attach file and with the peer of the attach socket.
+	UID, EUID uint32
+	GID, EGID uint32
+	// SigCgt is the set of signals the process catches: bit n-1 is signal n. It is zero when
+	// the status has no SigCgt line.
+	SigCgt uint64
 }
+
+// sigQuit is the signal that makes HotSpot start its attach listener.
+const sigQuit = 3
+
+// CatchesSIGQUIT reports whether the process installed a handler for SIGQUIT. Without one the
+// signal ends the process (default action), or has no effect when ignored.
+func (s Status) CatchesSIGQUIT() bool { return s.SigCgt&(1<<(sigQuit-1)) != 0 }
 
 // maxProcFile bounds what is read from a procfs file; the kernel's output is far smaller.
 const maxProcFile = 64 << 10
@@ -113,16 +127,23 @@ func (p Proc) Status(pid int) (Status, error) {
 				return Status{}, fmt.Errorf("malformed NSpid in %s", path)
 			}
 		case "Uid":
-			fields := strings.Fields(value)
-			if len(fields) != 4 {
+			real, effective, ok := parseIDs(value)
+			if !ok {
 				return Status{}, fmt.Errorf("malformed Uid in %s", path)
 			}
-			real, err1 := strconv.ParseUint(fields[0], 10, 32)
-			effective, err2 := strconv.ParseUint(fields[1], 10, 32)
-			if err1 != nil || err2 != nil {
-				return Status{}, fmt.Errorf("malformed Uid in %s", path)
+			st.UID, st.EUID, haveUID = real, effective, true
+		case "Gid":
+			real, effective, ok := parseIDs(value)
+			if !ok {
+				return Status{}, fmt.Errorf("malformed Gid in %s", path)
 			}
-			st.UID, st.EUID, haveUID = uint32(real), uint32(effective), true
+			st.GID, st.EGID = real, effective
+		case "SigCgt":
+			mask, err := strconv.ParseUint(strings.TrimSpace(value), 16, 64)
+			if err != nil {
+				return Status{}, fmt.Errorf("malformed SigCgt in %s", path)
+			}
+			st.SigCgt = mask
 		}
 	}
 	if !haveUID {
@@ -139,9 +160,32 @@ func (p Proc) Status(pid int) (Status, error) {
 	return st, nil
 }
 
+// parseIDs reads the four ids of a Uid or Gid line and returns the real and the effective one.
+func parseIDs(value string) (real, effective uint32, ok bool) {
+	fields := strings.Fields(value)
+	if len(fields) != 4 {
+		return 0, 0, false
+	}
+	r, err1 := strconv.ParseUint(fields[0], 10, 32)
+	e, err2 := strconv.ParseUint(fields[1], 10, 32)
+	if err1 != nil || err2 != nil {
+		return 0, 0, false
+	}
+	return uint32(r), uint32(e), true
+}
+
 // PIDNamespace returns the identity of the PID namespace of a process.
 func (p Proc) PIDNamespace(pid int) (string, error) {
 	path, err := p.path(pid, "ns/pid")
+	if err != nil {
+		return "", err
+	}
+	return os.Readlink(path)
+}
+
+// NetNamespace returns the identity of the network namespace of a process.
+func (p Proc) NetNamespace(pid int) (string, error) {
+	path, err := p.path(pid, "ns/net")
 	if err != nil {
 		return "", err
 	}
@@ -170,4 +214,71 @@ func (p Proc) PIDs() ([]int, error) {
 			return nil, err
 		}
 	}
+}
+
+const (
+	// arthasThreadPrefix starts the name of every thread of an Arthas server (arthas-NettyWeb,
+	// arthas-timer, arthas-command-execute, ...). Linux keeps 15 bytes of a thread name in comm.
+	arthasThreadPrefix = "arthas-"
+	// maxThreads bounds the threads examined per process; the kernel's default limit is 32768.
+	maxThreads = 1 << 16
+)
+
+// ArthasThreads counts the threads of the process whose name starts with "arthas-". An
+// Arthas server in the process has them, and none is left after it stopped. An application
+// thread with such a name is counted too. The file descriptors and memory mappings of
+// Arthas' jar files stay after a stop, so they say nothing about a running server.
+func (p Proc) ArthasThreads(pid int) (int, error) {
+	dirPath, err := p.path(pid, "task")
+	if err != nil {
+		return 0, err
+	}
+	dir, err := os.Open(dirPath)
+	if err != nil {
+		return 0, vanished(pid, err)
+	}
+	defer dir.Close()
+	count, seen := 0, 0
+	for {
+		names, err := dir.Readdirnames(256)
+		for _, name := range names {
+			if seen++; seen > maxThreads {
+				return 0, fmt.Errorf("process %d has more than %d threads", pid, maxThreads)
+			}
+			comm, err := readComm(filepath.Join(dirPath, name, "comm"))
+			if errors.Is(err, fs.ErrNotExist) {
+				continue // the thread ended
+			}
+			if err != nil {
+				return 0, err
+			}
+			if strings.HasPrefix(comm, arthasThreadPrefix) {
+				count++
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			return count, nil
+		}
+		if err != nil {
+			return 0, vanished(pid, err)
+		}
+	}
+}
+
+// readComm reads a thread name; the kernel writes at most 16 bytes.
+func readComm(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	buf := make([]byte, 64)
+	n, err := f.Read(buf)
+	if err != nil && !errors.Is(err, io.EOF) {
+		if errors.Is(err, syscall.ESRCH) {
+			return "", fs.ErrNotExist
+		}
+		return "", err
+	}
+	return strings.TrimRight(string(buf[:n]), "\n"), nil
 }

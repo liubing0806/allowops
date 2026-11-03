@@ -1,6 +1,7 @@
 package jvmtarget
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -168,5 +169,121 @@ func TestPIDNamespaceAndPIDs(t *testing.T) {
 		if !want[pid] {
 			t.Errorf("unexpected pid %d in %v", pid, pids)
 		}
+	}
+}
+
+func TestStatusGroupsAndSignals(t *testing.T) {
+	root := t.TempDir()
+	p := Proc{Root: root}
+	status := func(sigCgt string) string {
+		return "Name:\tjava\nNSpid:\t42\t7\nUid:\t10001\t10001\t10001\t10001\nGid:\t10002\t10003\t10002\t10002\nSigIgn:\t0000000000000000\nSigCgt:\t" + sigCgt + "\n"
+	}
+	for sigCgt, wantQuit := range map[string]bool{
+		"0000000000005ccf": true,  // a JVM: SIGQUIT (bit 2) is caught
+		"0000000000001cc8": false, // -Xrs: the JVM leaves SIGQUIT alone
+		"0000000000000004": true,
+		"0000000000000000": false,
+		"fffffffffffffffb": false,
+		"ffffffffffffffff": true,
+	} {
+		writeFile(t, filepath.Join(root, "42", "status"), status(sigCgt))
+		st, err := p.Status(42)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.GID != 10002 || st.EGID != 10003 || st.UID != 10001 || st.EUID != 10001 {
+			t.Errorf("ids = %d/%d %d/%d", st.UID, st.EUID, st.GID, st.EGID)
+		}
+		if st.CatchesSIGQUIT() != wantQuit {
+			t.Errorf("SigCgt %s: CatchesSIGQUIT = %v", sigCgt, st.CatchesSIGQUIT())
+		}
+	}
+	for name, content := range map[string]string{
+		"short gid":  "NSpid:\t42\nUid:\t1\t1\t1\t1\nGid:\t5\n",
+		"bad gid":    "NSpid:\t42\nUid:\t1\t1\t1\t1\nGid:\ta\tb\tc\td\n",
+		"bad sigcgt": "NSpid:\t42\nUid:\t1\t1\t1\t1\nSigCgt:\tzz\n",
+		"neg sigcgt": "NSpid:\t42\nUid:\t1\t1\t1\t1\nSigCgt:\t-4\n",
+	} {
+		writeFile(t, filepath.Join(root, "42", "status"), content)
+		if st, err := p.Status(42); err == nil {
+			t.Errorf("%s: parsed %+v", name, st)
+		}
+	}
+	// The ids and the signal mask are optional: older tests and kernels print what they know.
+	writeFile(t, filepath.Join(root, "42", "status"), "NSpid:\t42\nUid:\t1\t1\t1\t1\n")
+	if st, err := p.Status(42); err != nil || st.SigCgt != 0 || st.CatchesSIGQUIT() {
+		t.Errorf("status without Gid and SigCgt: %+v, %v", st, err)
+	}
+}
+
+func TestNetNamespace(t *testing.T) {
+	root := t.TempDir()
+	p := Proc{Root: root}
+	if err := os.MkdirAll(filepath.Join(root, "42", "ns"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("net:[4026532700]", filepath.Join(root, "42", "ns", "net")); err != nil {
+		t.Fatal(err)
+	}
+	if ns, err := p.NetNamespace(42); err != nil || ns != "net:[4026532700]" {
+		t.Errorf("namespace = %q, %v", ns, err)
+	}
+	if _, err := p.NetNamespace(43); err == nil {
+		t.Error("a missing process has a network namespace")
+	}
+}
+
+// fakeThreads gives the process one task directory per thread name.
+func fakeThreads(t *testing.T, root string, pid int, names ...string) {
+	t.Helper()
+	if err := os.RemoveAll(filepath.Join(root, strconv.Itoa(pid), "task")); err != nil {
+		t.Fatal(err)
+	}
+	for i, name := range names {
+		writeFile(t, filepath.Join(root, strconv.Itoa(pid), "task", strconv.Itoa(pid+i), "comm"), name+"\n")
+	}
+	if len(names) == 0 {
+		if err := os.MkdirAll(filepath.Join(root, strconv.Itoa(pid), "task"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestArthasThreads(t *testing.T) {
+	root := t.TempDir()
+	p := Proc{Root: root}
+	fakeThreads(t, root, 42, "java", "GC Thread#0", "arthas-NettyWeb", "arthas-timer", "my-arthas-worker", "Arthas-x", "arthas", "arthas-")
+	// "arthas-" followed by nothing is a prefix match too: only the exact prefix counts, case sensitive.
+	if n, err := p.ArthasThreads(42); err != nil || n != 3 {
+		t.Errorf("count = %d, %v; want 3 (arthas-NettyWeb, arthas-timer, arthas-)", n, err)
+	}
+	fakeThreads(t, root, 42, "java", "C2 CompilerThre")
+	if n, err := p.ArthasThreads(42); err != nil || n != 0 {
+		t.Errorf("count = %d, %v; want 0", n, err)
+	}
+	fakeThreads(t, root, 42)
+	if n, err := p.ArthasThreads(42); err != nil || n != 0 {
+		t.Errorf("no threads: count = %d, %v", n, err)
+	}
+	// A thread that ended while the directory was listed has no comm file.
+	fakeThreads(t, root, 42, "arthas-a", "arthas-b")
+	if err := os.Remove(filepath.Join(root, "42", "task", "43", "comm")); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := p.ArthasThreads(42); err != nil || n != 1 {
+		t.Errorf("count = %d, %v; want 1", n, err)
+	}
+	if _, err := p.ArthasThreads(43); !errors.Is(err, ErrProcessChanged) {
+		t.Errorf("missing process: %v; want ErrProcessChanged", err)
+	}
+	if _, err := p.ArthasThreads(0); err == nil {
+		t.Error("pid 0 accepted")
+	}
+}
+
+func TestArthasThreadsOfThisProcess(t *testing.T) {
+	n, err := DefaultProc().ArthasThreads(os.Getpid())
+	if err != nil || n != 0 {
+		t.Errorf("count = %d, %v; the test process has no Arthas threads", n, err)
 	}
 }

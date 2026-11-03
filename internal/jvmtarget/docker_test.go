@@ -46,26 +46,27 @@ func dockerDaemon(t *testing.T, handler func(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-// inspect mimics the container inspect document, whose Config.Env holds secrets.
-func inspect(state string) string {
-	return `{"Id":"abc","Name":"/web","State":` + state + `,"Config":{"Env":["DB_PASSWORD=CANARY-env"],"Cmd":["java","-jar","x.jar"]}}`
+// inspect mimics the container inspect document of the container with the given name; its
+// Config.Env holds secrets.
+func inspect(name, state string) string {
+	return `{"Id":"abc","Name":"/` + name + `","State":` + state + `,"Config":{"Env":["DB_PASSWORD=CANARY-env"],"Cmd":["java","-jar","x.jar"]}}`
 }
 
 func TestDockerContainerPID(t *testing.T) {
 	socket, requests := dockerDaemon(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/containers/web/json":
-			w.Write([]byte(inspect(`{"Status":"running","Running":true,"Paused":false,"Restarting":false,"Pid":4242,"StartedAt":"2026-10-23T00:00:00Z"}`)))
+			w.Write([]byte(inspect("web", `{"Status":"running","Running":true,"Paused":false,"Restarting":false,"Pid":4242,"StartedAt":"2026-10-23T00:00:00Z"}`)))
 		case "/containers/paused/json":
-			w.Write([]byte(inspect(`{"Status":"paused","Running":true,"Paused":true,"Pid":4243}`)))
+			w.Write([]byte(inspect("paused", `{"Status":"paused","Running":true,"Paused":true,"Pid":4243}`)))
 		case "/containers/stopped/json":
-			w.Write([]byte(inspect(`{"Status":"exited","Running":false,"Pid":0}`)))
+			w.Write([]byte(inspect("stopped", `{"Status":"exited","Running":false,"Pid":0}`)))
 		case "/containers/restarting/json":
-			w.Write([]byte(inspect(`{"Status":"restarting","Running":true,"Restarting":true,"Pid":0}`)))
+			w.Write([]byte(inspect("restarting", `{"Status":"restarting","Running":true,"Restarting":true,"Pid":0}`)))
 		case "/containers/nopid/json":
-			w.Write([]byte(inspect(`{"Status":"running","Running":true,"Pid":0}`)))
+			w.Write([]byte(inspect("nopid", `{"Status":"running","Running":true,"Pid":0}`)))
 		case "/containers/negpid/json":
-			w.Write([]byte(inspect(`{"Status":"running","Running":true,"Pid":-5}`)))
+			w.Write([]byte(inspect("negpid", `{"Status":"running","Running":true,"Pid":-5}`)))
 		case "/containers/garbage/json":
 			w.Write([]byte("<html>CANARY-body</html>"))
 		case "/containers/huge/json":
@@ -111,6 +112,45 @@ func TestDockerContainerPID(t *testing.T) {
 	for _, r := range requests() {
 		if r.method != "GET" || !strings.HasPrefix(r.path, "/containers/") || !strings.HasSuffix(r.path, "/json") {
 			t.Errorf("unexpected request %+v", r)
+		}
+	}
+}
+
+// A container reference that is a hexadecimal prefix of an ID matches a container by ID when no
+// container has that name. The configured name must be the name of the container that answers.
+func TestDockerContainerPIDRejectsAnotherContainer(t *testing.T) {
+	running := `{"Status":"running","Running":true,"Pid":4242}`
+	socket, _ := dockerDaemon(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/containers/db/json":
+			// No container is named "db"; this one has an ID that starts with it.
+			w.Write([]byte(`{"Id":"db3f9a0c","Name":"/billing","State":` + running + `}`))
+		case "/containers/ab12/json":
+			// A name that also reads as an ID prefix, with a container whose name merely starts with it.
+			w.Write([]byte(`{"Id":"ab12ff","Name":"/ab12-old","State":` + running + `}`))
+		case "/containers/noname/json":
+			w.Write([]byte(`{"Id":"abc","State":` + running + `}`))
+		case "/containers/Web/json":
+			// Names are case sensitive.
+			w.Write([]byte(inspect("web", running)))
+		default:
+			// The name in the document is the name that was asked for.
+			w.Write([]byte(inspect(strings.Split(r.URL.Path, "/")[2], running)))
+		}
+	})
+	for _, name := range []string{"db", "ab12", "noname", "Web"} {
+		pid, err := dockerContainerPID(context.Background(), socket, name)
+		if err == nil {
+			t.Errorf("%s: pid %d accepted", name, pid)
+			continue
+		}
+		if strings.Contains(err.Error(), "billing") || strings.Contains(err.Error(), "ab12-old") {
+			t.Errorf("%s: error names another container: %v", name, err)
+		}
+	}
+	for _, name := range []string{"db3f9a0c", "ab12-old", "billing"} {
+		if pid, err := dockerContainerPID(context.Background(), socket, name); err != nil || pid != 4242 {
+			t.Errorf("%s: pid = %d, %v", name, pid, err)
 		}
 	}
 }

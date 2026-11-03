@@ -19,6 +19,7 @@ const maxInspectBytes = 8 << 20
 
 // dockerContainerPID asks the Docker Engine API for the host pid of the
 // container's main process. The only request is GET /containers/<name>/json.
+// The container must have exactly this name.
 func dockerContainerPID(ctx context.Context, socket, name string) (int, error) {
 	if !containerPattern.MatchString(name) || len(name) > maxContainerLen {
 		return 0, fmt.Errorf("invalid container name %q", name)
@@ -47,6 +48,7 @@ func dockerContainerPID(ctx context.Context, socket, name string) (int, error) {
 		return 0, fmt.Errorf("docker API answered %s for container %q", resp.Status, name)
 	}
 	var doc struct {
+		Name  string
 		State struct {
 			Pid        int
 			Running    bool
@@ -56,6 +58,11 @@ func dockerContainerPID(ctx context.Context, socket, name string) (int, error) {
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxInspectBytes+1)).Decode(&doc); err != nil {
 		return 0, fmt.Errorf("docker API: unreadable inspect document for container %q", name)
+	}
+	// Docker also accepts an ID or an ID prefix in the place of the name, and a name made of
+	// hexadecimal digits that no container has can match the ID of another container.
+	if doc.Name != "/"+name {
+		return 0, fmt.Errorf("no container is named %q (Docker answered with a container of another name)", name)
 	}
 	state := doc.State
 	switch {
