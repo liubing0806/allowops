@@ -233,19 +233,24 @@ func (h *Host) SearchInventory(ctx context.Context, q Query, sources []string) (
 					delete(e.Attrs, k)
 					continue
 				}
+				// "password=x" is recognised only with its key; "-px" only
+				// as a standalone value. Redact both forms.
 				prefix := k + "="
 				value := h.redactor.Line(prefix + v)
 				if strings.HasPrefix(value, prefix) {
-					e.Attrs[k] = strings.TrimPrefix(value, prefix)
+					e.Attrs[k] = h.redactor.Line(strings.TrimPrefix(value, prefix))
 				} else {
 					e.Attrs[k] = "[REDACTED]"
 				}
 			}
 			// A redacted selector would select other hosts; keep only Hosts.
-			if h.redactor.Line(e.Selector) != e.Selector {
+			if h.redacts(e.Selector) {
 				e.Selector = ""
 			}
 			for i, v := range e.DependsOn {
+				if kind, name, ok := strings.Cut(v, "/"); ok {
+					v = kind + "/" + h.redactor.Line(name)
+				}
 				e.DependsOn[i] = h.redactor.Line(v)
 			}
 			results = append(results, Result{Entity: e, Source: call.inst.id})
@@ -264,6 +269,23 @@ func (h *Host) SearchInventory(ctx context.Context, q Query, sources []string) (
 		return strings.Compare(a.Source, b.Source)
 	})
 	return results, errors
+}
+
+// redacts reports whether redaction changes the selector or any of its
+// keys and values on their own.
+func (h *Host) redacts(selector string) bool {
+	if h.redactor.Line(selector) != selector {
+		return true
+	}
+	for _, term := range strings.Split(selector, ",") {
+		key, value, _ := strings.Cut(term, "=")
+		for _, part := range []string{term, key, value, strings.TrimSpace(key), strings.TrimSpace(value)} {
+			if h.redactor.Line(part) != part {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func validEntity(e inventory.Entity) bool {

@@ -40,6 +40,7 @@ type entityFile struct {
 
 var kindPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 var attrPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
+var yamlErrorLine = regexp.MustCompile(`line (\d+)`)
 
 func (m *Module) Provision(ctx context.Context, h plugin.Host) error {
 	// O_NONBLOCK keeps a FIFO from blocking startup; the file type check
@@ -70,7 +71,12 @@ func (m *Module) Provision(ctx context.Context, h plugin.Host) error {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&file); err != nil {
-		return err
+		// yaml.v3 errors quote keys and values from the file; keep only the
+		// line number.
+		if line := yamlErrorLine.FindStringSubmatch(err.Error()); line != nil {
+			return fmt.Errorf("inventory file: invalid YAML at line %s", line[1])
+		}
+		return fmt.Errorf("inventory file: invalid YAML")
 	}
 	entities := make([]inventory.Entity, 0, len(file.Entities))
 	seen := map[[2]string]bool{}
