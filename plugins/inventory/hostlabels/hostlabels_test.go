@@ -5,8 +5,10 @@ import (
 	"errors"
 	"log/slog"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/liubing0806/allowops/internal/redact"
 	"github.com/liubing0806/allowops/plugin"
 	"github.com/liubing0806/allowops/plugin/inventory"
 )
@@ -84,6 +86,32 @@ func TestRejectCredentialLabels(t *testing.T) {
 	for _, label := range []string{"password", "reported.password", "api_token", "DB_PASS", "client_secret", "API_KEY", "authorization"} {
 		if err := (&Module{Label: label}).Provision(context.Background(), testHost{}); err == nil {
 			t.Errorf("credential label %q accepted", label)
+		}
+	}
+}
+
+// TestCredentialLabelsMatchRedactor checks that every label key the gateway
+// redactor treats as a credential key in "key=value" form is rejected.
+func TestCredentialLabelsMatchRedactor(t *testing.T) {
+	r, err := redact.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := []string{"service", "team", "env", "app", "monkey", "design_key", "bypass", "compass",
+		"password", "passwd", "passphrase", "secret", "token", "credential", "credentials", "pwd", "db_pass", "keystorePass",
+		"api_key", "apikey", "access_key", "secret_key", "private_key", "auth_key", "encrypt_key", "encryption_key",
+		"signing_key", "master_key", "masterKey", "SIGNING-KEY", "kms.masterKey", "app_key", "sign_key", "secret_key_base"}
+	for _, key := range keys {
+		redacted := r.Line(key+"=synthetic-value") != key+"=synthetic-value"
+		rejected := (&Module{Label: key}).Provision(context.Background(), testHost{}) != nil
+		if redacted && !rejected {
+			t.Errorf("label %q is a credential key for the redactor but is accepted", key)
+		}
+		if strings.HasPrefix(key, "reported.") {
+			continue
+		}
+		if redacted && (&Module{Label: "reported." + key}).Provision(context.Background(), testHost{}) == nil {
+			t.Errorf("label reported.%q accepted", key)
 		}
 	}
 }

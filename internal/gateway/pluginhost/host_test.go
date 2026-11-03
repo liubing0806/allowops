@@ -270,3 +270,15 @@ func TestConfigErrorOmitsContent(t *testing.T) {
 		t.Fatalf("error: %v", err)
 	}
 }
+
+func TestEnvelopeErrorsOmitContent(t *testing.T) {
+	for name, configs := range map[string][]Config{
+		"id":     {{ID: jwtKey, Module: "inventory.host_test"}},
+		"module": {{ID: "test", Module: jwtKey}},
+		"kind":   {{ID: "test", Module: "changes." + jwtKey}},
+	} {
+		if _, err := New(context.Background(), configs, testDeps()); err == nil || strings.Contains(err.Error(), "eyJ") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
