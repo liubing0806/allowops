@@ -461,6 +461,29 @@ func TestRunKeepsTheRecordWhenTheLoadIsUnanswered(t *testing.T) {
 	r.wantEnded()
 }
 
+// The record on disk while the load command is out has to keep the recovery from deleting it:
+// the call can die, or fail to write the record again, before the JVM answers.
+func TestRunMarksTheRecordBeforeTheLoadIsSent(t *testing.T) {
+	r := newRig(t)
+	var during Record
+	var readErr error
+	r.jvm.onAttach = func(req jvmtarget.AttachRequest) error {
+		during, readErr = r.state().ReadRecord(r.key)
+		return r.onAttach(req)
+	}
+	res, err := r.run(context.Background())
+	if err != nil || res.ExitCode != 0 {
+		t.Fatalf("%v\n%s", err, res.Stdout)
+	}
+	if readErr != nil {
+		t.Fatalf("no session record while the load command is out: %v", readErr)
+	}
+	if !during.LoadUnanswered {
+		t.Errorf("load_unanswered = %v while the load command is out, want true", during.LoadUnanswered)
+	}
+	r.wantEnded()
+}
+
 func TestRunServerThatDoesNotListenIsHandled(t *testing.T) {
 	r := newRig(t)
 	r.jvm.onAttach = func(jvmtarget.AttachRequest) error { return nil } // attach "works", nothing listens
