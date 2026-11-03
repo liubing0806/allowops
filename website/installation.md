@@ -244,3 +244,87 @@ and THIRD_PARTY_NOTICES from the archive. Do not run the agent as root.
 The intended OS range includes CentOS/RHEL 7, Rocky/Alma/RHEL 8+, Ubuntu 20.04+
 and Debian 11+. This guide does not establish a successful VM test for each OS.
 Use the release's platform verification evidence when selecting a version.
+
+## Optional package: allowops-arthas
+
+`allowops-arthas` carries the Arthas 4.3.5 files that the `jvm_arthas` builtin
+loads into a Java process. It is a separate package from `allowops-agent` and is
+optional. A host reports the `jvm_arthas` capability only when this package is
+installed; on other hosts `jvm_arthas` actions are `unsupported`. Neither the
+package nor the agent downloads anything when installing or running.
+
+Install the verified local file in the same way as the agent package. The
+package has no dependency on `allowops-agent`, no installation scripts and no
+account.
+
+```sh
+sudo dpkg -i /absolute/path/allowops-arthas_0.1.0_all.deb
+# Or, on an RPM-based system:
+sudo rpm -Uvh /absolute/path/allowops-arthas-0.1.0-1.noarch.rpm
+```
+
+Replace the example version with the verified release's filename. The files are
+installed under `/usr/share/allowops/arthas/4.3.5/`; the directory name is the
+Arthas version.
+
+| File in the version directory | Content | Ownership / mode |
+|---|---|---|
+| `arthas-agent.jar`, `arthas-core.jar`, `arthas-spy.jar` | Unmodified from the Arthas release | root, 0644 |
+| `arthas.properties` | The Arthas file without `arthas.mcpEndpoint` and `arthas.mcpProtocol`, so the Arthas MCP server does not start | root, 0644 |
+| `logback.xml` | Unmodified; without it Arthas writes log lines to the target's standard output | root, 0644 |
+| `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES` | Apache License 2.0, the Arthas attribution notices, and the licenses, notices and source locations of the components inside `arthas-core.jar` | root, 0644 |
+| `SHA256SUMS` | SHA-256 of every other file in the directory | root, 0644 |
+
+The directories `/usr/share/allowops`, `/usr/share/allowops/arthas` and the
+version directory are root, 0755. The package does not contain `arthas-boot`,
+`arthas-client`, the `as.sh` scripts or the async-profiler libraries. Removing
+the package deletes the directories. Each package release carries exactly one
+Arthas version.
+
+The signed catalog's `builtin_config` for `jvm_arthas` holds the SHA-256 of each
+file that is loaded. Before a use, `allowops-exec` compares the SHA-256 of
+these files with the catalog values and refuses to attach if any value differs.
+`SHA256SUMS` is for administrators; it is not the trust anchor. Check an
+installation with:
+
+```sh
+cd /usr/share/allowops/arthas/4.3.5 && sha256sum --check --strict SHA256SUMS
+```
+
+### Containers
+
+A JVM can load only files that exist in its own container filesystem. For a
+target that runs in a container, put the same files at the same path inside the
+container before the first diagnosis. Two methods are supported.
+`allowops-exec` reads the files through `/proc/<pid>/root`, verifies the
+SHA-256 values from `builtin_config` and never writes to the container.
+
+Method 1 (recommended): put the files into the image. This Dockerfile installs
+the local package file in a build stage and copies only its directory into the
+application image, so ownership, modes and the file set are those of the
+package. The build needs no network access for this step.
+
+```dockerfile
+FROM debian:12 AS arthas
+COPY allowops-arthas_0.1.0_all.deb /tmp/
+RUN dpkg -i /tmp/allowops-arthas_0.1.0_all.deb
+
+FROM eclipse-temurin:17-jre
+COPY --from=arthas /usr/share/allowops/arthas /usr/share/allowops/arthas
+```
+
+Method 2: mount the directory of a host that has the package installed as a
+read-only volume at the same path.
+
+```yaml
+services:
+  app:
+    image: registry.example.com/app:1.0
+    volumes:
+      - /usr/share/allowops/arthas/4.3.5:/usr/share/allowops/arthas/4.3.5:ro
+```
+
+With `docker run`, use `-v /usr/share/allowops/arthas/4.3.5:/usr/share/allowops/arthas/4.3.5:ro`.
+Do not make the mount writable; the files must stay unchanged for the checksum
+verification. The files must be readable by the user of the JVM; the modes
+above allow every user to read them.

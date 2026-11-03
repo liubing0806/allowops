@@ -80,6 +80,7 @@ L1、L2 的定义见第 4 节。
    - 按 HotSpot 的查找顺序创建 `.attach_pid<容器内 pid>` 文件，发送 SIGQUIT，等待 `.java_pid<容器内 pid>` 套接字出现。套接字已存在时不发送信号。
    - 连接该套接字，发送 `load instrument false <arthas-agent.jar>=<参数>`。JDK 8 要求 attach 文件属主和连接的 uid 都等于目标 JVM 的有效 uid，因此 allowops-exec 用 `fchown` 设置文件属主，并在锁定的 OS 线程上切换到目标的 uid/gid 后连接；JDK 11 及以上接受 root 连接。
    - 参数的键名与 `arthas.properties` 相同（见第 10 节）：`telnetPort=-1`（不监听 telnet）、`httpPort=<allowops 选定的端口>`、`ip=127.0.0.1`、`password=<每次随机生成>`、`localConnectionNonAuth=false`、`disabledCommands=<本次不需要的全部命令>`、`sessionTimeout=<略大于调用时长>`。
+   - `disabledCommands` 不能包含 `reset` 和 `stop`。阶段 2 实测：两者被禁用后清理无法停止服务端，HTTP API 也没有其他停止服务端的方式。
    - `localConnectionNonAuth=false` 必需。缺少它时，来自 127.0.0.1 的连接不需要密码。
    - 参数先经 URL 解码，因此密码只用字母和数字。参数总长度不超过 1024 个字符。
    - 参数 `mcpEndpoint=`（空值）不能关闭 Arthas 自带的 MCP 服务，原因未查明。关闭 MCP 依靠包内的 `arthas.properties` 删除 `arthas.mcpEndpoint` 和 `arthas.mcpProtocol` 两个键（第 6 节）。
@@ -176,6 +177,8 @@ L2 的限制：
 - Arthas 文件不进 allowops-agent 主安装包。另出可选包 `allowops-arthas`（rpm、deb），安装到 `/usr/share/allowops/arthas/<版本>/`，属主 root。
 - 包内只放 `arthas-agent.jar`、`arthas-core.jar`、`arthas-spy.jar`、`logback.xml` 和删除 `arthas.mcpEndpoint`、`arthas.mcpProtocol` 两个键后的 `arthas.properties`。阶段 0 实测：只删 `mcpEndpoint` 或在参数中传空值，MCP 服务仍会启动；缺少 `logback.xml` 时，Arthas 向目标进程的标准输出打印 DEBUG 日志和 `[ERROR] can not find arthas logging config`（报告第 3.1 节变体 g）。不放 arthas-boot、arthas-client 和 async-profiler 原生库。
 - 版本固定，来源为 Maven Central 的 `arthas-packaging-<版本>-bin.zip`。各文件的 SHA-256 写入签名目录的 builtin_config，allowops-exec 使用前校验。不联网下载。
+- 包内不能有 `commands` 目录：Arthas 从 `<arthas 目录>/commands` 加载外部命令。
+- 包内的 `SHA256SUMS` 列出各文件的 SHA-256。builtin_config 使用其中 3 个 jar、`arthas.properties` 和 `logback.xml` 的值。
 - 只有安装了该包的主机上报 `jvm_arthas` 能力。未安装的主机上，该 action 为 `unsupported`。
 - 目标在容器内时，JVM 只能加载其挂载命名空间内可见的文件。有两种方式：
   1. 预装（推荐）：运维把同一版本的文件放进镜像，或以只读卷挂载到固定路径。allowops-exec 经 `/proc/<pid>/root` 读取并校验 SHA-256，不写容器文件系统。

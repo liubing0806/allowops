@@ -657,6 +657,7 @@ agent 评估：MVP 不做，列入 Roadmap。
 - 第三方许可证合规：
   - 用 `go-licenses` 和 `license-checker` 生成 Go 和前端依赖清单，随发布物提供 `THIRD_PARTY_NOTICES`。
   - CI 只允许 MIT、BSD、Apache-2.0、ISC、MPL-2.0 许可的依赖；GPL、AGPL 依赖直接拒绝。
+  - 例外（A68，2026-10-24）：可选安装包 allowops-arthas 原样分发 `arthas-core.jar`，其中内嵌的 logback 1.2.13 按 EPL-1.0 分发。该例外只适用于这个包，不适用于 allowops 的 Go 和前端依赖。
 
 ## 18. 示例与文档
 
@@ -949,5 +950,6 @@ params:
 | A58 | 项目许可（2026-10-21） | 改为 MIT，版权人 liubing；不再使用 PolyForm 二选一与商业许可（A36 作废） |
 | A66 | Arthas 引入（2026-10-23） | 按 `java-diagnostics-arthas-plan.md` 分阶段引入，取代 2026-10-22 的不集成决定。在 allowops-exec 中实现内置处理器 `jvm_arthas`，不采用在容器内运行 arthas-boot 的目录 action；Arthas action 的 risk 用 write，按 action 名授权；容器内的 Arthas 文件以预装为准，注入在安全路径解析验证后再开放；新增 action 字段 `max_targets`；首批目标为主机 JVM 和 Docker 容器，Kubernetes 以后评估；验收阈值在阶段 0 实测后确认 |
 | A67 | Arthas 验收阈值（2026-10-24） | 采纳 `arthas-stage0-report.md` 第 5 节的建议值，写入 `java-diagnostics-arthas-plan.md` 第 1 节和 3.2 节。状态为“估算”或“未验证”的项在阶段 2D 验收时核对 |
+| A68 | allowops-arthas 的第三方许可证（2026-10-24） | logback 1.2.13（EPL-1.0 或 LGPL-2.1）选 EPL-1.0，作为该包的许可证白名单例外，声明中附 EPL-1.0 全文和源码获取方式；javassist（MPL-1.1、LGPL-2.1、Apache-2.0 三选一）选 Apache-2.0；Arthas Web UI 文件和 JSON Schema 文件按上游条款写入声明；包元数据 License 字段使用复合表达式 |
 
 总指挥在实施中按规则自行决定的实现细节（G7~G18）记录在计划库，不改变上表和 design.md 的行为。

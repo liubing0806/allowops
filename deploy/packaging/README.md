@@ -32,3 +32,18 @@ Exactly one of `--token`, `--token-file` and `--token-stdin` is required.
 Each source accepts at most 4 KiB, trims surrounding whitespace and rejects
 an empty token. The legacy `--token` remains available for compatibility. Package signatures and
 checksums are verified according to your release process before installation.
+
+## Optional Arthas package
+
+`allowops-arthas` is a separate, optional package with the Arthas 4.3.5 files for
+the `jvm_arthas` builtin. Install the local file the same way as the agent
+package; it does not download anything and does not require `allowops-agent`.
+
+```sh
+sudo dpkg -i /absolute/path/allowops-arthas_0.1.0_all.deb
+# Or:
+sudo rpm -Uvh /absolute/path/allowops-arthas-0.1.0-1.noarch.rpm
+```
+
+Files, container installation and verification are described in
+[arthas/README.md](arthas/README.md) and in the installation guide.
