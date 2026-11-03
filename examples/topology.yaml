@@ -1,0 +1,12 @@
+entities:
+  - kind: service
+    name: order-api
+    attrs: {team: trade, env: prod}
+    selector: service=order-api
+    depends_on: [database/order-mysql, cache/order-redis]
+  - kind: database
+    name: order-mysql
+    hosts: [db-01, db-02]
+  - kind: cache
+    name: order-redis
+    hosts: [cache-01]
