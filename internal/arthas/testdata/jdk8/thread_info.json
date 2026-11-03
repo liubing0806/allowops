@@ -1,0 +1,67 @@
+{
+  "body": {
+    "command": "thread 2",
+    "jobId": 4,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "all": false,
+        "jobId": 4,
+        "threadInfo": {
+          "blockedCount": 14,
+          "blockedTime": -1,
+          "inNative": false,
+          "lockInfo": {
+            "className": "java.lang.ref.Reference$Lock",
+            "identityHashCode": 1439972387
+          },
+          "lockName": "java.lang.ref.Reference$Lock@55d43c23",
+          "lockOwnerId": -1,
+          "lockedMonitors": [],
+          "lockedSynchronizers": [],
+          "stackTrace": [
+            {
+              "fileName": "Object.java",
+              "lineNumber": -2,
+              "className": "java.lang.Object",
+              "methodName": "wait"
+            },
+            {
+              "fileName": "Object.java",
+              "lineNumber": 502,
+              "className": "java.lang.Object",
+              "methodName": "wait"
+            },
+            {
+              "fileName": "Reference.java",
+              "lineNumber": 191,
+              "className": "java.lang.ref.Reference",
+              "methodName": "tryHandlePending"
+            },
+            {
+              "fileName": "Reference.java",
+              "lineNumber": 153,
+              "className": "java.lang.ref.Reference$ReferenceHandler",
+              "methodName": "run"
+            }
+          ],
+          "suspended": false,
+          "threadId": 2,
+          "threadName": "Reference Handler",
+          "threadState": "WAITING",
+          "waitedCount": 14,
+          "waitedTime": -1
+        },
+        "type": "thread"
+      },
+      {
+        "jobId": 4,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "01bce553-e289-4d1e-842a-62b724e54896",
+  "state": "SUCCEEDED"
+}

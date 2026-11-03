@@ -1,0 +1,13 @@
+# classloaders
+depth	hash	loaded_count	name	parent
+0	null	4110	BootstrapClassLoader	
+0	7586beff	60	sun.misc.Launcher$ExtClassLoader@7586beff	
+1	1644c361	2113	com.taobao.arthas.agent.ArthasClassloader@1644c361	sun.misc.Launcher$ExtClassLoader@7586beff
+2	26fb1712	28	com.alibaba.arthas.deps.com.alibaba.fastjson2.util.DynamicClassLoader@26fb1712	com.taobao.arthas.agent.ArthasClassloader@1644c361
+1	22355cb8	2137	com.taobao.arthas.agent.ArthasClassloader@22355cb8	sun.misc.Launcher$ExtClassLoader@7586beff
+2	473ca886	28	com.alibaba.arthas.deps.com.alibaba.fastjson2.util.DynamicClassLoader@473ca886	com.taobao.arthas.agent.ArthasClassloader@22355cb8
+1	39ed5853	1987	com.taobao.arthas.agent.ArthasClassloader@39ed5853	sun.misc.Launcher$ExtClassLoader@7586beff
+2	2625222f	16	com.alibaba.arthas.deps.com.alibaba.fastjson2.util.DynamicClassLoader@2625222f	com.taobao.arthas.agent.ArthasClassloader@39ed5853
+1	70dea4e	59	sun.misc.Launcher$AppClassLoader@70dea4e	sun.misc.Launcher$ExtClassLoader@7586beff
+2	31cefde0	10159	org.springframework.boot.loader.LaunchedURLClassLoader@31cefde0	sun.misc.Launcher$AppClassLoader@70dea4e
+3	73e22a3d	1	net.bytebuddy.utility.dispatcher.JavaDispatcher$DynamicClassLoader@73e22a3d	org.springframework.boot.loader.LaunchedURLClassLoader@31cefde0

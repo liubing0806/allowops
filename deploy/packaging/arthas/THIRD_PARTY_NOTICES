@@ -1,0 +1,294 @@
+Third-party components in arthas-core.jar (Arthas 4.3.5)
+
+arthas-core.jar is distributed as released. The lists below were made from
+the pom.xml and pom.properties files under META-INF/maven, the files under
+META-INF, the license banners in the bundled web files and the package names
+of the classes in the jar. Where the jar does not declare a license, the entry
+follows the terms published by the upstream project.
+
+The License column is the license under which this package distributes the
+component. Where a component is offered under several licenses, the column
+names the one that applies here.
+
+Source of the license information:
+  pom       the pom.xml of the component inside the jar declares the license
+  jar       a license or notice text or a banner inside the jar states the license
+  upstream  the jar does not declare the license; the entry follows the terms
+            published by the upstream project and was not verified from the jar
+
+| Component | Version | License | Source |
+|---|---|---|---|
+| Arthas modules: arthas-agent, arthas-spy, arthas-core, arthas-common, arthas-model, arthas-vmtool, arthas-mcp-server, arthas-memorycompiler, arthas-tunnel-client, arthas-tunnel-common | 4.3.5 | Apache-2.0 | pom |
+| arthas-repackage-logger, repackage-asm | 0.0.20 | Apache-2.0 | pom |
+| ASM (inside repackage-asm, package com.alibaba.deps.org) | not recorded | BSD-3-Clause | upstream |
+| bytekit-core, bytekit-instrument-api | 0.1.7 | Apache-2.0 | pom |
+| cli (com.alibaba.middleware) | 1.0.4 | Apache-2.0 | pom |
+| termd-core | 1.1.7.16 | Apache-2.0 | pom |
+| text-ui | 0.0.3 | Apache-2.0 | pom |
+| fastjson2 | 2.0.64 | Apache-2.0 | pom |
+| JSON Schema documents schema/2020-12.json and schema/draft-04.json | not recorded | Apache-2.0 (distributed with fastjson2) | pom |
+| jackson-annotations, jackson-core, jackson-databind | 2.18.1 | Apache-2.0 | pom |
+| jackson-datatype-jsr310 | 2.18.1 | Apache-2.0 | upstream |
+| FastDoubleParser (inside jackson-core) | not recorded | MIT; derived code under Apache-2.0 | jar |
+| netty-buffer, netty-codec, netty-codec-http, netty-common, netty-handler, netty-resolver, netty-transport, netty-transport-native-unix-common | 4.1.132.Final | Apache-2.0 | upstream |
+| jctools-core | 4.0.5 | Apache-2.0 | pom |
+| ognl | 3.3.5 | Apache-2.0 | pom |
+| logback-classic, logback-core (repackaged as com.alibaba.arthas.deps.ch.qos.logback) | 1.2.13 | EPL-1.0 (offered as EPL-1.0 or LGPL-2.1) | upstream |
+| slf4j-api | 1.7.36 | MIT | upstream |
+| javassist | 3.29.0-GA | Apache-2.0 (offered as MPL-1.1, LGPL-2.1 or Apache-2.0) | pom |
+| cfr (org.benf.cfr) | 0.152 | MIT | pom |
+| RSyntaxTextArea (org.fife.ui) | not recorded | BSD-3-Clause | jar |
+| async-profiler Java API (package one.profiler; the native libraries are not included) | not recorded | Apache-2.0 | upstream |
+
+JSON Schema documents: schema/2020-12.json and schema/draft-04.json are
+distributed with fastjson2 (Apache-2.0). The original source of the
+meta-schemas is json-schema.org.
+
+Javassist: the pom.xml in the jar lists MPL-1.1, LGPL-2.1 and Apache-2.0.
+This package distributes javassist under the Apache License 2.0.
+
+Logback: logback is distributed under the Eclipse Public License v1.0
+(EPL-1.0). The upstream project also offers it under LGPL-2.1; that option is
+not used for this package. The complete text of EPL-1.0 is at the end of this
+file. logback-classic and logback-core are contained in arthas-core.jar in
+repackaged form: the package names are relocated to
+com.alibaba.arthas.deps.ch.qos.logback (artifact
+com.alibaba.arthas:arthas-repackage-logger:0.0.20). arthas-core.jar is
+distributed without changes by allowops, and no term is added to EPL-1.0.
+The source code of logback 1.2.13 is available from:
+  - Maven Central, the files logback-core-1.2.13-sources.jar and
+    logback-classic-1.2.13-sources.jar in
+    https://repo.maven.apache.org/maven2/ch/qos/logback/logback-core/1.2.13/
+    and
+    https://repo.maven.apache.org/maven2/ch/qos/logback/logback-classic/1.2.13/
+  - the upstream repository https://github.com/qos-ch/logback, tag v_1.2.13
+  - the repackaging project https://github.com/hengyunabc/arthas-repackage-deps
+    (named in the build file of Arthas)
+
+Web UI
+
+The files under com/taobao/arthas/core/http in arthas-core.jar (the Arthas
+Web Console) are built from the directory src/web-ui/arthasWebConsole
+(version 0.1.4) of the Arthas 4.3.5 source tree. Arthas is licensed under the
+Apache License 2.0, and these files are distributed under it as part of
+Arthas. The jar contains the built files, not the packages of the
+dependencies. The direct runtime dependencies in package.json of that
+directory and the versions locked in its yarn.lock are:
+
+| Dependency | Locked version | License | Source |
+|---|---|---|---|
+| @headlessui/vue | 1.7.4 | MIT | upstream |
+| @heroicons/vue | 1.0.6 | MIT | upstream |
+| @highlightjs/vue-plugin | 2.1.0 | MIT | upstream |
+| @xstate/vue | 2.0.0 | MIT | upstream |
+| axios | 1.7.7 | MIT | upstream |
+| daisyui | 2.41.0 | MIT | upstream |
+| dayjs | 1.11.6 | MIT | upstream |
+| echarts | 5.4.0 | Apache-2.0 | upstream |
+| highlight.js | 11.6.0 | BSD-3-Clause | upstream |
+| pinia | 2.0.24 | MIT | jar (banner in static/js/ui-89814ddf.js) |
+| vue | 3.2.45 | MIT | upstream |
+| vue-router | 4.1.6 | MIT | upstream |
+| xstate | 4.34.0 | MIT | upstream |
+| xterm | 5.0.0 | MIT | jar (banner in static/css/main-b1fd99c4.css) |
+| xterm-addon-fit | 0.6.0 | MIT | upstream |
+| xterm-addon-webgl | 0.13.0 | MIT | upstream |
+
+Components identified by banners in the bundled files:
+
+| Component | Version | License | Source |
+|---|---|---|---|
+| zrender (dependency of echarts) | 5.4.0 | BSD-3-Clause | upstream; banner "Copyright (c) 2013, Baidu Inc." in static/js/Line-887f62e7.js |
+| tslib (dependency of zrender) | 2.3.0 | 0BSD | jar; the banner in static/js/Line-887f62e7.js and static/js/ui-89814ddf.js is the text of the BSD Zero Clause License, "Copyright (c) Microsoft Corporation" |
+| term.js and the terminal of Fabrice Bellard's jslinux (in the header of xterm.css) | not recorded | MIT | jar; the header in static/css/main-b1fd99c4.css contains the MIT license text |
+
+The other transitive dependencies are listed in yarn.lock of the Arthas source
+tree. Their licenses were not checked. The licenses marked "upstream" follow
+the terms published by the upstream projects and were not verified from the
+jar.
+
+The notices that the jar carries follow, unmodified.
+
+===== META-INF/NOTICE (Jackson) =====
+
+# Jackson JSON processor
+
+Jackson is a high-performance, Free/Open Source JSON processing library.
+It was originally written by Tatu Saloranta (tatu.saloranta@iki.fi), and has
+been in development since 2007.
+It is currently developed by a community of developers.
+
+## Copyright
+
+Copyright 2007-, Tatu Saloranta (tatu.saloranta@iki.fi)
+
+## Licensing
+
+Jackson 2.x core and extension components are licensed under Apache License 2.0
+To find the details that apply to this artifact see the accompanying LICENSE file.
+
+## Credits
+
+A list of contributors may be found from CREDITS(-2.x) file, which is included
+in some artifacts (usually source distributions); but is always available
+from the source code management (SCM) system project uses.
+
+## FastDoubleParser
+
+jackson-core bundles a shaded copy of FastDoubleParser <https://github.com/wrandelshofer/FastDoubleParser>.
+That code is available under an MIT license <https://github.com/wrandelshofer/FastDoubleParser/blob/main/LICENSE>
+under the following copyright.
+
+Copyright © 2023 Werner Randelshofer, Switzerland. MIT License.
+
+See FastDoubleParser-NOTICE for details of other source code included in FastDoubleParser
+and the licenses and copyrights that apply to that code.
+
+===== META-INF/FastDoubleParser-NOTICE =====
+
+# FastDoubleParser
+
+This is a Java port of Daniel Lemire's fast_float project.
+This project provides parsers for double, float, BigDecimal and BigInteger values.
+
+## Copyright
+
+Copyright © 2024 Werner Randelshofer, Switzerland.
+
+## Licensing
+
+This code is licensed under MIT License.
+https://github.com/wrandelshofer/FastDoubleParser/blob/522be16e145f43308c43b23094e31d5efcaa580e/LICENSE
+(The file 'LICENSE' is included in the sources and classes Jar files that are released by this project
+- as is required by that license.)
+
+Some portions of the code have been derived from other projects.
+All these projects require that we include a copyright notice, and some require that we also include some text of their
+license file.
+
+fast_double_parser, Copyright (c) 2022 Daniel Lemire. BSL License.
+https://github.com/lemire/fast_double_parser
+https://github.com/lemire/fast_double_parser/blob/07d9189a8fb815fe800cb15ca022e7a07093236e/LICENSE.BSL
+(The file 'thirdparty-LICENSE' is included in the sources and classes Jar files that are released by this project
+- as is required by that license.)
+
+fast_float, Copyright (c) 2021 The fast_float authors. MIT License.
+https://github.com/fastfloat/fast_float
+https://github.com/fastfloat/fast_float/blob/cc1e01e9eee74128e48d51488a6b1df4a767a810/LICENSE-MIT
+(The file 'thirdparty-LICENSE' is included in the sources and classes Jar files that are released by this project
+- as is required by that license.)
+
+bigint, Copyright 2020 Tim Buktu. 2-clause BSD License.
+https://github.com/tbuktu/bigint/tree/floatfft
+https://github.com/tbuktu/bigint/blob/617c8cd8a7c5e4fb4d919c6a4d11e2586107f029/LICENSE
+https://github.com/wrandelshofer/FastDoubleParser/blob/39e123b15b71f29a38a087d16a0bc620fc879aa6/bigint-LICENSE
+(We only use those portions of the bigint project that can be licensed under 2-clause BSD License.)
+(The file 'thirdparty-LICENSE' is included in the sources and classes Jar files that are released by this project
+- as is required by that license.)
+
+===== META-INF/FastDoubleParser-LICENSE =====
+
+This file is identical to the file LICENSE in this directory (Apache License 2.0).
+
+===== META-INF/LICENSE (BSD-3-Clause, RSyntaxTextArea) =====
+
+Copyright (c) 2021, Robert Futrell
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+    * Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+    * Neither the name of the author nor the names of its contributors may
+      be used to endorse or promote products derived from this software
+      without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+===== Eclipse Public License - v 1.0 (logback) =====
+
+Eclipse Public License - v 1.0
+
+THE ACCOMPANYING PROGRAM IS PROVIDED UNDER THE TERMS OF THIS ECLIPSE PUBLIC LICENSE ("AGREEMENT"). ANY USE, REPRODUCTION OR DISTRIBUTION OF THE PROGRAM CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS AGREEMENT.
+
+1. DEFINITIONS
+
+"Contribution" means:
+     a) in the case of the initial Contributor, the initial code and documentation distributed under this Agreement, and
+     b) in the case of each subsequent Contributor:
+          i) changes to the Program, and
+          ii) additions to the Program;
+
+where such changes and/or additions to the Program originate from and are distributed by that particular Contributor. A Contribution 'originates' from a Contributor if it was added to the Program by such Contributor itself or anyone acting on such Contributor's behalf. Contributions do not include additions to the Program which: (i) are separate modules of software distributed in conjunction with the Program under their own license agreement, and (ii) are not derivative works of the Program.
+"Contributor" means any person or entity that distributes the Program.
+
+"Licensed Patents" mean patent claims licensable by a Contributor which are necessarily infringed by the use or sale of its Contribution alone or when combined with the Program.
+
+"Program" means the Contributions distributed in accordance with this Agreement.
+
+"Recipient" means anyone who receives the Program under this Agreement, including all Contributors.
+
+2. GRANT OF RIGHTS
+
+     a) Subject to the terms of this Agreement, each Contributor hereby grants Recipient a non-exclusive, worldwide, royalty-free copyright license to reproduce, prepare derivative works of, publicly display, publicly perform, distribute and sublicense the Contribution of such Contributor, if any, and such derivative works, in source code and object code form.
+
+     b) Subject to the terms of this Agreement, each Contributor hereby grants Recipient a non-exclusive, worldwide, royalty-free patent license under Licensed Patents to make, use, sell, offer to sell, import and otherwise transfer the Contribution of such Contributor, if any, in source code and object code form. This patent license shall apply to the combination of the Contribution and the Program if, at the time the Contribution is added by the Contributor, such addition of the Contribution causes such combination to be covered by the Licensed Patents. The patent license shall not apply to any other combinations which include the Contribution. No hardware per se is licensed hereunder.
+
+     c) Recipient understands that although each Contributor grants the licenses to its Contributions set forth herein, no assurances are provided by any Contributor that the Program does not infringe the patent or other intellectual property rights of any other entity. Each Contributor disclaims any liability to Recipient for claims brought by any other entity based on infringement of intellectual property rights or otherwise. As a condition to exercising the rights and licenses granted hereunder, each Recipient hereby assumes sole responsibility to secure any other intellectual property rights needed, if any. For example, if a third party patent license is required to allow Recipient to distribute the Program, it is Recipient's responsibility to acquire that license before distributing the Program.
+
+     d) Each Contributor represents that to its knowledge it has sufficient copyright rights in its Contribution, if any, to grant the copyright license set forth in this Agreement.
+
+3. REQUIREMENTS
+A Contributor may choose to distribute the Program in object code form under its own license agreement, provided that:
+
+     a) it complies with the terms and conditions of this Agreement; and
+
+     b) its license agreement:
+          i) effectively disclaims on behalf of all Contributors all warranties and conditions, express and implied, including warranties or conditions of title and non-infringement, and implied warranties or conditions of merchantability and fitness for a particular purpose;
+          ii) effectively excludes on behalf of all Contributors all liability for damages, including direct, indirect, special, incidental and consequential damages, such as lost profits;
+          iii) states that any provisions which differ from this Agreement are offered by that Contributor alone and not by any other party; and
+          iv) states that source code for the Program is available from such Contributor, and informs licensees how to obtain it in a reasonable manner on or through a medium customarily used for software exchange.
+
+When the Program is made available in source code form:
+
+     a) it must be made available under this Agreement; and
+
+     b) a copy of this Agreement must be included with each copy of the Program.
+Contributors may not remove or alter any copyright notices contained within the Program.
+
+Each Contributor must identify itself as the originator of its Contribution, if any, in a manner that reasonably allows subsequent Recipients to identify the originator of the Contribution.
+
+4. COMMERCIAL DISTRIBUTION
+Commercial distributors of software may accept certain responsibilities with respect to end users, business partners and the like. While this license is intended to facilitate the commercial use of the Program, the Contributor who includes the Program in a commercial product offering should do so in a manner which does not create potential liability for other Contributors. Therefore, if a Contributor includes the Program in a commercial product offering, such Contributor ("Commercial Contributor") hereby agrees to defend and indemnify every other Contributor ("Indemnified Contributor") against any losses, damages and costs (collectively "Losses") arising from claims, lawsuits and other legal actions brought by a third party against the Indemnified Contributor to the extent caused by the acts or omissions of such Commercial Contributor in connection with its distribution of the Program in a commercial product offering. The obligations in this section do not apply to any claims or Losses relating to any actual or alleged intellectual property infringement. In order to qualify, an Indemnified Contributor must: a) promptly notify the Commercial Contributor in writing of such claim, and b) allow the Commercial Contributor to control, and cooperate with the Commercial Contributor in, the defense and any related settlement negotiations. The Indemnified Contributor may participate in any such claim at its own expense.
+
+For example, a Contributor might include the Program in a commercial product offering, Product X. That Contributor is then a Commercial Contributor. If that Commercial Contributor then makes performance claims, or offers warranties related to Product X, those performance claims and warranties are such Commercial Contributor's responsibility alone. Under this section, the Commercial Contributor would have to defend claims against the other Contributors related to those performance claims and warranties, and if a court requires any other Contributor to pay any damages as a result, the Commercial Contributor must pay those damages.
+
+5. NO WARRANTY
+EXCEPT AS EXPRESSLY SET FORTH IN THIS AGREEMENT, THE PROGRAM IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED INCLUDING, WITHOUT LIMITATION, ANY WARRANTIES OR CONDITIONS OF TITLE, NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE. Each Recipient is solely responsible for determining the appropriateness of using and distributing the Program and assumes all risks associated with its exercise of rights under this Agreement , including but not limited to the risks and costs of program errors, compliance with applicable laws, damage to or loss of data, programs or equipment, and unavailability or interruption of operations.
+
+6. DISCLAIMER OF LIABILITY
+EXCEPT AS EXPRESSLY SET FORTH IN THIS AGREEMENT, NEITHER RECIPIENT NOR ANY CONTRIBUTORS SHALL HAVE ANY LIABILITY FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING WITHOUT LIMITATION LOST PROFITS), HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OR DISTRIBUTION OF THE PROGRAM OR THE EXERCISE OF ANY RIGHTS GRANTED HEREUNDER, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+7. GENERAL
+
+If any provision of this Agreement is invalid or unenforceable under applicable law, it shall not affect the validity or enforceability of the remainder of the terms of this Agreement, and without further action by the parties hereto, such provision shall be reformed to the minimum extent necessary to make such provision valid and enforceable.
+
+If Recipient institutes patent litigation against any entity (including a cross-claim or counterclaim in a lawsuit) alleging that the Program itself (excluding combinations of the Program with other software or hardware) infringes such Recipient's patent(s), then such Recipient's rights granted under Section 2(b) shall terminate as of the date such litigation is filed.
+
+All Recipient's rights under this Agreement shall terminate if it fails to comply with any of the material terms or conditions of this Agreement and does not cure such failure in a reasonable period of time after becoming aware of such noncompliance. If all Recipient's rights under this Agreement terminate, Recipient agrees to cease use and distribution of the Program as soon as reasonably practicable. However, Recipient's obligations under this Agreement and any licenses granted by Recipient relating to the Program shall continue and survive.
+
+Everyone is permitted to copy and distribute copies of this Agreement, but in order to avoid inconsistency the Agreement is copyrighted and may only be modified in the following manner. The Agreement Steward reserves the right to publish new versions (including revisions) of this Agreement from time to time. No one other than the Agreement Steward has the right to modify this Agreement. The Eclipse Foundation is the initial Agreement Steward. The Eclipse Foundation may assign the responsibility to serve as the Agreement Steward to a suitable separate entity. Each new version of the Agreement will be given a distinguishing version number. The Program (including Contributions) may always be distributed subject to the version of the Agreement under which it was received. In addition, after a new version of the Agreement is published, Contributor may elect to distribute the Program (including its Contributions) under the new version. Except as expressly stated in Sections 2(a) and 2(b) above, Recipient receives no rights or licenses to the intellectual property of any Contributor under this Agreement, whether expressly, by implication, estoppel or otherwise. All rights in the Program not expressly granted under this Agreement are reserved.
+
+This Agreement is governed by the laws of the State of New York and the intellectual property laws of the United States of America. No party to this Agreement will bring a legal action under this Agreement more than one year after the cause of action arose. Each party waives its rights to a jury trial in any resulting litigation.

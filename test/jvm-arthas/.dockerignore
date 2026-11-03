@@ -1,0 +1,6 @@
+run/
+results/
+tools/
+scripts/
+app/target/classes
+app/target/maven-*

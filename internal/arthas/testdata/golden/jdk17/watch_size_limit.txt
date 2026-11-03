@@ -1,0 +1,16 @@
+# watch
+time	2026-10-26 04:30:58.986053824
+class	demo.DiagController
+method	threadNames
+access_point	AtExit
+cost_ms	0.054
+value
+  @ArrayList[
+      @ArrayList[
+          @String[Reference Handler],
+          @String[Finalizer],
+          @String[Signal Dispatcher],
+          @String[Notification Thread],
+          @String[Attach Listener],
+          @String[arthas-timer],
+          @String[arthas-Ne Object size exceeds size limit: 256, try to use `options object-size-limit <bytes>` to increase the limit.

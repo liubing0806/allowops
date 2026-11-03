@@ -32,6 +32,8 @@ func TestRuleNeedsNeverChangeTheResult(t *testing.T) {
 		"ghp_abc123", "gho_x", "github_pat_x1", "glpat-x1", "://", "ghp_abc@", "@tcp(", "@unix(", "root:pw@tcp(h)/db",
 		"HTTP_AUTHORIZATION", "grpc_set_header", "fastcgi_param", "authorization", "Proxy-Authorization", "> ", "{", "?token=", "&",
 		"X509_check_private_key", "?db_pass=v", "&pass=v", "db_pass=v", "keystorePass: v", "volume \"x-secret\" :", "\\\"", "\\",
+		"@String[", "]:", "@HashMap[", "@String[db.password]:", "@String[PWD]:", "\"db.password\", \"v\"", "\"--password\", \"v\"", "put(", ".set",
+		"setPassword(\"v\")", "setApiKey(", "setTokenCount(\"v\")", "(", ")", "\", \"",
 	}
 	rng := rand.New(rand.NewSource(7))
 	for i := 0; i < 30000; i++ {

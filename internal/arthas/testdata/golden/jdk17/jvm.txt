@@ -1,0 +1,68 @@
+# RUNTIME
+MACHINE-NAME	7@84e3b268963b
+JVM-START-TIME	2026-10-24 13:40:48
+MANAGEMENT-SPEC-VERSION	3.0
+SPEC-NAME	Java Virtual Machine Specification
+SPEC-VENDOR	Oracle Corporation
+SPEC-VERSION	17
+VM-NAME	OpenJDK 64-Bit Server VM
+VM-VENDOR	Eclipse Adoptium
+VM-VERSION	17.0.20.1+1
+
+# CLASS-LOADING
+LOADED-CLASS-COUNT	19778
+TOTAL-LOADED-CLASS-COUNT	19778
+UNLOADED-CLASS-COUNT	0
+IS-VERBOSE	false
+
+# COMPILATION
+NAME	HotSpot 64-Bit Tiered Compilers
+TOTAL-COMPILE-TIME	20739
+
+# GARBAGE-COLLECTORS
+name	collection_count	collection_time_ms
+G1 Young Generation	16	161
+G1 Old Generation	0	0
+
+# MEMORY-MANAGERS
+manager	pool
+CodeCacheManager	CodeHeap 'non-nmethods'
+CodeCacheManager	CodeHeap 'profiled nmethods'
+CodeCacheManager	CodeHeap 'non-profiled nmethods'
+Metaspace Manager	Metaspace
+Metaspace Manager	Compressed Class Space
+G1 Young Generation	G1 Eden Space
+G1 Young Generation	G1 Survivor Space
+G1 Young Generation	G1 Old Gen
+G1 Old Generation	G1 Eden Space
+G1 Old Generation	G1 Survivor Space
+G1 Old Generation	G1 Old Gen
+
+# MEMORY
+HEAP-MEMORY-USAGE.init	536870912
+HEAP-MEMORY-USAGE.used	40345600
+HEAP-MEMORY-USAGE.committed	536870912
+HEAP-MEMORY-USAGE.max	536870912
+NO-HEAP-MEMORY-USAGE.init	7667712
+NO-HEAP-MEMORY-USAGE.used	147494384
+NO-HEAP-MEMORY-USAGE.committed	154468352
+NO-HEAP-MEMORY-USAGE.max	-1
+PENDING-FINALIZE-COUNT	0
+
+# OPERATING-SYSTEM
+OS	Linux
+ARCH	amd64
+PROCESSORS-COUNT	4
+LOAD-AVERAGE	6.19
+VERSION	6.18.54-1-lts
+
+# THREAD
+COUNT	47
+DAEMON-COUNT	43
+PEAK-COUNT	47
+STARTED-COUNT	118
+DEADLOCK-COUNT	0
+
+# FILE-DESCRIPTOR
+MAX-FILE-DESCRIPTOR-COUNT	-1
+OPEN-FILE-DESCRIPTOR-COUNT	-1

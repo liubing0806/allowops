@@ -1,0 +1,31 @@
+# Overlay for the JVM pause measurements (docs/arthas-jvm-pause-report.md), used with
+#   COMPOSE_FILE=compose.yaml:compose.pause.yaml COMPOSE_PROJECT_NAME=jvm-arthas-pause JA_PORT_PREFIX=25
+# It gives jdk11, jdk17 and jdk21 their own image tags, so that rebuilding here does not replace the images other copies of
+# the environment use, and adds two knobs:
+#   JA_JAVA_EXTRA   extra JVM flags (JAVA_EXTRA of entrypoint.sh), for example -Xlog:async
+#   JA_LOGDIR       where the JVM writes safepoint.log, gc.log and redefine.log (LOGDIR of entrypoint.sh): /logs (default,
+#                   ./run/<service>/logs on the host) or /logs-tmpfs (a tmpfs inside the container)
+#   JA_LOGS_HOST    host directory mounted at /logs instead of ./run/<service>/logs (one value for all three services)
+x-pause: &pause
+  environment:
+    JAVA_EXTRA: ${JA_JAVA_EXTRA:-}
+    LOGDIR: ${JA_LOGDIR:-/logs}
+  tmpfs:
+    - /logs-tmpfs:mode=1777,size=64m
+
+services:
+  jdk11:
+    <<: *pause
+    image: jvmarthas/app-pause:jdk11
+    volumes:
+      - ${JA_LOGS_HOST:-./run/jdk11/logs}:/logs
+  jdk17:
+    <<: *pause
+    image: jvmarthas/app-pause:jdk17
+    volumes:
+      - ${JA_LOGS_HOST:-./run/jdk17/logs}:/logs
+  jdk21:
+    <<: *pause
+    image: jvmarthas/app-pause:jdk21
+    volumes:
+      - ${JA_LOGS_HOST:-./run/jdk21/logs}:/logs

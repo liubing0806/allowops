@@ -1,0 +1,3 @@
+Premain-Class: jvmprobe.Probe
+Can-Retransform-Classes: true
+Can-Redefine-Classes: true

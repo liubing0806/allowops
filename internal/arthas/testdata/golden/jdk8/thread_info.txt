@@ -1,0 +1,20 @@
+# thread
+id	2
+name	Reference Handler
+state	WAITING
+daemon	false
+priority	0
+in_native	false
+suspended	false
+blocked_count	14
+blocked_time_ms	-1
+waited_count	14
+waited_time_ms	-1
+lock_name	java.lang.ref.Reference$Lock@55d43c23
+lock_owner_id	-1
+
+# stack 2 Reference Handler
+at java.lang.Object.wait(Native Method)
+at java.lang.Object.wait(Object.java:502)
+at java.lang.ref.Reference.tryHandlePending(Reference.java:191)
+at java.lang.ref.Reference$ReferenceHandler.run(Reference.java:153)

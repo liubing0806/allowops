@@ -1,0 +1,22 @@
+# Overlay for the stage-2 acceptance measurements (docs/arthas-stage2-acceptance-report.md), used with
+#   COMPOSE_FILE=compose.yaml:compose.accept.yaml
+# It gives the four JDK services their own image tags, so that rebuilding the sample application here does not
+# replace the images other copies of the environment use, and passes JA_JAVA_EXTRA to the JVM as JAVA_EXTRA
+# (for example -XX:MaxMetaspaceSize=160m).
+services:
+  jdk8:
+    image: jvmarthas/app-accept:jdk8
+    environment:
+      JAVA_EXTRA: ${JA_JAVA_EXTRA:-}
+  jdk11:
+    image: jvmarthas/app-accept:jdk11
+    environment:
+      JAVA_EXTRA: ${JA_JAVA_EXTRA:-}
+  jdk17:
+    image: jvmarthas/app-accept:jdk17
+    environment:
+      JAVA_EXTRA: ${JA_JAVA_EXTRA:-}
+  jdk21:
+    image: jvmarthas/app-accept:jdk21
+    environment:
+      JAVA_EXTRA: ${JA_JAVA_EXTRA:-}

@@ -1,0 +1,271 @@
+{
+  "body": {
+    "command": "thread -n 3",
+    "jobId": 3,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "all": false,
+        "busyThreads": [
+          {
+            "blockedCount": 4,
+            "blockedTime": -1,
+            "cpu": 18.55,
+            "daemon": true,
+            "deltaTime": 37,
+            "group": "main",
+            "id": 121,
+            "inNative": false,
+            "interrupted": false,
+            "lockInfo": {
+              "className": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject",
+              "identityHashCode": 321403544
+            },
+            "lockName": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject@13283a98",
+            "lockOwnerId": -1,
+            "lockedMonitors": [],
+            "lockedSynchronizers": [],
+            "name": "http-nio-8080-exec-12",
+            "priority": 5,
+            "stackTrace": [
+              {
+                "fileName": "Unsafe.java",
+                "lineNumber": -2,
+                "className": "jdk.internal.misc.Unsafe",
+                "methodName": "park"
+              },
+              {
+                "fileName": "LockSupport.java",
+                "lineNumber": 252,
+                "className": "java.util.concurrent.locks.LockSupport",
+                "methodName": "parkNanos"
+              },
+              {
+                "fileName": "AbstractQueuedSynchronizer.java",
+                "lineNumber": 1679,
+                "className": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject",
+                "methodName": "awaitNanos"
+              },
+              {
+                "fileName": "LinkedBlockingQueue.java",
+                "lineNumber": 460,
+                "className": "java.util.concurrent.LinkedBlockingQueue",
+                "methodName": "poll"
+              },
+              {
+                "fileName": "TaskQueue.java",
+                "lineNumber": 123,
+                "className": "org.apache.tomcat.util.threads.TaskQueue",
+                "methodName": "poll"
+              },
+              {
+                "fileName": "TaskQueue.java",
+                "lineNumber": 33,
+                "className": "org.apache.tomcat.util.threads.TaskQueue",
+                "methodName": "poll"
+              },
+              {
+                "fileName": "ThreadPoolExecutor.java",
+                "lineNumber": 1113,
+                "className": "org.apache.tomcat.util.threads.ThreadPoolExecutor",
+                "methodName": "getTask"
+              },
+              {
+                "fileName": "ThreadPoolExecutor.java",
+                "lineNumber": 1176,
+                "className": "org.apache.tomcat.util.threads.ThreadPoolExecutor",
+                "methodName": "runWorker"
+              },
+              {
+                "fileName": "ThreadPoolExecutor.java",
+                "lineNumber": 659,
+                "className": "org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker",
+                "methodName": "run"
+              },
+              {
+                "fileName": "TaskThread.java",
+                "lineNumber": 61,
+                "className": "org.apache.tomcat.util.threads.TaskThread$WrappingRunnable",
+                "methodName": "run"
+              },
+              {
+                "fileName": "Thread.java",
+                "lineNumber": 840,
+                "className": "java.lang.Thread",
+                "methodName": "run"
+              }
+            ],
+            "state": "TIMED_WAITING",
+            "suspended": false,
+            "time": 407,
+            "waitedCount": 1771,
+            "waitedTime": -1
+          },
+          {
+            "blockedCount": 4266,
+            "blockedTime": -1,
+            "cpu": 17.26,
+            "daemon": true,
+            "deltaTime": 34,
+            "group": "main",
+            "id": 32,
+            "inNative": false,
+            "interrupted": false,
+            "lockOwnerId": -1,
+            "lockedMonitors": [],
+            "lockedSynchronizers": [],
+            "name": "http-nio-8080-Poller",
+            "priority": 5,
+            "stackTrace": [
+              {
+                "fileName": "EPoll.java",
+                "lineNumber": -2,
+                "className": "sun.nio.ch.EPoll",
+                "methodName": "wait"
+              },
+              {
+                "fileName": "EPollSelectorImpl.java",
+                "lineNumber": 118,
+                "className": "sun.nio.ch.EPollSelectorImpl",
+                "methodName": "doSelect"
+              },
+              {
+                "fileName": "SelectorImpl.java",
+                "lineNumber": 129,
+                "className": "sun.nio.ch.SelectorImpl",
+                "methodName": "lockAndDoSelect"
+              },
+              {
+                "fileName": "SelectorImpl.java",
+                "lineNumber": 141,
+                "className": "sun.nio.ch.SelectorImpl",
+                "methodName": "select"
+              },
+              {
+                "fileName": "NioEndpoint.java",
+                "lineNumber": 812,
+                "className": "org.apache.tomcat.util.net.NioEndpoint$Poller",
+                "methodName": "run"
+              },
+              {
+                "fileName": "Thread.java",
+                "lineNumber": 840,
+                "className": "java.lang.Thread",
+                "methodName": "run"
+              }
+            ],
+            "state": "RUNNABLE",
+            "suspended": false,
+            "time": 707,
+            "waitedCount": 6,
+            "waitedTime": -1
+          },
+          {
+            "blockedCount": 4,
+            "blockedTime": -1,
+            "cpu": 13.23,
+            "daemon": true,
+            "deltaTime": 26,
+            "group": "main",
+            "id": 31,
+            "inNative": false,
+            "interrupted": false,
+            "lockInfo": {
+              "className": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject",
+              "identityHashCode": 321403544
+            },
+            "lockName": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject@13283a98",
+            "lockOwnerId": -1,
+            "lockedMonitors": [],
+            "lockedSynchronizers": [],
+            "name": "http-nio-8080-exec-10",
+            "priority": 5,
+            "stackTrace": [
+              {
+                "fileName": "Unsafe.java",
+                "lineNumber": -2,
+                "className": "jdk.internal.misc.Unsafe",
+                "methodName": "park"
+              },
+              {
+                "fileName": "LockSupport.java",
+                "lineNumber": 252,
+                "className": "java.util.concurrent.locks.LockSupport",
+                "methodName": "parkNanos"
+              },
+              {
+                "fileName": "AbstractQueuedSynchronizer.java",
+                "lineNumber": 1679,
+                "className": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject",
+                "methodName": "awaitNanos"
+              },
+              {
+                "fileName": "LinkedBlockingQueue.java",
+                "lineNumber": 460,
+                "className": "java.util.concurrent.LinkedBlockingQueue",
+                "methodName": "poll"
+              },
+              {
+                "fileName": "TaskQueue.java",
+                "lineNumber": 123,
+                "className": "org.apache.tomcat.util.threads.TaskQueue",
+                "methodName": "poll"
+              },
+              {
+                "fileName": "TaskQueue.java",
+                "lineNumber": 33,
+                "className": "org.apache.tomcat.util.threads.TaskQueue",
+                "methodName": "poll"
+              },
+              {
+                "fileName": "ThreadPoolExecutor.java",
+                "lineNumber": 1113,
+                "className": "org.apache.tomcat.util.threads.ThreadPoolExecutor",
+                "methodName": "getTask"
+              },
+              {
+                "fileName": "ThreadPoolExecutor.java",
+                "lineNumber": 1176,
+                "className": "org.apache.tomcat.util.threads.ThreadPoolExecutor",
+                "methodName": "runWorker"
+              },
+              {
+                "fileName": "ThreadPoolExecutor.java",
+                "lineNumber": 659,
+                "className": "org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker",
+                "methodName": "run"
+              },
+              {
+                "fileName": "TaskThread.java",
+                "lineNumber": 61,
+                "className": "org.apache.tomcat.util.threads.TaskThread$WrappingRunnable",
+                "methodName": "run"
+              },
+              {
+                "fileName": "Thread.java",
+                "lineNumber": 840,
+                "className": "java.lang.Thread",
+                "methodName": "run"
+              }
+            ],
+            "state": "TIMED_WAITING",
+            "suspended": false,
+            "time": 783,
+            "waitedCount": 2562,
+            "waitedTime": -1
+          }
+        ],
+        "jobId": 3,
+        "type": "thread"
+      },
+      {
+        "jobId": 3,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "deb40fe3-0d4d-4fea-a3fd-73623a48ffeb",
+  "state": "SUCCEEDED"
+}

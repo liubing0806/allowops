@@ -1,0 +1,34 @@
+{
+  "body": {
+    "jobId": 29,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "command": "watch demo.ItemRepository findById -n 1 -m 1 --timeout 5",
+        "jobId": 29,
+        "state": "SCHEDULED",
+        "type": "command"
+      },
+      {
+        "effect": {
+          "classCount": 0,
+          "cost": 13,
+          "listenerId": 7,
+          "methodCount": 0,
+          "overLimitMsg": "The number of matched classes is 2, greater than the limit value 1. Try to change the limit with option '-m \u003carg\u003e'."
+        },
+        "jobId": 29,
+        "success": false,
+        "type": "enhancer"
+      },
+      {
+        "jobId": 29,
+        "statusCode": -1,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "36730af1-7c7c-400c-aee6-352db90fbc22",
+  "state": "SUCCEEDED"
+}

@@ -1,0 +1,252 @@
+{
+  "body": {
+    "command": "jvm",
+    "jobId": 7,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "jobId": 7,
+        "jvmInfo": {
+          "RUNTIME": [
+            {
+              "name": "MACHINE-NAME",
+              "value": "7@a76d4d103d1a"
+            },
+            {
+              "name": "JVM-START-TIME",
+              "value": "2026-10-24 13:40:48"
+            },
+            {
+              "name": "MANAGEMENT-SPEC-VERSION",
+              "value": "1.2"
+            },
+            {
+              "name": "SPEC-NAME",
+              "value": "Java Virtual Machine Specification"
+            },
+            {
+              "name": "SPEC-VENDOR",
+              "value": "Oracle Corporation"
+            },
+            {
+              "name": "SPEC-VERSION",
+              "value": "1.8"
+            },
+            {
+              "name": "VM-NAME",
+              "value": "OpenJDK 64-Bit Server VM"
+            },
+            {
+              "name": "VM-VENDOR",
+              "value": "Temurin"
+            },
+            {
+              "name": "VM-VERSION",
+              "value": "25.504-b01"
+            },
+            {
+              "name": "INPUT-ARGUMENTS",
+              "value": [
+                "-Xms512m",
+                "-Xmx512m",
+                "-XX:+UseG1GC",
+                "-Djava.security.egd=file:/dev/./urandom",
+                "-Dspring.main.banner-mode=off",
+                "-XX:+PrintGCDetails",
+                "-XX:+PrintGCDateStamps",
+                "-XX:+PrintGCApplicationStoppedTime",
+                "-Xloggc:/logs/gc.log",
+                "-XX:+UnlockDiagnosticVMOptions",
+                "-XX:+PrintSafepointStatistics",
+                "-XX:PrintSafepointStatisticsCount=1"
+              ]
+            },
+            {
+              "name": "CLASS-PATH",
+              "value": "/app/app.jar"
+            },
+            {
+              "name": "BOOT-CLASS-PATH",
+              "value": "/opt/java/openjdk/jre/lib/resources.jar:/opt/java/openjdk/jre/lib/rt.jar:/opt/java/openjdk/jre/lib/sunrsasign.jar:/opt/java/openjdk/jre/lib/jsse.jar:/opt/java/openjdk/jre/lib/jce.jar:/opt/java/openjdk/jre/lib/charsets.jar:/opt/java/openjdk/jre/lib/jfr.jar:/opt/java/openjdk/jre/classes"
+            },
+            {
+              "name": "LIBRARY-PATH",
+              "value": "/usr/java/packages/lib/amd64:/usr/lib64:/lib64:/lib:/usr/lib"
+            }
+          ],
+          "CLASS-LOADING": [
+            {
+              "name": "LOADED-CLASS-COUNT",
+              "value": 19330
+            },
+            {
+              "name": "TOTAL-LOADED-CLASS-COUNT",
+              "value": 19330
+            },
+            {
+              "name": "UNLOADED-CLASS-COUNT",
+              "value": 0
+            },
+            {
+              "name": "IS-VERBOSE",
+              "value": false
+            }
+          ],
+          "COMPILATION": [
+            {
+              "name": "NAME",
+              "value": "HotSpot 64-Bit Tiered Compilers"
+            },
+            {
+              "desc": "time (ms)",
+              "name": "TOTAL-COMPILE-TIME",
+              "value": 20228
+            }
+          ],
+          "GARBAGE-COLLECTORS": [
+            {
+              "desc": "count/time (ms)",
+              "name": "G1 Young Generation",
+              "value": {
+                "name": "G1 Young Generation",
+                "collectionCount": 18,
+                "collectionTime": 231
+              }
+            },
+            {
+              "desc": "count/time (ms)",
+              "name": "G1 Old Generation",
+              "value": {
+                "name": "G1 Old Generation",
+                "collectionCount": 0,
+                "collectionTime": 0
+              }
+            }
+          ],
+          "MEMORY-MANAGERS": [
+            {
+              "name": "CodeCacheManager",
+              "value": [
+                "Code Cache"
+              ]
+            },
+            {
+              "name": "Metaspace Manager",
+              "value": [
+                "Metaspace",
+                "Compressed Class Space"
+              ]
+            },
+            {
+              "name": "G1 Young Generation",
+              "value": [
+                "G1 Eden Space",
+                "G1 Survivor Space",
+                "G1 Old Gen"
+              ]
+            },
+            {
+              "name": "G1 Old Generation",
+              "value": [
+                "G1 Eden Space",
+                "G1 Survivor Space",
+                "G1 Old Gen"
+              ]
+            }
+          ],
+          "MEMORY": [
+            {
+              "desc": "memory in bytes",
+              "name": "HEAP-MEMORY-USAGE",
+              "value": {
+                "name": "heap",
+                "init": 536870912,
+                "used": 303654896,
+                "committed": 536870912,
+                "max": 536870912
+              }
+            },
+            {
+              "desc": "memory in bytes",
+              "name": "NO-HEAP-MEMORY-USAGE",
+              "value": {
+                "name": "nonheap",
+                "init": 2555904,
+                "used": 148201000,
+                "committed": 158068736,
+                "max": -1
+              }
+            },
+            {
+              "name": "PENDING-FINALIZE-COUNT",
+              "value": 0
+            }
+          ],
+          "OPERATING-SYSTEM": [
+            {
+              "name": "OS",
+              "value": "Linux"
+            },
+            {
+              "name": "ARCH",
+              "value": "amd64"
+            },
+            {
+              "name": "PROCESSORS-COUNT",
+              "value": 4
+            },
+            {
+              "name": "LOAD-AVERAGE",
+              "value": 3.84619140625
+            },
+            {
+              "name": "VERSION",
+              "value": "6.18.54-1-lts"
+            }
+          ],
+          "THREAD": [
+            {
+              "name": "COUNT",
+              "value": 43
+            },
+            {
+              "name": "DAEMON-COUNT",
+              "value": 39
+            },
+            {
+              "name": "PEAK-COUNT",
+              "value": 44
+            },
+            {
+              "name": "STARTED-COUNT",
+              "value": 114
+            },
+            {
+              "name": "DEADLOCK-COUNT",
+              "value": 0
+            }
+          ],
+          "FILE-DESCRIPTOR": [
+            {
+              "name": "MAX-FILE-DESCRIPTOR-COUNT",
+              "value": 524288
+            },
+            {
+              "name": "OPEN-FILE-DESCRIPTOR-COUNT",
+              "value": 96
+            }
+          ]
+        },
+        "type": "jvm"
+      },
+      {
+        "jobId": 7,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "01bce553-e289-4d1e-842a-62b724e54896",
+  "state": "SUCCEEDED"
+}

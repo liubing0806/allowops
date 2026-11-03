@@ -1,0 +1,74 @@
+{
+  "body": {
+    "command": "thread -b",
+    "jobId": 1,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "all": false,
+        "blockingLockInfo": {
+          "blockingThreadCount": 3,
+          "lockIdentityHashCode": 2115034460,
+          "threadInfo": {
+            "blockedCount": 0,
+            "blockedTime": -1,
+            "daemon": false,
+            "inNative": false,
+            "lockOwnerId": -1,
+            "lockedMonitors": [
+              {
+                "className": "java.lang.Object",
+                "identityHashCode": 2115034460,
+                "lockedStackDepth": 1,
+                "lockedStackFrame": {
+                  "fileName": "Blocker.java",
+                  "lineNumber": 10,
+                  "className": "Blocker$1",
+                  "methodName": "run"
+                }
+              }
+            ],
+            "lockedSynchronizers": [],
+            "priority": 5,
+            "stackTrace": [
+              {
+                "fileName": "Thread.java",
+                "lineNumber": -2,
+                "className": "java.lang.Thread",
+                "methodName": "sleep"
+              },
+              {
+                "fileName": "Blocker.java",
+                "lineNumber": 10,
+                "className": "Blocker$1",
+                "methodName": "run"
+              },
+              {
+                "fileName": "Thread.java",
+                "lineNumber": 840,
+                "className": "java.lang.Thread",
+                "methodName": "run"
+              }
+            ],
+            "suspended": false,
+            "threadId": 22,
+            "threadName": "lock-holder",
+            "threadState": "TIMED_WAITING",
+            "waitedCount": 1,
+            "waitedTime": -1
+          }
+        },
+        "jobId": 1,
+        "type": "thread"
+      },
+      {
+        "jobId": 1,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "cd7f6aa8-589d-45e5-b046-ec8a9b30a166",
+  "state": "SUCCEEDED"
+}

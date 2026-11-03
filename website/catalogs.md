@@ -103,6 +103,15 @@ actions share a total stdout/stderr output budget. Runtime callers can tighten
 batch/failure limits, not increase the signed limits. stdout is redacted,
 filtered and truncated in that order. stderr is redacted before truncation.
 
+An action may also set `max_targets`, an integer from 1 to 2147483647; omitting
+it means no limit. When a job resolves to more target hosts than `max_targets`
+(a selector is counted after it is resolved), the gateway rejects the whole job
+before policy evaluation, without creating a job or task. The value is part of
+the signed action digest and callers cannot change it. Use it where only a few
+instances may act at once, such as `max_targets: 1` for a diagnostic action.
+Hosts running an agent that predates the field cannot load a catalog that uses
+it; see [fields that hosts must understand](publishing.md#fields-that-hosts-must-understand).
+
 `secrets` is enabled by default; `pii` is optional. Custom rules use
 `redact.custom: [{name, regex, before_builtin}]`. Custom rules run after the
 built-in rules unless `before_builtin: true` is set; use it for a rule that

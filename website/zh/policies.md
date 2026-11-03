@@ -32,7 +32,7 @@ rules:
       team: ops
 ```
 
-仅有这段片段不能替代一套安装所需的管理规则。[示例策略](https://github.com/liubing0806/allowops/blob/main/examples/policy/read-only.yaml)包含管理员恢复权限和一条单独的输出规则。`hours` 使用 `from`、`to`、`timezone`。它表示同一天内的左闭右开区间，要求 `0 <= from < to <= 24`。跨夜的时间窗口需要使用两条规则。请显式提供 IANA 时区。来源网络规则使用 CIDR 表示法。请自行选择网络，不要把部署环境的地址复制到公开的策略仓库中。
+仅有这段片段不能替代一套安装所需的管理规则。[示例策略](https://github.com/liubing0806/allowops/blob/main/examples/policy/read-only.yaml)包含管理员恢复权限和一条单独的输出规则。[Java 诊断示例](https://github.com/liubing0806/allowops/blob/main/examples/policy/java-diagnostics.yaml)把会增强类或反编译类的 Arthas L2 动作，在一个时间窗口内单独授予一个角色，与 Arthas L1 动作分开授权。`hours` 使用 `from`、`to`、`timezone`。它表示同一天内的左闭右开区间，要求 `0 <= from < to <= 24`。跨夜的时间窗口需要使用两条规则。请显式提供 IANA 时区。来源网络规则使用 CIDR 表示法。请自行选择网络，不要把部署环境的地址复制到公开的策略仓库中。
 
 操作名称包括 `execute_action`、`modify_policy`、`manage_service_accounts`、`manage_hosts`、`create_join_token`、`manage_user_roles`、`publish_catalog`、`view_hosts`、`view_catalog`、`view_jobs`、`view_output`、`view_audit` 和 `view_system`。
 

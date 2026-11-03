@@ -133,6 +133,9 @@ func ExecuteWithCallbacks(ctx context.Context, input io.Reader, callbacks execut
 		response.Reason = "ROOT_REQUIRED"
 		return response
 	}
+	if request.Operation == OperationArthasRecover {
+		return runArthasRecover(ctx, callbacks)
+	}
 	a, err := Prepare(DefaultCache(), request)
 	if err != nil {
 		response.Reason = "REQUEST_REJECTED"

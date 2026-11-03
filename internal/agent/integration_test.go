@@ -307,6 +307,12 @@ func startGateway(t *testing.T, renewSoon bool) (*testGateway, *httptest.Server,
 
 func startAgent(t *testing.T, config Config) (*Agent, context.CancelFunc) {
 	t.Helper()
+	return startAgentWith(t, config, nil)
+}
+
+// newAgentWith joins the gateway and builds an agent that is not running yet; change adjusts its options.
+func newAgentWith(t *testing.T, config Config, change func(*Options)) *Agent {
+	t.Helper()
 	dataDir := filepath.Join(t.TempDir(), "data")
 	if err := os.Mkdir(dataDir, 0700); err != nil {
 		t.Fatal(err)
@@ -327,10 +333,21 @@ func startAgent(t *testing.T, config Config) (*Agent, context.CancelFunc) {
 		t.Fatalf("identity mode: %v %v", info, err)
 	}
 	keys := t.TempDir()
-	a, err := New(config, Options{DataDir: dataDir, KeysDir: keys, KeyOwner: os.Getuid(), Version: "dev"})
+	options := Options{DataDir: dataDir, KeysDir: keys, KeyOwner: os.Getuid(), Version: "dev"}
+	if change != nil {
+		change(&options)
+	}
+	a, err := New(config, options)
 	if err != nil {
 		t.Fatal(err)
 	}
+	return a
+}
+
+// startAgentWith runs an agent built by newAgentWith until the test ends.
+func startAgentWith(t *testing.T, config Config, change func(*Options)) (*Agent, context.CancelFunc) {
+	t.Helper()
+	a := newAgentWith(t, config, change)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- a.Run(ctx) }()
