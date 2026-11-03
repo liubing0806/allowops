@@ -79,3 +79,11 @@ func TestProvisionAndHostErrors(t *testing.T) {
 		t.Fatal("host error lost")
 	}
 }
+
+func TestRejectCredentialLabels(t *testing.T) {
+	for _, label := range []string{"password", "reported.password", "api_token", "DB_PASS", "client_secret", "API_KEY", "authorization"} {
+		if err := (&Module{Label: label}).Provision(context.Background(), testHost{}); err == nil {
+			t.Errorf("credential label %q accepted", label)
+		}
+	}
+}

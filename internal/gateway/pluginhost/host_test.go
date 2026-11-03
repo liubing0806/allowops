@@ -262,3 +262,11 @@ func TestSecretsDoNotLeak(t *testing.T) {
 		t.Errorf("logs contain secret: %s", logs.String())
 	}
 }
+
+func TestConfigErrorOmitsContent(t *testing.T) {
+	c := config(t, "id: test\nmodule: inventory.host_test\nconfig: {"+jwtKey+": x}")
+	_, err := New(context.Background(), []Config{c}, testDeps())
+	if err == nil || strings.Contains(err.Error(), "eyJ") || !strings.Contains(err.Error(), "plugin test: invalid config at line 1") {
+		t.Fatalf("error: %v", err)
+	}
+}
