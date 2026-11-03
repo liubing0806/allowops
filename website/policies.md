@@ -17,15 +17,33 @@ to the same rule.
 
 | Role | Initial permissions |
 |---|---|
-| `admin` | Management and reading, plus all actions on labeled hosts, including dangerous actions. |
-| `operator` | Host management/reading, join tokens, job metadata and system status. |
+| `admin` | Management and reading, including inventory, plus all actions on labeled hosts, including dangerous actions. |
+| `operator` | Host management/reading, join tokens, inventory, job metadata and system status. |
 | `auditor` | Audit, job metadata and output. |
-| `viewer` | Host/catalog/job metadata. |
+| `viewer` | Host/catalog/job metadata and inventory. |
 | `publisher` | Publish catalogs. |
 
 Only admin has default execution access. The other roles need explicit action
 rules. Configuration `bootstrap_admins` preserves policy modification access as
 a recovery path; it is not an unrestricted execution identity.
+
+## Inventory access after an upgrade
+
+`entities_search` requires `view_inventory`. New installations grant it to
+admin, operator and viewer. Upgrades preserve the stored policy, so existing
+roles do not gain this permission automatically.
+
+As an administrator, export the current policy with `allowops policy get > rules.yaml`.
+Add `view_inventory` to the rules for the roles that need inventory access.
+Retain the other rules, run `allowops policy test -f rules.yaml`, then run
+`allowops policy apply -f rules.yaml --reason 'grant inventory access'`.
+You can also edit, simulate and save the policy in the console.
+
+`view_inventory` is a global operation. A rule with `host_labels` does not match
+it. Hostnames in inventory results still require `view_hosts` for each host.
+Entities whose associated hosts are all hidden are removed. Entities configured
+without hosts remain visible to callers with `view_inventory`. Passing a returned
+selector to an action checks execution permission on each target.
 
 ## Rule shape
 
@@ -56,7 +74,7 @@ without copying deployment addresses into a public policy repository.
 
 Operation names are `execute_action`, `modify_policy`, `manage_service_accounts`,
 `manage_hosts`, `create_join_token`, `manage_user_roles`, `publish_catalog`,
-`view_hosts`, `view_catalog`, `view_jobs`, `view_output`, `view_audit` and `view_system`.
+`view_hosts`, `view_inventory`, `view_catalog`, `view_jobs`, `view_output`, `view_audit` and `view_system`.
 
 ## Review and apply
 

@@ -177,7 +177,7 @@ CSV 为 UTF-8 RFC 4180，首列 `hostname`，其余列为 `set:<key>` 或 `remov
 
 ### 策略（A11）
 
-`PolicyRule` 显式描述 role/team/owner、operation、action/risk、授权标签、hours 和 CIDR。operations 使用稳定名称：`execute_action`、`manage_policy`、`manage_service_accounts`、`manage_hosts`、`create_join_token`、`manage_users`、`publish_catalog`、`view_hosts`、`view_catalog`、`view_job`、`view_output`、`view_audit`、`view_system`；目录所述角色默认权限由 P5 规则数据实现，不在协议中硬编码角色绕过。
+`PolicyRule` 显式描述 role/team/owner、operation、action/risk、授权标签、hours 和 CIDR。operations 使用稳定名称：`execute_action`、`manage_policy`、`manage_service_accounts`、`manage_hosts`、`create_join_token`、`manage_users`、`publish_catalog`、`view_hosts`、`view_inventory`、`view_catalog`、`view_job`、`view_output`、`view_audit`、`view_system`；目录所述角色默认权限由 P5 规则数据实现，不在协议中硬编码角色绕过。
 
 规则匹配：roles 必填且支持 `*`；其余非空主体条件合取，列表内为或；operations 必填；actions 与 risks 非空项之间为或，两者都空时不限制 action。host_labels 为逐键相等合取；CIDR 列表为或；hours 用明确 IANA 时区且 `0 <= from < to <= 24`，范围左闭右开，跨午夜用两条规则。主体属性由 P5 从身份库读取；主机条件只能匹配实际提供的主机授权标签，不能由调用者伪造。所有规则 deny 优先、无匹配 deny、求值异常 deny；新主机无授权标签时明确执行默认拒绝约束。
 

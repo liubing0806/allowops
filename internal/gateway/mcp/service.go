@@ -14,6 +14,7 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/catalogsvc"
 	"github.com/liubing0806/allowops/internal/gateway/job"
+	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -22,6 +23,8 @@ import (
 // Identity is the part of the management API the MCP service uses.
 // *api.Service implements it.
 type Identity interface {
+	Require(context.Context, authz.Operation, authz.Action, authz.Host) (authz.Result, error)
+	VisibleHostnames(context.Context, []string) (map[string]bool, error)
 	// Middleware authenticates requests and stores the caller in the context.
 	Middleware(http.Handler) http.Handler
 	// PolicySnapshot returns the current policy rules for display prechecks.
@@ -39,7 +42,13 @@ type Identity interface {
 	PageSize() int
 }
 
+type Inventory interface {
+	InventorySources() []string
+	SearchInventory(context.Context, pluginhost.Query, []string) ([]pluginhost.Result, []pluginhost.SourceError)
+}
+
 type Config struct {
+	Inventory        Inventory
 	CacheEntries     int
 	ProgressInterval time.Duration
 	// Jobs is the gateway job configuration. Tool schemas and argument checks use

@@ -29,7 +29,7 @@ allowops hosts delete host-a
 
 标签和删除命令先查询当前 ID/revision，再由服务端事务确认。selector 标签命令必须给出精确 expected-count。读取和修改是独立权限，调用者须具备目标的 view_hosts 和 manage_hosts。G36 确认管理主机隐含查看主机，默认 operator 规则增加 view_hosts；已有策略版本通过试算和保存更新。其余默认角色的现有职责读取权限无已确认缺口。
 
-空 cases 的默认策略试算保留每个主体的 12 项全局控制台检查。view_hosts、manage_hosts 各按现有主机展开；view_catalog 按当前有效目录 action 展开；view_jobs、view_output 各按 action 与 (空主机 + 现有主机) 组合展开，空主机对应没有任务的 job；execute_action 按 action 与主机组合展开。设主体数为 S、有效 action 数为 A、主机数为 H，当前总求值数为 `S × (12 + 2H + 3A + 3AH)`。每增加一项输入都先检查同一 `MaxTestEvaluations`，不预先构造笛卡尔积、不抽样；超限时 TestPolicy 和 SavePolicy 复核均返回 RESOURCE_EXHAUSTED。展开增加覆盖数量，已有部署可能更早到达上限。默认试算按当前有效目录中的 action 展开；已移出当前目录或 risk 已变化的历史 job，其 action_definition 不在默认试算内。显式 cases 的语义见下文 view_* 用例的说明。
+空 cases 的默认策略试算保留每个主体的 13 项全局控制台检查（含 `view_inventory`）。view_hosts、manage_hosts 各按现有主机展开；view_catalog 按当前有效目录 action 展开；view_jobs、view_output 各按 action 与 (空主机 + 现有主机) 组合展开，空主机对应没有任务的 job；execute_action 按 action 与主机组合展开。设主体数为 S、有效 action 数为 A、主机数为 H，当前总求值数为 `S × (13 + 2H + 3A + 3AH)`。每增加一项输入都先检查同一 `MaxTestEvaluations`，不预先构造笛卡尔积、不抽样；超限时 TestPolicy 和 SavePolicy 复核均返回 RESOURCE_EXHAUSTED。展开增加覆盖数量，已有部署可能更早到达上限。默认试算按当前有效目录中的 action 展开；已移出当前目录或 risk 已变化的历史 job，其 action_definition 不在默认试算内。显式 cases 的语义见下文 view_* 用例的说明。
 
 默认试算的主机只来自 `certificate_status='active'` 的主机。已删除主机上的历史 job 仍可通过 view_jobs、view_output 按已删除主机的授权标签求值，这些输入不在默认试算内，规则的 host_labels 只匹配已删除主机时，查看权限的变化不计入 changed_count。不展开的原因：已删除主机只增不减，展开会使求值数随删除次数无上限增长并终将超出 `MaxTestEvaluations`，且需要为每个已删除主机扫描 tasks 表判断是否被引用。显式 cases 也只从 active 主机中选择目标。
 
