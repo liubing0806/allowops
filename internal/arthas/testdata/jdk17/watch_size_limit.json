@@ -1,0 +1,43 @@
+{
+  "body": {
+    "jobId": 8,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "command": "watch demo.DiagController threadNames {returnObj} -n 1 -x 2 -m 1 --timeout 5",
+        "jobId": 8,
+        "state": "SCHEDULED",
+        "type": "command"
+      },
+      {
+        "effect": {
+          "classCount": 1,
+          "cost": 58,
+          "listenerId": 2,
+          "methodCount": 1
+        },
+        "jobId": 8,
+        "success": true,
+        "type": "enhancer"
+      },
+      {
+        "accessPoint": "AtExit",
+        "className": "demo.DiagController",
+        "cost": 0.054217,
+        "jobId": 8,
+        "methodName": "threadNames",
+        "ts": "2026-10-26 04:30:58.986053824",
+        "type": "watch",
+        "value": "@ArrayList[\n    @ArrayList[\n        @String[Reference Handler],\n        @String[Finalizer],\n        @String[Signal Dispatcher],\n        @String[Notification Thread],\n        @String[Attach Listener],\n        @String[arthas-timer],\n        @String[arthas-Ne Object size exceeds size limit: 256, try to use `options object-size-limit \u003cbytes\u003e` to increase the limit."
+      },
+      {
+        "jobId": 8,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "db514780-edea-4443-88fd-6fc601bfdd58",
+  "state": "SUCCEEDED"
+}

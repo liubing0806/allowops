@@ -4,7 +4,7 @@
 
 allowops 只执行运维人员预先定义、评审并签名的 action。本节点提供公开示例的需求和 YAML，不实现执行器，不生成已签名目录包。
 
-依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 104 个 action：103 个 risk: read，1 个 risk: dangerous（`agent_upgrade`）；2026-10-23 起原 `log_search` 改名 `log_grep`，新的 `log_search` 和新增的 `log_sources`、`log_stats`、`log_patterns`、`log_search_containers`、`log_export` 使用内置 log_query 处理器；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90；2026-10-23 新增上述 6 个 log_query action，2026-10-24 新增第 6 节 `prometheus_query` 的 6 个 action 和 `alertmanager_alerts` 的 1 个 action，90 + 6 + 7 = 103 个 risk: read；2026-10-25 起示例目录另含 StarRocks 与 Dremio 的 11 个 action，104 + 11 = 115，见 `builtin-starrocks.md`、`builtin-dremio.md`）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
+依据为 `design.md` 第 4、5 节及扩展执行能力表，`architecture-decisions.md` 第 9、13、18、20、21 节。AC1B 按 `internal/catalog/`、`internal/params/`、`internal/builtin/` 和 `internal/executor/` 的实际字段与行为对齐。本文与 `examples/catalog/actions/` 一一对应，共 133 个 action：115 个 risk: read，1 个 risk: dangerous（`agent_upgrade`），17 个 risk: write（`jvm_arthas_*`）；2026-10-23 起原 `log_search` 改名 `log_grep`，新的 `log_search` 和新增的 `log_sources`、`log_stats`、`log_patterns`、`log_search_containers`、`log_export` 使用内置 log_query 处理器；2026-10-22 起删除了 docker_stop、process_signal 两个写操作，并按 `action-usage-analysis.md` 第 6.5 节相对 2026-10-22 计划基线（`44d82fb`，51 个 action）新增 41 个，修改 `dns_lookup` 和 `file_view`，删除 2 个（`git diff 44d82fb..HEAD` 统计 A 41、M 2、D 2，51 + 41 - 2 = 90；2026-10-23 新增上述 6 个 log_query action，2026-10-24 新增第 6 节 `prometheus_query` 的 6 个 action 和 `alertmanager_alerts` 的 1 个 action，90 + 6 + 7 = 103 个 risk: read；2026-10-25 起示例目录另含 StarRocks 与 Dremio 的 11 个 action，104 + 11 = 115，见 `builtin-starrocks.md`、`builtin-dremio.md`；2026-10-23 新增内置处理器 `jvm_perfdata`（Arthas 引入计划阶段 1）的 1 个 action，115 + 1 = 116；2026-10-25 起另含 `jvm_arthas` 的 13 个 risk: write action（内置处理器，Arthas 引入计划阶段 2D），116 + 13 = 129；同日按 A69 删除 `jvm_arthas_logger`，129 - 1 = 128；2026-10-26 起另含 `jvm_arthas` 的 5 个 L2 risk: write action（Arthas 引入计划阶段 3），128 + 5 = 133）。`dns_lookup` 的定义被替换为正则约束的主机名参数，`file_view` 在第四轮审阅中增加了文件脱敏规则。新增项中，`app_config_grep`、`docker_app_config_grep` 经审阅删除并由 `app_config_view`、`docker_app_config_view` 替代，`k8s_configmap_grep` 改名为 `k8s_configmap_view`；其中 7 个是 MySQL 与 Redis 日志、参数、配置查询 action（`mysql_variables`、`mysql_processlist`、`mysql_error_log`、`mysql_slow_log`、`mysql_config_view`、`redis_config_file_view`、`redis_log_view`）。
 
 第 18 节的 19 个名称与使用分析的 39 个名称合并。重复名称共 7 个：`process_top`、`ports_listening`、`log_tail_file`、`docker_ps`、`docker_stats`、`docker_container_state`、`docker_logs`。同名定义按使用分析第 4 节合并，`ports_listening`、`log_tail_file` 增加 D1，`docker_logs` 增加 D1 和可选 until；其他同名定义保留对应用途。没有需要改名的冲突。
 
@@ -41,6 +41,7 @@ test/examples/check_examples.py
 
 - name 匹配 `^[a-z][a-z0-9_]{0,63}$`，文件名与 name 一致。保留工具名不得用于 action。action 和每个参数的 description 必填；示例 YAML 的 description 使用英文。
 - 执行方式恰好为 exec、steps、script、builtin 之一。exec 的首项及 exec_fallbacks 均为绝对路径；exec 不含提权命令，提权仅通过 run_as。省略 run_as 时使用 allowops 用户。
+- `max_targets` 为可选字段：1 到 2147483647 的整数，省略表示不限制；job 的目标主机数（`selector` 为解析后的数量）超过该值时，网关拒绝整个 job。需要限制同时作用的实例数时设置（如诊断类 action 设为 1）。字段受签名保护；不认识它的旧版主机端会拒绝整个目录包，发布前须先升级主机端（见 `docs/design.md` 第 4 节格式规则 12）。依据：`internal/catalog/catalog.go` 的 `validateLimits`，`internal/gateway/job/service.go` 的 `RunJob`。
 - 参数只替换完整 argv 元素 `{param}`。可选项使用子列表，缺失时省略整组；Go 格式模板按字面值传递。不执行 shell，不拼接选项或路径。
 - string、path 拒绝以连字符开头的值。未知参数、缺失必填值或类型错误一律拒绝。path 必须存在，解析符号链接后按路径分量检查 allowed_roots；它不单独拒绝所有 `..` 写法。内置 log_search 额外拒绝 `..` 分量；依据：`internal/params/params.go` 的 `ResolvePath`、`internal/builtin/logsearch/logsearch.go` 的 `files`。执行前还要通过属主与写权限检查，见第 4 节第 8 项。
 - 包装命令后真正执行的命令也必须通过解释器检查。Docker 示例不分配 TTY（终端）；不启用解释器覆盖。签名脚本是 D6 明确允许的例外，主机端须使用 Python -I。
@@ -54,7 +55,7 @@ filters 是允许 agent 传入的过滤参数集合，`[]` 表示不允许过滤
 
 处理顺序为 stdout → 脱敏 → match/exclude → head/tail/count → 截断。过滤不能查询未脱敏内容；stderr 脱敏并截断，不过滤。组合 action 按步骤 stdout 独立过滤，所有步骤的 stdout+stderr 共用 max_output；普通 exec/script/builtin 的 stdout、stderr 分别受 max_output 限制。max_scan 按每个步骤 stdout 原始字节计，超限报告 scan_limit_reached；输出或处理器资源上限报告 truncated，处理器另报告 resource_limit_reached。依据：A13、A17、`internal/executor/executor.go` 的 `RunWithFilters`、`processOutput`、`runCommand`。上述任一上限标记均表示结果可能不全。
 
-所有示例保留 secrets，没有示例关闭脱敏。action 的 redact 覆盖全局规则，因此覆盖时仍显式保留 secrets。额外启用 pii 的 action 共 36 个，读取日志、文件内容、配置文件、数据库值和 HTTP 响应体的 action 属于这一类；其余 54 个只保留 secrets，包括系统指标、进程和网络状态、Docker 与 K8s 元数据、jar 条目名和类成员、键名列表、`hosts_entries`（运行时地址和主机名不脱敏，不启用 pii）、除 `dubbo_qos_get_address`、`dubbo_qos_get_config` 之外的 Dubbo QoS、`mysql_variables`、`mysql_config_view`、`redis_config_file_view` 和 `redis_config_get`。这个划分以示例 YAML 为准，不表示后一类 action 的输出一定不含个人信息。pii 可能误伤数字标识，正则不能识别所有敏感内容；此目录不声称输出能全部去敏。设计规定运行时 IP 地址和主机名不脱敏，公开示例不包含任何实际环境数据。
+所有示例保留 secrets，没有示例关闭脱敏。action 的 redact 覆盖全局规则，因此覆盖时仍显式保留 secrets。额外启用 pii 的 action 共 48 个，读取日志、文件内容、配置文件、数据库值、HTTP 响应体、Prometheus 与 Alertmanager 查询结果的 action，以及输出方法参数、返回值和源码的 5 个 Arthas L2 action 属于这一类；其余 67 个只保留 secrets，包括系统指标、进程和网络状态、Docker 与 K8s 元数据、jar 条目名和类成员、`jvm_perfdata` 和 12 个 Arthas L1 action 的 JVM 状态与类信息、键名列表、`hosts_entries`（运行时地址和主机名不脱敏，不启用 pii）、除 `dubbo_qos_get_address`、`dubbo_qos_get_config` 之外的 Dubbo QoS、`mysql_variables`、`mysql_config_view`、`redis_config_file_view` 和 `redis_config_get`。这个划分以示例 YAML 为准，不表示后一类 action 的输出一定不含个人信息。pii 可能误伤数字标识，正则不能识别所有敏感内容；此目录不声称输出能全部去敏。设计规定运行时 IP 地址和主机名不脱敏，公开示例不包含任何实际环境数据。
 
 内置 secrets 规则集（`internal/redact/redact.go` 的 `secretRules`，按顺序执行）包含：阿里云和 AWS 访问密钥、JWT、`Authorization: Bearer`、URL 凭据（用户名可为空，如 `redis://:口令@host`；令牌作为唯一用户信息的 `https://ghp_xxx@github.com` 和 Go MySQL DSN `user:pass@tcp(host:3306)/db` 也识别；口令可含 `@`，取到 token 内最后一个 `@`；Oracle thin 的 `jdbc:oracle:thin:用户/口令@host`）、`MYSQL_PWD`、`REDISCLI_AUTH`、password、secret、token 后紧跟 `=` 的赋值、`Authorization` 与 `Proxy-Authorization` 头（识别条件见下文“Authorization 头”）、`X-*-Key/Token/Secret/Auth/Pass` 头及 nginx 的 `proxy_set_header`、`add_header` 等指令、htpasswd 哈希（apr1、`$1$`、`$5$`、`$6$`、bcrypt、yescrypt、`{SHA}`、`{SSHA}`）、名称以凭据词结尾的键（`DB_PASSWORD=x`、`access_token=x`）及冒号形式 `NAME: 值`（kubectl describe pod 的 Environment 段、YAML、JSON）、命令行口令（`--password`、`--token`、`--requirepass` 等长选项，`curl -u`、`curl -uUSER:PASS`、`--user`、`redis-cli -a`、`redis-cli -aPASS`、`sshpass -p`）和 `mysql -p`。因此 `file_view`、`log_*`、`docker_logs`、`k8s_pod_logs`、`crontab_list`、`k8s_describe_pod` 等只启用内置规则的 action 也覆盖这些形式。示例中的 `redact.custom` 规则保留，与内置规则叠加（内置先执行，自定义后执行；带 `before_builtin: true` 的自定义规则例外，在内置规则之前执行，目前只用于 `mysql_processlist`、`mysql_slow_log`、`mysql_error_log` 的 sql_text）；测试 `TestExampleCustomRulesComposeWithBuiltinRules` 验证两种顺序都不泄露、无嵌套标记、重复脱敏结果不变。
 
@@ -1346,6 +1347,122 @@ argv 或 builtin_config（与示例 YAML 一致）：
 exec: [/usr/bin/journalctl, -u, '{service}', -n, '{lines}', --no-pager, [--since, '{since}']]
 ```
 
+### `jvm_arthas_*`（12 个 action）
+
+在白名单中一个 JVM 内执行一条固定的 Arthas L1 命令（不增强类）。每个 action 对应一条命令，命令写在 `builtin_config.command`，调用方不能选择。`logger` 暂停（A69）：调用后 Arthas 的类加载器不卸载，每次约 12 MiB 元空间直到 JVM 重启；原因查明前目录校验拒绝 `command: logger`，示例目录不提供 `jvm_arthas_logger`。
+
+| 项 | 需求 |
+|---|---|
+| risk | write（attach 使 JVM 加载 Arthas 的类，类不能卸载到进程结束） |
+| run_as | root |
+| idempotent | false |
+| batch_size / max_failures / max_targets | 1 / 1 / 1（目录校验强制；一次只对一个 JVM 执行一条命令） |
+| 执行方式 | builtin（`jvm_arthas`） |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D7 |
+| 执行限制 | timeout=60s（`exec_timeout` 省略时 10s，上限 60s）；max_output 见下表 |
+| 主机要求 | 主机装有 Arthas 文件包（`/usr/share/allowops/arthas/4.3.5/` 下五个文件）；JVM 为 HotSpot 8、11、17、21，主机为 amd64；目标进程能被 attach（未设 `-XX:+DisableAttachMechanism`，运行时含 `java.instrument`）。缺少文件包时 action 在主机上报告 unsupported，agent 的 hello 不列出 `jvm_arthas`。CentOS 7 未验证。 |
+| 安全说明 | 调用方只能选择 `builtin_config.targets` 的键名和各命令的结构化参数，没有 pid、路径或命令文本。`class`、`method` 按 Java 标识符规则校验，`sysprop` 的 `key` 只能取 `sysprop_keys` 中的值。Arthas 文件在目标挂载命名空间内按 `builtin_config.sha256` 校验。Arthas 服务端只监听目标网络命名空间的回环地址，使用每次随机的密码。执行前检查、运行期监测和会话回收的规则见 `builtin-config.md`；阈值只能比默认值更严（A67）。依据：`docs/java-diagnostics-arthas-plan.md` 第 1、3、4、5、6、8 节，`docs/arthas-stage0-report.md`，`internal/builtin/jvmarthas/`，`internal/arthas/`，`internal/jvmtarget/`。 |
+
+| action | Arthas 命令 | 参数（除 `target` 外） | max_output |
+|---|---|---|---|
+| `jvm_arthas_dashboard` | `dashboard -n 1` | 无 | 64KB |
+| `jvm_arthas_thread_top` | `thread -n <top>` | `top`：int，1..10 | 128KB |
+| `jvm_arthas_thread_blocking` | `thread -b` | 无；`java.threads.live` 超过 `checks.max_blocking_threads`（默认 1000）时拒绝 | 128KB |
+| `jvm_arthas_thread_info` | `thread <thread_id>` | `thread_id`：int，不小于 1 | 64KB |
+| `jvm_arthas_memory` | `memory` | 无 | 64KB |
+| `jvm_arthas_jvm` | `jvm` | 无 | 128KB |
+| `jvm_arthas_class_info` | `sc -d <class>` | `class`：string，二进制类名，不允许通配符 | 128KB |
+| `jvm_arthas_method_info` | `sm -d <class> [method]` | `class`（同上）；`method`：string，可选，Java 标识符 | 128KB |
+| `jvm_arthas_classloader_tree` | `classloader -t` | 无 | 256KB |
+| `jvm_arthas_classloader_list` | `classloader -l` | 无 | 256KB |
+| `jvm_arthas_sysprop` | `sysprop <key>` | `key`：enum，取自 `sysprop_keys` | 64KB |
+| `jvm_arthas_version` | `version` | 无 | 64KB |
+
+所有 action 都有参数 `target`：enum，`values: ['api', 'shop-web']`（取自 `builtin_config.targets` 的键，按字典序）；必填。
+
+argv 或 builtin_config（与示例 YAML 一致，以 `jvm_arthas_dashboard` 为例）：
+
+```yaml
+builtin: jvm_arthas
+builtin_config:
+  command: dashboard
+  targets:
+    api:
+      systemd_unit: api.service
+    shop-web:
+      container: shop-web
+      main_class: com.example.shop.Main
+  sha256:
+    arthas-agent.jar: b5bf8765c7621849889fb6522a296fa177ceb3f5c2c2b6d9f631d761ca9c04f9
+    arthas-core.jar: 7cbc3dc36ec29e96ae044845ad6b690b790a800e45d0694fcfbe90c9725de813
+    arthas-spy.jar: d11cfc1cee83eb46501d5b9719ea49117db2a9e7cbdab9e83e376716255380a6
+    arthas.properties: a507ed264d99387b6e1717f8ad6f257dba79de983f5b6617a8c63e38975acec1
+    logback.xml: e038b9c097cf0fe801483c65871565f6d120c1365c4d55b65666b05d533f7445
+```
+
+示例中的 SHA-256 是 `allowops-arthas` 文件包的值：三个 jar 取自 Arthas 4.3.5 发行包，`arthas.properties` 已删除 `arthas.mcpEndpoint` 和 `arthas.mcpProtocol`，`logback.xml` 取自发行包。使用其他文件包时必须替换这些值。
+
+### `jvm_arthas_*` 的 L2 命令（5 个 action）
+
+在白名单中一个 JVM 内执行一条固定的 Arthas L2 命令。`watch`、`trace`、`stack`、`monitor` 在限定时长内增强（修改字节码）一个类的一个方法，结束后 `reset`；`jad` 反编译一个已加载的类，输出业务源码。每个 action 对应一条命令，命令写在 `builtin_config.command`，调用方不能选择。这 5 个 action 与上一节的 L1 action 按 action 名分开授权，示例策略见 `examples/policy/java-diagnostics.yaml`。L1 的主机要求、执行前检查、运行期监测和清理对 L2 同样适用。
+
+| 项 | 需求 |
+|---|---|
+| risk | write（增强在调用期间改变方法的字节码；jad 使 JVM 重新转换（retransform）该类，并输出业务源码） |
+| run_as | root |
+| idempotent | false |
+| batch_size / max_failures / max_targets | 1 / 1 / 1（目录校验强制；一次只对一个 JVM 执行一条命令） |
+| 执行方式 | builtin（`jvm_arthas`） |
+| filters | match, exclude, tail, head, count |
+| redact | secrets, pii（目录校验要求生效的 `redact.builtin` 同时含两者，action 未写 `redact` 时取目录级 `redact`；示例显式写出。输出含方法参数、返回值、调用栈和源码） |
+| 扩展能力 | D7 |
+| 执行限制 | timeout=90s（目录校验要求 watch、trace、stack、monitor 不小于 `enhance_duration` + 60s，默认配置下 90s；jad 不小于 `exec_timeout` + 60s，默认配置下 70s）；max_output=128KB（watch 最多 5 条结果，每条不超过 `object_size_limit`，默认 8KB） |
+| 主机要求 | 同 L1。jad 需要目标 JVM 的用户能写 Arthas 日志目录（默认为该用户的 `~/logs/arthas`），不可写时 jad 失败。 |
+| 安全说明 | `class` 是精确的二进制类名，必须以 `builtin_config.class_prefixes` 中的一项开头（示例为 `com.example.`），且不能以 `java.`、`javax.`、`jdk.`、`sun.`、`com.sun.`、`com.taobao.arthas.`、`com.alibaba.arthas.` 开头；这些禁止前缀固定在代码中，`class_prefixes` 含更宽的前缀（如 `com.`）时同样拒绝。`method` 是精确的 Java 标识符。不允许通配符和正则（`-E`）。watch 的观察表达式只能从固定组合中选择；条件表达式只开放 `#cost>` 加整数，由处理器根据 `min_cost_ms` 生成。`-n` ≤ 5，`-m 1`，`watch -x` ≤ 2。处理器先发送 `options disable-sub-class true`，只增强指定的类本身，不增强其子类（如 Spring CGLIB 代理）；watch 另发送 `options object-size-limit`，限制每个结果的大小。调用方不能发送 `options`。执行前检查最后一项是 CPU：目标进程 5 秒平均 CPU 达到 `checks.max_cpu_percent`（默认 50%，相对 cgroup CPU 限额与 cpuset 的较小者）时拒绝。增强后核对 Arthas 返回的影响范围（Affect）：类数超过 1、方法数超过 `max_methods` 或增强失败时立即 reset 并返回失败。清理后核对增强类数为 0。依据：`docs/java-diagnostics-arthas-plan.md` 第 4、5、8 节，`internal/builtin/jvmarthas/`。 |
+
+`<D>` 是 `enhance_duration` 的秒数（默认 30），`[...]` 是可选部分。
+
+| action | Arthas 命令 | 参数（除 `target`、`class` 外） | max_output |
+|---|---|---|---|
+| `jvm_arthas_watch` | `watch <class> <method> {<express>} [#cost><min_cost_ms>] -n <count> -x <expand> -m 1 --timeout <D>` | `method`：必填；`express`：enum，`params`、`returnObj`、`throwExp`、`params,returnObj`、`params,throwExp`、`returnObj,throwExp`、`params,returnObj,throwExp`，默认 `params,returnObj`；`expand`：int，1..2，默认 1；`count`：int，1..5，默认 1；`min_cost_ms`：int，1..3600000，可选 | 128KB |
+| `jvm_arthas_trace` | `trace <class> <method> [#cost><min_cost_ms>] -n <count> -m 1 --timeout <D>` | `method`：必填；`count`、`min_cost_ms`（同 watch） | 128KB |
+| `jvm_arthas_stack` | `stack <class> <method> [#cost><min_cost_ms>] -n <count> -m 1 --timeout <D>` | `method`：必填；`count`、`min_cost_ms`（同 watch） | 128KB |
+| `jvm_arthas_monitor` | `monitor <class> <method> [#cost><min_cost_ms>] -c <cycle> -n <count> -m 1 --timeout <D>` | `method`：必填；`cycle`：int，秒，1..`<D>`-1，必填；`count`、`min_cost_ms`（同 watch）；`count` × `cycle` 必须小于 `<D>` | 128KB |
+| `jvm_arthas_jad` | `jad --source-only <class> [<method>]` | `method`：可选 | 128KB |
+
+所有 action 都有参数 `target`：enum，`values: ['api', 'shop-web']`（取自 `builtin_config.targets` 的键，按字典序）；必填。`class`：string，正则 `^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$`，最长 255；必填。`method`：string，正则 `^[A-Za-z_$][A-Za-z0-9_$]*$`，最长 255。参数不合法时处理器不 attach，退出码为 1。
+
+一次调用的时长（其中约 5 秒是 CPU 采样）：watch、trace、stack 在方法被调用够 `count` 次时结束增强，方法在增强后很快被调用够次数时，一次调用约 10~15 秒；调用次数不足时，增强持续到 `enhance_duration`，一次调用约 40~50 秒（增强时长加 attach 和清理，默认配置）。monitor 在方法第一次被调用后才输出周期，第 `count` 次输出后再过一个周期结束；方法在增强后很快被调用时约 10 秒加 (`count` + 1) × `cycle` 秒，方法没有被调用时约 40~50 秒。jad 不增强，一次调用约 10 秒。本地真实 JVM 测试（JDK 8、11、17、21，每个命令每个 JDK 1 次，被增强的方法每秒约 50 次调用，默认配置）的结果：watch、trace、stack（`count` 1）9.9~12.3 秒，monitor（`count` 1，`cycle` 2）13.7~15.3 秒，jad（整个类）9.3~10.7 秒。40~50 秒超过 MCP `wait_seconds` 的默认值 30 秒，调用方传 `wait_seconds` 90（上限 120），或用 `jobs_get` 查询结果。
+
+对目标 JVM 的影响：增强开始后 1~4 秒内整个 JVM 的 CPU 升高，所有接口的延迟可达数百毫秒；每个 JVM 的第一次增强影响更大，JVM CPU 在 5~10 秒内高于 100%，最大延迟 220~1127 ms，之后的稳态增幅也更高（[arthas-stage3-l2-report.md](arthas-stage3-l2-report.md)）；Arthas 计划阶段 0 在 JDK 11、21 上观察到整个 JVM 最长 4.12 秒的暂停，原因是 JVM 线程写安全点日志或 hsperfdata 时等待文件系统 journal 提交（[arthas-jvm-pause-report.md](arthas-jvm-pause-report.md)）。详见 `builtin-config.md` jvm_arthas 一节的“L2 命令”。
+
+jad 的副作用：目标 JVM 把类的当前字节码写到 `<Arthas 日志目录>/classdump/<类加载器类名>-<哈希>/<包路径>/<类名>.class`，文件属主为目标 JVM 的用户。Arthas 和 allowops 都不删除这个文件，同一类再次 jad 时覆盖同一文件。
+
+argv 或 builtin_config（与示例 YAML 一致，以 `jvm_arthas_watch` 为例）：
+
+```yaml
+builtin: jvm_arthas
+builtin_config:
+  command: watch
+  targets:
+    api:
+      systemd_unit: api.service
+    shop-web:
+      container: shop-web
+      main_class: com.example.shop.Main
+  sha256:
+    arthas-agent.jar: b5bf8765c7621849889fb6522a296fa177ceb3f5c2c2b6d9f631d761ca9c04f9
+    arthas-core.jar: 7cbc3dc36ec29e96ae044845ad6b690b790a800e45d0694fcfbe90c9725de813
+    arthas-spy.jar: d11cfc1cee83eb46501d5b9719ea49117db2a9e7cbdab9e83e376716255380a6
+    arthas.properties: a507ed264d99387b6e1717f8ad6f257dba79de983f5b6617a8c63e38975acec1
+    logback.xml: e038b9c097cf0fe801483c65871565f6d120c1365c4d55b65666b05d533f7445
+  class_prefixes: [com.example.]
+```
+
+示例使用 `enhance_duration`、`max_methods`、`object_size_limit` 和 `checks.max_cpu_percent` 的默认值，键的含义见 `builtin-config.md` 的 jvm_arthas 一节。
+
 ### `jvm_gc_stats`
 
 查看容器内 JVM 垃圾回收指标有限样本。
@@ -1402,6 +1519,42 @@ argv 或 builtin_config（与示例 YAML 一致）：
 
 ```yaml
 exec: [/usr/bin/docker, exec, '{container}', jps, -l]
+```
+
+### `jvm_perfdata`
+
+读取白名单中一个 JVM 的 hsperfdata，输出堆、GC、类加载和线程数据。
+
+| 项 | 需求 |
+|---|---|
+| risk | read |
+| run_as | root |
+| 执行方式 | builtin（`jvm_perfdata`） |
+| filters | match, exclude, tail, head, count |
+| redact | secrets |
+| 扩展能力 | D7 |
+| 执行限制 | timeout=10s（builtin_config.timeout=5s）；max_output=64KB |
+| CentOS 7 | systemd 目标可用（`systemctl show --property=MainPID` 不使用 `--value`，systemd 219 可用；内核 3.10 没有 `openat2`，逐段 `O_NOFOLLOW` 解析代替）。Docker 目标要求 `/proc/<pid>/status` 有 `NSpid` 行（Linux 4.1 及以上），内核 3.10 报错 `this kernel does not report NSpid`。不要求安装 JDK、jcmd 或 jstat，也不要求 JVM 开启任何选项；JVM 以 `-XX:-UsePerfData` 或 `-XX:+PerfDisableSharedMem` 启动时没有 hsperfdata，返回明确错误。 |
+| 安全说明 | 不 attach，不向目标发送信号（不创建 `.java_pid*` 套接字，不触发线程转储），不写目标文件系统。调用方只能从 `builtin_config.targets` 的键名中选择，没有 pid 和路径参数；目标是 systemd 服务的 MainPID，或 Docker 容器（`GET /containers/<name>/json` 的 `State.Pid`）内 `sun.rt.javaCommand` 第一个词等于 `main_class` 的 JVM。读取 `/proc/<pid>/root` 下 `/tmp/hsperfdata_<用户>/<容器内 pid>` 时，容器内的符号链接不能指向宿主路径（`openat2(RESOLVE_IN_ROOT)`，旧内核逐段 `O_NOFOLLOW`），只读取属主等于 JVM 有效 uid 的普通文件，大小上限 16MiB，所有长度和偏移做边界检查。读取前后比较 `/proc/<pid>/stat` 的启动时间，识别 pid 重用。输出不含 JVM 参数、`sun.rt.javaCommand`、`java.rt.vmArgs`、`java.rt.vmFlags` 和系统属性值。依据：`builtin-config.md`，`docs/java-diagnostics-arthas-plan.md` 第 8 节，`internal/jvmtarget/`，`internal/builtin/jvmperfdata/`。 |
+
+参数：
+
+| 名称 | 类型 | 约束 | 用途（description） |
+|---|---|---|---|
+| `target` | enum | `values: ['api', 'shop-web']`（取自 `builtin_config.targets` 的键，按字典序）；必填 | 白名单中的 JVM 目标 |
+
+argv 或 builtin_config（与示例 YAML 一致）：
+
+```yaml
+builtin: jvm_perfdata
+builtin_config:
+  timeout: 5s
+  targets:
+    api:
+      systemd_unit: api.service
+    shop-web:
+      container: shop-web
+      main_class: com.example.shop.Main
 ```
 
 ### `jvm_thread_dump`
@@ -3245,7 +3398,7 @@ P12D 已实现 G30 的 Redis/MySQL 收紧配置。依据 `builtin-config.md` 的
 
 ## 5. 本地示例检查
 
-`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 115 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
+`make examples-check` 先构建 CLI，再对原始 examples/catalog 执行 catalog validate，并断言 133 个 action 全部 valid。随后通过 catalog try 执行 system_load、disk_usage、ports_listening，要求成功、输出非空、无 stderr 且未截断；ports_listening 提供 /usr/bin/ss 作为候选路径。check_examples.py 仅依赖 Python 标准库；本机需要 uptime、df、ss 及读取 netlink socket 的权限，不会通过 sudo 提权。
 
 配置脱敏冒烟在同一临时目录中把 app_config_view、app_config_keys 的 allowed_roots 改为临时配置目录，写入 properties、JSON、XML 形式的凭据和 PEM 私钥：断言 app_config_view 输出不含凭据值、match 过滤命中与否都以退出码 0 返回，app_config_keys 只输出键名且不输出 PEM 内容。该检查依赖本机 grep 支持 -P 和 head。
 

@@ -1,0 +1,57 @@
+# Overlay for the logger class-loader measurements (docs/arthas-logger-classloader-report.md), used with
+#   COMPOSE_FILE=compose.yaml:compose.logger.yaml
+# jdk8 and jdk17 get image tags of their own, so that rebuilding the sample application here does not replace the
+# images other copies of the environment use. log4j2-8 and log4j2-17 run the same images with the log4j2 build of
+# the sample application (app/pom-log4j2.xml, built into app/target-log4j2/) mounted over /app/app.jar.
+# /opt/arthas-patched is the test-only Arthas variant of scripts/patch-arthas-pd.sh.
+services:
+  jdk8:
+    image: jvmarthas/app-logger:jdk8
+    volumes:
+      - ./run/arthas-patched:/opt/arthas-patched:ro
+  jdk17:
+    image: jvmarthas/app-logger:jdk17
+    volumes:
+      - ./run/arthas-patched:/opt/arthas-patched:ro
+  log4j2-8:
+    image: jvmarthas/app-logger:jdk8
+    init: true
+    mem_limit: ${APP_MEM:-1g}
+    memswap_limit: ${APP_MEM:-1g}
+    cpuset: ${APP_CPUS:-4-7}
+    cpu_shares: 262144
+    user: "10001:10001"
+    restart: "no"
+    stop_grace_period: 10s
+    pull_policy: never
+    profiles: [log4j2]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}058:8080
+    environment:
+      HEAP: "512m"
+    volumes:
+      - ./run/log4j2-8/logs:/logs
+      - ./app/target-log4j2/app.jar:/app/app.jar:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+      - ./run/arthas-patched:/opt/arthas-patched:ro
+  log4j2-17:
+    image: jvmarthas/app-logger:jdk17
+    init: true
+    mem_limit: ${APP_MEM:-1g}
+    memswap_limit: ${APP_MEM:-1g}
+    cpuset: ${APP_CPUS:-4-7}
+    cpu_shares: 262144
+    user: "10001:10001"
+    restart: "no"
+    stop_grace_period: 10s
+    pull_policy: never
+    profiles: [log4j2]
+    ports:
+      - 127.0.0.1:${JA_PORT_PREFIX:-18}067:8080
+    environment:
+      HEAP: "512m"
+    volumes:
+      - ./run/log4j2-17/logs:/logs
+      - ./app/target-log4j2/app.jar:/app/app.jar:ro
+      - ./run/arthas-minlog:/opt/arthas-minlog:ro
+      - ./run/arthas-patched:/opt/arthas-patched:ro

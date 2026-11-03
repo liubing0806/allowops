@@ -1,0 +1,53 @@
+{
+  "body": {
+    "jobId": 3,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "command": "watch demo.HotService work {params,returnObj} -n 2 -x 2 -m 1 --timeout 5",
+        "jobId": 3,
+        "state": "SCHEDULED",
+        "type": "command"
+      },
+      {
+        "effect": {
+          "classCount": 1,
+          "cost": 90,
+          "listenerId": 1,
+          "methodCount": 1
+        },
+        "jobId": 3,
+        "success": true,
+        "type": "enhancer"
+      },
+      {
+        "accessPoint": "AtExit",
+        "className": "demo.HotService",
+        "cost": 0.764196,
+        "jobId": 3,
+        "methodName": "work",
+        "ts": "2026-10-26 04:30:24.377",
+        "type": "watch",
+        "value": "@ArrayList[\n    @Object[][\n        @Integer[0],\n    ],\n    @Long[4728970651561984952],\n]"
+      },
+      {
+        "accessPoint": "AtExit",
+        "className": "demo.HotService",
+        "cost": 0.764572,
+        "jobId": 3,
+        "methodName": "work",
+        "ts": "2026-10-26 04:30:24.378",
+        "type": "watch",
+        "value": "@ArrayList[\n    @Object[][\n        @Integer[0],\n    ],\n    @Long[4728970651561984952],\n]"
+      },
+      {
+        "jobId": 3,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "36730af1-7c7c-400c-aee6-352db90fbc22",
+  "state": "SUCCEEDED"
+}

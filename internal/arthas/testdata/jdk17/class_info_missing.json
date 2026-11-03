@@ -1,0 +1,22 @@
+{
+  "body": {
+    "command": "sc -d no.such.Clazz",
+    "jobId": 14,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "jobId": 14,
+        "rowCount": 0,
+        "type": "row_affect"
+      },
+      {
+        "jobId": 14,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "deb40fe3-0d4d-4fea-a3fd-73623a48ffeb",
+  "state": "SUCCEEDED"
+}

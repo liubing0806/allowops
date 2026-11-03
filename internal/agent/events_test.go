@@ -51,8 +51,11 @@ func TestAgentBuiltinCapabilitiesAndCatalogUnsupported(t *testing.T) {
 	g, _, config := startGateway(t, false)
 	a, _ := startAgent(t, config)
 	c := connection(t, g)
-	if want := catalog.BuiltinNames(); !slices.Equal(c.hello.Capabilities.Builtins, want) {
-		t.Fatalf("hello builtins=%v want %v", c.hello.Capabilities.Builtins, want)
+	withoutArthas := func(names []string) []string {
+		return slices.DeleteFunc(slices.Clone(names), func(name string) bool { return name == "jvm_arthas" })
+	}
+	if got, want := withoutArthas(c.hello.Capabilities.Builtins), withoutArthas(catalog.BuiltinNames()); !slices.Equal(got, want) {
+		t.Fatalf("hello builtins=%v want %v", got, want)
 	}
 	if !slices.Contains(c.hello.Capabilities.ParameterTypes, "bool") || !slices.Contains(c.hello.Capabilities.ParameterTypes, "string_array") || len(c.hello.Capabilities.OutputFilters) != 5 {
 		t.Fatalf("capabilities=%v", c.hello.Capabilities)

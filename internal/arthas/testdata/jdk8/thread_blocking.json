@@ -1,0 +1,72 @@
+{
+  "body": {
+    "command": "thread -b",
+    "jobId": 1,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "all": false,
+        "blockingLockInfo": {
+          "blockingThreadCount": 3,
+          "lockIdentityHashCode": 854260401,
+          "threadInfo": {
+            "blockedCount": 0,
+            "blockedTime": -1,
+            "inNative": false,
+            "lockOwnerId": -1,
+            "lockedMonitors": [
+              {
+                "className": "java.lang.Object",
+                "identityHashCode": 854260401,
+                "lockedStackDepth": 1,
+                "lockedStackFrame": {
+                  "fileName": "Blocker.java",
+                  "lineNumber": 10,
+                  "className": "Blocker$1",
+                  "methodName": "run"
+                }
+              }
+            ],
+            "lockedSynchronizers": [],
+            "stackTrace": [
+              {
+                "fileName": "Thread.java",
+                "lineNumber": -2,
+                "className": "java.lang.Thread",
+                "methodName": "sleep"
+              },
+              {
+                "fileName": "Blocker.java",
+                "lineNumber": 10,
+                "className": "Blocker$1",
+                "methodName": "run"
+              },
+              {
+                "fileName": "Thread.java",
+                "lineNumber": 750,
+                "className": "java.lang.Thread",
+                "methodName": "run"
+              }
+            ],
+            "suspended": false,
+            "threadId": 18,
+            "threadName": "lock-holder",
+            "threadState": "TIMED_WAITING",
+            "waitedCount": 1,
+            "waitedTime": -1
+          }
+        },
+        "jobId": 1,
+        "type": "thread"
+      },
+      {
+        "jobId": 1,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "7863d005-e348-41b0-b69d-d24fcbc3edee",
+  "state": "SUCCEEDED"
+}

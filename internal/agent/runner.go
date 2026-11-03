@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 
@@ -33,6 +35,12 @@ func (LocalRunner) Run(ctx context.Context, action catalog.Action, input, filter
 	if err != nil {
 		return executor.Result{ExitCode: -1}, errors.New("INVALID_PARAMETERS")
 	}
+	return runHelper(ctx, data, action, callbacks)
+}
+
+// runHelper starts the helper with the request on its standard input and follows its events. The
+// output limit and the step names come from action.
+func runHelper(ctx context.Context, data []byte, action catalog.Action, callbacks executor.Callbacks) (executor.Result, error) {
 	command := exec.Command("/usr/bin/sudo", "-n", "/usr/libexec/allowops/allowops-exec")
 	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8", "PAGER=cat", "SYSTEMD_PAGER="}
 	command.Stdin = bytes.NewReader(data)
@@ -166,4 +174,34 @@ func boundedTimeout(action catalog.Action, requested time.Duration) (time.Durati
 		return 0, errors.New("INVALID_TIMEOUT")
 	}
 	return requested, nil
+}
+
+// arthasRecoverMaxOutput bounds what the helper may report of a recovery.
+const arthasRecoverMaxOutput = 16 << 10
+
+// RecoverArthas asks the helper to end the Arthas servers that earlier jvm_arthas calls left behind.
+// The result is the summary of the helper; it is empty when there was nothing to do.
+func RecoverArthas(ctx context.Context) (string, error) {
+	result, err := runHelper(ctx, arthasRecoverRequest(), catalog.Action{MaxOutput: arthasRecoverMaxOutput}, executor.Callbacks{})
+	return recoveryOutcome(result, err)
+}
+
+func arthasRecoverRequest() []byte {
+	data, err := json.Marshal(map[string]string{"operation": execd.OperationArthasRecover})
+	if err != nil {
+		panic(err) // a map of strings always encodes
+	}
+	return data
+}
+
+// recoveryOutcome turns the result of the helper into the summary, or into an error that carries
+// the details the helper wrote to stderr.
+func recoveryOutcome(result executor.Result, err error) (string, error) {
+	if err != nil {
+		if detail := strings.TrimSpace(result.Stderr); detail != "" {
+			return "", fmt.Errorf("%w: %s", err, detail)
+		}
+		return "", err
+	}
+	return strings.TrimSpace(result.Stdout), nil
 }

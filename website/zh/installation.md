@@ -154,3 +154,62 @@ sudo systemctl enable allowops-agent
 | `/var/lib/allowops-exec/` | root, 0700 |
 
 目标操作系统范围包括 CentOS/RHEL 7、Rocky/Alma/RHEL 8+、Ubuntu 20.04+ 和 Debian 11+。本指南不证明每个操作系统都已通过虚拟机测试。选择版本时，请参考该发布版本的平台验证证据。
+
+## 可选软件包：allowops-arthas {#optional-package-allowops-arthas}
+
+`allowops-arthas` 包含 `jvm_arthas` 内置处理程序加载到 Java 进程中的 Arthas 4.3.5 文件。它是独立于 `allowops-agent` 的可选软件包。只有安装了该软件包的主机才会上报 `jvm_arthas` 能力；其他主机上的 `jvm_arthas` 动作为 `unsupported`。安装和运行时，该软件包与 agent 都不会下载任何内容。
+
+用与 agent 软件包相同的方式安装已验证的本地文件。该软件包不依赖 `allowops-agent`，没有安装脚本，也不创建账号。
+
+```sh
+sudo dpkg -i /absolute/path/allowops-arthas_0.1.0_all.deb
+# 基于 RPM 的系统：
+sudo rpm -Uvh /absolute/path/allowops-arthas-0.1.0-1.noarch.rpm
+```
+
+请把示例中的版本号换成已验证发布版本的文件名。文件安装在 `/usr/share/allowops/arthas/4.3.5/` 下，目录名即 Arthas 版本。
+
+| 版本目录中的文件 | 内容 | 属主 / 权限 |
+|---|---|---|
+| `arthas-agent.jar`、`arthas-core.jar`、`arthas-spy.jar` | 与 Arthas 发布包一致，未修改 | root, 0644 |
+| `arthas.properties` | Arthas 的文件，去掉了 `arthas.mcpEndpoint` 和 `arthas.mcpProtocol`，因此 Arthas 的 MCP 服务不会启动 | root, 0644 |
+| `logback.xml` | 未修改；没有它时，Arthas 会把日志行写到目标进程的标准输出 | root, 0644 |
+| `LICENSE`、`NOTICE`、`THIRD_PARTY_NOTICES` | Apache License 2.0、Arthas 的署名声明，以及 `arthas-core.jar` 内各组件的许可证、声明和源码位置 | root, 0644 |
+| `SHA256SUMS` | 该目录中其余每个文件的 SHA-256 | root, 0644 |
+
+目录 `/usr/share/allowops`、`/usr/share/allowops/arthas` 和版本目录的属主为 root，权限 0755。软件包不包含 `arthas-boot`、`arthas-client`、`as.sh` 脚本和 async-profiler 库。卸载软件包会删除这些目录。每个软件包发布版本只包含一个 Arthas 版本。
+
+已签名目录中 `jvm_arthas` 的 `builtin_config` 保存了每个被加载文件的 SHA-256。每次使用前，`allowops-exec` 把这些文件的 SHA-256 与目录中的值比较，任一值不同就拒绝 attach。`SHA256SUMS` 供管理员使用，不是信任锚。用下面的命令检查安装：
+
+```sh
+cd /usr/share/allowops/arthas/4.3.5 && sha256sum --check --strict SHA256SUMS
+```
+
+L2 命令 `jad` 会让 JVM 把它反编译的类文件写到 JVM 自己文件系统中的 `<Arthas 日志目录>/classdump/`。默认日志目录是 JVM 用户的 `~/logs/arthas`，文件属于该用户。Arthas 和 allowops 都不会删除该文件。该目录不可写时，`jad` 失败。
+
+### 容器 {#containers}
+
+JVM 只能加载自己容器文件系统中存在的文件。目标运行在容器中时，请在第一次诊断之前，把相同的文件放到容器内的相同路径下。支持两种方式。`allowops-exec` 通过 `/proc/<pid>/root` 读取这些文件，用 `builtin_config` 中的 SHA-256 校验，并且从不写入容器。
+
+方式一（推荐）：把文件放进镜像。下面的 Dockerfile 在构建阶段安装本地软件包文件，只把它的目录复制到应用镜像，因此属主、权限和文件集合与软件包一致。这一步构建不需要网络访问。
+
+```dockerfile
+FROM debian:12 AS arthas
+COPY allowops-arthas_0.1.0_all.deb /tmp/
+RUN dpkg -i /tmp/allowops-arthas_0.1.0_all.deb
+
+FROM eclipse-temurin:17-jre
+COPY --from=arthas /usr/share/allowops/arthas /usr/share/allowops/arthas
+```
+
+方式二：把已安装该软件包的主机上的目录，以只读卷的方式挂载到相同路径。
+
+```yaml
+services:
+  app:
+    image: registry.example.com/app:1.0
+    volumes:
+      - /usr/share/allowops/arthas/4.3.5:/usr/share/allowops/arthas/4.3.5:ro
+```
+
+使用 `docker run` 时，加上 `-v /usr/share/allowops/arthas/4.3.5:/usr/share/allowops/arthas/4.3.5:ro`。不要把挂载设为可写；文件必须保持不变，才能通过校验。文件必须能被 JVM 所属用户读取；上表中的权限允许所有用户读取。

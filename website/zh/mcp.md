@@ -102,6 +102,8 @@ Claude Code 会展开该文件中的环境变量引用。不要把 token 写入�
 | `max_failures` | 非负数；只能调低签名中的有效上限，该上限通常为 5。失败数超过该值时停止。 |
 | `response_format` | `concise`（默认）或 `detailed`。 |
 
+如果动作设置了 `max_targets`，其描述和 `targets` 的 schema 会写明该上限。目标数（选择器按解析后的数量计）超过上限的调用整体被拒绝，返回 `isError: true`、`reason` 为 `MAX_TARGETS_EXCEEDED`、`actual_count`，以及指明上限的 `violations` 条目。该检查在 `expected_count` 检查之后、策略评估之前；不创建 job 和 task。
+
 只有动作声明的过滤器才会出现在其 schema 中。`match`/`exclude` 是 RE2 模式，`head`/`tail` 是正整数计数，`count` 是布尔值。`head`、`tail` 和 `count` 不能同时出现，`count: false` 也算出现。
 
 ## 结果和更新 {#results-and-updates}

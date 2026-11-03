@@ -11,6 +11,8 @@ func TestBuiltinNamesListsEveryHandlerSorted(t *testing.T) {
 		"dremio_diag",
 		"dremio_query",
 		"http_get",
+		"jvm_arthas",
+		"jvm_perfdata",
 		"log_query",
 		"log_search",
 		"mysql_query",

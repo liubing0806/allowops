@@ -1,0 +1,18 @@
+{
+  "body": {
+    "command": "jad --source-only demo.NoSuchClass",
+    "jobId": 44,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "jobId": 44,
+        "message": "No class found for: demo.NoSuchClass",
+        "statusCode": -1,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "db514780-edea-4443-88fd-6fc601bfdd58",
+  "state": "SUCCEEDED"
+}

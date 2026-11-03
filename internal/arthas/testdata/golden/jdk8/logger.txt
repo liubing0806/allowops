@@ -1,0 +1,7 @@
+# loggers
+name	level	effective_level	additivity	class
+ROOT	INFO	INFO	true	ch.qos.logback.classic.Logger
+
+# appenders
+logger	name	class	target
+ROOT	CONSOLE	ch.qos.logback.core.ConsoleAppender	System.out

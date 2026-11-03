@@ -1,0 +1,266 @@
+# classes
+count	24
+
+# class com.alibaba.arthas.deps.io.netty.handler.codec.DefaultHeaders$HeaderEntry
+name	com.alibaba.arthas.deps.io.netty.handler.codec.DefaultHeaders$HeaderEntry
+modifier	protected,static
+flags	member
+code_source	/opt/arthas-minlog/arthas-core.jar
+class_loader_hash	39ed5853
+class_loaders	com.taobao.arthas.agent.ArthasClassloader@39ed5853, sun.misc.Launcher$ExtClassLoader@7586beff
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class com.alibaba.arthas.deps.io.netty.handler.codec.DefaultHeaders$HeaderEntry
+name	com.alibaba.arthas.deps.io.netty.handler.codec.DefaultHeaders$HeaderEntry
+modifier	protected,static
+flags	member
+code_source	/opt/arthas-minlog/arthas-core.jar
+class_loader_hash	22355cb8
+class_loaders	com.taobao.arthas.agent.ArthasClassloader@22355cb8, sun.misc.Launcher$ExtClassLoader@7586beff
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class com.alibaba.arthas.deps.io.netty.handler.codec.DefaultHeaders$HeaderEntry
+name	com.alibaba.arthas.deps.io.netty.handler.codec.DefaultHeaders$HeaderEntry
+modifier	protected,static
+flags	member
+code_source	/opt/arthas-minlog/arthas-core.jar
+class_loader_hash	1644c361
+class_loaders	com.taobao.arthas.agent.ArthasClassloader@1644c361, sun.misc.Launcher$ExtClassLoader@7586beff
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class java.lang.ProcessEnvironment$StringEntry
+name	java.lang.ProcessEnvironment$StringEntry
+modifier	private,static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class java.util.AbstractMap$SimpleImmutableEntry
+name	java.util.AbstractMap$SimpleImmutableEntry
+modifier	public,static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry, java.io.Serializable
+annotations	
+
+# class java.util.Collections$UnmodifiableMap$UnmodifiableEntrySet$UnmodifiableEntry
+name	java.util.Collections$UnmodifiableMap$UnmodifiableEntrySet$UnmodifiableEntry
+modifier	private,static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class java.util.EnumMap$EntryIterator$Entry
+name	java.util.EnumMap$EntryIterator$Entry
+modifier	private
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class java.util.HashMap$Node
+name	java.util.HashMap$Node
+modifier	static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class java.util.HashMap$TreeNode
+name	java.util.HashMap$TreeNode
+modifier	final,static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.util.LinkedHashMap$Entry, java.util.HashMap$Node, java.lang.Object
+interfaces	
+annotations	
+
+# class java.util.Hashtable$Entry
+name	java.util.Hashtable$Entry
+modifier	private,static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class java.util.IdentityHashMap$EntryIterator$Entry
+name	java.util.IdentityHashMap$EntryIterator$Entry
+modifier	private
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class java.util.LinkedHashMap$Entry
+name	java.util.LinkedHashMap$Entry
+modifier	static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.util.HashMap$Node, java.lang.Object
+interfaces	
+annotations	
+
+# class java.util.Map$Entry
+name	java.util.Map$Entry
+modifier	abstract,interface,public,static
+flags	interface,member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	
+interfaces	
+annotations	
+
+# class java.util.TreeMap$Entry
+name	java.util.TreeMap$Entry
+modifier	final,static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class java.util.WeakHashMap$Entry
+name	java.util.WeakHashMap$Entry
+modifier	private,static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.lang.ref.WeakReference, java.lang.ref.Reference, java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class java.util.concurrent.ConcurrentHashMap$ForwardingNode
+name	java.util.concurrent.ConcurrentHashMap$ForwardingNode
+modifier	final,static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.util.concurrent.ConcurrentHashMap$Node, java.lang.Object
+interfaces	
+annotations	
+
+# class java.util.concurrent.ConcurrentHashMap$MapEntry
+name	java.util.concurrent.ConcurrentHashMap$MapEntry
+modifier	final,static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class java.util.concurrent.ConcurrentHashMap$Node
+name	java.util.concurrent.ConcurrentHashMap$Node
+modifier	static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	
+
+# class java.util.concurrent.ConcurrentHashMap$ReservationNode
+name	java.util.concurrent.ConcurrentHashMap$ReservationNode
+modifier	final,static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.util.concurrent.ConcurrentHashMap$Node, java.lang.Object
+interfaces	
+annotations	
+
+# class java.util.concurrent.ConcurrentHashMap$TreeBin
+name	java.util.concurrent.ConcurrentHashMap$TreeBin
+modifier	final,static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.util.concurrent.ConcurrentHashMap$Node, java.lang.Object
+interfaces	
+annotations	
+
+# class java.util.concurrent.ConcurrentHashMap$TreeNode
+name	java.util.concurrent.ConcurrentHashMap$TreeNode
+modifier	final,static
+flags	member
+code_source	
+class_loader_hash	null
+class_loaders	
+super_classes	java.util.concurrent.ConcurrentHashMap$Node, java.lang.Object
+interfaces	
+annotations	
+
+# class org.hibernate.engine.internal.EntityEntryContext$EntityEntryCrossRef
+name	org.hibernate.engine.internal.EntityEntryContext$EntityEntryCrossRef
+modifier	abstract,interface,public,static
+flags	interface,member
+code_source	file:/app/app.jar!/BOOT-INF/lib/hibernate-core-5.6.15.Final.jar!/
+class_loader_hash	31cefde0
+class_loaders	org.springframework.boot.loader.LaunchedURLClassLoader@31cefde0, sun.misc.Launcher$AppClassLoader@70dea4e, sun.misc.Launcher$ExtClassLoader@7586beff
+super_classes	
+interfaces	java.util.Map$Entry
+annotations	
+
+# class org.hibernate.engine.internal.EntityEntryContext$EntityEntryCrossRefImpl
+name	org.hibernate.engine.internal.EntityEntryContext$EntityEntryCrossRefImpl
+modifier	private,static
+flags	member
+code_source	file:/app/app.jar!/BOOT-INF/lib/hibernate-core-5.6.15.Final.jar!/
+class_loader_hash	31cefde0
+class_loaders	org.springframework.boot.loader.LaunchedURLClassLoader@31cefde0, sun.misc.Launcher$AppClassLoader@70dea4e, sun.misc.Launcher$ExtClassLoader@7586beff
+super_classes	java.lang.Object
+interfaces	org.hibernate.engine.internal.EntityEntryContext$EntityEntryCrossRef
+annotations	
+
+# class org.springframework.util.ConcurrentReferenceHashMap$Entry
+name	org.springframework.util.ConcurrentReferenceHashMap$Entry
+modifier	final,protected,static
+flags	member
+code_source	file:/app/app.jar!/BOOT-INF/lib/spring-core-5.3.31.jar!/
+class_loader_hash	31cefde0
+class_loaders	org.springframework.boot.loader.LaunchedURLClassLoader@31cefde0, sun.misc.Launcher$AppClassLoader@70dea4e, sun.misc.Launcher$ExtClassLoader@7586beff
+super_classes	java.lang.Object
+interfaces	java.util.Map$Entry
+annotations	

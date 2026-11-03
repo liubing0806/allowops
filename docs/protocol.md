@@ -199,7 +199,7 @@ LDAP 密码仅经 TLS 发往网关，网关仅使用 LDAPS/StartTLS、转义过�
 
 ### job 与输出 API
 
-RunJob 与 MCP 共用参数校验、目标解析、expected_count 检查、逐台 ABAC、批次调度和审计。selector 必须传 expected_count，不匹配返回实际数量；任一 deny 则整单拒绝，并返回被拒主机和规则，不派发部分任务。reason 必填。batch_size/max_failures 只能收紧 action/网关限制，未传时取 action 限制与网关 jobs 配置中的较小值（网关默认 20/5）；max_failures=0 表示首次失败即停止。wait_seconds 未传时取网关 jobs 配置（默认 30，最大 120），显式 0 为立即返回；MCP 工具 schema 中的 default 与 maximum 按同一配置生成；它只限制 RPC 等待，不改变 action 超时。RunJob 网络结果不明时不得盲目重试，协议没有新增幂等键；可按主体、action 和时间查询 job 后人工确认。
+RunJob 与 MCP 共用参数校验、目标解析、expected_count 检查、max_targets 检查、逐台 ABAC、批次调度和审计。selector 必须传 expected_count，不匹配返回实际数量；目标数超过 action 的 `max_targets` 时返回 `FAILED_PRECONDITION` 和 `MAX_TARGETS_EXCEEDED`，该检查在 expected_count 之后、ABAC 之前，不创建 job；任一 deny 则整单拒绝，并返回被拒主机和规则，不派发部分任务。reason 必填。batch_size/max_failures 只能收紧 action/网关限制，未传时取 action 限制与网关 jobs 配置中的较小值（网关默认 20/5）；max_failures=0 表示首次失败即停止。wait_seconds 未传时取网关 jobs 配置（默认 30，最大 120），显式 0 为立即返回；MCP 工具 schema 中的 default 与 maximum 按同一配置生成；它只限制 RPC 等待，不改变 action 超时。RunJob 网络结果不明时不得盲目重试，协议没有新增幂等键；可按主体、action 和时间查询 job 后人工确认。
 
 G39：RunJobRequest 新增字段 10、GetJobRequest 新增字段 3 为 `response_format`；RunJobResponse/GetJobResponse 新增字段 2 为 `JobSummary`，原字段保持编号和含义。缺省为 concise，每组至多返回前两个主机名；detailed 在响应预算内列出全部主机名。分组只比较退出码的存在性和值、stdout SHA-256、stderr SHA-256。每组 stdout+stderr 预览总计至多 4KiB，单次响应的 protobuf 和 JSON 编码均至多 32KiB。省略组、主机名或预览时 summary.truncated 为 true；group.truncated 表示预览或主机输出发生截断。输出信任标记固定 UNTRUSTED。Job 本身保持仅元数据；所有汇总预览仍需 view_output，缺少该权限时只返回元数据。
 
@@ -290,7 +290,7 @@ SystemStatus 的计数按调用者权限返回；不允许通过 overview 泄露
 | PERMISSION_DENIED | ABAC deny，整单任一目标被拒绝，读取输出无权限 | `POLICY_DENIED` + denied_hosts/rules/policy_version |
 | NOT_FOUND | 已授权查询的资源不存在；输出已丢失或过期 | `OUTPUT_UNAVAILABLE` |
 | ALREADY_EXISTS | 同名主机注册、已存在的目录版本冲突 | `HOSTNAME_EXISTS` |
-| FAILED_PRECONDITION | expected_count 不同、目录过期、防策略锁死、未完成上传 | `TARGET_COUNT_MISMATCH` + actual_count；`POLICY_LOCKOUT` |
+| FAILED_PRECONDITION | expected_count 不同、目标数超过 action 的 max_targets、目录过期、防策略锁死、未完成上传 | `TARGET_COUNT_MISMATCH` + actual_count；`MAX_TARGETS_EXCEEDED` + actual_count + violations（字段 `targets`，说明中给出上限）；`POLICY_LOCKOUT` |
 | ABORTED | revision/base_version 变化、预览快照变化、同一上传位置内容冲突 | `REVISION_CONFLICT`；重新读取/试算后重试 |
 | RESOURCE_EXHAUSTED | 消息、总字节、速率、并发上限 | `LIMIT_EXCEEDED`，可重试情况给 retry_after |
 | OUT_OF_RANGE | 输出 offset 超过可读范围、无效的序列区间 | `OUTPUT_OFFSET_OUT_OF_RANGE` |
@@ -337,7 +337,7 @@ SystemStatus 的计数按调用者权限返回；不允许通过 overview 泄露
 
 ## 10. allowops-agent 与 allowops-exec 的本地协议（P3）
 
-agent 对声明 `run_as` 的 action 调用 `/usr/bin/sudo -n /usr/libexec/allowops/allowops-exec`，不传命令行参数。sudoers 中的 `""` 表示禁止参数。按签名 action 的 `RequiresExec()` 判断执行位置：mysql_query、redis_command、starrocks_query、starrocks_diag、dremio_query 和 dremio_diag 需要读取 root 凭据，即使未声明 run_as 也使用辅助程序，此时以 root 执行。log_search、http_get，以及未配置 credential 的 prometheus_query 和 alertmanager_alerts，未声明 run_as 时直接调用执行器；配置 credential 的 prometheus_query 和 alertmanager_alerts 在目录校验阶段要求 run_as: root，因此经辅助程序执行。辅助程序忽略环境变量，程序和目录路径固定，不能由请求指定。
+agent 对声明 `run_as` 的 action 调用 `/usr/bin/sudo -n /usr/libexec/allowops/allowops-exec`，不传命令行参数。sudoers 中的 `""` 表示禁止参数。按签名 action 的 `RequiresExec()` 判断执行位置：mysql_query、redis_command、starrocks_query、starrocks_diag、dremio_query 和 dremio_diag 需要读取 root 凭据，jvm_perfdata 需要读取其他用户的进程和容器根文件系统，jvm_arthas 需要以 root attach 并进入目标的命名空间，这些处理器即使未声明 run_as 也使用辅助程序，此时以 root 执行。log_search、http_get，以及未配置 credential 的 prometheus_query 和 alertmanager_alerts，未声明 run_as 时直接调用执行器；配置 credential 的 prometheus_query 和 alertmanager_alerts 在目录校验阶段要求 run_as: root，因此经辅助程序执行。辅助程序忽略环境变量，程序和目录路径固定，不能由请求指定。
 
 stdin 是单个 UTF-8 JSON 对象，最多 128 KiB。参数对象最多 64 KiB，最大深度 32，保留整数精度；拒绝重复键、未知请求字段、尾随内容和非对象参数。filters 与 action 参数分开校验，不能覆盖参数定义。
 
@@ -360,13 +360,23 @@ stdout/stderr 是 Base64 字节串，空串表示空输出。辅助程序输出�
 
 取消或连接断开时，agent 向 sudo 的进程组发送 SIGTERM。sudo 转发到辅助程序，辅助程序的信号 context 取消执行器；执行器以目标用户身份终止动作的整个进程组。连接取消后丢弃该连接的输出和结果，不补传。辅助程序永久设置 supplementary groups、gid、uid 后执行，只处理一个请求。
 
+Arthas 会话回收使用另一种请求（`arthas_recover`）。stdin 的 JSON 对象只含 `operation`：
+
+```json
+{"operation":"arthas_recover"}
+```
+
+含 `operation` 时 `catalog_id`、`catalog_version`、`action`、`params` 和 `filters` 必须全部省略；`operation` 取其他值时拒绝（`INVALID_REQUEST`）。该请求不读取目录，辅助程序不切换身份，非 root 时返回 `ROOT_REQUIRED`。
+辅助程序先发送 started，再处理 `/var/lib/allowops-exec/arthas/` 中遗留的会话记录（规则见 `docs/builtin-config.md` 的 jvm_arthas 一节），最后发送 completed。有处理项时 `result.stdout` 是摘要，如 `arthas recovery: cleaned 1, stale 2`（值为 0 的项省略）；无事可做时 stdout 为空。有记录无法清理时，记录写入 stderr，reason 为 `EXECUTION_FAILED`，退出码为 1，记录保留。取消和超时的 reason 与 action 请求相同。
+agent 在启动时、且仅在 Arthas 文件包已安装的主机上，于后台发送该请求，时限 5 分钟。结果写入 agent 日志，失败不影响与网关的连接。agent 退出时向辅助程序的进程组发送 SIGTERM 并等待其结束，辅助程序以独立的时间预算完成清理。每次 jvm_arthas 调用开始时也执行同样的回收，不经过 agent。
+
 G22 的两套 CA 分别保存和验证：ca_pin 固定网关 TLS CA 证书 DER 的 SHA-256，服务器需要发送包含该 CA 的证书链；仍校验证书链、主机名、有效期和 ALPN。主机 CA 从已认证的 Join 响应取得，连同私钥和证书链原子保存在 `/var/lib/allowops/identity.json`（0700 目录、0600 文件）。续证验证最初保存的主机 CA、同一 host_id、CN 和 SPIFFE URI。主机 CA 轮换不在 MVP 范围。续证及 PullCatalog 使用独立 TLS 会话；既有 Connect 保留，重连时使用当前证书，遵循 G18。
 
 agent 的服务入口为 `allowops-agent run`。配置在 `/etc/allowops/agent.yaml`，字段为 upstream、ca_pin、reported_labels 和可选 limits；limits 示例见 deploy/packaging/agent.yaml，省略的项使用协议默认值，GatewayHello 只能收紧本地生效上限。status 只输出公开身份、证书到期、进程与连接状态、已加载目录，不输出私钥或证书内容。任务历史超出本地消息与控制队列预算时关闭连接，保持连接内 task_id 不重复执行。
 
 G26 允许 root 或 allowops 用户执行 join；run 只能由 allowops 用户执行，且不允许额外组。两种注册方式均在发送 Join RPC 前检查预建目录的 allowops 属主和 0700 权限。root 在目录文件描述符下写临时文件，将文件 chown 为 allowops 用户和组、chmod 为 0600 后再原子重命名；禁止跟随软链接。目录文件描述符锁防止两个注册或运行实例同时改写身份。
 
-G29：执行器的同步回调在首个成功进程启动和每一步完成时调用，回调失败停止执行；未知 builtin 的目录编写仍拒绝，已签名且 schema 已知的目录加载保留该 action 并报告 unsupported，schema 未知仍整包拒绝。AgentHello 上报四个内置处理器和 match/exclude/tail/head/count 过滤能力。
+G29：执行器的同步回调在首个成功进程启动和每一步完成时调用，回调失败停止执行；未知 builtin 的目录编写仍拒绝，已签名且 schema 已知的目录加载保留该 action 并报告 unsupported，schema 未知仍整包拒绝。AgentHello 上报内置处理器名称和 match/exclude/tail/head/count 过滤能力；`jvm_arthas` 仅在 Arthas 文件包已安装时列出（五个文件都在 `/usr/share/allowops/arthas/4.3.5/`），未安装时含该 builtin 的 action 在目录加载阶段报告 unsupported。
 
 ## 11. 本地检查
 

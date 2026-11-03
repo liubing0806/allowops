@@ -14,7 +14,7 @@ import (
 
 // RequiresExec is derived from signed action fields, never from caller input.
 func (a Action) RequiresExec() bool {
-	return a.RunAs != "" || a.Builtin == "mysql_query" || a.Builtin == "redis_command" || a.Builtin == "starrocks_query" || a.Builtin == "dremio_query" || a.Builtin == "starrocks_diag" || a.Builtin == "dremio_diag"
+	return a.RunAs != "" || a.Builtin == "mysql_query" || a.Builtin == "redis_command" || a.Builtin == "starrocks_query" || a.Builtin == "dremio_query" || a.Builtin == "starrocks_diag" || a.Builtin == "dremio_diag" || a.Builtin == "jvm_perfdata" || a.Builtin == "jvm_arthas"
 }
 
 type HostSupport struct {
@@ -411,6 +411,9 @@ func CheckHost(a Action) HostSupport {
 			}
 		case a.Script != nil:
 			_, err = ResolveExecutable([]any{a.Script.Interpreter}, nil, true)
+		case a.Builtin == "jvm_arthas":
+			// Only a host with the allowops-arthas package can run the action.
+			err = jvmArthasInstalled()
 		}
 	}
 	if err != nil {

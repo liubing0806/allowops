@@ -1,0 +1,33 @@
+# Usage: target=<name of an entry in builtin_config.targets>. top=<1-10>, the number of threads.
+# Attaches the Arthas agent to the JVM, runs `thread -n <top>` and shuts the agent down. The attach loads classes into the JVM,
+# so the action has risk write; it is refused when the JVM or the host has too little memory left or has been attached too often.
+# The output starts with a `# call` section (status, check, attach number of the JVM, clean-up result); the Arthas output follows.
+name: jvm_arthas_thread_top
+description: Show the busiest threads of an allowlisted JVM with their stacks through the Arthas agent.
+risk: write
+run_as: root
+idempotent: false
+params: {}
+builtin: jvm_arthas
+builtin_config:
+  command: thread_top
+  targets:
+    api:
+      systemd_unit: api.service
+    shop-web:
+      container: shop-web
+      main_class: com.example.shop.Main
+  sha256:
+    arthas-agent.jar: b5bf8765c7621849889fb6522a296fa177ceb3f5c2c2b6d9f631d761ca9c04f9
+    arthas-core.jar: 7cbc3dc36ec29e96ae044845ad6b690b790a800e45d0694fcfbe90c9725de813
+    arthas-spy.jar: d11cfc1cee83eb46501d5b9719ea49117db2a9e7cbdab9e83e376716255380a6
+    arthas.properties: a507ed264d99387b6e1717f8ad6f257dba79de983f5b6617a8c63e38975acec1
+    logback.xml: e038b9c097cf0fe801483c65871565f6d120c1365c4d55b65666b05d533f7445
+timeout: 60s
+max_output: 128KB
+filters: [match, exclude, tail, head, count]
+redact:
+  builtin: [secrets]
+batch_size: 1
+max_failures: 1
+max_targets: 1

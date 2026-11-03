@@ -1,0 +1,13 @@
+# classes
+count	1
+
+# class demo.HotService
+name	demo.HotService
+modifier	public
+flags	
+code_source	file:/app/app.jar!/BOOT-INF/classes!/
+class_loader_hash	31cefde0
+class_loaders	org.springframework.boot.loader.LaunchedURLClassLoader@31cefde0, sun.misc.Launcher$AppClassLoader@70dea4e, sun.misc.Launcher$ExtClassLoader@7586beff
+super_classes	java.lang.Object
+interfaces	
+annotations	org.springframework.stereotype.Service

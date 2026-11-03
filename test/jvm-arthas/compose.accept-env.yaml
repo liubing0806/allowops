@@ -1,0 +1,9 @@
+# Second overlay for item 6 of the stage-2 acceptance: jdk17 started without entrypoint.sh, so that the JVM can take
+# options from JAVA_TOOL_OPTIONS or JDK_JAVA_OPTIONS (entrypoint.sh reads the Java version from the first line that
+# java -version prints, which these variables replace with a "Picked up" note). Use after compose.accept.yaml.
+services:
+  jdk17:
+    entrypoint: ["sh", "-c", "exec java -Xms512m -Xmx512m -XX:+UseG1GC -Dspring.main.banner-mode=off -jar /app/app.jar"]
+    environment:
+      JAVA_TOOL_OPTIONS: ${JA_JAVA_TOOL_OPTIONS:-}
+      JDK_JAVA_OPTIONS: ${JA_JDK_JAVA_OPTIONS:-}

@@ -178,6 +178,15 @@ var secretRules = []secretRule{
 	// volume, so it is a key and not a quoted word inside a sentence. The
 	// kubelet event "failed for volume "x" : reason" is kept by skipVolumeEvent.
 	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, group: 1, skip: skipVolumeEvent, regex: jsonPrefix + `(` + jsonKey + lineValue + `)`, head: jsonPrefix + `(` + jsonKey + `)`},
+	// A map or Properties entry as Arthas prints an object (watch of the jvm_arthas builtin):
+	// @String[db.password]:@String[value]. A bare PWD key is the working directory, as above.
+	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: `(?i)@[A-Za-z0-9_$]+\[` + keyPrefix + `(?:` + credentialWords + `|[_.-]pwd)\]:` + lineValue},
+	// A credential and its name as two string literals, as decompiled source shows them:
+	// props.put("password", "value"). An option name such as "--password" is left to the
+	// cli_password rules.
+	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: `(?i)"` + keyPrefix + `(?:` + credentialWords + `|pwd)"\s*,\s*` + dqValue, keep: optionName},
+	// A setter called with a string literal in decompiled source: setPassword("value").
+	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: `(?i)\bset[A-Za-z0-9_]*?(?:` + setterWords + `)\(\s*` + dqValue + `\s*\)`},
 	// Command lines. Options that are also used with other meanings (-u, -a,
 	// -p) are only recognised after the command that gives them a password.
 	{name: "cli_password", needs: []string{"--"}, regex: `(?i)(?:^|\s)--` + optionWords + `(?:\s+|=)` + optionValue, keep: negatedOption, group: 1},
@@ -228,6 +237,12 @@ func skipOpenSSLMessage(match string) int {
 var volumeEvent = regexp.MustCompile(`(?i)^failed\s+for\s+volume\s+[^:]*:\s*`)
 
 func skipVolumeEvent(match string) int { return len(volumeEvent.FindString(match)) }
+
+// The last word of a setter that takes a credential.
+const setterWords = `password|passwd|passphrase|secret|token|credentials?|(?:api|access|secret|private|auth|signing|master|encrypt(?:ion)?)key|pwd`
+
+// optionName reports a quoted command-line option name such as "--password".
+func optionName(match string) bool { return strings.HasPrefix(match, `"-`) }
 
 // withoutColon reports a curl -u value that holds no user:password separator.
 func withoutColon(match string) bool { return !strings.Contains(match, ":") }

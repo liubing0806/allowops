@@ -1,0 +1,27 @@
+# trace
+time	2026-10-26 04:30:59.457879716
+thread	http-nio-8080-exec-1
+thread_id	22
+daemon	true
+priority	5
+classloader	org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@6fb365ed
+node_count	2
+
+# trace tree
+depth	type	name	line	times	total_ms	min_ms	max_ms	exception
+0	method	demo.ApiController.hot		1	0.068	0.068	0.068	
+1	call	demo.HotService.work	39	1	0.016	0.016	0.016	
+
+# trace
+time	2026-10-26 04:30:59.457878027
+thread	http-nio-8080-exec-3
+thread_id	24
+daemon	true
+priority	5
+classloader	org.springframework.boot.web.embedded.tomcat.TomcatEmbeddedWebappClassLoader@6fb365ed
+node_count	2
+
+# trace tree
+depth	type	name	line	times	total_ms	min_ms	max_ms	exception
+0	method	demo.ApiController.hot		1	0.025	0.025	0.025	
+1	call	demo.HotService.work	39	1	0.006	0.006	0.006	

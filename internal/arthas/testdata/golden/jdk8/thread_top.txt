@@ -1,0 +1,40 @@
+# busy threads
+id	name	group	state	cpu_percent	delta_time_ms	time_ms	priority	daemon	interrupted	in_native	suspended	blocked_count	waited_count	lock_name	lock_owner_id
+29	http-nio-8080-Poller	main	RUNNABLE	16.87	33	780	5	true	false	false	false	9821	26		-1
+21	http-nio-8080-exec-3	main	WAITING	14.66	29	675	5	true	false	false	false	77	3786	java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject@713e329f	-1
+25	http-nio-8080-exec-7	main	RUNNABLE	13.39	26	627	5	true	false	false	false	21	3783	java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject@713e329f	-1
+
+# stack 29 http-nio-8080-Poller
+at sun.nio.ch.EPollArrayWrapper.epollWait(Native Method)
+at sun.nio.ch.EPollArrayWrapper.poll(EPollArrayWrapper.java:269)
+at sun.nio.ch.EPollSelectorImpl.doSelect(EPollSelectorImpl.java:93)
+at sun.nio.ch.SelectorImpl.lockAndDoSelect(SelectorImpl.java:86)
+at sun.nio.ch.SelectorImpl.select(SelectorImpl.java:97)
+at org.apache.tomcat.util.net.NioEndpoint$Poller.run(NioEndpoint.java:812)
+at java.lang.Thread.run(Thread.java:750)
+
+# stack 21 http-nio-8080-exec-3
+at sun.misc.Unsafe.park(Native Method)
+at java.util.concurrent.locks.LockSupport.park(LockSupport.java:175)
+at java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject.await(AbstractQueuedSynchronizer.java:2039)
+at java.util.concurrent.LinkedBlockingQueue.take(LinkedBlockingQueue.java:442)
+at org.apache.tomcat.util.threads.TaskQueue.take(TaskQueue.java:141)
+at org.apache.tomcat.util.threads.TaskQueue.take(TaskQueue.java:33)
+at org.apache.tomcat.util.threads.ThreadPoolExecutor.getTask(ThreadPoolExecutor.java:1114)
+at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1176)
+at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:61)
+at java.lang.Thread.run(Thread.java:750)
+
+# stack 25 http-nio-8080-exec-7
+at sun.misc.Unsafe.park(Native Method)
+at java.util.concurrent.locks.LockSupport.park(LockSupport.java:175)
+at java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject.await(AbstractQueuedSynchronizer.java:2039)
+at java.util.concurrent.LinkedBlockingQueue.take(LinkedBlockingQueue.java:442)
+at org.apache.tomcat.util.threads.TaskQueue.take(TaskQueue.java:141)
+at org.apache.tomcat.util.threads.TaskQueue.take(TaskQueue.java:33)
+at org.apache.tomcat.util.threads.ThreadPoolExecutor.getTask(ThreadPoolExecutor.java:1114)
+at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1176)
+at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)
+at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:61)
+at java.lang.Thread.run(Thread.java:750)

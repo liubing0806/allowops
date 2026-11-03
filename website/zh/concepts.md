@@ -21,7 +21,7 @@ MCP client / CLI / console → gateway → PostgreSQL and S3-compatible storage
 
 ## Job 和目标 {#jobs-and-targets}
 
-**job** 是对一组目标的一次动作调用。**task** 是在单台主机上的执行。可以指定明确的主机名，也可以指定逗号分隔的 `key=value` 条件，所有条件都必须匹配。选择器必须提供精确的 `expected_count`。数量不匹配，或任一目标被拒绝，都会在分发前拒绝整个请求。
+**job** 是对一组目标的一次动作调用。**task** 是在单台主机上的执行。可以指定明确的主机名，也可以指定逗号分隔的 `key=value` 条件，所有条件都必须匹配。选择器必须提供精确的 `expected_count`。数量不匹配、目标数超过动作的 `max_targets`，或任一目标被拒绝，都会在分发前拒绝整个请求。
 
 task 分批运行。`batch_size` 和 `max_failures` 可以收紧签名中的限制。失败、超时和 unsupported 的 task 计入失败上限，离线的 task 不计入。失败数超过阈值时，跳过剩余的 task。`wait_seconds` 控制响应的等待时长，不控制动作超时。离线主机不会被排队等待以后执行。连接断开会停止该 task 的进程组。执行和输出都不会重放。
 

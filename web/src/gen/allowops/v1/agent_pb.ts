@@ -412,7 +412,7 @@ export type AgentCapabilities = Message<"allowops.v1.AgentCapabilities"> & {
   executionModes: string[];
 
   /**
-   * log_search,log_query,mysql_query,redis_command,http_get,prometheus_query,alertmanager_alerts,starrocks_query,dremio_query,starrocks_diag,dremio_diag.
+   * log_search,log_query,mysql_query,redis_command,http_get,prometheus_query,alertmanager_alerts,starrocks_query,dremio_query,starrocks_diag,dremio_diag,jvm_perfdata,jvm_arthas.
    *
    * @generated from field: repeated string builtins = 4;
    */
@@ -426,7 +426,7 @@ export type AgentCapabilities = Message<"allowops.v1.AgentCapabilities"> & {
   outputFilters: string[];
 
   /**
-   * Additional signed-catalog features, e.g. exec_fallbacks and allow_interpreter.
+   * Additional signed-catalog features, e.g. exec_fallbacks, allow_interpreter and max_targets.
    *
    * @generated from field: repeated string features = 6;
    */
@@ -457,7 +457,7 @@ export type AgentCapabilitiesJson = {
   executionModes?: string[];
 
   /**
-   * log_search,log_query,mysql_query,redis_command,http_get,prometheus_query,alertmanager_alerts,starrocks_query,dremio_query,starrocks_diag,dremio_diag.
+   * log_search,log_query,mysql_query,redis_command,http_get,prometheus_query,alertmanager_alerts,starrocks_query,dremio_query,starrocks_diag,dremio_diag,jvm_perfdata,jvm_arthas.
    *
    * @generated from field: repeated string builtins = 4;
    */
@@ -471,7 +471,7 @@ export type AgentCapabilitiesJson = {
   outputFilters?: string[];
 
   /**
-   * Additional signed-catalog features, e.g. exec_fallbacks and allow_interpreter.
+   * Additional signed-catalog features, e.g. exec_fallbacks, allow_interpreter and max_targets.
    *
    * @generated from field: repeated string features = 6;
    */

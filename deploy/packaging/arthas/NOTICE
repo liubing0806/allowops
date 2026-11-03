@@ -1,0 +1,69 @@
+allowops-arthas
+
+This package redistributes files from Arthas 4.3.5
+(https://github.com/alibaba/arthas), which is licensed under the Apache
+License, Version 2.0. The license text is in the file LICENSE.
+
+Source of the files
+  arthas-packaging-4.3.5-bin.zip from Maven Central:
+  https://repo.maven.apache.org/maven2/com/taobao/arthas/arthas-packaging/4.3.5/
+  SHA-256 of the archive:
+  2f75ea954ead5d02c4a743ecd783fd92f546a44ef3aee437ea5066eb30ad07bf
+  The archive contains no LICENSE or NOTICE file. The file LICENSE and the
+  notices below are the files LICENSE and NOTICE of the Arthas 4.3.5 source
+  tree. LICENSE is identical to META-INF/FastDoubleParser-LICENSE inside
+  arthas-core.jar.
+
+Changes made by the allowops project
+  arthas.properties: the lines for arthas.mcpEndpoint and arthas.mcpProtocol
+  are removed, so that the MCP server of Arthas does not start. No other line
+  is changed.
+  arthas-agent.jar, arthas-core.jar, arthas-spy.jar and logback.xml are
+  unmodified.
+
+Not included from the archive
+  arthas-boot.jar, arthas-client.jar, math-game.jar, as.sh, as.bat,
+  as-service.bat, install-local.sh, the async-profiler directory and the lib
+  directory.
+
+Third-party components
+  arthas-core.jar contains third-party components under their own licenses.
+  THIRD_PARTY_NOTICES lists them, states the license that applies to each,
+  carries the notices that the jar carries, and gives the text of the Eclipse
+  Public License 1.0 and the location of the source code for logback.
+
+Verification
+  SHA256SUMS lists the SHA-256 of every other file in this directory:
+  sha256sum --check SHA256SUMS
+
+Notices of the Arthas project (file NOTICE of the Arthas 4.3.5 source tree,
+unmodified)
+-------------------------------------------------------------------------------
+Arthas
+Copyright 2018 Alibaba Group 
+
+This product includes software developed at
+Alibaba Group (https://www.alibabagroup.com/en/global/home).
+
+This product contains code form the greys-anatomy Project:
+
+The greys-anatomy Project
+=================
+Please visit Github for more information:
+  * https://github.com/oldmanpushcart/greys-anatomy 
+
+
+-------------------------------------------------------------------------------
+This product contains a modified portion of 'Apache Commons Lang':
+  * LICENSE:
+    * Apache License 2.0
+  * HOMEPAGE:
+    * https://commons.apache.org/proper/commons-lang/
+
+
+This product contains a modified portion of 'Apache Commons Net':
+  * LICENSE:
+    * Apache License 2.0
+  * HOMEPAGE:
+    * https://commons.apache.org/proper/commons-net/
+-------------------------------------------------------------------------------

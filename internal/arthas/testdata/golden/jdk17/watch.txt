@@ -1,0 +1,27 @@
+# watch
+time	2026-10-26 04:30:58.382259989
+class	demo.HotService
+method	work
+access_point	AtExit
+cost_ms	0.542
+value
+  @ArrayList[
+      @Object[][
+          @Integer[0],
+      ],
+      @Long[4728970651561984952],
+  ]
+
+# watch
+time	2026-10-26 04:30:58.382259990
+class	demo.HotService
+method	work
+access_point	AtExit
+cost_ms	0.485
+value
+  @ArrayList[
+      @Object[][
+          @Integer[0],
+      ],
+      @Long[4728970651561984952],
+  ]
