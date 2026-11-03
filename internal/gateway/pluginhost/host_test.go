@@ -315,3 +315,19 @@ func TestLabelValuesUnderCredentialKeys(t *testing.T) {
 		})
 	}
 }
+
+// TestRedactedSecretHiddenInOtherAttributes checks that a value redacted under
+// one attribute is hidden in the keys and values of the other attributes.
+func TestRedactedSecretHiddenInOtherAttributes(t *testing.T) {
+	h, err := New(context.Background(), nil, testDeps())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 20 { // map order varies between runs
+		e := inventory.Entity{Attrs: map[string]string{"password": "hunter2", "memo": "pw is hunter2", "hunter2": "x", "team": "ops"}}
+		h.redactEntity(&e)
+		if data, _ := json.Marshal(e); strings.Contains(string(data), "hunter2") || e.Attrs["team"] != "ops" {
+			t.Fatalf("redacted entity: %s", data)
+		}
+	}
+}
