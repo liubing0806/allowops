@@ -51,10 +51,8 @@ func TestAgentBuiltinCapabilitiesAndCatalogUnsupported(t *testing.T) {
 	g, _, config := startGateway(t, false)
 	a, _ := startAgent(t, config)
 	c := connection(t, g)
-	for _, name := range []string{"log_search", "log_query", "http_get", "redis_command", "mysql_query", "prometheus_query", "alertmanager_alerts", "starrocks_query", "dremio_query", "starrocks_diag", "dremio_diag"} {
-		if !slices.Contains(c.hello.Capabilities.Builtins, name) {
-			t.Fatalf("missing builtin %s: %v", name, c.hello)
-		}
+	if want := catalog.BuiltinNames(); !slices.Equal(c.hello.Capabilities.Builtins, want) {
+		t.Fatalf("hello builtins=%v want %v", c.hello.Capabilities.Builtins, want)
 	}
 	if !slices.Contains(c.hello.Capabilities.ParameterTypes, "bool") || !slices.Contains(c.hello.Capabilities.ParameterTypes, "string_array") || len(c.hello.Capabilities.OutputFilters) != 5 {
 		t.Fatalf("capabilities=%v", c.hello.Capabilities)
