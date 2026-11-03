@@ -50,7 +50,18 @@ func (s *Service) dependencyHealth(ctx context.Context) []*v1.DependencyHealth {
 			objects.Reason = ""
 		}
 	}
-	return []*v1.DependencyHealth{postgres, jobs, objects}
+	dependencies := []*v1.DependencyHealth{postgres, jobs, objects}
+	if s.pluginHealth != nil {
+		for _, h := range s.pluginHealth() {
+			d := &v1.DependencyHealth{Name: "plugin:" + h.ID, Status: v1.HealthStatus_HEALTH_STATUS_HEALTHY}
+			if !h.OK {
+				d.Status = v1.HealthStatus_HEALTH_STATUS_UNAVAILABLE
+				d.Reason = "provision failed"
+			}
+			dependencies = append(dependencies, d)
+		}
+	}
+	return dependencies
 }
 
 func (s *Service) GetSystemStatus(ctx context.Context, _ *connect.Request[v1.GetSystemStatusRequest]) (*connect.Response[v1.GetSystemStatusResponse], error) {
