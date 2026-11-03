@@ -6,7 +6,7 @@ params:
   version:
     type: enum
     description: Agent package version; list only versions not newer than the gateway.
-    values: ['0.1.0']
+    values: ['0.1.0', '0.2.0']
 timeout: 10m
 max_output: 64KB
 script:

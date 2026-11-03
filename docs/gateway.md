@@ -2,7 +2,7 @@
 
 P4 使用 PostgreSQL、pgx、sqlc 和 goose。初始 schema 为版本 1，仅创建主机、join token、目录版本、网关实例及 G15 短期消息表。后续迁移先扩展再收缩；task/审计的月分区由 P6/P7 定义，本节点不预设其列或分区工具。
 
-数据库连接从 `ALLOWOPS_DATABASE_URL` 环境变量读取。不要把密码放进命令参数或日志。启动检查 schema，只允许二进制内的 `store.SchemaVersion`（本基线为 6）；未迁移或较新的 schema 均拒绝。迁移与服务启动分别执行：
+数据库连接从 `ALLOWOPS_DATABASE_URL` 环境变量读取。不要把密码放进命令参数或日志。启动检查 schema，只允许二进制内的 `store.SchemaVersion`（v0.2.0 为 9）；未迁移或较新的 schema 均拒绝。迁移与服务启动分别执行：
 
 ```sh
 ./bin/allowops-gateway migrate
@@ -19,7 +19,7 @@ ca_certificate: /etc/allowops/host-ca.pem
 ca_key: /etc/allowops/host-ca.key
 catalog_keys: /etc/allowops/catalog-keys
 gateway:
-  version: '0.1.0'
+  version: '0.2.0'
   certificate_ttl: 24h
   single_join_ttl: 24h
   multi_join_ttl: 24h

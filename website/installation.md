@@ -158,9 +158,9 @@ packages are `.rpm`. Install systemd, account-management utilities and sudo
 before installing from local media.
 
 ```sh
-sudo dpkg -i /absolute/path/allowops-agent_0.1.0_amd64.deb
+sudo dpkg -i /absolute/path/allowops-agent_0.2.0_amd64.deb
 # Or, on an RPM-based system:
-sudo rpm -Uvh /absolute/path/allowops-agent-0.1.0-1.x86_64.rpm
+sudo rpm -Uvh /absolute/path/allowops-agent-0.2.0-1.x86_64.rpm
 sudo install -o root -g root -m 0644 /absolute/path/catalog.pub.pem \
   /etc/allowops/catalog-keys/catalog.pub.pem
 sudo install -o root -g root -m 0644 /absolute/path/agent.yaml \
@@ -203,7 +203,7 @@ package-manager installer. Extract the verified archive into a staging directory
 
 ```sh
 mkdir -p staging
-tar -xzf /absolute/path/allowops_0.1.0_linux_amd64.tar.gz -C staging
+tar -xzf /absolute/path/allowops_0.2.0_linux_amd64.tar.gz -C staging
 ```
 
 From the matching source tag, provision the dedicated account if it does not
@@ -258,9 +258,9 @@ package has no dependency on `allowops-agent`, no installation scripts and no
 account.
 
 ```sh
-sudo dpkg -i /absolute/path/allowops-arthas_0.1.0_all.deb
+sudo dpkg -i /absolute/path/allowops-arthas_0.2.0_all.deb
 # Or, on an RPM-based system:
-sudo rpm -Uvh /absolute/path/allowops-arthas-0.1.0-1.noarch.rpm
+sudo rpm -Uvh /absolute/path/allowops-arthas-0.2.0-1.noarch.rpm
 ```
 
 Replace the example version with the verified release's filename. The files are
@@ -312,8 +312,8 @@ package. The build needs no network access for this step.
 
 ```dockerfile
 FROM debian:12 AS arthas
-COPY allowops-arthas_0.1.0_all.deb /tmp/
-RUN dpkg -i /tmp/allowops-arthas_0.1.0_all.deb
+COPY allowops-arthas_0.2.0_all.deb /tmp/
+RUN dpkg -i /tmp/allowops-arthas_0.2.0_all.deb
 
 FROM eclipse-temurin:17-jre
 COPY --from=arthas /usr/share/allowops/arthas /usr/share/allowops/arthas

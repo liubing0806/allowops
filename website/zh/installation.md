@@ -86,9 +86,9 @@ allowops-gateway health --url https://gateway.example.org/health/ready \
 安装已验证的本地文件。Debian/Ubuntu 使用 `.deb` 安装包；RHEL 系列使用 `.rpm` 安装包。从本地介质安装前，先安装 systemd、账号管理工具和 sudo。
 
 ```sh
-sudo dpkg -i /absolute/path/allowops-agent_0.1.0_amd64.deb
+sudo dpkg -i /absolute/path/allowops-agent_0.2.0_amd64.deb
 # Or, on an RPM-based system:
-sudo rpm -Uvh /absolute/path/allowops-agent-0.1.0-1.x86_64.rpm
+sudo rpm -Uvh /absolute/path/allowops-agent-0.2.0-1.x86_64.rpm
 sudo install -o root -g root -m 0644 /absolute/path/catalog.pub.pem \
   /etc/allowops/catalog-keys/catalog.pub.pem
 sudo install -o root -g root -m 0644 /absolute/path/agent.yaml \
@@ -119,7 +119,7 @@ agent 以 `allowops` 账号运行，不带附加组。需要额外权限的动�
 
 ```sh
 mkdir -p staging
-tar -xzf /absolute/path/allowops_0.1.0_linux_amd64.tar.gz -C staging
+tar -xzf /absolute/path/allowops_0.2.0_linux_amd64.tar.gz -C staging
 ```
 
 在对应的源码 tag 下，如果专用账号不存在，先创建该账号，然后安装文件。以下命令假定二进制文件位于暂存目录根目录。请先检查已验证归档的目录结构。
@@ -162,9 +162,9 @@ sudo systemctl enable allowops-agent
 用与 agent 软件包相同的方式安装已验证的本地文件。该软件包不依赖 `allowops-agent`，没有安装脚本，也不创建账号。
 
 ```sh
-sudo dpkg -i /absolute/path/allowops-arthas_0.1.0_all.deb
+sudo dpkg -i /absolute/path/allowops-arthas_0.2.0_all.deb
 # 基于 RPM 的系统：
-sudo rpm -Uvh /absolute/path/allowops-arthas-0.1.0-1.noarch.rpm
+sudo rpm -Uvh /absolute/path/allowops-arthas-0.2.0-1.noarch.rpm
 ```
 
 请把示例中的版本号换成已验证发布版本的文件名。文件安装在 `/usr/share/allowops/arthas/4.3.5/` 下，目录名即 Arthas 版本。
@@ -195,8 +195,8 @@ JVM 只能加载自己容器文件系统中存在的文件。目标运行在容�
 
 ```dockerfile
 FROM debian:12 AS arthas
-COPY allowops-arthas_0.1.0_all.deb /tmp/
-RUN dpkg -i /tmp/allowops-arthas_0.1.0_all.deb
+COPY allowops-arthas_0.2.0_all.deb /tmp/
+RUN dpkg -i /tmp/allowops-arthas_0.2.0_all.deb
 
 FROM eclipse-temurin:17-jre
 COPY --from=arthas /usr/share/allowops/arthas /usr/share/allowops/arthas

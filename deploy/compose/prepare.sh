@@ -24,7 +24,7 @@ fi
 mkdir -p .local/bin .local/secrets .local/joins .local/host-context .local/cli
 for binary in allowops allowops-agent allowops-exec; do
     (cd "$repo" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 \
-      go build -trimpath -ldflags '-s -w -X main.version=0.1.0' \
+      go build -trimpath -ldflags '-s -w -X main.version=0.2.0' \
       -o "deploy/compose/.local/bin/$binary" "./cmd/$binary")
 done
 for name in tls-ca host-ca; do
@@ -98,7 +98,7 @@ EOF
 printf 'management:\n  upstream: https://gateway:8443\n  ca_pin: sha256:%s\n' "$pin" >> .local/gateway.yaml
 chmod 0644 .local/gateway.yaml
 python3 prepare-auth.py
-docker build --network host --platform linux/amd64 --build-arg VERSION=0.1.0 \
+docker build --network host --platform linux/amd64 --build-arg VERSION=0.2.0 \
   --build-arg HTTP_PROXY --build-arg HTTPS_PROXY \
   -f "$repo/deploy/docker/Dockerfile" -t "${ALLOWOPS_GATEWAY_IMAGE:-allowops-gateway:fx2}" "$repo"
 docker compose --profile demo build demo-1

@@ -8,9 +8,9 @@ from your administrator.
 
 ```sh
 # Debian / Ubuntu (local file):
-sudo dpkg -i /absolute/path/allowops-agent_0.1.0_amd64.deb
+sudo dpkg -i /absolute/path/allowops-agent_0.2.0_amd64.deb
 # RHEL / Rocky / Alma / CentOS (local file):
-sudo rpm -Uvh /absolute/path/allowops-agent-0.1.0-1.x86_64.rpm
+sudo rpm -Uvh /absolute/path/allowops-agent-0.2.0-1.x86_64.rpm
 
 sudo install -o root -g root -m 0644 /absolute/path/catalog.pub.pem \
   /etc/allowops/catalog-keys/catalog.pub.pem
@@ -40,9 +40,9 @@ the `jvm_arthas` builtin. Install the local file the same way as the agent
 package; it does not download anything and does not require `allowops-agent`.
 
 ```sh
-sudo dpkg -i /absolute/path/allowops-arthas_0.1.0_all.deb
+sudo dpkg -i /absolute/path/allowops-arthas_0.2.0_all.deb
 # Or:
-sudo rpm -Uvh /absolute/path/allowops-arthas-0.1.0-1.noarch.rpm
+sudo rpm -Uvh /absolute/path/allowops-arthas-0.2.0-1.noarch.rpm
 ```
 
 Files, container installation and verification are described in

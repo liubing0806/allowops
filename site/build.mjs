@@ -8,7 +8,7 @@ import { render } from './src/render.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const dist = join(root, 'dist');
-const version = process.env.ALLOWOPS_SITE_VERSION || 'v0.1.0';
+const version = process.env.ALLOWOPS_SITE_VERSION || 'v0.2.0';
 const langs = process.env.ALLOWOPS_SITE_LANGS?.split(',') || ['zh', 'en'];
 
 rmSync(dist, { recursive: true, force: true });

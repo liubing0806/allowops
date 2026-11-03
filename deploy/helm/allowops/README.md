@@ -12,8 +12,8 @@ Supply an image tag in `image.repository` / `image.tag`. Build locally with:
 
 ```sh
 docker build --platform linux/amd64 -f deploy/docker/Dockerfile \
-  --build-arg VERSION=0.1.0 -t allowops-gateway:0.1.0 .
-./deploy/docker/verify.sh allowops-gateway:0.1.0 0.1.0
+  --build-arg VERSION=0.2.0 -t allowops-gateway:0.2.0 .
+./deploy/docker/verify.sh allowops-gateway:0.2.0 0.2.0
 helm lint deploy/helm/allowops
 helm template allowops deploy/helm/allowops > /tmp/allowops.yaml
 python3 deploy/helm/verify.py /tmp/allowops.yaml  # local PyYAML dependency
