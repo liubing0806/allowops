@@ -146,9 +146,11 @@ redact:                                # 可选，覆盖全局脱敏规则
 | StarRocks 固定诊断 | `builtin: starrocks_diag` | 连接方式、凭据和 TSV 输出同 `starrocks_query`；调用方选择 `op`：集群状态、运行中查询、审计表慢查询、profile 列表、`ANALYZE PROFILE`、profile 摘要（含 SR-* 规则命中）；语句全部由处理器生成，账号需要 SYSTEM 级 OPERATE，与 query 账号分开；始终需要 allowops-exec。可选 `profile_run` 执行调用方的 SELECT 并返回摘要，默认关闭，先经 sqlguard |
 | Dremio 只读查询 | `builtin: dremio_query` | 通过 REST API v3 连接（`url: http(s)://host:port`），每次调用登录、提交作业、读取第一页结果（最多 500 行）、取消并注销；凭据在主机 `/etc/allowops/credentials/`（root，0600）；调用方提供一条 SELECT、SHOW、DESCRIBE 或 EXPLAIN PLAN FOR；始终需要 allowops-exec。Dremio 24.1 社区版没有权限边界（所有账号都是管理员），sqlguard 词法校验是 Dremio 一侧唯一的写入限制（决定 D6）；数据源一侧由数据源账号的只读权限限制；另有 `max_rows`、`max_bytes`、`timeout` 上限 |
 | Dremio 固定诊断 | `builtin: dremio_diag` | 连接方式和凭据同 `dremio_query`；调用方选择 `op`：节点与内存、作业列表、单个作业、作业 profile 摘要（含 DR-* 规则命中）、反射；请求由处理器生成，不接受 SQL、不经过 sqlguard，调用方的值只在通过固定格式或范围校验后进入请求；`builtin_config.ops` 可固定 op；始终需要 allowops-exec。同样没有权限边界，该处理器的写入限制是请求固定 |
+| JVM 运行数据（只读） | `builtin: jvm_perfdata` | 读取 systemd 单元或 Docker 容器内 JVM 的 hsperfdata（堆、GC、类、线程）；不 attach，不发信号，不写目标；目标由签名配置中的单元名，或容器名加主类确定，调用方只选目标名；始终需要 allowops-exec |
+| Arthas JVM 诊断 | `builtin: jvm_arthas` | 每个 action 一条固定的 Arthas 命令：L1 读取 JVM 状态，不增强类；L2 对一个类的一个方法最多增强 30 秒，或反编译一个类。每次调用 attach、执行、停止 Arthas；`risk: write`、`run_as: root`、`max_targets: 1`；Arthas 文件在目标挂载命名空间内按签名配置中的 SHA-256 校验；只有安装了 `allowops-arthas` 软件包的主机支持。计划见 `java-diagnostics-arthas-plan.md`，威胁分析见 `SECURITY.md` |
 
 - 内置处理器的参数 schema 由 allowops 定义，目录只能通过 `builtin_config` 收紧。需要读取主机凭据或声明 `run_as` 的内置处理器在 allowops-exec 中执行。
-- `mysql_query`、`redis_command`、`starrocks_query`、`starrocks_diag`、`dremio_query`、`dremio_diag` 必须读取 root 凭据，`RequiresExec` 为真，未声明 `run_as` 时也经 allowops-exec 以 root 执行。`starrocks_*` 和 `dremio_*` 的 SQL 校验是词法级白名单（`internal/builtin/sqlguard`，规则见 `builtin-sqlguard.md`），不单独保证只读；各处理器的字段、默认值和上限见 `builtin-starrocks.md`、`builtin-dremio.md`、`builtin-config.md`。
+- `mysql_query`、`redis_command`、`starrocks_query`、`starrocks_diag`、`dremio_query`、`dremio_diag` 必须读取 root 凭据，`RequiresExec` 为真，未声明 `run_as` 时也经 allowops-exec 以 root 执行。`jvm_perfdata` 读取其他用户的进程和容器根文件系统，`jvm_arthas` 以 root attach 并进入目标的命名空间，二者同样经 allowops-exec 以 root 执行。`starrocks_*` 和 `dremio_*` 的 SQL 校验是词法级白名单（`internal/builtin/sqlguard`，规则见 `builtin-sqlguard.md`），不单独保证只读；各处理器的字段、默认值和上限见 `builtin-starrocks.md`、`builtin-dremio.md`、`builtin-config.md`。
 
 ## 5. 主机端
 
