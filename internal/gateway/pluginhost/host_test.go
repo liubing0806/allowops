@@ -3,6 +3,7 @@ package pluginhost
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -49,7 +50,9 @@ func (m *testInventory) Resolve(ctx context.Context, q inventory.Query) ([]inven
 		panic("private panic password=hunter2")
 	case "secret":
 		return []inventory.Entity{{Kind: "service", Name: "password=hunter2", Selector: "service=https://u:hunter2@x.example",
-			Attrs: map[string]string{jwtKey: "v", "team": "ops"}, Hosts: []string{"host"}}}, nil
+			Attrs: map[string]string{jwtKey: "v", "team": "ops"}, Hosts: []string{"host"}},
+			{Kind: "service", Name: "-phunter2", Selector: "service=-phunter2", Attrs: map[string]string{"memo": "-phunter2"},
+				Hosts: []string{"host"}, DependsOn: []string{"service/-phunter2"}}}, nil
 	case "invalid":
 		return []inventory.Entity{
 			{Kind: "bad-kind", Name: "a"}, {Kind: "service", Name: ""}, {Kind: "service", Name: strings.Repeat("x", 129)},
@@ -219,7 +222,8 @@ func TestConcurrentSearchOwnsResults(t *testing.T) {
 func TestSecretsDoNotLeak(t *testing.T) {
 	var logs bytes.Buffer
 	deps := Deps{Logger: slog.New(slog.NewTextHandler(&logs, nil)), Hosts: func(context.Context) ([]plugin.HostInfo, error) {
-		return []plugin.HostInfo{{Hostname: "h1", Labels: map[string]string{"service": "https://u:hunter2@x.example"}}}, nil
+		return []plugin.HostInfo{{Hostname: "h1", Labels: map[string]string{"service": "https://u:hunter2@x.example"}},
+			{Hostname: "h2", Labels: map[string]string{"service": "-phunter2"}}}, nil
 	}}
 	var configs []Config
 	for _, mode := range []string{"secret", "failed", "panic", "provision"} {
@@ -231,14 +235,17 @@ func TestSecretsDoNotLeak(t *testing.T) {
 		t.Fatal(err)
 	}
 	results, errs := h.SearchInventory(context.Background(), Query{}, nil)
-	if len(results) != 2 || len(errs) != 2 {
+	if len(results) != 4 || len(errs) != 2 {
 		t.Fatalf("results=%+v errors=%+v", results, errs)
 	}
 	for _, e := range results {
 		if e.Selector != "" || len(e.Hosts) != 1 || strings.Contains(e.Name, "hunter2") {
 			t.Errorf("redaction changed selector or kept secret: %+v", e)
 		}
-		if e.Source == "secret" && (len(e.Attrs) != 1 || e.Attrs["team"] != "ops") {
+		if data, _ := json.Marshal(e); strings.Contains(string(data), "hunter2") {
+			t.Errorf("secret in result: %s", data)
+		}
+		if e.Source == "secret" && strings.Contains(e.Name, "credential") && (len(e.Attrs) != 1 || e.Attrs["team"] != "ops") {
 			t.Errorf("secret attribute key kept: %+v", e.Attrs)
 		}
 	}

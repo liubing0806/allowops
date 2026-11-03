@@ -106,13 +106,16 @@ func TestFIFODoesNotBlock(t *testing.T) {
 }
 func TestErrorsOmitEntityContent(t *testing.T) {
 	for name, data := range map[string]string{
-		"duplicate": "entities: [{kind: service, name: password=hunter2}, {kind: service, name: password=hunter2}]",
-		"invalid":   "entities: [{kind: service, name: password=hunter2, selector: '" + strings.Repeat("n", 513) + "'}]",
-		"attr":      "entities: [{kind: service, name: a, attrs: {'hunter2 key': x}}]",
+		"duplicate":  "entities: [{kind: service, name: password=hunter2}, {kind: service, name: password=hunter2}]",
+		"invalid":    "entities: [{kind: service, name: password=hunter2, selector: '" + strings.Repeat("n", 513) + "'}]",
+		"attr":       "entities: [{kind: service, name: a, attrs: {'hunter2 key': x}}]",
+		"yaml type":  "entities: [{kind: service, name: a, attrs: '-phunter2'}]",
+		"yaml key":   "entities: [{kind: service, name: a, attrs: {'-phunter2': a, '-phunter2': b}}]",
+		"yaml field": "entities: [{kind: service, name: a, 'Authorization: hunter2': x}]",
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := (&Module{File: writeFile(t, data)}).Provision(context.Background(), nil)
-			if err == nil || strings.Contains(err.Error(), "hunter2") || !strings.Contains(err.Error(), "inventory entity #") {
+			if err == nil || strings.Contains(err.Error(), "hunter2") || !strings.Contains(err.Error(), "inventory entity #") && !strings.Contains(err.Error(), "invalid YAML at line 1") {
 				t.Fatalf("error: %v", err)
 			}
 		})
