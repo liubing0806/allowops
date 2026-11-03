@@ -89,7 +89,7 @@
 |---|---|---|
 | 主体 | agent 服务账号、控制台用户 | 角色、团队、负责人 |
 | 资源 | 主机、action | 主机授权标签；action 的 risk、分类 |
-| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和授权标签、创建 join token、管理用户角色、发布目录、查看 job、查看输出（`view_output`）、查看审计 | — |
+| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和授权标签、创建 join token、管理用户角色、发布目录、查看资源清单（`view_inventory`）、查看 job、查看输出（`view_output`）、查看审计 | — |
 | 环境 | 请求上下文 | 请求时间、来源 IP |
 
 - 判定结果：`allow`、`deny`。deny 优先于 allow。未匹配任何规则时 deny。
@@ -503,10 +503,10 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 
 | 角色 | 默认权限 |
 |---|---|
-| admin | 全部：策略、服务账号、主机、join token、用户角色 |
-| operator | 管理主机（授权标签、删除）、创建 join token、查看 job |
+| admin | 全部：策略、服务账号、主机、join token、用户角色、资源清单（`view_inventory`） |
+| operator | 管理主机（授权标签、删除）、创建 join token、查看 job 和资源清单（`view_inventory`） |
 | auditor | 查看审计、job 和命令输出 |
-| viewer | 查看主机、目录和 job 摘要，不能查看命令输出 |
+| viewer | 查看主机、目录、job 摘要和资源清单（`view_inventory`），不能查看命令输出 |
 | publisher | 只能发布目录（供 CI 使用） |
 
 - 防锁死：保存策略前检查，保存后若没有任何主体能修改策略则拒绝保存。

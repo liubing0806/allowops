@@ -213,7 +213,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 |---|---|
 | 主体 | 服务账号、控制台用户（角色、团队、负责人） |
 | 资源 | 主机（授权标签）、action（risk、名称） |
-| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和标签、创建 join token、管理用户角色、发布目录、查看 job、查看输出、查看审计 |
+| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和标签、创建 join token、管理用户角色、发布目录、查看资源清单（`view_inventory`）、查看 job、查看输出、查看审计 |
 | 环境 | 请求时间、来源 IP |
 
 - 判定结果 `allow`、`deny`；deny 优先；未匹配任何规则时 deny。MVP 不做审批。
@@ -237,11 +237,13 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 | 工具 | 作用 |
 |---|---|
 | `hosts_search` | 按标签选择器或主机名查询主机：主机、标签、在线状态、总数、标签分布 |
+| `entities_search` | 存在可用 Inventory 实例时列出；按类型、名称和来源查询实体，需 `view_inventory` 权限 |
 | `<action>` | 每个 action 一个工具，只列出该身份可能被允许的 action |
 | `jobs_get` | job 汇总；传 `host` 时分页返回该主机完整输出；支持 `wait_seconds` |
 | `jobs_list` | 当前服务账号最近的 job |
 | `jobs_cancel` | 取消 job |
 
+- `entities_search` 先按主机可见性过滤，再按 `limit`（默认 20，范围 1~100）和完整结果的 32KB 上限截断。返回内容标记为不可信数据。返回的 selector 作为 action 目标时仍逐台检查权限。
 - action 工具公共参数：`targets`（`hosts` 或 `selector`）、`expected_count`、`reason`、`wait_seconds`、`batch_size`、`max_failures`、`response_format`。
 - 用 `selector` 时必须带 `expected_count`，与实际数量不符时拒绝并返回实际数量。
 - 任一主机被 deny 时整个 job 拒绝，返回被拒主机和规则。
