@@ -19,11 +19,13 @@ import (
 var renderJDKs = []string{"jdk8", "jdk17"}
 
 // renderCases lists the recorded responses and the command each one answers.
-// failure is the message of the status result when the command failed.
+// failure is the message of the status result when the command failed, and code its status
+// code when it is not 1.
 var renderCases = []struct {
 	name    string
 	kind    Kind
 	failure string
+	code    int
 }{
 	{name: "version", kind: KindVersion},
 	{name: "dashboard", kind: KindDashboard},
@@ -45,6 +47,16 @@ var renderCases = []struct {
 	{name: "logger", kind: KindLogger},
 	{name: "sysprop", kind: KindSysprop},
 	{name: "sysprop_missing", kind: KindSysprop, failure: "There is no property with the key no.such.key"},
+	{name: "watch", kind: KindWatch},
+	{name: "watch_size_limit", kind: KindWatch},
+	{name: "watch_none", kind: KindWatch},
+	{name: "watch_over_limit", kind: KindWatch, code: -1},
+	{name: "trace", kind: KindTrace},
+	{name: "stack", kind: KindStack},
+	{name: "monitor", kind: KindMonitor},
+	{name: "jad", kind: KindJad},
+	{name: "jad_method", kind: KindJad},
+	{name: "jad_missing", kind: KindJad, failure: "No class found for: demo.NoSuchClass", code: -1},
 }
 
 // loadResponse reads a recorded envelope the way Client.Exec decodes it.
@@ -144,7 +156,7 @@ func TestRenderGolden(t *testing.T) {
 	update := os.Getenv("ALLOWOPS_ARTHAS_UPDATE_GOLDEN") == "1"
 	for _, jdk := range renderJDKs {
 		for _, c := range renderCases {
-			if c.failure != "" {
+			if c.failure != "" || c.code != 0 {
 				continue
 			}
 			t.Run(jdk+"/"+c.name, func(t *testing.T) {
@@ -187,7 +199,7 @@ func TestRenderCoversEveryKind(t *testing.T) {
 func TestRenderShape(t *testing.T) {
 	for _, jdk := range renderJDKs {
 		for _, c := range renderCases {
-			if c.failure != "" {
+			if c.failure != "" || c.code != 0 {
 				continue
 			}
 			t.Run(jdk+"/"+c.name, func(t *testing.T) {
@@ -218,10 +230,14 @@ func TestRenderShape(t *testing.T) {
 func TestRenderCommandError(t *testing.T) {
 	for _, jdk := range renderJDKs {
 		for _, c := range renderCases {
-			if c.failure == "" {
+			if c.failure == "" && c.code == 0 {
 				continue
 			}
 			t.Run(jdk+"/"+c.name, func(t *testing.T) {
+				code := c.code
+				if code == 0 {
+					code = 1
+				}
 				out, err := Render(c.kind, loadResponse(t, jdk, c.name))
 				var ce *CommandError
 				if !errors.As(err, &ce) {
@@ -230,8 +246,8 @@ func TestRenderCommandError(t *testing.T) {
 				if out != "" {
 					t.Errorf("output with an error = %q, want empty", out)
 				}
-				if ce.Kind != c.kind || ce.Code != 1 || ce.Message != c.failure {
-					t.Errorf("CommandError = %+v, want kind %s code 1 message %q", ce, c.kind, c.failure)
+				if ce.Kind != c.kind || ce.Code != code || ce.Message != c.failure {
+					t.Errorf("CommandError = %+v, want kind %s code %d message %q", ce, c.kind, code, c.failure)
 				}
 				if !strings.Contains(err.Error(), c.failure) {
 					t.Errorf("error text %q does not hold the message", err)
@@ -582,7 +598,7 @@ func TestRenderRejectsWrongInput(t *testing.T) {
 		resp *ExecResponse
 	}{
 		{"nil response", KindVersion, nil},
-		{"unknown kind", Kind("trace"), resultsOf(t, version)},
+		{"unknown kind", Kind("tt"), resultsOf(t, version)},
 		{"empty kind", Kind(""), resultsOf(t, version)},
 		{"no results", KindVersion, &ExecResponse{}},
 		{"only a status", KindVersion, rawResultsOf(t, `{"type":"status","statusCode":0}`)},
@@ -592,6 +608,12 @@ func TestRenderRejectsWrongInput(t *testing.T) {
 		{"thread result without blockingLockInfo", KindThreadBlocking, resultsOf(t, `{"type":"thread","threadInfo":{"threadId":1}}`)},
 		{"malformed result", KindMemory, resultsOf(t, `{"type":"memory","memoryInfo":"text"}`)},
 		{"malformed number", KindDashboard, resultsOf(t, `{"type":"dashboard","threads":[{"id":"x"}]}`)},
+		{"malformed watch value", KindWatch, resultsOf(t, `{"type":"watch","value":5}`)},
+		{"trace without root", KindTrace, resultsOf(t, `{"type":"trace","nodeCount":1}`)},
+		{"malformed stack thread id", KindStack, resultsOf(t, `{"type":"stack","threadId":{}}`)},
+		{"malformed monitor", KindMonitor, resultsOf(t, `{"type":"monitor","monitorDataList":{}}`)},
+		{"jad without source", KindJad, resultsOf(t, `{"type":"jad","location":"x"}`)},
+		{"no jad result", KindJad, resultsOf(t, version)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

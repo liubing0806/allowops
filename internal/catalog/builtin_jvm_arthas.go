@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/liubing0806/allowops/internal/arthas"
@@ -49,7 +51,12 @@ func jvmArthasConfig(input map[string]any) (jvmarthas.Config, error) {
 		HTTPPortMax int                         `json:"http_port_max"`
 		ExecTimeout string                      `json:"exec_timeout"`
 		SyspropKeys []string                    `json:"sysprop_keys"`
-		Checks      struct {
+		// The settings of the L2 commands.
+		ClassPrefixes   []string `json:"class_prefixes"`
+		EnhanceDuration string   `json:"enhance_duration"`
+		MaxMethods      int      `json:"max_methods"`
+		ObjectSizeLimit Size     `json:"object_size_limit"`
+		Checks          struct {
 			MinMemoryHeadroom    Size   `json:"min_memory_headroom"`
 			MinMetaspaceHeadroom Size   `json:"min_metaspace_headroom"`
 			MaxAttaches          int    `json:"max_attaches"`
@@ -57,6 +64,7 @@ func jvmArthasConfig(input map[string]any) (jvmarthas.Config, error) {
 			MaxBlockingThreads   int    `json:"max_blocking_threads"`
 			MaxOldGenPercent     int    `json:"max_old_gen_percent"`
 			NoFullGCWithin       string `json:"no_full_gc_within"`
+			MaxCPUPercent        int    `json:"max_cpu_percent"`
 		} `json:"checks"`
 		Guard struct {
 			MaxCPUPercent    int    `json:"max_cpu_percent"`
@@ -82,16 +90,24 @@ func jvmArthasConfig(input map[string]any) (jvmarthas.Config, error) {
 	cfg := jvmarthas.Config{
 		Command: arthas.Kind(fields.Command), Targets: fields.Targets, ArthasDir: fields.ArthasDir, SHA256: fields.SHA256,
 		HTTPPortMin: fields.HTTPPortMin, HTTPPortMax: fields.HTTPPortMax, SyspropKeys: fields.SyspropKeys,
+		ClassPrefixes: fields.ClassPrefixes, MaxMethods: fields.MaxMethods,
 		Checks: jvmarthas.Checks{
 			MinMemoryHeadroom: int64(fields.Checks.MinMemoryHeadroom), MinMetaspaceHeadroom: int64(fields.Checks.MinMetaspaceHeadroom),
 			MaxAttaches: fields.Checks.MaxAttaches, MaxBlockingThreads: fields.Checks.MaxBlockingThreads, MaxOldGenPercent: fields.Checks.MaxOldGenPercent,
+			MaxCPUPercent: fields.Checks.MaxCPUPercent,
 		},
 		Guard: jvmarthas.Guard{
 			MaxCPUPercent: fields.Guard.MaxCPUPercent, MaxGCTimePercent: fields.Guard.MaxGCTimePercent, MaxGCPerSecond: fields.Guard.MaxGCPerSecond,
 		},
 	}
+	// A size beyond the range of int is out of the range of object_size_limit as well.
+	if fields.ObjectSizeLimit > Size(arthas.MaxObjectSizeLimit) {
+		return jvmarthas.Config{}, fmt.Errorf("object_size_limit must be between %d and %d bytes", arthas.MinObjectSizeLimit, arthas.MaxObjectSizeLimit)
+	}
+	cfg.ObjectSizeLimit = int(fields.ObjectSizeLimit)
 	durations := []durationField{
 		{"exec_timeout", fields.ExecTimeout, &cfg.ExecTimeout},
+		{"enhance_duration", fields.EnhanceDuration, &cfg.EnhanceDuration},
 		{"checks.min_attach_interval", fields.Checks.MinAttachInterval, &cfg.Checks.MinAttachInterval},
 		{"checks.no_full_gc_within", fields.Checks.NoFullGCWithin, &cfg.Checks.NoFullGCWithin},
 		{"guard.settle", fields.Guard.Settle, &cfg.Guard.Settle},
@@ -117,10 +133,42 @@ func (jvmArthasHandler) ValidateConfig(input map[string]any) error {
 	return err
 }
 
+// l2Overhead is the part of the timeout of an L2 action beyond its enhancement, or beyond the
+// command timeout of jad: the CPU check (5s), the attach, the setup commands, the end of the job
+// and the clean-up with its confirming reset.
+const l2Overhead = 60 * time.Second
+
 // ValidateActionFields fixes the fields that keep a call to one JVM, one at a time: risk write
 // (the attach loads code into the JVM), run_as root (allowops-exec needs it to attach and to
-// enter the namespaces of the target), and no repetition or fan-out.
+// enter the namespaces of the target), and no repetition or fan-out. An L2 action also needs the
+// secrets and pii redaction, since its output holds application data, and a timeout that covers
+// the enhancement.
 func (jvmArthasHandler) ValidateActionFields(a Action) error {
+	if err := validateArthasCommonFields(a); err != nil {
+		return err
+	}
+	cfg, err := jvmArthasConfig(a.BuiltinConfig)
+	if err != nil {
+		return err
+	}
+	if cfg.Command.Level() != 2 {
+		return nil
+	}
+	if a.Redact == nil || !slices.Contains(a.Redact.Builtin, "secrets") || !slices.Contains(a.Redact.Builtin, "pii") {
+		return fmt.Errorf("jvm_arthas %s requires redact.builtin with secrets and pii", cfg.Command)
+	}
+	eff := cfg.Effective()
+	least := eff.ExecTimeout + l2Overhead
+	if cfg.Command.Enhances() {
+		least = eff.EnhanceDuration + l2Overhead
+	}
+	if timeout, err := time.ParseDuration(a.Timeout); err != nil || timeout < least {
+		return fmt.Errorf("jvm_arthas %s requires a timeout of at least %s", cfg.Command, least)
+	}
+	return nil
+}
+
+func validateArthasCommonFields(a Action) error {
 	switch {
 	case a.RunAs != "root":
 		return fmt.Errorf("jvm_arthas requires run_as: root")
@@ -150,6 +198,29 @@ func (jvmArthasHandler) Parameters(input map[string]any) (map[string]params.Defi
 		"target": {Type: params.Enum, Description: "JVM target from the action's allowlist", Values: cfg.TargetNames()},
 	}
 	class := params.Definition{Type: params.String, Description: "Binary name of the class, without wildcards", Regex: classNamePattern, MaxLen: maxJavaName}
+	if cfg.Command.Level() == 2 {
+		class.Description = "Binary name of the class, without wildcards; it must start with " + strings.Join(cfg.ClassPrefixes, ", ")
+		defs["class"] = class
+		method := params.Definition{Type: params.String, Description: "Name of the method, without wildcards", Regex: identifierPattern, MaxLen: maxJavaName}
+		if cfg.Command == arthas.KindJad {
+			method.Description, method.Optional = "Name of the method to decompile; the whole class when omitted", true
+		}
+		defs["method"] = method
+	}
+	if cfg.Command.Enhances() {
+		maxCost := int64(arthas.MaxMinCost)
+		defs["count"] = params.Definition{Type: params.Int, Description: "Number of results after which the enhancement ends", Min: &one, Max: int64(arthas.MaxCount), Default: int64(1)}
+		defs["min_cost_ms"] = params.Definition{Type: params.Int, Description: "Only calls that take longer than this many milliseconds", Min: &one, Max: maxCost, Optional: true}
+	}
+	switch cfg.Command {
+	case arthas.KindWatch:
+		defs["express"] = params.Definition{Type: params.Enum, Description: "What to show of each call: arguments, return value, exception", Values: arthas.WatchExpressions(), Default: "params,returnObj"}
+		defs["expand"] = params.Definition{Type: params.Int, Description: "Depth to which objects are expanded", Min: &one, Max: int64(arthas.MaxExpand), Default: int64(1)}
+	case arthas.KindMonitor:
+		// count × cycle must also stay below the enhancement time; arthas.Build checks that.
+		seconds := int64(cfg.Effective().EnhanceDuration / time.Second)
+		defs["cycle"] = params.Definition{Type: params.Int, Description: "Seconds of one statistics period; count × cycle must be less than " + strconv.FormatInt(seconds, 10), Min: &one, Max: seconds - 1}
+	}
 	switch cfg.Command {
 	case arthas.KindThreadTop:
 		defs["top"] = params.Definition{Type: params.Int, Description: "Number of busiest threads to show", Min: &one, Max: int64(arthas.MaxTop)}
@@ -189,6 +260,17 @@ func (jvmArthasHandler) RunRedacted(ctx context.Context, input, values map[strin
 	req.Class, _ = values["class"].(string)
 	req.Method, _ = values["method"].(string)
 	req.Key, _ = values["key"].(string)
+	req.Express, _ = values["express"].(string)
+	if n, ok := values["expand"].(int64); ok {
+		req.Expand = int(n)
+	}
+	if n, ok := values["count"].(int64); ok {
+		req.Count = int(n)
+	}
+	req.MinCost, _ = values["min_cost_ms"].(int64)
+	if n, ok := values["cycle"].(int64); ok {
+		req.Cycle = int(n)
+	}
 	r, err := jvmArthasRun(ctx, cfg, jvmarthas.Params{Target: target, Request: req}, mask)
 	return BuiltinResult{Stdout: r.Stdout, Stderr: r.Stderr, ExitCode: r.ExitCode}, err
 }

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-var testPolicy = Policy{SyspropKeys: []string{"java.version", "user.dir", "file.encoding"}}
+var testPolicy = Policy{SyspropKeys: []string{"java.version", "user.dir", "file.encoding"}, ClassPrefixes: []string{"demo."}}
 
 func TestBuildCommands(t *testing.T) {
 	cases := []struct {
@@ -35,6 +35,11 @@ func TestBuildCommands(t *testing.T) {
 		{"logger", Request{Kind: KindLogger}, "logger", "logger", nil},
 		{"sysprop", Request{Kind: KindSysprop, Key: "java.version"}, "sysprop java.version", "sysprop", nil},
 		{"version", Request{Kind: KindVersion}, "version", "version", nil},
+		{"watch", Request{Kind: KindWatch, Class: "demo.HotService", Method: "work", Express: "params", Expand: 1, Count: 1}, "watch demo.HotService work {params} -n 1 -x 1 -m 1 --timeout 30", "watch", []PreCheck{PreCheckCPU}},
+		{"trace", Request{Kind: KindTrace, Class: "demo.HotService", Method: "work", Count: 1}, "trace demo.HotService work -n 1 -m 1 --timeout 30", "trace", []PreCheck{PreCheckCPU}},
+		{"stack", Request{Kind: KindStack, Class: "demo.HotService", Method: "work", Count: 1}, "stack demo.HotService work -n 1 -m 1 --timeout 30", "stack", []PreCheck{PreCheckCPU}},
+		{"monitor", Request{Kind: KindMonitor, Class: "demo.HotService", Method: "work", Count: 1, Cycle: 5}, "monitor demo.HotService work -c 5 -n 1 -m 1 --timeout 30", "monitor", []PreCheck{PreCheckCPU}},
+		{"jad", Request{Kind: KindJad, Class: "demo.HotService"}, "jad --source-only demo.HotService", "jad", []PreCheck{PreCheckCPU}},
 	}
 	seen := map[Kind]bool{}
 	for _, c := range cases {
@@ -60,8 +65,8 @@ func TestBuildCommands(t *testing.T) {
 			t.Errorf("kind %s has no case", k)
 		}
 	}
-	if len(Kinds()) != 12 {
-		t.Errorf("Kinds() = %v, want 12 kinds", Kinds())
+	if len(Kinds()) != 17 {
+		t.Errorf("Kinds() = %v, want 17 kinds", Kinds())
 	}
 }
 
@@ -188,6 +193,13 @@ func TestBuildRejectsFieldsOfOtherKinds(t *testing.T) {
 		{Kind: KindSysprop, Key: "java.version", Class: "a.B"},
 		{Kind: KindDashboard, Top: 5},
 		{Kind: KindLogger, Class: "a.B"},
+		{Kind: KindMemory, Count: 1},
+		{Kind: KindMemory, Express: "params"},
+		{Kind: KindMemory, Expand: 1},
+		{Kind: KindMemory, MinCost: 1},
+		{Kind: KindMemory, Cycle: 1},
+		{Kind: KindMethodInfo, Class: "demo.A", Count: 1},
+		{Kind: KindClassInfo, Class: "demo.A", MinCost: 5},
 	}
 	for _, req := range cases {
 		if got, err := Build(req, testPolicy); err == nil {
@@ -197,7 +209,7 @@ func TestBuildRejectsFieldsOfOtherKinds(t *testing.T) {
 }
 
 func TestBuildRejectsUnknownKinds(t *testing.T) {
-	for _, k := range []Kind{"", "ognl", "watch", "thread", "sc", "sysprop ", "THREAD_TOP", "dashboard -n 1", "reset", "stop", "heapdump"} {
+	for _, k := range []Kind{"", "ognl", "tt", "thread", "sc", "sysprop ", "THREAD_TOP", "dashboard -n 1", "reset", "stop", "heapdump"} {
 		if got, err := Build(Request{Kind: k, Top: 1, ThreadID: 1, Class: "a.B", Key: "java.version"}, testPolicy); err == nil {
 			t.Errorf("kind %q accepted as %q", k, got.Text)
 		}
@@ -209,22 +221,51 @@ var commandForm = regexp.MustCompile(`^(` +
 	`dashboard -n 1|thread -n (10|[1-9])|thread -b|thread [1-9][0-9]*|memory|jvm|classloader -[tl]|logger|version|` +
 	`sc -d [A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*|` +
 	`sm -d [A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*( [A-Za-z_$][A-Za-z0-9_$]*)?|` +
-	`sysprop (java\.version|user\.dir|file\.encoding))$`)
+	`sysprop (java\.version|user\.dir|file\.encoding)|` +
+	`watch demo(\.[A-Za-z_$][A-Za-z0-9_$]*)+ [A-Za-z_$][A-Za-z0-9_$]* \{(params|returnObj|throwExp)(,(returnObj|throwExp)){0,2}\}( #cost>[1-9][0-9]*)? -n [1-5] -x [12] -m 1 --timeout 30|` +
+	`(trace|stack) demo(\.[A-Za-z_$][A-Za-z0-9_$]*)+ [A-Za-z_$][A-Za-z0-9_$]*( #cost>[1-9][0-9]*)? -n [1-5] -m 1 --timeout 30|` +
+	`monitor demo(\.[A-Za-z_$][A-Za-z0-9_$]*)+ [A-Za-z_$][A-Za-z0-9_$]*( #cost>[1-9][0-9]*)? -c [1-9][0-9]* -n [1-5] -m 1 --timeout 30|` +
+	`jad --source-only demo(\.[A-Za-z_$][A-Za-z0-9_$]*)+( [A-Za-z_$][A-Za-z0-9_$]*)?)$`)
+
+// setupForm lists every setup command Build may return.
+var setupForm = regexp.MustCompile(`^options (disable-sub-class true|object-size-limit 8192)$`)
 
 func FuzzBuildOnlyReturnsFixedForms(f *testing.F) {
 	for _, h := range hostile {
-		f.Add(h, h, h, 1, int64(1), uint8(0))
+		f.Add(h, h, h, h, 1, int64(1), uint8(0))
 	}
-	f.Add("demo.HotService", "work", "java.version", 5, int64(49), uint8(3))
+	f.Add("demo.HotService", "work", "java.version", "params,returnObj", 5, int64(49), uint8(3))
+	f.Add("demo.HotService", "work", "", "params,returnObj", 2, int64(10), uint8(12))
+	f.Add("demo.HotService", "work", "", "", 1, int64(0), uint8(15))
 	kinds := Kinds()
-	f.Fuzz(func(t *testing.T, class, method, key string, top int, id int64, which uint8) {
+	f.Fuzz(func(t *testing.T, class, method, key, express string, top int, id int64, which uint8) {
 		kind := kinds[int(which)%len(kinds)]
-		got, err := Build(Request{Kind: kind, Class: class, Method: method, Key: key, Top: top, ThreadID: id}, testPolicy)
+		// The small numbers are shared, so that every kind sees values in range now and then.
+		req := Request{Kind: kind, Class: class, Method: method, Key: key, Top: top, ThreadID: id}
+		switch kind {
+		case KindWatch, KindTrace, KindStack, KindMonitor:
+			req.Top, req.ThreadID, req.Key = 0, 0, ""
+			req.Count, req.MinCost = top, id
+			if kind == KindWatch {
+				req.Express, req.Expand = express, top%3
+			}
+			if kind == KindMonitor {
+				req.Cycle = int(id % 31)
+			}
+		case KindJad:
+			req.Top, req.ThreadID, req.Key = 0, 0, ""
+		}
+		got, err := Build(req, testPolicy)
 		if err != nil {
 			return
 		}
 		if !commandForm.MatchString(got.Text) {
-			t.Fatalf("Build(%q, %q, %q, %d, %d) returned %q", class, method, key, top, id, got.Text)
+			t.Fatalf("Build(%+v) returned %q", req, got.Text)
+		}
+		for _, s := range got.Setup {
+			if !setupForm.MatchString(s) {
+				t.Fatalf("Build(%+v) returned setup %q", req, s)
+			}
 		}
 		if got.ExecTimeout <= 0 || got.ExecTimeout > MaxExecTimeout {
 			t.Fatalf("ExecTimeout = %s", got.ExecTimeout)

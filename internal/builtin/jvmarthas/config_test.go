@@ -37,9 +37,95 @@ func TestValidateAcceptsEveryCommandKind(t *testing.T) {
 		if kind == arthas.KindSysprop {
 			cfg.SyspropKeys = []string{"java.version", "user.timezone"}
 		}
+		if kind.Level() == 2 {
+			cfg.ClassPrefixes = []string{"com.example."}
+		}
 		if err := cfg.Validate(); err != nil {
 			t.Errorf("%s: %v", kind, err)
 		}
+		if err := cfg.Effective().Validate(); err != nil {
+			t.Errorf("%s: effective configuration: %v", kind, err)
+		}
+	}
+}
+
+func l2Config(kind arthas.Kind) Config {
+	cfg := goodConfig()
+	cfg.Command = kind
+	cfg.ClassPrefixes = []string{"com.example.", "demo."}
+	return cfg
+}
+
+func TestValidateL2Settings(t *testing.T) {
+	tests := []struct {
+		name   string
+		kind   arthas.Kind
+		change func(*Config)
+		want   string
+	}{
+		{"L2 without class prefixes", arthas.KindWatch, func(c *Config) { c.ClassPrefixes = nil }, "class_prefixes must list"},
+		{"jad without class prefixes", arthas.KindJad, func(c *Config) { c.ClassPrefixes = []string{} }, "class_prefixes must list"},
+		{"too many class prefixes", arthas.KindTrace, func(c *Config) {
+			c.ClassPrefixes = nil
+			for i := 0; i <= MaxClassPrefixes; i++ {
+				c.ClassPrefixes = append(c.ClassPrefixes, "p"+strings.Repeat("x", i)+".")
+			}
+		}, "class_prefixes must list"},
+		{"prefix without a dot", arthas.KindWatch, func(c *Config) { c.ClassPrefixes = []string{"com.example"} }, "class_prefixes"},
+		{"prefix with a wildcard", arthas.KindWatch, func(c *Config) { c.ClassPrefixes = []string{"com.*."} }, "class_prefixes"},
+		{"forbidden prefix", arthas.KindStack, func(c *Config) { c.ClassPrefixes = []string{"com.example.", "java.util."} }, "class_prefixes"},
+		{"Arthas prefix", arthas.KindJad, func(c *Config) { c.ClassPrefixes = []string{"com.taobao.arthas."} }, "class_prefixes"},
+		{"class prefixes on an L1 command", arthas.KindClassInfo, func(c *Config) {}, "class_prefixes applies to the L2 commands only"},
+		{"enhancement above 30s", arthas.KindWatch, func(c *Config) { c.EnhanceDuration = 31 * time.Second }, "enhance_duration"},
+		{"enhancement below 1s", arthas.KindTrace, func(c *Config) { c.EnhanceDuration = 500 * time.Millisecond }, "enhance_duration"},
+		{"enhancement in parts of a second", arthas.KindMonitor, func(c *Config) { c.EnhanceDuration = 1500 * time.Millisecond }, "enhance_duration"},
+		{"negative enhancement", arthas.KindStack, func(c *Config) { c.EnhanceDuration = -time.Second }, "enhance_duration"},
+		{"monitor with one second", arthas.KindMonitor, func(c *Config) { c.EnhanceDuration = time.Second }, "enhance_duration of monitor must be at least 2s"},
+		{"enhancement for jad", arthas.KindJad, func(c *Config) { c.EnhanceDuration = 10 * time.Second }, "enhance_duration applies to"},
+		{"more methods than the default", arthas.KindWatch, func(c *Config) { c.MaxMethods = 6 }, "max_methods"},
+		{"negative methods", arthas.KindWatch, func(c *Config) { c.MaxMethods = -1 }, "max_methods"},
+		{"methods for jad", arthas.KindJad, func(c *Config) { c.MaxMethods = 1 }, "max_methods applies to"},
+		{"object size above 64 KiB", arthas.KindWatch, func(c *Config) { c.ObjectSizeLimit = 64<<10 + 1 }, "object_size_limit"},
+		{"object size below 256 bytes", arthas.KindWatch, func(c *Config) { c.ObjectSizeLimit = 255 }, "object_size_limit"},
+		{"object size for trace", arthas.KindTrace, func(c *Config) { c.ObjectSizeLimit = 1024 }, "object_size_limit applies to watch only"},
+		{"cpu share above the default", arthas.KindWatch, func(c *Config) { c.Checks.MaxCPUPercent = 51 }, "max_cpu_percent"},
+		{"negative cpu share", arthas.KindJad, func(c *Config) { c.Checks.MaxCPUPercent = -1 }, "max_cpu_percent"},
+		{"cpu share on an L1 command", arthas.KindDashboard, func(c *Config) { c.ClassPrefixes = nil; c.Checks.MaxCPUPercent = 10 }, "max_cpu_percent applies to the L2 commands only"},
+		{"enhancement on an L1 command", arthas.KindVersion, func(c *Config) { c.ClassPrefixes = nil; c.EnhanceDuration = time.Second }, "enhance_duration applies to"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := l2Config(tc.kind)
+			tc.change(&cfg)
+			err := cfg.Validate()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Validate() = %v; want an error mentioning %q", err, tc.want)
+			}
+		})
+	}
+	cfg := l2Config(arthas.KindWatch)
+	cfg.EnhanceDuration, cfg.MaxMethods, cfg.ObjectSizeLimit, cfg.Checks.MaxCPUPercent = time.Second, 1, 64<<10, 1
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("tighter watch settings: %v", err)
+	}
+}
+
+func TestEffectiveFillsTheL2Defaults(t *testing.T) {
+	watch := l2Config(arthas.KindWatch).Effective()
+	if watch.EnhanceDuration != 30*time.Second || watch.MaxMethods != 5 || watch.ObjectSizeLimit != 8<<10 || watch.Checks.MaxCPUPercent != 50 {
+		t.Errorf("watch: %+v", watch)
+	}
+	trace := l2Config(arthas.KindTrace).Effective()
+	if trace.EnhanceDuration != 30*time.Second || trace.MaxMethods != 5 || trace.ObjectSizeLimit != 0 || trace.Checks.MaxCPUPercent != 50 {
+		t.Errorf("trace: %+v", trace)
+	}
+	jad := l2Config(arthas.KindJad).Effective()
+	if jad.EnhanceDuration != 0 || jad.MaxMethods != 0 || jad.ObjectSizeLimit != 0 || jad.Checks.MaxCPUPercent != 50 {
+		t.Errorf("jad: %+v", jad)
+	}
+	l1 := goodConfig().Effective()
+	if l1.EnhanceDuration != 0 || l1.MaxMethods != 0 || l1.ObjectSizeLimit != 0 || l1.Checks.MaxCPUPercent != 0 {
+		t.Errorf("dashboard: %+v", l1)
 	}
 }
 

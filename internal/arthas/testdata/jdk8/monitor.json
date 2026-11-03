@@ -1,0 +1,63 @@
+{
+  "body": {
+    "jobId": 20,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "command": "monitor demo.HotService work -c 1 -n 2 -m 1 --timeout 5",
+        "jobId": 20,
+        "state": "SCHEDULED",
+        "type": "command"
+      },
+      {
+        "effect": {
+          "classCount": 1,
+          "cost": 45,
+          "listenerId": 5,
+          "methodCount": 1
+        },
+        "jobId": 20,
+        "success": true,
+        "type": "enhancer"
+      },
+      {
+        "jobId": 20,
+        "monitorDataList": [
+          {
+            "className": "demo.HotService",
+            "cost": 2.3671889999999998,
+            "failed": 0,
+            "methodName": "work",
+            "success": 90,
+            "timestamp": "2026-10-26 04:30:27.343",
+            "total": 90
+          }
+        ],
+        "type": "monitor"
+      },
+      {
+        "jobId": 20,
+        "monitorDataList": [
+          {
+            "className": "demo.HotService",
+            "cost": 1.8669180000000003,
+            "failed": 0,
+            "methodName": "work",
+            "success": 96,
+            "timestamp": "2026-10-26 04:30:28.353",
+            "total": 96
+          }
+        ],
+        "type": "monitor"
+      },
+      {
+        "jobId": 20,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "36730af1-7c7c-400c-aee6-352db90fbc22",
+  "state": "SUCCEEDED"
+}

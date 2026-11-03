@@ -45,11 +45,13 @@ required trust, privilege and deployment boundaries.
 ### Java diagnostics with Arthas
 
 The `jvm_arthas` builtin loads Arthas into a JVM named in the signed catalog,
-runs one fixed read-only command and removes Arthas again. The caller names a
-target and the structured arguments of one command kind; it never supplies a
-process ID, a path or command text. The target is resolved from a signed
-systemd unit or container name and the JVM's main class. The helper gains these
-capabilities against that JVM:
+runs one fixed command and removes Arthas again. The L1 commands read the state
+of the JVM. The L2 commands `watch`, `trace`, `stack` and `monitor` enhance one
+method of one class for a bounded time, and `jad` decompiles one class. The
+caller names a target and the structured arguments of one command kind; it
+never supplies a process ID, a path or command text. The target is resolved
+from a signed systemd unit or container name and the JVM's main class. The
+helper gains these capabilities against that JVM:
 
 - **SIGQUIT to the target.** It is sent only when the JVM's hsperfdata allows
   attach, the JVM catches SIGQUIT, no attach socket exists yet and the attach
@@ -73,24 +75,56 @@ capabilities against that JVM:
 - **Loading code into the JVM.** Only the agent jar from the Arthas directory
   of the signed configuration is loaded, after the five Arthas files in the
   target's file system match the SHA-256 values of the signed configuration.
-  The agent arguments disable telnet, bind the HTTP API to 127.0.0.1 on a port
-  from the signed range, require a 32-character random password generated for
-  the call, require the password from local connections too, disable every
-  command except the one the call runs and set a session timeout. Command text
-  is assembled from fixed words and arguments that match strict patterns; no
-  OGNL expression is accepted and no class is enhanced. Before the attach the
+  The agent arguments disable telnet, bind the HTTP API to the loopback address
+  on a port from the signed range, require a 32-character random password
+  generated for the call, require the password from local connections too,
+  disable every command except the one the call runs (and `options` for the
+  enhancing commands) and set a session timeout. Command text is assembled from
+  fixed words and arguments that match strict patterns; the caller supplies no
+  OGNL expression, and the L1 commands enhance no class. Before the attach the
   helper checks memory and metaspace headroom, the number of earlier attaches
-  and the time since the last one; while the command runs it can abort on CPU,
-  garbage collection and health-check thresholds. Afterwards it interrupts the
-  job, closes the session, resets and stops Arthas, and checks that the port is
-  closed and no Arthas thread is left. A session record (mode 0600 in a
-  root-only directory) lets a later call or the recovery request stop a server
-  that a failed call left behind.
+  and the time since the last one, and for an L2 command that the JVM used less
+  than 50% of its CPU limit over 5 seconds; while the command runs it can abort
+  on CPU, garbage collection and health-check thresholds. Afterwards it
+  interrupts the job, closes the session, resets and stops Arthas, and checks
+  that the port is closed and no Arthas thread is left. A session record (mode
+  0600 in a root-only directory) lets a later call or the recovery request stop
+  a server that a failed call left behind; stopping Arthas also resets its
+  enhancements.
+- **Changing the bytecode of one method (L2).** The class and the method are
+  exact names without wildcards or regular expressions. The class must start
+  with an entry of the signed `class_prefixes`, which has no default, and it is
+  refused in the packages `java.`, `javax.`, `jdk.`, `sun.`, `com.sun.`,
+  `com.taobao.arthas.` and `com.alibaba.arthas.` whatever the configuration
+  says. The helper sets `options disable-sub-class true` and runs the command
+  with `-m 1`, so Arthas enhances at most one class; when Arthas reports more
+  than one class or more than `max_methods` methods (default 5), the job is
+  interrupted, Arthas is reset and the call fails. The command asks for 1 to
+  5 results (Arthas can deliver up to two more before it ends the job) and
+  ends at the latest after the enhancement time (default 30 seconds; the
+  configuration can only shorten it). `watch` shows a fixed choice of the
+  arguments, the return value and the exception, expanded one or two levels,
+  and Arthas cuts each result at `object_size_limit` (default 8 KiB, at most
+  64 KiB); the only condition is `#cost>` followed by an integer. After every
+  call the helper resets Arthas and confirms with a second reset that no class
+  is left enhanced; when that cannot be confirmed, the call is not reported as
+  ok. The guard does not evaluate the first 5 seconds of an enhancement; after
+  that a breach of its thresholds ends the job early. An L2 action must redact
+  its output with the `secrets` and `pii` rules.
+- **Writing a class file (`jad`).** To decompile a class, the JVM retransforms
+  it and Arthas writes its current bytecode to
+  `classdump/<class loader>/<package path>/<class>.class` under the Arthas log
+  directory of the JVM's user (default `~/logs/arthas`). The JVM writes the
+  file as its own user. The helper does not delete or move it: Arthas needs a
+  writable directory for it, and deleting it would make a root process remove
+  a path in the target's mount namespace that it learns from the target. A
+  later `jad` of the same class overwrites the file. The file holds bytecode
+  that the JVM's user can read already.
 - **TCP connections in the target's network namespace.** The namespace is
   entered on a dedicated thread that exits afterwards, only after the process
-  start time is compared again, and only to connect to 127.0.0.1 on a port
-  where the JVM itself holds the listening socket. HTTP responses are limited
-  in size, including the status line and headers, and in time.
+  start time is compared again, and only to connect to the loopback address on
+  a port where the JVM itself holds the listening socket. HTTP responses are
+  limited in size, including the status line and headers, and in time.
 
 The target JVM, its container and other processes in its namespaces are
 untrusted. The helper reads their files, sockets and replies only through the
@@ -112,7 +146,11 @@ controls the target JVM controls what Arthas reports about it.
   process with `CAP_NET_RAW` in that namespace can capture the password from
   loopback traffic, and the JVM's own attach records, such as the JFR
   `jdk.JavaAgent` event, contain it. The password is valid only until the
-  session ends and allows only the command of the call, `reset` and `stop`.
+  session ends and allows only the command of the call, `reset` and `stop`,
+  and for an enhancing command also `options`. Typed by hand, the enhancing
+  commands accept OGNL expressions and wildcards, and `options` can allow the
+  enhancement of system classes, so a password captured during an L2 call
+  lets its holder run code in the JVM until the session ends.
 - When the helper connects to the Arthas port, the JVM can close its listener
   between the listener check and the connection, and another process in the
   namespace can bind the port in that moment.
@@ -127,8 +165,21 @@ controls the target JVM controls what Arthas reports about it.
   hsperfdata, another process there with the same main class is attached
   instead and its answers are reported.
 - Arthas output contains real application data such as thread names, class
-  names and allowed system properties. Output filtering cannot recognise every
-  secret.
+  names and allowed system properties. The L2 output adds the arguments,
+  return values and exceptions of application calls and the source code of
+  application classes with their string constants. Output filtering cannot
+  recognise every secret or every item of personal data.
+- An L2 enhancement slows the whole JVM for a few seconds after it starts; in
+  the project's measurements responses were delayed by up to 1.5 seconds
+  during the first 1 to 4 seconds. The CPU check refuses only a JVM that is
+  busy before the attach.
+- To show the values that `watch` captures, Arthas calls `isEmpty`, `size`,
+  `iterator` and `entrySet` of the collections and maps among them, which can
+  be methods of the application.
+- When the job ends before Arthas reports the enhancement, the number of
+  enhanced methods is unknown; the helper then checks only the number of
+  classes that the reset restored.
+- `jad` leaves a class file in the Arthas log directory of the JVM's user.
 - After an attach, Arthas classes such as `arthas-spy` stay loaded in the
   target JVM until the process exits.
 

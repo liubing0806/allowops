@@ -184,3 +184,88 @@ func TestBootID(t *testing.T) {
 		t.Error("a malformed boot id was accepted")
 	}
 }
+
+func (ht *hostTree) statusOf(pid int, cpus string) {
+	write(ht.t, filepath.Join(ht.base, "proc", fmt.Sprint(pid), "status"), "Name:\tjava\nCpus_allowed:\tf0000\nCpus_allowed_list:\t"+cpus+"\nMems_allowed_list:\t0\n")
+}
+
+func TestCPULimitCgroupV2(t *testing.T) {
+	ht, h := newHostTree(t)
+	ht.file("cgroup.controllers", "cpuset cpu io memory pids")
+	ht.statusOf(10, "0-15")
+	ht.cgroupOf(10, "0::/system.slice/docker-abc.scope\n")
+	ht.file("system.slice/docker-abc.scope/cpu.max", "250000 100000")
+	ht.file("system.slice/cpu.max", "max 100000")
+	got, err := h.CPULimit(10)
+	if err != nil || got != 2.5 {
+		t.Fatalf("CPULimit = %v, %v; want 2.5", got, err)
+	}
+	// A tighter parent wins.
+	ht.file("system.slice/cpu.max", "50000 100000")
+	if got, err := h.CPULimit(10); err != nil || got != 0.5 {
+		t.Errorf("CPULimit = %v, %v; want 0.5", got, err)
+	}
+}
+
+func TestCPULimitIsAtMostTheAffinity(t *testing.T) {
+	ht, h := newHostTree(t)
+	ht.file("cgroup.controllers", "cpuset cpu")
+	ht.statusOf(10, "16-19")
+	ht.cgroupOf(10, "0::/a\n")
+	ht.file("a/cpu.max", "800000 100000")
+	if got, err := h.CPULimit(10); err != nil || got != 4 {
+		t.Errorf("CPULimit = %v, %v; want 4 (cpuset 16-19)", got, err)
+	}
+	ht.statusOf(10, "0,2,4-5")
+	ht.file("a/cpu.max", "max 100000")
+	if got, err := h.CPULimit(10); err != nil || got != 4 {
+		t.Errorf("CPULimit = %v, %v; want 4 (0,2,4-5)", got, err)
+	}
+}
+
+func TestCPULimitCgroupV1(t *testing.T) {
+	ht, h := newHostTree(t)
+	ht.statusOf(10, "0-7")
+	ht.cgroupOf(10, "11:memory:/docker/abc\n4:cpu,cpuacct:/docker/abc\n3:cpuset:/docker/abc\n")
+	ht.file("cpu,cpuacct/docker/abc/cpu.cfs_quota_us", "150000")
+	ht.file("cpu,cpuacct/docker/abc/cpu.cfs_period_us", "100000")
+	ht.file("cpu,cpuacct/docker/cpu.cfs_quota_us", "-1")
+	ht.file("cpu,cpuacct/docker/cpu.cfs_period_us", "100000")
+	if got, err := h.CPULimit(10); err != nil || got != 1.5 {
+		t.Errorf("CPULimit = %v, %v; want 1.5", got, err)
+	}
+	ht.file("cpu,cpuacct/docker/abc/cpu.cfs_quota_us", "-1")
+	if got, err := h.CPULimit(10); err != nil || got != 8 {
+		t.Errorf("CPULimit = %v, %v; want 8 without a quota", got, err)
+	}
+}
+
+func TestCPULimitErrors(t *testing.T) {
+	ht, h := newHostTree(t)
+	ht.file("cgroup.controllers", "cpu")
+	if _, err := h.CPULimit(10); err == nil {
+		t.Error("no status file accepted")
+	}
+	for _, list := range []string{"", "a-b", "3-1", "0-70000", "1,,2"} {
+		ht.statusOf(10, list)
+		ht.cgroupOf(10, "0::/a\n")
+		if got, err := h.CPULimit(10); err == nil {
+			t.Errorf("Cpus_allowed_list %q accepted as %v", list, got)
+		}
+	}
+	ht.statusOf(10, "0-3")
+	for _, quota := range []string{"abc 100000", "0 100000", "100000", "100000 0"} {
+		ht.file("a/cpu.max", quota)
+		if got, err := h.CPULimit(10); err == nil {
+			t.Errorf("cpu.max %q accepted as %v", quota, got)
+		}
+	}
+	ht.file("a/cpu.max", "max 100000")
+	ht.cgroupOf(10, "0::a/../b\n")
+	if _, err := h.CPULimit(10); err == nil {
+		t.Error("relative cgroup path accepted")
+	}
+	if _, err := h.CPULimit(0); err == nil {
+		t.Error("pid 0 accepted")
+	}
+}

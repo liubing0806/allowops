@@ -3,6 +3,7 @@ package jvmarthas
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -38,8 +39,18 @@ type fakeServer struct {
 	actions  []string
 	// ignoreStop makes the stop command a no-op, so that the server keeps running.
 	ignoreStop bool
-	// onExec handles the exec of a command other than reset and stop; it returns true when it wrote the response.
+	// onExec handles the exec of a command other than reset, stop and options; it returns true when it wrote the response.
 	onExec func(w http.ResponseWriter, r *http.Request, command string) bool
+	// jobs are the scripted background jobs: every async_exec takes the next entry, the batches
+	// that the following pull_results requests return, with JOB replaced by the job ID.
+	jobs    [][][]string
+	pending [][]string
+	nextJob int
+	// resets are the class counts of the reset answers, in order; 0 when they run out, and no
+	// count for a negative entry.
+	resets []int
+	// interruptOK makes interrupt_job succeed, as it does while a job runs.
+	interruptOK bool
 }
 
 const versionReply = `{"state":"SUCCEEDED","sessionId":"sid-1","body":{"jobId":1,"jobStatus":"TERMINATED","timeExpired":false,` +
@@ -103,16 +114,17 @@ func (s *fakeServer) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	data, _ := io.ReadAll(r.Body)
 	var req struct {
-		Action    string `json:"action"`
-		Command   string `json:"command"`
-		SessionID string `json:"sessionId"`
+		Action     string `json:"action"`
+		Command    string `json:"command"`
+		SessionID  string `json:"sessionId"`
+		ConsumerID string `json:"consumerId"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	action := req.Action
-	if action == "exec" {
+	if action == "exec" || action == "async_exec" {
 		action += ":" + req.Command
 	}
 	s.mu.Lock()
@@ -125,15 +137,40 @@ func (s *fakeServer) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	switch req.Action {
 	case "init_session":
-		reply(`{"state":"SUCCEEDED","sessionId":"sid-1","body":{}}`)
+		reply(`{"state":"SUCCEEDED","sessionId":"sid-1","consumerId":"cid-1","body":{}}`)
 	case "interrupt_job":
+		s.mu.Lock()
+		ok := s.interruptOK
+		s.mu.Unlock()
+		if ok {
+			reply(`{"state":"SUCCEEDED","body":{"jobId":10,"jobStatus":"TERMINATED"}}`)
+			return
+		}
 		reply(`{"state":"FAILED","message":"no foreground job is running"}`)
+	case "async_exec":
+		reply(s.asyncExec())
+	case "pull_results":
+		if req.SessionID != "sid-1" || req.ConsumerID != "cid-1" {
+			http.Error(w, "pull_results without session and consumer", http.StatusBadRequest)
+			return
+		}
+		reply(s.pull())
 	case "close_session":
 		reply(`{"state":"SUCCEEDED"}`)
 	case "exec":
 		switch req.Command {
 		case "reset":
-			reply(`{"state":"SUCCEEDED","body":{"jobId":2,"jobStatus":"TERMINATED","results":[{"type":"reset","affect":{"classCount":0}},{"type":"status","statusCode":0}]}}`)
+			s.mu.Lock()
+			n := 0
+			if len(s.resets) > 0 {
+				n, s.resets = s.resets[0], s.resets[1:]
+			}
+			s.mu.Unlock()
+			affect := fmt.Sprintf(`{"classCount":%d}`, n)
+			if n < 0 {
+				affect = `{}`
+			}
+			reply(`{"state":"SUCCEEDED","body":{"jobId":2,"jobStatus":"TERMINATED","results":[{"type":"reset","affect":` + affect + `},{"type":"status","statusCode":0}]}}`)
 		case "stop":
 			if ignoreStop {
 				reply(`{"state":"SUCCEEDED","body":{"jobId":3,"jobStatus":"TERMINATED","results":[{"type":"status","statusCode":0}]}}`)
@@ -145,11 +182,49 @@ func (s *fakeServer) handle(w http.ResponseWriter, r *http.Request) {
 			if onExec != nil && onExec(w, r, req.Command) {
 				return
 			}
+			if words := strings.Fields(req.Command); len(words) == 3 && words[0] == "options" {
+				// Build sends only true, false and numbers, which are JSON values as they are.
+				reply(`{"state":"SUCCEEDED","sessionId":"sid-1","body":{"jobId":4,"jobStatus":"TERMINATED","results":[` +
+					`{"type":"options","jobId":4,"changeResult":{"name":"` + words[1] + `","beforeValue":null,"afterValue":` + words[2] + `}},` +
+					`{"type":"status","jobId":4,"statusCode":0}]}}`)
+				return
+			}
 			reply(versionReply)
 		}
 	default:
 		http.Error(w, "unexpected action "+req.Action, http.StatusBadRequest)
 	}
+}
+
+// asyncExec schedules the next scripted job.
+func (s *fakeServer) asyncExec() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.nextJob == len(s.jobs) {
+		s.t.Errorf("async_exec without a scripted job")
+		return `{"state":"FAILED","message":"no job"}`
+	}
+	id := 10 + s.nextJob
+	for _, batch := range s.jobs[s.nextJob] {
+		var out []string
+		for _, r := range batch {
+			out = append(out, strings.ReplaceAll(r, "JOB", strconv.Itoa(id)))
+		}
+		s.pending = append(s.pending, out)
+	}
+	s.nextJob++
+	return fmt.Sprintf(`{"state":"SCHEDULED","sessionId":"sid-1","body":{"jobId":%d,"jobStatus":"READY"}}`, id)
+}
+
+// pull returns the next batch of results, or none.
+func (s *fakeServer) pull() string {
+	s.mu.Lock()
+	var batch []string
+	if len(s.pending) > 0 {
+		batch, s.pending = s.pending[0], s.pending[1:]
+	}
+	s.mu.Unlock()
+	return `{"state":"SUCCEEDED","sessionId":"sid-1","consumerId":"cid-1","body":{"results":[` + strings.Join(batch, ",") + `]}}`
 }
 
 // drop closes the connection without a response, as Arthas does when it stops.
@@ -179,6 +254,8 @@ type rig struct {
 	sums       map[string]string
 	stateDir   string
 	failAttach bool
+	// request holds the arguments of the call.
+	request arthas.Request
 }
 
 func newRig(t *testing.T) *rig {
@@ -254,7 +331,7 @@ func (r *rig) agent() (string, map[string]string) {
 	return r.agentJar, r.agentOpts
 }
 
-func (r *rig) params() Params { return Params{Target: "api"} }
+func (r *rig) params() Params { return Params{Target: "api", Request: r.request} }
 
 func (r *rig) run(ctx context.Context) (Result, error) {
 	r.t.Helper()

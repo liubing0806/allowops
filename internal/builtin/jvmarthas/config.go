@@ -39,6 +39,10 @@ const (
 	DefaultMaxOldGenPercent = 85
 	DefaultNoFullGCWithin   = 60 * time.Second
 
+	// DefaultMaxCPUPercent is the CPU use of the JVM, in percent of its CPU limit, from which an
+	// L2 command is refused.
+	DefaultMaxCPUPercent = 50
+
 	DefaultExecTimeout = 10 * time.Second
 	DefaultHTTPPortMin = 18563
 	DefaultHTTPPortMax = 18662
@@ -62,8 +66,19 @@ type Config struct {
 	ExecTimeout              time.Duration
 	// SyspropKeys are the properties the sysprop command may read.
 	SyspropKeys []string
-	Checks      Checks
-	Guard       Guard
+	// ClassPrefixes are the package prefixes, each ending with a dot, that the class of an L2
+	// command must start with. Required for the L2 commands and not allowed for the others.
+	ClassPrefixes []string
+	// EnhanceDuration is how long the enhancement of watch, trace, stack and monitor lasts, in
+	// whole seconds; arthas.DefaultEnhance when zero, and it can only be shortened.
+	EnhanceDuration time.Duration
+	// MaxMethods is the most methods one enhancement may affect; arthas.DefaultMaxMethods when
+	// zero, and it can only be lowered.
+	MaxMethods int
+	// ObjectSizeLimit bounds one watch value, in bytes; arthas.DefaultObjectSizeLimit when zero.
+	ObjectSizeLimit int
+	Checks          Checks
+	Guard           Guard
 }
 
 // Checks are the thresholds of the checks before the attach.
@@ -84,6 +99,9 @@ type Checks struct {
 	MaxOldGenPercent int
 	// NoFullGCWithin refuses the call when a full collection ended within this time.
 	NoFullGCWithin time.Duration
+	// MaxCPUPercent refuses an L2 command when the JVM used this share of its CPU limit or more,
+	// measured over a few seconds before the attach.
+	MaxCPUPercent int
 }
 
 // Guard are the thresholds watched while the session is open. A zero value
@@ -144,6 +162,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	if err := c.validateSysprop(); err != nil {
+		return err
+	}
+	if err := c.validateL2(); err != nil {
 		return err
 	}
 	if err := c.Checks.validate(); err != nil {
@@ -236,6 +257,50 @@ func (c Config) validateSysprop() error {
 	return nil
 }
 
+// MaxClassPrefixes bounds class_prefixes.
+const MaxClassPrefixes = 32
+
+// validateL2 checks the settings of the L2 commands, and that none of them is set for a
+// command it does not apply to.
+func (c Config) validateL2() error {
+	kind := c.Command
+	l2, enhances := kind.Level() == 2, kind.Enhances()
+	switch {
+	case !l2 && len(c.ClassPrefixes) > 0:
+		return fmt.Errorf("class_prefixes applies to the L2 commands only, not to %s", kind)
+	case !l2 && c.Checks.MaxCPUPercent != 0:
+		return fmt.Errorf("checks.max_cpu_percent applies to the L2 commands only, not to %s", kind)
+	case !enhances && c.EnhanceDuration != 0:
+		return fmt.Errorf("enhance_duration applies to watch, trace, stack and monitor only, not to %s", kind)
+	case !enhances && c.MaxMethods != 0:
+		return fmt.Errorf("max_methods applies to watch, trace, stack and monitor only, not to %s", kind)
+	case kind != arthas.KindWatch && c.ObjectSizeLimit != 0:
+		return fmt.Errorf("object_size_limit applies to watch only, not to %s", kind)
+	}
+	if !l2 {
+		return nil
+	}
+	if len(c.ClassPrefixes) == 0 || len(c.ClassPrefixes) > MaxClassPrefixes {
+		return fmt.Errorf("class_prefixes must list 1 to %d package prefixes for %s", MaxClassPrefixes, kind)
+	}
+	for _, prefix := range c.ClassPrefixes {
+		if err := arthas.CheckClassPrefix(prefix); err != nil {
+			return fmt.Errorf("class_prefixes: %w", err)
+		}
+	}
+	switch d := c.EnhanceDuration; {
+	case d != 0 && (d < time.Second || d > arthas.MaxEnhance || d%time.Second != 0):
+		return fmt.Errorf("enhance_duration may only be shortened, to whole seconds between 1s and %s", arthas.MaxEnhance)
+	case kind == arthas.KindMonitor && d == time.Second:
+		return errors.New("enhance_duration of monitor must be at least 2s: one period of at least 1s has to end before the enhancement")
+	case c.MaxMethods != 0 && (c.MaxMethods < 1 || c.MaxMethods > arthas.DefaultMaxMethods):
+		return fmt.Errorf("max_methods may only be lowered, to between 1 and %d", arthas.DefaultMaxMethods)
+	case c.ObjectSizeLimit != 0 && (c.ObjectSizeLimit < arthas.MinObjectSizeLimit || c.ObjectSizeLimit > arthas.MaxObjectSizeLimit):
+		return fmt.Errorf("object_size_limit must be between %d and %d bytes", arthas.MinObjectSizeLimit, arthas.MaxObjectSizeLimit)
+	}
+	return nil
+}
+
 func (k Checks) validate() error {
 	switch {
 	case k.MinMemoryHeadroom != 0 && k.MinMemoryHeadroom < DefaultMinMemoryHeadroom:
@@ -252,6 +317,8 @@ func (k Checks) validate() error {
 		return fmt.Errorf("checks.max_old_gen_percent may only be lowered, to between 1 and %d", DefaultMaxOldGenPercent)
 	case k.NoFullGCWithin != 0 && (k.NoFullGCWithin < DefaultNoFullGCWithin || k.NoFullGCWithin > 24*time.Hour):
 		return fmt.Errorf("checks.no_full_gc_within may only be raised above %s (at most 24h)", DefaultNoFullGCWithin)
+	case k.MaxCPUPercent != 0 && (k.MaxCPUPercent < 1 || k.MaxCPUPercent > DefaultMaxCPUPercent):
+		return fmt.Errorf("checks.max_cpu_percent may only be lowered, to between 1 and %d", DefaultMaxCPUPercent)
 	}
 	return nil
 }
@@ -329,6 +396,22 @@ func (c Config) Effective() Config {
 	}
 	if k.NoFullGCWithin == 0 {
 		k.NoFullGCWithin = DefaultNoFullGCWithin
+	}
+	// The L2 settings get their defaults only where they apply, so that the result still
+	// passes Validate.
+	if c.Command.Level() == 2 && k.MaxCPUPercent == 0 {
+		k.MaxCPUPercent = DefaultMaxCPUPercent
+	}
+	if c.Command.Enhances() {
+		if c.EnhanceDuration == 0 {
+			c.EnhanceDuration = arthas.DefaultEnhance
+		}
+		if c.MaxMethods == 0 {
+			c.MaxMethods = arthas.DefaultMaxMethods
+		}
+	}
+	if c.Command == arthas.KindWatch && c.ObjectSizeLimit == 0 {
+		c.ObjectSizeLimit = arthas.DefaultObjectSizeLimit
 	}
 	if c.Guard.Health != nil {
 		h := *c.Guard.Health

@@ -58,6 +58,9 @@ type Host interface {
 	StartTime(pid int) (uint64, error)
 	// CPUTicks is the user and system CPU time of the process in clock ticks.
 	CPUTicks(pid int) (uint64, error)
+	// CPULimit is the number of CPUs the process may use: its cgroup CPU quota, at most the
+	// number of CPUs it may run on.
+	CPULimit(pid int) (float64, error)
 	// MemoryHeadroom is the number of bytes the process's cgroup can still allocate:
 	// the smallest limit of the cgroup and its parents minus the usage there. Without a
 	// limit it is the available memory of the host.
@@ -90,6 +93,11 @@ type Env struct {
 	ListenWait time.Duration
 	// AttachSettle is how long a failed attach is watched for a server that started anyway.
 	AttachSettle time.Duration
+	// CPUWindow is how long the CPU use of the JVM is measured before an L2 command.
+	CPUWindow time.Duration
+	// JobGrace is how long the job of an enhancing command may run past the end of its
+	// enhancement before the call reports a timeout.
+	JobGrace time.Duration
 	// Arch is the architecture of this host as GOARCH names it; the architecture of the build when empty.
 	Arch string
 	// Probe sends the health request of the run-time guard and returns nil when the target answered well.

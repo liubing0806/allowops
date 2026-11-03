@@ -216,3 +216,132 @@ func (h *procHost) availableMemory() (int64, error) {
 	}
 	return 0, fmt.Errorf("no MemAvailable in %s", h.meminfo)
 }
+
+// CPULimit returns the number of CPUs the process may use: the smallest quota of its cpu cgroup
+// and the parents (cpu.max in cgroup v2, cpu.cfs_quota_us / cpu.cfs_period_us in v1), and at
+// most the number of CPUs it may run on (Cpus_allowed_list of /proc/<pid>/status).
+func (h *procHost) CPULimit(pid int) (float64, error) {
+	if pid <= 0 {
+		return 0, fmt.Errorf("invalid pid %d", pid)
+	}
+	status, err := readSmallFile(filepath.Join(h.proc.Root, strconv.Itoa(pid), "status"))
+	if err != nil {
+		return 0, err
+	}
+	cpus, err := allowedCPUs(status)
+	if err != nil {
+		return 0, err
+	}
+	limit := float64(cpus)
+	data, err := readSmallFile(filepath.Join(h.proc.Root, strconv.Itoa(pid), "cgroup"))
+	if err != nil {
+		return 0, err
+	}
+	_, statErr := os.Stat(filepath.Join(h.cgroupRoot, "cgroup.controllers"))
+	unified := statErr == nil
+	var base, group string
+	for _, line := range strings.Split(data, "\n") {
+		parts := strings.SplitN(line, ":", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		switch {
+		case unified && parts[0] == "0" && parts[1] == "":
+			base, group = h.cgroupRoot, parts[2]
+		case !unified && slices.Contains(strings.Split(parts[1], ","), "cpu"):
+			// The hierarchy is mounted under the list of its controllers, such as cpu,cpuacct.
+			base, group = filepath.Join(h.cgroupRoot, parts[1]), parts[2]
+		}
+	}
+	if group == "" {
+		return limit, nil // no cpu controller: the affinity is the limit
+	}
+	if !path.IsAbs(group) || path.Clean(group) != group {
+		return 0, fmt.Errorf("unexpected cgroup path %q", group)
+	}
+	for dir := group; ; dir = path.Dir(dir) {
+		quota, limited, err := cgroupCPUQuota(filepath.Join(base, filepath.FromSlash(dir)), unified)
+		if err != nil {
+			return 0, err
+		}
+		if limited && quota < limit {
+			limit = quota
+		}
+		if dir == "/" {
+			break
+		}
+	}
+	return limit, nil
+}
+
+// cgroupCPUQuota returns the CPUs that the quota of one cgroup directory allows. A directory
+// without the quota file, or with no quota set, has no limit of its own.
+func cgroupCPUQuota(dir string, unified bool) (cpus float64, limited bool, err error) {
+	var quotaText, periodText string
+	if unified {
+		text, err := readSmallFile(filepath.Join(dir, "cpu.max"))
+		if errors.Is(err, fs.ErrNotExist) {
+			return 0, false, nil
+		}
+		if err != nil {
+			return 0, false, err
+		}
+		fields := strings.Fields(text)
+		if len(fields) != 2 {
+			return 0, false, fmt.Errorf("malformed cpu.max in %s", dir)
+		}
+		quotaText, periodText = fields[0], fields[1]
+		if quotaText == "max" {
+			return 0, false, nil
+		}
+	} else {
+		text, err := readSmallFile(filepath.Join(dir, "cpu.cfs_quota_us"))
+		if errors.Is(err, fs.ErrNotExist) {
+			return 0, false, nil
+		}
+		if err != nil {
+			return 0, false, err
+		}
+		if quotaText = strings.TrimSpace(text); quotaText == "-1" {
+			return 0, false, nil
+		}
+		if periodText, err = readSmallFile(filepath.Join(dir, "cpu.cfs_period_us")); err != nil {
+			return 0, false, err
+		}
+	}
+	quota, err1 := strconv.ParseInt(quotaText, 10, 64)
+	period, err2 := strconv.ParseInt(strings.TrimSpace(periodText), 10, 64)
+	if err1 != nil || err2 != nil || quota <= 0 || period <= 0 {
+		return 0, false, fmt.Errorf("malformed CPU quota in %s", dir)
+	}
+	return float64(quota) / float64(period), true, nil
+}
+
+// maxCPUs bounds the CPU numbers read from an affinity list.
+const maxCPUs = 1 << 16
+
+// allowedCPUs counts the CPUs of the Cpus_allowed_list line of /proc/<pid>/status, such as
+// "0-3,8,10-11".
+func allowedCPUs(status string) (int, error) {
+	for _, line := range strings.Split(status, "\n") {
+		list, ok := strings.CutPrefix(line, "Cpus_allowed_list:")
+		if !ok {
+			continue
+		}
+		n := 0
+		for _, part := range strings.Split(strings.TrimSpace(list), ",") {
+			lo, hi, isRange := strings.Cut(part, "-")
+			if !isRange {
+				hi = lo
+			}
+			a, err1 := strconv.Atoi(lo)
+			b, err2 := strconv.Atoi(hi)
+			if err1 != nil || err2 != nil || a < 0 || b < a || b >= maxCPUs {
+				return 0, fmt.Errorf("malformed Cpus_allowed_list %q", strings.TrimSpace(list))
+			}
+			n += b - a + 1
+		}
+		return n, nil
+	}
+	return 0, errors.New("no Cpus_allowed_list in the process status")
+}

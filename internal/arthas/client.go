@@ -202,14 +202,16 @@ type apiRequest struct {
 	Action      string `json:"action"`
 	Command     string `json:"command,omitempty"`
 	SessionID   string `json:"sessionId,omitempty"`
+	ConsumerID  string `json:"consumerId,omitempty"`
 	ExecTimeout int    `json:"execTimeout,omitempty"`
 }
 
 type apiResponse struct {
-	State     string          `json:"state"`
-	Message   string          `json:"message"`
-	SessionID string          `json:"sessionId"`
-	Body      json.RawMessage `json:"body"`
+	State      string          `json:"state"`
+	Message    string          `json:"message"`
+	SessionID  string          `json:"sessionId"`
+	ConsumerID string          `json:"consumerId"`
+	Body       json.RawMessage `json:"body"`
 }
 
 type execBody struct {
@@ -412,4 +414,77 @@ func (c *Client) CloseSession(ctx context.Context, sessionID string) error {
 	}
 	_, err := c.call(ctx, c.cfg.RequestTimeout, apiRequest{Action: "close_session", SessionID: sessionID})
 	return err
+}
+
+// Session is an Arthas session together with the consumer that receives the results of its
+// asynchronous jobs.
+type Session struct {
+	ID         string
+	ConsumerID string
+}
+
+// OpenSession creates a session like InitSession and also returns the ID of its result consumer,
+// which PullResults needs.
+func (c *Client) OpenSession(ctx context.Context) (Session, error) {
+	resp, err := c.call(ctx, c.cfg.RequestTimeout, apiRequest{Action: "init_session"})
+	if err != nil {
+		return Session{}, err
+	}
+	if resp.SessionID == "" || resp.ConsumerID == "" {
+		return Session{}, errors.New("arthas init_session: response has no session or consumer ID")
+	}
+	return Session{ID: resp.SessionID, ConsumerID: resp.ConsumerID}, nil
+}
+
+// AsyncExec starts a command built by Build in the session and returns the ID of its job without
+// waiting for it. The results arrive through PullResults; the last one of the job is a status
+// result.
+//
+// Arthas does not apply execTimeout to an asynchronous job: the job ends by itself, when it is
+// interrupted or when its session is closed. Build gives every command that runs as a job a limit
+// of its own (--timeout, -n).
+func (c *Client) AsyncExec(ctx context.Context, s Session, cmd Command) (int, error) {
+	if !cmd.built || cmd.Text == "" {
+		return 0, errors.New("arthas: AsyncExec accepts only commands returned by Build")
+	}
+	if s.ID == "" {
+		return 0, errors.New("arthas: async_exec needs a session ID")
+	}
+	req := apiRequest{Action: "async_exec", Command: cmd.Text, SessionID: s.ID}
+	resp, err := c.roundTrip(ctx, c.cfg.RequestTimeout, req)
+	if err != nil {
+		return 0, err
+	}
+	if resp.State != "SCHEDULED" {
+		return 0, &StateError{Action: req.Action, State: resp.State, Message: resp.Message}
+	}
+	var body struct {
+		JobID int `json:"jobId"`
+	}
+	if err := json.Unmarshal(resp.Body, &body); err != nil || body.JobID <= 0 {
+		return 0, errors.New("arthas async_exec: response has no job ID")
+	}
+	return body.JobID, nil
+}
+
+// PullResults returns the results that arrived for the consumer of the session since the last
+// call. Arthas holds the request for up to two seconds while no result arrives, and returns at
+// most 20 results at a time.
+func (c *Client) PullResults(ctx context.Context, s Session) ([]Result, error) {
+	if s.ID == "" || s.ConsumerID == "" {
+		return nil, errors.New("arthas: pull_results needs a session and a consumer ID")
+	}
+	resp, err := c.call(ctx, c.cfg.RequestTimeout, apiRequest{Action: "pull_results", SessionID: s.ID, ConsumerID: s.ConsumerID})
+	if err != nil {
+		return nil, err
+	}
+	var body struct {
+		Results []Result `json:"results"`
+	}
+	if len(resp.Body) > 0 {
+		if err := json.Unmarshal(resp.Body, &body); err != nil {
+			return nil, fmt.Errorf("arthas pull_results: decode body: %w", err)
+		}
+	}
+	return body.Results, nil
 }

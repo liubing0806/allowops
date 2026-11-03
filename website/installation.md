@@ -291,6 +291,12 @@ installation with:
 cd /usr/share/allowops/arthas/4.3.5 && sha256sum --check --strict SHA256SUMS
 ```
 
+The L2 command `jad` makes the JVM write the class file that it decompiles to
+`<Arthas log directory>/classdump/` in the JVM's own filesystem. The default log
+directory is `~/logs/arthas` of the JVM user, and the file is owned by that user.
+Neither Arthas nor allowops deletes the file. `jad` fails when the directory is
+not writable.
+
 ### Containers
 
 A JVM can load only files that exist in its own container filesystem. For a

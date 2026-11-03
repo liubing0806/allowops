@@ -136,7 +136,7 @@ func recoverKey(ctx context.Context, env Env, state *State, boot string, key Key
 	if !serverPresent(env, proc, rec.Port) {
 		return stale, state.RemoveRecord(key)
 	}
-	res := shutdown(ctx, env, proc, rec.Port, newClient(proc, rec.Port, rec.Password), rec.SessionID)
+	res := shutdown(ctx, env, proc, rec.Port, newClient(proc, rec.Port, rec.Password), rec.SessionID, false)
 	if !res.stopped {
 		return nothing, fmt.Errorf("the Arthas server on port %d of process %d is still running: %s", rec.Port, rec.PID, res.problem())
 	}

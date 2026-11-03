@@ -1,0 +1,40 @@
+# Usage: target=<name of an entry in builtin_config.targets>. class=<binary name that starts with an entry of class_prefixes, no wildcards>.
+# method=<name, no wildcards>. [count=<1-5, default 1>] [min_cost_ms=<1-3600000>, only calls slower than this are shown].
+# Attaches the Arthas agent to the JVM and runs
+# `trace <class> <method> [#cost><min_cost_ms>] -n <count> -m 1 --timeout <enhance_duration seconds>`, which ends after about count
+# results or after enhance_duration (default 30s); then resets the enhancement and shuts the agent down.
+# The enhancement changes the bytecode of the method until the reset, so the action has risk write and is authorized apart from the
+# L1 actions (see examples/policy/java-diagnostics.yaml). The call is refused when the JVM used 50% or more of its CPU limit over 5 seconds,
+# has too little memory left or has been attached too often; it fails when the method matches more than one class or more than
+# max_methods methods. The output starts with a `# call` section (status, check, attach number, CPU before the attach, affected classes
+# and methods, enhanced classes after the reset, clean-up result); the trace output follows, with secrets and personal data redacted.
+name: jvm_arthas_trace
+description: Trace the calls made inside one method of a class in an allowlisted JVM, with the time spent in each, through the Arthas agent, for at most count calls within 30 seconds. The whole JVM responds more slowly for 1 to 4 seconds after the enhancement starts. A call takes about 10 to 15 seconds when count matching calls happen soon after the enhancement starts, and 40 to 50 seconds (the enhancement time plus the attach and the clean-up) when fewer happen; pass wait_seconds=90 or read the job with jobs_get.
+risk: write
+run_as: root
+idempotent: false
+params: {}
+builtin: jvm_arthas
+builtin_config:
+  command: trace
+  targets:
+    api:
+      systemd_unit: api.service
+    shop-web:
+      container: shop-web
+      main_class: com.example.shop.Main
+  sha256:
+    arthas-agent.jar: b5bf8765c7621849889fb6522a296fa177ceb3f5c2c2b6d9f631d761ca9c04f9
+    arthas-core.jar: 7cbc3dc36ec29e96ae044845ad6b690b790a800e45d0694fcfbe90c9725de813
+    arthas-spy.jar: d11cfc1cee83eb46501d5b9719ea49117db2a9e7cbdab9e83e376716255380a6
+    arthas.properties: a507ed264d99387b6e1717f8ad6f257dba79de983f5b6617a8c63e38975acec1
+    logback.xml: e038b9c097cf0fe801483c65871565f6d120c1365c4d55b65666b05d533f7445
+  class_prefixes: [com.example.]
+timeout: 90s
+max_output: 128KB
+filters: [match, exclude, tail, head, count]
+redact:
+  builtin: [secrets, pii]
+batch_size: 1
+max_failures: 1
+max_targets: 1

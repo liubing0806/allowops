@@ -14,6 +14,7 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin/jvmarthas"
 	"github.com/liubing0806/allowops/internal/jvmtarget"
 	"github.com/liubing0806/allowops/internal/params"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 const arthasSum = "b5bf8765c7621849889fb6522a296fa177ceb3f5c2c2b6d9f631d761ca9c04f9"
@@ -39,10 +40,15 @@ func jvmArthasAction(command string) Action {
 	if command == "sysprop" {
 		cfg["sysprop_keys"] = []any{"user.timezone", "java.version"}
 	}
-	return Action{
+	a := Action{
 		Name: "jvm_arthas_" + command, Description: "Arthas " + command, Risk: "write", RunAs: "root", Idempotent: &no,
 		Builtin: "jvm_arthas", BuiltinConfig: cfg, Timeout: "90s", MaxOutput: 65536, BatchSize: 1, MaxFailures: &one, MaxTargets: &one,
 	}
+	if arthas.Kind(command).Level() == 2 {
+		cfg["class_prefixes"] = []any{"com.example.", "demo."}
+		a.Redact = &redact.Config{Builtin: []string{"secrets", "pii"}}
+	}
+	return a
 }
 
 func TestJVMArthasIsRegisteredForEveryCommand(t *testing.T) {
@@ -67,15 +73,17 @@ func TestJVMArthasConfigRejects(t *testing.T) {
 		return map[string]any{"health_check": h}
 	}
 	cases := map[string]func(map[string]any){
-		"unknown field":        func(c map[string]any) { c["pid"] = 1 },
-		"unknown check":        func(c map[string]any) { c["checks"] = map[string]any{"max_pid": 1} },
-		"unknown guard field":  func(c map[string]any) { c["guard"] = map[string]any{"kill": true} },
-		"unknown command":      func(c map[string]any) { c["command"] = "ognl" },
-		"watch is not L1":      func(c map[string]any) { c["command"] = "watch" },
-		"logger is paused":     func(c map[string]any) { c["command"] = "logger" },
-		"missing command":      func(c map[string]any) { delete(c, "command") },
-		"command not a string": func(c map[string]any) { c["command"] = 1 },
-		"missing targets":      func(c map[string]any) { delete(c, "targets") },
+		"unknown field":                func(c map[string]any) { c["pid"] = 1 },
+		"unknown check":                func(c map[string]any) { c["checks"] = map[string]any{"max_pid": 1} },
+		"unknown guard field":          func(c map[string]any) { c["guard"] = map[string]any{"kill": true} },
+		"unknown command":              func(c map[string]any) { c["command"] = "ognl" },
+		"watch without class prefixes": func(c map[string]any) { c["command"] = "watch" },
+		"class prefixes for L1":        func(c map[string]any) { c["class_prefixes"] = []any{"com.example."} },
+		"cpu share for L1":             func(c map[string]any) { c["checks"] = map[string]any{"max_cpu_percent": 10} },
+		"logger is paused":             func(c map[string]any) { c["command"] = "logger" },
+		"missing command":              func(c map[string]any) { delete(c, "command") },
+		"command not a string":         func(c map[string]any) { c["command"] = 1 },
+		"missing targets":              func(c map[string]any) { delete(c, "targets") },
 		"pid in a target": func(c map[string]any) {
 			c["targets"] = map[string]any{"api": map[string]any{"systemd_unit": "api.service", "pid": 1}}
 		},
@@ -239,6 +247,14 @@ func TestJVMArthasActionFieldRules(t *testing.T) {
 
 const classPattern = `^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$`
 
+var (
+	l2One     = int64(1)
+	l2Class   = params.Definition{Type: params.String, Regex: classPattern, MaxLen: 255}
+	l2Method  = params.Definition{Type: params.String, Regex: `^[A-Za-z_$][A-Za-z0-9_$]*$`, MaxLen: 255}
+	l2Count   = params.Definition{Type: params.Int, Min: &l2One, Max: int64(5), Default: int64(1)}
+	l2MinCost = params.Definition{Type: params.Int, Min: &l2One, Max: int64(3600000), Optional: true}
+)
+
 func TestJVMArthasParametersPerCommand(t *testing.T) {
 	one := int64(1)
 	target := params.Definition{Type: params.Enum, Description: "JVM target from the action's allowlist", Values: []string{"api", "web"}}
@@ -255,6 +271,13 @@ func TestJVMArthasParametersPerCommand(t *testing.T) {
 		arthas.KindClassInfo:       {"class": {Type: params.String, Regex: classPattern, MaxLen: 255}},
 		arthas.KindMethodInfo:      {"class": {Type: params.String, Regex: classPattern, MaxLen: 255}, "method": {Type: params.String, Regex: `^[A-Za-z_$][A-Za-z0-9_$]*$`, MaxLen: 255, Optional: true}},
 		arthas.KindSysprop:         {"key": {Type: params.Enum, Values: []string{"java.version", "user.timezone"}}},
+		arthas.KindWatch: {"class": l2Class, "method": l2Method, "count": l2Count, "min_cost_ms": l2MinCost,
+			"express": {Type: params.Enum, Values: arthas.WatchExpressions(), Default: "params,returnObj"},
+			"expand":  {Type: params.Int, Min: &one, Max: int64(2), Default: int64(1)}},
+		arthas.KindTrace:   {"class": l2Class, "method": l2Method, "count": l2Count, "min_cost_ms": l2MinCost},
+		arthas.KindStack:   {"class": l2Class, "method": l2Method, "count": l2Count, "min_cost_ms": l2MinCost},
+		arthas.KindMonitor: {"class": l2Class, "method": l2Method, "count": l2Count, "min_cost_ms": l2MinCost, "cycle": {Type: params.Int, Min: &one, Max: int64(29)}},
+		arthas.KindJad:     {"class": l2Class, "method": {Type: params.String, Regex: `^[A-Za-z_$][A-Za-z0-9_$]*$`, MaxLen: 255, Optional: true}},
 	}
 	for _, kind := range arthas.Kinds() {
 		want, ok := cases[kind]
@@ -422,6 +445,12 @@ func TestJVMArthasRunMapsConfigParametersAndResult(t *testing.T) {
 		arthas.KindClassInfo:  {map[string]any{"target": "api", "class": "a.B"}, arthas.Request{Class: "a.B"}},
 		arthas.KindMethodInfo: {map[string]any{"target": "api", "class": "a.B", "method": "run"}, arthas.Request{Class: "a.B", Method: "run"}},
 		arthas.KindSysprop:    {map[string]any{"target": "api", "key": "java.version"}, arthas.Request{Key: "java.version"}},
+		arthas.KindWatch: {map[string]any{"target": "api", "class": "demo.A", "method": "run", "express": "returnObj", "expand": int64(2), "count": int64(3), "min_cost_ms": int64(50)},
+			arthas.Request{Class: "demo.A", Method: "run", Express: "returnObj", Expand: 2, Count: 3, MinCost: 50}},
+		arthas.KindTrace:   {map[string]any{"target": "api", "class": "demo.A", "method": "run", "count": int64(1)}, arthas.Request{Class: "demo.A", Method: "run", Count: 1}},
+		arthas.KindStack:   {map[string]any{"target": "api", "class": "demo.A", "method": "run", "count": int64(5)}, arthas.Request{Class: "demo.A", Method: "run", Count: 5}},
+		arthas.KindMonitor: {map[string]any{"target": "api", "class": "demo.A", "method": "run", "count": int64(2), "cycle": int64(10)}, arthas.Request{Class: "demo.A", Method: "run", Count: 2, Cycle: 10}},
+		arthas.KindJad:     {map[string]any{"target": "api", "class": "demo.A"}, arthas.Request{Class: "demo.A"}},
 	}
 	for kind, tc := range cases {
 		a := jvmArthasAction(string(kind))

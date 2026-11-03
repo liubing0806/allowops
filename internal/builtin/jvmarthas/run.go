@@ -8,6 +8,7 @@ import (
 	"net"
 	"path"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -56,6 +57,10 @@ const (
 	defaultSampleEvery  = time.Second
 	defaultListenWait   = 10 * time.Second
 	defaultAttachSettle = 3 * time.Second
+	defaultCPUWindow    = 5 * time.Second
+	// defaultJobGrace covers the end of a job after its enhancement: Arthas ends the job when
+	// --timeout expires, and the last results still have to be read.
+	defaultJobGrace = 10 * time.Second
 )
 
 func (e Env) withDefaults() Env {
@@ -79,6 +84,12 @@ func (e Env) withDefaults() Env {
 	}
 	if e.AttachSettle <= 0 {
 		e.AttachSettle = defaultAttachSettle
+	}
+	if e.CPUWindow <= 0 {
+		e.CPUWindow = defaultCPUWindow
+	}
+	if e.JobGrace <= 0 {
+		e.JobGrace = defaultJobGrace
 	}
 	if e.Arch == "" {
 		e.Arch = runtime.GOARCH
@@ -116,7 +127,10 @@ func RunWith(ctx context.Context, env Env, cfg Config, p Params, mask func(strin
 	eff := cfg.Effective()
 	req := p.Request
 	req.Kind = eff.Command
-	cmd, err := arthas.Build(req, arthas.Policy{SyspropKeys: eff.SyspropKeys, ExecTimeout: eff.ExecTimeout})
+	cmd, err := arthas.Build(req, arthas.Policy{
+		SyspropKeys: eff.SyspropKeys, ExecTimeout: eff.ExecTimeout, ClassPrefixes: eff.ClassPrefixes,
+		Enhance: eff.EnhanceDuration, MaxMethods: eff.MaxMethods, ObjectSizeLimit: eff.ObjectSizeLimit,
+	})
 	if err != nil {
 		return failure(mask, "%v", err), nil
 	}
@@ -144,6 +158,11 @@ type report struct {
 	cleanup         string
 	cleanupFailed   bool
 	body            string
+	// cpuBefore, affect and enhanced are the rows of the L2 commands: the CPU use before the
+	// attach, the enhancer result, and the classes left enhanced after the clean-up.
+	cpuBefore string
+	affect    string
+	enhanced  string
 }
 
 func (r *report) result(mask func(string) string) Result {
@@ -162,8 +181,11 @@ func (r *report) result(mask func(string) string) Result {
 	row("status", r.status)
 	row("check", r.check)
 	row("reason", r.reason)
+	row("cpu_before", r.cpuBefore)
 	row("attach", r.attach)
+	row("affect", r.affect)
 	row("earlier_sessions", r.earlier)
+	row("enhanced_classes", r.enhanced)
 	row("cleanup", r.cleanup)
 	if r.body != "" {
 		b.WriteString("\n" + r.body)
@@ -392,6 +414,19 @@ func (c *call) prepare(ctx context.Context, state *State, proc *Process, key Key
 		c.refuse(StatusRefused, CheckPortRange, "%v", err)
 		return
 	}
+	// The CPU check comes last: it takes a few seconds, which should end right before the attach.
+	if slices.Contains(c.cmd.PreChecks, arthas.PreCheckCPU) {
+		row, r, err := checkCPU(ctx, c.env, c.cfg, proc.PID)
+		c.rep.cpuBefore = row
+		if err != nil {
+			c.interrupted(ctx)
+			return
+		}
+		if r != nil {
+			c.refuse(StatusRefused, r.Check, "%s", r.Reason)
+			return
+		}
+	}
 	password, err := c.env.NewPassword()
 	if err != nil {
 		c.fail("password: %v", err)
@@ -399,7 +434,7 @@ func (c *call) prepare(ctx context.Context, state *State, proc *Process, key Key
 	}
 	agent := arthas.AgentConfig{
 		AgentJar: path.Join(c.cfg.ArthasDir, "arthas-agent.jar"), CoreJar: path.Join(c.cfg.ArthasDir, "arthas-core.jar"),
-		HTTPPort: port, Password: password, Enabled: []string{c.cmd.Name}, SessionTimeout: c.cmd.ExecTimeout + sessionSlack,
+		HTTPPort: port, Password: password, Enabled: c.cmd.Enabled(), SessionTimeout: c.cmd.ExecTimeout + c.cmd.Enhance + sessionSlack,
 	}
 	arg, err := agent.Argument()
 	if err != nil {
@@ -411,7 +446,7 @@ func (c *call) prepare(ctx context.Context, state *State, proc *Process, key Key
 	now := c.env.Now()
 	rec := Record{
 		Version: recordVersion, BootID: key.BootID, PID: key.PID, StartTime: key.StartTime, Target: c.target.Name,
-		Command: string(c.cmd.Kind), Port: port, Password: password, Created: now, Deadline: now.Add(c.cmd.ExecTimeout + recordLifetime),
+		Command: string(c.cmd.Kind), Port: port, Password: password, Created: now, Deadline: now.Add(c.cmd.ExecTimeout + c.cmd.Enhance + recordLifetime),
 	}
 	if err := state.WriteRecord(rec); err != nil {
 		c.fail("session record: %v", err)
@@ -450,7 +485,10 @@ func (c *call) serve(ctx context.Context, state *State, proc *Process, rec Recor
 		state.RemoveRecord(key)
 		return
 	}
-	sd := shutdown(ctx, c.env, proc, rec.Port, client, out.session)
+	sd := shutdown(ctx, c.env, proc, rec.Port, client, out.session, c.cmd.Level == 2)
+	if c.cmd.Level == 2 {
+		c.confirmReset(sd)
+	}
 	switch {
 	case !sd.stopped:
 		// The record stays: the next call, or the start of the agent, ends the server.
@@ -489,11 +527,24 @@ func (c *call) attachAndRun(ctx context.Context, state *State, proc *Process, cl
 	if err != nil {
 		return outcome{status: StatusFailed, reason: err.Error(), mayExist: true}
 	}
-	rec.SessionID = session
+	rec.SessionID = session.ID
 	if err := state.WriteRecord(*rec); err != nil {
-		return outcome{status: StatusFailed, reason: "session record: " + err.Error(), session: session, mayExist: true}
+		return outcome{status: StatusFailed, reason: "session record: " + err.Error(), session: session.ID, mayExist: true}
 	}
-	return c.command(ctx, proc, client, session)
+	if c.cmd.Enhance > 0 {
+		return c.job(ctx, proc, client, session)
+	}
+	return c.command(ctx, proc, client, session.ID)
+}
+
+// guardConfig returns the thresholds of the guard. For an L2 command the settle time is at least
+// DefaultSettle: the first seconds of an enhancement raise the CPU use of the JVM (plan 3.3).
+func (c *call) guardConfig() Guard {
+	g := c.cfg.Guard
+	if c.cmd.Level == 2 && g.Settle < DefaultSettle {
+		g.Settle = DefaultSettle
+	}
+	return g
 }
 
 // command runs the command while the guard watches the process. When the guard trips, the
@@ -503,7 +554,7 @@ func (c *call) command(ctx context.Context, proc *Process, client *arthas.Client
 	defer cancel()
 	aborted := make(chan *Abort, 1)
 	go func() {
-		abort := watch(execCtx, c.env, c.cfg.Guard, proc, c.env.Now())
+		abort := watch(execCtx, c.env, c.guardConfig(), proc, c.env.Now())
 		if abort != nil {
 			cancel()
 		}
@@ -544,6 +595,111 @@ func (c *call) command(ctx context.Context, proc *Process, client *arthas.Client
 	return out
 }
 
+// job runs an enhancing command: its setup commands, then the command as a background job, while
+// the guard watches the process from the start of the enhancement. RunJob returns as soon as the
+// enhancer result is outside the limits of the command; the clean-up then interrupts the job and
+// resets the class.
+func (c *call) job(ctx context.Context, proc *Process, client *arthas.Client, s arthas.Session) outcome {
+	out := outcome{session: s.ID, mayExist: true}
+	if err := client.Setup(ctx, s.ID, c.cmd); err != nil {
+		out.status, out.reason = StatusFailed, "setup: "+err.Error()
+		return out
+	}
+	jobCtx, cancel := context.WithTimeout(ctx, c.cmd.Enhance+c.env.JobGrace)
+	defer cancel()
+	aborted := make(chan *Abort, 1)
+	go func() {
+		abort := watch(jobCtx, c.env, c.guardConfig(), proc, c.env.Now())
+		if abort != nil {
+			cancel()
+		}
+		aborted <- abort
+	}()
+	job, err := client.RunJob(jobCtx, s, c.cmd)
+	timedOut := err != nil && errors.Is(ctxErr(jobCtx), context.DeadlineExceeded)
+	cancel()
+	abort := <-aborted
+	if job != nil && job.Affect != nil {
+		c.rep.affect = job.Affect.String()
+	}
+	var affect *arthas.AffectError
+	switch {
+	case abort != nil:
+		out.status, out.check, out.reason = StatusAborted, abort.Check, abort.Detail
+		out.body = c.partial(job)
+	case errors.As(err, &affect):
+		out.status, out.check, out.reason = StatusFailed, CheckAffect, affect.Reason
+	case timedOut:
+		out.status = StatusTimeout
+		out.reason = fmt.Sprintf("the job did not end within %s of the start of the enhancement", c.cmd.Enhance+c.env.JobGrace)
+		out.body = c.partial(job)
+	case err != nil:
+		out.status, out.reason = StatusFailed, err.Error()
+	default:
+		if job.Affect == nil {
+			// The n-th result ended the job before Arthas added the enhancer result, which Arthas
+			// then drops (EnhancerCommand.enhance, ProcessImpl.appendResult). The reset count of
+			// the clean-up still tells how many classes were enhanced.
+			c.rep.affect = "not reported: the job ended before Arthas reported the enhancement"
+		}
+		text, err := arthas.Render(c.cmd.Kind, job.Response())
+		if err != nil {
+			out.status, out.reason = StatusFailed, err.Error()
+		} else {
+			out.status, out.body = StatusOK, text
+		}
+	}
+	return out
+}
+
+// partial renders the results a job produced before it was stopped.
+func (c *call) partial(job *arthas.Job) string {
+	if job == nil || len(job.Results) == 0 {
+		return ""
+	}
+	partial := *job
+	partial.Ended = false
+	text, err := arthas.Render(c.cmd.Kind, partial.Response())
+	if err != nil {
+		return ""
+	}
+	return text
+}
+
+// confirmReset writes the enhanced_classes row of an L2 command. A call that would be ok fails
+// when the clean-up cannot confirm that no class stays enhanced, or when an enhancing command
+// enhanced more than one class.
+func (c *call) confirmReset(sd shutdownResult) {
+	restored := "an unknown number of classes"
+	if sd.restored >= 0 {
+		restored = strconv.Itoa(sd.restored)
+	}
+	switch {
+	case sd.left < 0:
+		reason := "no confirming reset"
+		if sd.leftErr != nil {
+			reason = sd.leftErr.Error()
+		}
+		c.rep.enhanced = "unconfirmed: " + reason
+		c.failIfOK(CheckEnhancedClasses, "the clean-up could not confirm that no class stays enhanced: %s", reason)
+	case sd.left > 0:
+		c.rep.enhanced = fmt.Sprintf("unconfirmed: a second reset still restored %d classes (reset restored %s)", sd.left, restored)
+		c.failIfOK(CheckEnhancedClasses, "a second reset still restored %d classes", sd.left)
+	default:
+		c.rep.enhanced = "0 (reset restored " + restored + ")"
+		if c.cmd.Enhance > 0 && sd.restored > 1 {
+			c.failIfOK(CheckAffect, "the reset restored %d classes, the limit is 1", sd.restored)
+		}
+	}
+}
+
+// failIfOK marks a call that is ok so far as failed.
+func (c *call) failIfOK(check, format string, args ...any) {
+	if c.rep.status == StatusOK {
+		c.refuse(StatusFailed, check, format, args...)
+	}
+}
+
 // sleep waits for d or until ctx ends.
 func sleep(ctx context.Context, d time.Duration) {
 	t := time.NewTimer(d)
@@ -576,11 +732,11 @@ func waitListening(ctx context.Context, env Env, proc *Process, port int) error 
 }
 
 // initSession creates the Arthas session. The HTTP server can need a moment after the port opened.
-func initSession(ctx context.Context, env Env, client *arthas.Client) (string, error) {
+func initSession(ctx context.Context, env Env, client *arthas.Client) (arthas.Session, error) {
 	var err error
 	for attempt := 0; attempt < initAttempts; attempt++ {
-		var session string
-		if session, err = client.InitSession(ctx); err == nil {
+		var session arthas.Session
+		if session, err = client.OpenSession(ctx); err == nil {
 			return session, nil
 		}
 		if ctx.Err() != nil || errors.Is(err, arthas.ErrUnauthorized) {
@@ -588,7 +744,7 @@ func initSession(ctx context.Context, env Env, client *arthas.Client) (string, e
 		}
 		sleep(ctx, env.PollEvery)
 	}
-	return "", fmt.Errorf("init_session: %w", err)
+	return arthas.Session{}, fmt.Errorf("init_session: %w", err)
 }
 
 // stopSent reports whether the stop request of a clean-up reached the server.
@@ -654,6 +810,12 @@ type shutdownResult struct {
 	steps error
 	// verify says why the server was still there after the wait.
 	verify error
+	// restored is the number of classes the reset steps restored, and -1 when Arthas reported
+	// none. left is what the confirming reset of the last clean-up restored, and -1 with leftErr
+	// when it is unknown or no confirming reset ran.
+	restored int
+	left     int
+	leftErr  error
 }
 
 func (r shutdownResult) problem() string {
@@ -666,15 +828,30 @@ func (r shutdownResult) problem() string {
 //
 // The sequence is repeated while stop did not reach the server and the server may still be starting:
 // its threads exist before its HTTP port is bound, and a server that nobody stops runs on.
-func shutdown(ctx context.Context, env Env, proc *Process, port int, client *arthas.Client, session string) shutdownResult {
+//
+// confirm adds a confirming reset to the sequence, for a call that may have enhanced classes.
+func shutdown(ctx context.Context, env Env, proc *Process, port int, client *arthas.Client, session string, confirm bool) shutdownResult {
 	bg := context.WithoutCancel(ctx)
 	startBy := time.Now().Add(env.ListenWait)
-	cleanup := client.Cleanup(bg, session, env.Cleanup)
+	opts := env.Cleanup
+	opts.ConfirmReset = confirm
+	restored := -1
+	run := func() arthas.CleanupResult {
+		r := client.Cleanup(bg, session, opts)
+		if n, _, _ := r.Enhanced(); n >= 0 {
+			restored = max(restored, 0) + n
+		}
+		return r
+	}
+	cleanup := run()
 	for !stopSent(cleanup) && time.Now().Before(startBy) && !inspect(env, proc, port).stopped() {
 		sleep(bg, env.PollEvery)
-		cleanup = client.Cleanup(bg, session, env.Cleanup)
+		cleanup = run()
 	}
-	res := shutdownResult{steps: cleanup.Err()}
+	res := shutdownResult{steps: cleanup.Err(), restored: restored, left: -1}
+	if confirm {
+		_, res.left, res.leftErr = cleanup.Enhanced()
+	}
 	deadline := time.Now().Add(env.StopWait)
 	for {
 		state := inspect(env, proc, port)

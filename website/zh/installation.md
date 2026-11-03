@@ -185,6 +185,8 @@ sudo rpm -Uvh /absolute/path/allowops-arthas-0.1.0-1.noarch.rpm
 cd /usr/share/allowops/arthas/4.3.5 && sha256sum --check --strict SHA256SUMS
 ```
 
+L2 命令 `jad` 会让 JVM 把它反编译的类文件写到 JVM 自己文件系统中的 `<Arthas 日志目录>/classdump/`。默认日志目录是 JVM 用户的 `~/logs/arthas`，文件属于该用户。Arthas 和 allowops 都不会删除该文件。该目录不可写时，`jad` 失败。
+
 ### 容器 {#containers}
 
 JVM 只能加载自己容器文件系统中存在的文件。目标运行在容器中时，请在第一次诊断之前，把相同的文件放到容器内的相同路径下。支持两种方式。`allowops-exec` 通过 `/proc/<pid>/root` 读取这些文件，用 `builtin_config` 中的 SHA-256 校验，并且从不写入容器。

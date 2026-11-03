@@ -465,7 +465,7 @@ func TestExampleChecksumsMatchThePackage(t *testing.T) {
 // as long as the JVM runs; Spring Boot ends the main thread after the start.
 var referenceHandlerID = map[string]int{"jdk8": 2, "jdk11": 2, "jdk17": 2, "jdk21": 9}
 
-// actionCases are the 12 example actions with their arguments and texts that the output must contain.
+// actionCases are the 17 example actions with their arguments and texts that the output must contain.
 var actionCases = []struct {
 	name   string
 	params func(s service) map[string]any
@@ -485,6 +485,59 @@ var actionCases = []struct {
 	{"jvm_arthas_classloader_list", nil, []string{"# classloaders", "BootstrapClassLoader"}},
 	{"jvm_arthas_sysprop", func(service) map[string]any { return map[string]any{"key": "java.version"} }, []string{"java.version"}},
 	{"jvm_arthas_version", nil, []string{"version\t" + arthas.Version}},
+	{"jvm_arthas_watch", hotWork, []string{"# watch", "class\tdemo.HotService", "access_point\tAtExit"}},
+	{"jvm_arthas_trace", func(service) map[string]any {
+		return map[string]any{"class": "demo.ApiController", "method": "hot"}
+	}, []string{"# trace tree", "demo.HotService.work"}},
+	{"jvm_arthas_stack", hotWork, []string{"# stack", "at demo.ApiController.hot("}},
+	{"jvm_arthas_monitor", func(service) map[string]any {
+		return map[string]any{"class": "demo.HotService", "method": "work", "cycle": 2}
+	}, []string{"# monitor", "\tdemo.HotService\twork\t"}},
+	{"jvm_arthas_jad", func(service) map[string]any { return map[string]any{"class": "demo.HotService"} }, []string{"# jad", "public class HotService {"}},
+}
+
+func hotWork(service) map[string]any {
+	return map[string]any{"class": "demo.HotService", "method": "work"}
+}
+
+// load calls /hot about fifty times a second, so that the methods the L2 actions enhance run.
+func load(s service) (stop func()) {
+	client := &http.Client{Timeout: 3 * time.Second}
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-done:
+				return
+			case <-time.After(20 * time.Millisecond):
+			}
+			if resp, err := client.Get(s.hotURL(1)); err == nil {
+				resp.Body.Close()
+			}
+		}
+	}()
+	return func() { close(done); wg.Wait() }
+}
+
+// liveEnhanced reports whether HotService.work of the JVM still calls into the Arthas spy.
+func liveEnhanced(t testing.TB, s service) bool {
+	t.Helper()
+	client := http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + portPrefix + s.suffix + "/diag/live")
+	if err != nil {
+		t.Fatalf("%s: /diag/live: %v", s.name, err)
+	}
+	defer resp.Body.Close()
+	var live struct {
+		Enhanced *bool `json:"enhanced"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&live); err != nil || live.Enhanced == nil {
+		t.Fatalf("%s: /diag/live: status %d, %v", s.name, resp.StatusCode, err)
+	}
+	return *live.Enhanced
 }
 
 func TestExampleActionsOnEveryJDK(t *testing.T) {
@@ -494,6 +547,11 @@ func TestExampleActionsOnEveryJDK(t *testing.T) {
 			t.Parallel()
 			for _, tc := range actionCases {
 				a := exampleAction(t, tc.name)
+				l2 := arthas.Kind(a.BuiltinConfig["command"].(string)).Level() == 2
+				if l2 {
+					// The classes of the sample application are in package demo.
+					a.BuiltinConfig["class_prefixes"] = []any{"demo."}
+				}
 				params := map[string]any{"target": s.name}
 				if tc.params != nil {
 					for k, v := range tc.params(s) {
@@ -503,9 +561,14 @@ func TestExampleActionsOnEveryJDK(t *testing.T) {
 				// A new JVM resets the attach counter; the interval and count checks have their own tests.
 				restart(t, s)
 				before := take(t, s)
+				stopLoad := func() {}
+				if l2 {
+					stopLoad = load(s)
+				}
 				started := time.Now()
 				res, err := executor.RunWithCallbacks(context.Background(), a, params, nil, nil, executor.Callbacks{})
 				took := time.Since(started)
+				stopLoad()
 				evidence(s.name+"-"+tc.name+".txt", fmt.Sprintf("exit %d, err %v, took %s\n--- stdout\n%s--- stderr\n%s", res.ExitCode, err, took.Round(time.Millisecond), res.Stdout, res.Stderr))
 				if err != nil || res.ExitCode != 0 || res.Stderr != "" {
 					t.Errorf("%s: err=%v exit=%d stderr=%q", tc.name, err, res.ExitCode, res.Stderr)
@@ -529,6 +592,18 @@ func TestExampleActionsOnEveryJDK(t *testing.T) {
 					if !strings.Contains(res.Stdout, w) {
 						t.Errorf("%s: the output does not contain %q", tc.name, w)
 					}
+				}
+				if l2 {
+					if got := row(res.Stdout, "enhanced_classes"); !strings.HasPrefix(got, "0 (reset restored ") {
+						t.Errorf("%s: enhanced_classes row %q", tc.name, got)
+					}
+					if got := row(res.Stdout, "cpu_before"); !strings.Contains(got, "% of the CPU limit (") {
+						t.Errorf("%s: cpu_before row %q", tc.name, got)
+					}
+					if liveEnhanced(t, s) {
+						t.Errorf("%s: HotService.work still calls into Arthas after the call", tc.name)
+					}
+					t.Logf("%s %s: affect %q, enhanced_classes %q, cpu_before %q", s.name, tc.name, row(res.Stdout, "affect"), row(res.Stdout, "enhanced_classes"), row(res.Stdout, "cpu_before"))
 				}
 				postCheck(t, s, before)
 				t.Logf("%s %s: %s", s.name, tc.name, took.Round(time.Millisecond))

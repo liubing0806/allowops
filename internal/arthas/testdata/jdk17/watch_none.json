@@ -1,0 +1,33 @@
+{
+  "body": {
+    "jobId": 25,
+    "jobStatus": "TERMINATED",
+    "results": [
+      {
+        "command": "watch demo.HotService work {params} #cost\u003e100000 -n 1 -x 1 -m 1 --timeout 2",
+        "jobId": 25,
+        "state": "SCHEDULED",
+        "type": "command"
+      },
+      {
+        "effect": {
+          "classCount": 1,
+          "cost": 74,
+          "listenerId": 6,
+          "methodCount": 1
+        },
+        "jobId": 25,
+        "success": true,
+        "type": "enhancer"
+      },
+      {
+        "jobId": 25,
+        "statusCode": 0,
+        "type": "status"
+      }
+    ],
+    "timeExpired": false
+  },
+  "sessionId": "db514780-edea-4443-88fd-6fc601bfdd58",
+  "state": "SUCCEEDED"
+}

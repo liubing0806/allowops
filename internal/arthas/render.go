@@ -42,8 +42,9 @@ func (e *CommandError) Error() string {
 // The text is a list of sections. A section starts with a "# title" line and
 // ends at the next blank line. It holds either key/value lines or a table with
 // a header row; cells are separated by one tab. Stack sections hold "at"
-// lines instead. When a table or a stack is longer than its limit, the last
-// line of the section is "# truncated: N more rows" (or "frames").
+// lines instead. A watch value and a jad source follow their key/value lines as
+// a block of lines that each start with two spaces. When a table or a stack is longer than its limit, the last
+// line of the section is "# truncated: N more rows" (or "frames", "lines").
 //
 // Only the fields named in this file are written. Everything else in the
 // result, and every result of another type, is dropped. For jvm that leaves
@@ -91,6 +92,11 @@ var renderers = map[Kind]func(*textWriter, *ExecResponse) error{
 	KindLogger:          renderLogger,
 	KindSysprop:         renderSysprop,
 	KindVersion:         renderVersion,
+	KindWatch:           renderWatch,
+	KindTrace:           renderTrace,
+	KindStack:           renderStack,
+	KindMonitor:         renderMonitor,
+	KindJad:             renderJad,
 }
 
 // textWriter builds the output.

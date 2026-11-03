@@ -48,7 +48,10 @@ rules:
 
 This fragment alone is not a replacement for an installation's management
 rules. The [example policy](https://github.com/liubing0806/allowops/blob/main/examples/policy/read-only.yaml)
-includes administrator recovery permissions and a separate output rule.
+includes administrator recovery permissions and a separate output rule. The
+[Java diagnostics example](https://github.com/liubing0806/allowops/blob/main/examples/policy/java-diagnostics.yaml)
+grants the Arthas L2 actions, which enhance classes or decompile them, to one
+role in a time window, separately from the Arthas L1 actions.
 `hours` uses `from`, `to`, `timezone`; it is a half-open same-day interval with
 `0 <= from < to <= 24`. Use two rules for an overnight window. Supply explicit
 IANA timezones. Source-network rules use CIDR notation; choose your own networks

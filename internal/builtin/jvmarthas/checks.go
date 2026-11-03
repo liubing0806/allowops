@@ -1,6 +1,7 @@
 package jvmarthas
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"slices"
@@ -28,6 +29,14 @@ const (
 	CheckTargetLocked     = "target_locked"
 	CheckPortRange        = "http_port"
 	supportedArchitecture = "amd64"
+)
+
+// Checks of the L2 commands: CheckCPUUsage refuses a call before the attach; CheckAffect and
+// CheckEnhancedClasses fail a call after the enhancement.
+const (
+	CheckCPUUsage        = "cpu_usage"
+	CheckAffect          = "affect"
+	CheckEnhancedClasses = "enhanced_classes"
 )
 
 // Refusal says why a call stopped before it attached to the JVM.
@@ -324,6 +333,43 @@ func checkFullGC(in checkInput) *Refusal {
 		return refuse(CheckRecentFullGC, "this garbage collector publishes no full collection counter, so the check cannot be evaluated")
 	}
 	return nil
+}
+
+// checkCPU measures the CPU use of the process over env.CPUWindow, relative to its CPU limit. It
+// returns the text of the cpu_before row, the refusal when the use reached
+// Checks.MaxCPUPercent or cannot be measured, and the error of ctx when it ended the wait.
+func checkCPU(ctx context.Context, env Env, cfg Config, pid int) (string, *Refusal, error) {
+	limit, err := env.Host.CPULimit(pid)
+	if err != nil {
+		return "", refuse(CheckCPUUsage, "cannot read the CPU limit of process %d: %v", pid, err), nil
+	}
+	if limit <= 0 {
+		return "", refuse(CheckCPUUsage, "process %d has no usable CPU limit (%.2f CPUs)", pid, limit), nil
+	}
+	before, err := env.Host.CPUTicks(pid)
+	if err != nil {
+		return "", refuse(CheckCPUUsage, "cannot read the CPU time of process %d: %v", pid, err), nil
+	}
+	from := env.Now()
+	sleep(ctx, env.CPUWindow)
+	if err := ctxErr(ctx); err != nil {
+		return "", nil, err
+	}
+	after, err := env.Host.CPUTicks(pid)
+	if err != nil {
+		return "", refuse(CheckCPUUsage, "cannot read the CPU time of process %d: %v", pid, err), nil
+	}
+	elapsed := env.Now().Sub(from)
+	if after < before || elapsed <= 0 {
+		return "", refuse(CheckCPUUsage, "the CPU time of process %d did not advance in order", pid), nil
+	}
+	percent := float64(after-before) / ticksPerSecond / elapsed.Seconds() / limit * 100
+	window := elapsed.Round(100 * time.Millisecond)
+	row := fmt.Sprintf("%.0f%% of the CPU limit (%.2f CPUs) over %s", percent, limit, window)
+	if max := cfg.Checks.MaxCPUPercent; percent >= float64(max) {
+		return row, refuse(CheckCPUUsage, "the JVM used %.0f%% of its CPU limit (%.2f CPUs) over %s, an L2 command needs it below %d%%", percent, limit, window, max), nil
+	}
+	return row, nil, nil
 }
 
 // clipText shortens text from a JVM for a message.

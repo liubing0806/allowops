@@ -31,6 +31,9 @@ type fakeHost struct {
 	nextPort  int
 	root      Files
 	rootErr   error
+	// cpuLimit is the answer of CPULimit; zero reads as one CPU.
+	cpuLimit    float64
+	cpuLimitErr error
 }
 
 func (h *fakeHost) PickPort(pid, lo, hi int) (int, error) {
@@ -77,6 +80,15 @@ func (h *fakeHost) CPUTicks(pid int) (uint64, error) {
 		h.cpu[pid] += h.cpuStep
 	}
 	return h.cpu[pid], h.cpuErr
+}
+
+func (h *fakeHost) CPULimit(pid int) (float64, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.cpuLimit == 0 && h.cpuLimitErr == nil {
+		return 1, nil
+	}
+	return h.cpuLimit, h.cpuLimitErr
 }
 
 func (h *fakeHost) MemoryHeadroom(pid int) (int64, error) {
