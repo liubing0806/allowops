@@ -1,6 +1,6 @@
 # 插件架构阶段 0、1 实现设计
 
-状态：待负责人确认（2026-11-03）。已经过 Astra（gpt-6-astra）复审一轮，复审意见的处理见第 12 节。上位设计见 `plugin-architecture.md`，决定见 `architecture-decisions.md` 第 22 节。本文写的是阶段 0 和阶段 1 的实际实现，与上位设计不同的地方集中列在第 10 节。
+状态：已确认并实现（2026-11-03）。Astra（gpt-6-astra）复审设计一轮、审计实现一轮，意见的处理见第 12 节。上位设计见 `plugin-architecture.md`，决定见 `architecture-decisions.md` 第 22 节。本文写的是阶段 0 和阶段 1 的实际实现，与上位设计不同的地方集中列在第 10 节。
 
 代码位置依据 commit `dbb18f8`（源码与 `b11c123` 相同）。
 
@@ -119,7 +119,6 @@ type Entity struct {
 
 type Query struct {
 	Kind string // 精确匹配；空表示全部
-	Name string // 名称包含该子串（不区分大小写）；空表示全部
 }
 
 type Resolver interface {
@@ -131,6 +130,7 @@ type Resolver interface {
 
 - `Entity` 是 Go 接口类型，没有 YAML 或 JSON 标签。插件自己的文件格式、MCP 的输出格式各自定义字段名。
 - 所有字符串字段不得包含换行符（`\n`、`\r`）。
+- `Query` 没有名称条件。名称过滤由网关在脱敏之后进行（第 6.3 节）。如果插件按原始名称过滤，调用者可以用 `name=password=a`、`name=password=b` 这类条件逐字符推断被脱敏的名称。
 - `Query` 没有数量限制。网关先做权限过滤，再截断（第 8.2 节），所以需要插件返回全部匹配结果。以后出现数据量大的插件时，再增加限量提示字段。
 - 不提供关系展开深度。agent 需要依赖的详情时，用 `DependsOn` 中的名称和同一 `source` 再查一次。
 
@@ -199,20 +199,25 @@ type SourceError struct {
 }
 
 func (h *Host) InventorySources() []string // 可用的 inventory 实例 ID，按配置顺序
-func (h *Host) SearchInventory(ctx context.Context, q inventory.Query, sources []string) ([]Result, []SourceError)
+// Query 是调用者的查询条件。Name 与脱敏后的实体名称做不区分大小写的子串匹配。
+type Query struct{ Kind, Name string }
+
+func (h *Host) SearchInventory(ctx context.Context, q Query, sources []string) ([]Result, []SourceError)
 ```
 
 处理步骤：
 
 1. `sources` 为空时使用全部可用实例。未知或不可用的 ID 由调用方（MCP）在调用前拒绝。
-2. 每个实例在独立 goroutine 中调用 `Resolve`，用 `context.WithTimeout(ctx, timeout)`，并 `defer recover()`。网关等待到超时为止，不等待不响应 ctx 的插件返回；迟到的结果丢弃。
-3. 超时记为 `timeout`，返回错误记为 `failed`，panic 记为 `panic`。原始错误和 panic 值只写日志（含实例 ID），不返回给调用方。
+2. 每个实例在独立 goroutine 中调用 `Resolve`，只传入 `Kind`，用 `context.WithTimeout(ctx, timeout)`，并 `defer recover()`。网关等待到超时为止，不等待不响应 ctx 的插件返回；迟到的结果丢弃。
+3. 超时记为 `timeout`，返回错误记为 `failed`，panic 记为 `panic`。错误和 panic 值去掉换行、经 `Redactor.Line` 脱敏后写日志（含实例 ID），不返回给调用方。`Provision` 的错误同样脱敏后写日志；`required: true` 时网关的启动错误中也只含脱敏后的文本。
 4. 深拷贝每个实体（`Attrs`、`Hosts`、`DependsOn`），后续步骤只修改拷贝。
 5. 丢弃字段不合格的实体：`Kind` 格式错误、`Name` 为空或超过 128 字节、`Attrs` 键格式错误、`Selector` 超过 512 字节、任一字符串含换行符。丢弃数量写日志。
-6. 按 `Query` 再过滤一次。
+6. 按 `Kind` 再过滤一次。
 7. 脱敏，使用 `redact.New(nil)` 得到的 secrets 规则：
-   - `Attrs`：对每个键值对处理字符串 `<键>=<值>`。结果仍以 `<键>=` 开头时，取其后部分作为值；否则值替换为 `[REDACTED]`。这样 `password: x` 这类凭据由键名识别。
-   - `Name`、`Selector`、`DependsOn` 的每一项：直接用 `Redactor.Line` 处理。
+   - `Name`：用 `Redactor.Line` 处理，然后按 `q.Name` 过滤。过滤在脱敏之后，原因见第 5 节。
+   - `Attrs`：键本身经 `Redactor.Line` 处理后有变化（例如键是一个 JWT）时，删除该项。其余键值对处理字符串 `<键>=<值>`。结果仍以 `<键>=` 开头时，取其后部分作为值；否则值替换为 `[REDACTED]`。这样 `password: x` 这类凭据由键名识别。
+   - `Selector`：经 `Redactor.Line` 处理后有变化时清空，只保留 `Hosts`。脱敏后的 selector 语法仍然合法，但会选中另一组主机。例如标签值 `https://u:p@x` 脱敏后为 `[REDACTED:url_credentials]x`。
+   - `DependsOn` 的每一项：直接用 `Redactor.Line` 处理。
 8. 按 `Kind`、`Name`、`Source` 排序。
 
 `SearchInventory` 不截断。截断在 MCP 层权限过滤之后进行。
@@ -255,9 +260,10 @@ entities:
     hosts: [db-01, db-02]
 ```
 
-- `Provision` 读取文件：必须是普通文件（打开后检查文件类型），最多读 4MB，超过时报错。用 `KnownFields(true)` 严格解码，检查第 5 节的字段规则和 `(kind, name)` 唯一。
+- `Provision` 读取文件：用 `O_NONBLOCK` 打开，再检查打开的文件是普通文件。不加 `O_NONBLOCK` 时，打开一个没有写入方的 FIFO 会一直阻塞，`Provision` 的超时无法中断它。最多读 4MB，超过时报错。用 `KnownFields(true)` 严格解码，检查第 5 节的字段规则和 `(kind, name)` 唯一。
+- 校验错误只用序号标识实体（如 `inventory entity #2: duplicate kind and name`），不含名称、键或值。这些字段可能含有凭据，而错误会写入日志或网关的启动错误输出。
 - 文件在启动时读取一次。修改后需要重启网关。
-- `Resolve` 返回实体的拷贝，不返回内部缓存的 map 和 slice。
+- `Resolve` 按 `Kind` 过滤，返回实体的拷贝，不返回内部缓存的 map 和 slice。
 - `selector` 只检查长度，不检查语法。语法错误在 agent 用它调用 action 时由现有的 targets 校验报告。
 - `hosts` 中不存在的主机名在返回前被可见性过滤去掉（第 8.3 节）。
 - `examples/topology.yaml` 是示例文件，插件测试会实际加载它。
@@ -272,7 +278,7 @@ config:
   kind: service     # 可选，默认 service
 ```
 
-- 每次 `Resolve` 调用 `Host.Hosts(ctx)`，按标签值分组。每个不同的值生成一个实体：`Name` 为标签值，`Hosts` 为该值下的主机名（排序）。
+- 每次 `Resolve` 调用 `Host.Hosts(ctx)`，按标签值分组。`Query.Kind` 与配置的 `kind` 不同时返回空结果。每个不同的值生成一个实体：`Name` 为标签值，`Hosts` 为该值下的主机名（排序）。
 - `Selector` 为 `<label>=<value>`，只在标签键和值都不含 `,`、`=`，且没有首尾空白时生成。否则不生成 selector，只返回 `Hosts`。原因：selector 语法按 `,` 拆分条件、按 `=` 拆分键值、并去掉首尾空白（`internal/gateway/api/hosts.go:55-60`），而标签值允许这些字符（`internal/gateway/api/hosts.go:285`）。拼接这样的值会选中其他主机。
 - 没有该标签的主机不出现在结果中。
 - 不缓存。
@@ -370,7 +376,7 @@ func (s *Service) VisibleHostnames(ctx context.Context, names []string) (map[str
 | 第 5.1 节 | `Provisioner`、`Validator`、`Cleaner` 三个可选接口；`Modules()` | 只有 `Provisioner`，带 `ctx`；没有 `Modules()` | 本轮没有使用者 |
 | 第 5.4 节 | `Host` 含 `HTTPClient`、`Credential`、`Cache`、`State`、`Health`、`Now` | 只有 `InstanceID`、`Logger`、`Hosts` | 本轮插件不访问外部系统；健康状态由 pluginhost 维护 |
 | 第 5.4 节 | 凭据复用 `internal/builtin/credfile` | 待定 | `credfile.Read` 要求文件属主为 root 且权限 0600，网关镜像以 65532 用户运行（`deploy/docker/Dockerfile:25`），读不到这样的文件 |
-| 第 6.1 节 | `Entity` 有 `ID`、`Source`；另有 `Relation` 类型；`Query` 有 `Attrs`、`Depth`、`Limit` | `Entity` 用 `Kind/Name` 标识，依赖写在 `DependsOn` 且限同一来源；`Query` 只有 `Kind`、`Name` | 减少类型；网关需要在权限过滤后截断，插件须返回全部匹配结果 |
+| 第 6.1 节 | `Entity` 有 `ID`、`Source`；另有 `Relation` 类型；`Query` 有 `Attrs`、`Depth`、`Limit` | `Entity` 用 `Kind/Name` 标识，依赖写在 `DependsOn` 且限同一来源；`Query` 只有 `Kind` | 减少类型；网关需要在权限过滤后截断，插件须返回全部匹配结果 |
 | 第 6.1 节 | 同名实体合并，冲突返回 `conflicts` | 不合并，每条结果带 `source` | 没有实际多来源数据前难以确定合并规则 |
 | 第 7.2 节 | 审计记录查询参数和结果数量 | 只写现有的结果审计（操作、结果、策略版本、命中规则） | `reqctx.AuditEvent` 是白名单，注释要求不加入请求内容（`internal/gateway/reqctx/reqctx.go:20`） |
 | 第 7.2 节 | panic 时实例标记为 `error` | 健康状态只反映 `Provision`；panic 只体现在该次调用的 `source_errors` | 健康状态保持简单；单次失败不应长期改变状态 |
@@ -387,7 +393,8 @@ func (s *Service) VisibleHostnames(ctx context.Context, names []string) (map[str
 | `plugin` | ID 格式、重复注册 panic、`Lookup` |
 | `pluginhost` 配置 | 每种配置错误各一例拒绝启动：id 格式、重复、超过 32 项、未注册模块、接口不符、未知 config 字段、config 含别名、timeout 越界；`Provision` 失败时 `required` 两种取值的行为 |
 | `pluginhost` 查询 | 超时、错误、panic 分别得到对应 `reason`；不合格实体（含换行、超长、键格式错误）被丢弃；排序；`Attrs` 中 `password: x` 被脱敏；两个并发查询修改结果不影响插件内部数据（`-race`） |
-| `inventory.static` | 加载 `examples/topology.yaml`；未知字段、重复 `(kind, name)`、超过 4MB、非普通文件拒绝；按 `Query` 过滤 |
+| `pluginhost` 凭据 | 经 `SearchInventory`：脱敏改变的 selector 被清空（含 `inventory.host_labels` 生成的 selector）；键为 JWT 的属性被删除；`name` 条件无法匹配被脱敏的原文；错误、panic 值和 `Provision` 错误中的凭据不出现在日志和 `required` 启动错误中 |
+| `inventory.static` | 加载 `examples/topology.yaml`；未知字段、重复 `(kind, name)`、非普通文件拒绝；FIFO 在 2 秒内被拒绝；恰好 4MB 的合法文件接受，多 1 字节拒绝；错误信息不含实体名称和键；按 `Kind` 过滤 |
 | `inventory.host_labels` | 授权标签和 `reported.` 两种来源；无标签主机不出现；值含 `,`、`=`、首尾空白时不生成 selector；生成的 selector 经现有 selector 解析后匹配的主机与分组一致 |
 | `authz` | `TestDefaultRoles` 更新；viewer 允许、publisher 拒绝 `view_inventory` |
 | `api` | `VisibleHostnames`：不存在的主机、无权限主机被去掉，结果为空时不报错；系统状态包含 `plugin:<id>`；已有策略（非首次初始化）下 viewer 调用被拒绝 |
@@ -415,3 +422,16 @@ Astra 复审（2026-11-03，基于 `b4079c2`）。
 | `DependsOn` 跨来源引用有歧义 | 采纳。限定为同一来源（第 5 节） |
 | 性能完成条件没有标准；`examples-check` 不检查拓扑示例 | 采纳。删除性能完成条件；示例由插件测试加载 |
 | 可选：工厂返回值的反射检查；全部失败改为错误结果；提前加入并发上限等设施 | 不采纳。前者没有运行时安装入口，后两者已在设计中明确语义或列为推迟项 |
+
+Astra 审计实现（2026-11-03，基于 `2708d6e`）。每条必须修改项都有沙箱复现，失败测试单独提交（`a2a9477`），修复在 `e8763d0`。
+
+| 意见 | 处理 |
+| --- | --- |
+| 脱敏改写 selector 后会选中其他主机 | 采纳。脱敏后有变化的 selector 清空，只保留 `Hosts`（第 6.3 节） |
+| 插件按原始名称过滤，可逐字符推断被脱敏的名称 | 采纳。`inventory.Query` 去掉 `Name`，网关在脱敏后过滤（第 5、6.3 节） |
+| 静态文件校验错误、resolve 错误和 panic 值原样进入日志和启动错误 | 采纳。静态插件错误只用序号；宿主写日志和启动错误前脱敏（第 6.3、7.1 节） |
+| `Attrs` 的键本身可以是凭据 | 采纳。键经脱敏后有变化时删除该属性（第 6.3 节） |
+| FIFO 使 `Provision` 永久阻塞 | 采纳。`O_NONBLOCK` 打开后检查文件类型（第 7.1 节） |
+| 4MB 测试因 YAML 解析失败而通过，不能证明大小检查；名称脱敏和 selector 测试绕过宿主 | 采纳。改为合法 YAML 的边界测试；新增经 `SearchInventory` 的测试（第 11 节） |
+| 不响应 ctx 的插件在超时后留下 goroutine | 不采纳。限制已在第 6.3 节第 2 步写明；并发上限列为推迟项（第 1 节） |
+| 两处字段校验代码重复 | 不采纳。插件不导入 `internal/`（第 3 节），两处规则目前一致 |
