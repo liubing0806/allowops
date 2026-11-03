@@ -6,9 +6,17 @@ Changes on `main` since v0.1.0. They are not in a release yet.
 
 ### Upgrade notes
 
-- The gateway applies three schema migrations on start:
+- Run `allowops-gateway migrate` before starting the new gateway; `serve`
+  exits when the schema is older than the binary requires. The Helm chart runs
+  the migration in its pre-upgrade hook. Three migrations are added:
   `00007_jobs_created_index`, `00008_task_output_instance` and
   `00009_gateway_update_check`.
+- Set `gateway.version` in `gateway.yaml` to the new version or remove it;
+  without the key the gateway uses its build version. The gateway refuses
+  agents newer than this value, so with `gateway.version: '0.1.0'` an agent
+  upgraded by `agent_upgrade` is refused with `agent version unsupported`.
+- With a separate runtime database role, grant it `SELECT`, `INSERT` and
+  `UPDATE` on `gateway_update_check` before enabling `update_check`.
 - Building from source needs Go 1.27.3 (GO-2026-6809).
 - Command runners are treated as interpreters. A catalog action that passes
   caller-supplied program text to a command runner is refused; the program
