@@ -214,10 +214,10 @@ func (h *Host) SearchInventory(ctx context.Context, q Query, sources []string) (
 5. 丢弃字段不合格的实体：`Kind` 格式错误、`Name` 为空或超过 128 字节、`Attrs` 键格式错误、`Selector` 超过 512 字节、任一字符串含换行符。丢弃数量写日志。
 6. 按 `Kind` 再过滤一次。
 7. 脱敏，使用 `redact.New(nil)` 得到的 secrets 规则：
-   - `Name`：用 `Redactor.Line` 处理，然后按 `q.Name` 过滤。过滤在脱敏之后，原因见第 5 节。
-   - `Attrs`：键本身经 `Redactor.Line` 处理后有变化（例如键是一个 JWT）时，删除该项。其余键值对处理字符串 `<键>=<值>`。结果仍以 `<键>=` 开头时，取其后部分再单独用 `Redactor.Line` 处理一次作为值；否则值替换为 `[REDACTED]`。这样 `password: x` 这类凭据由键名识别，`-p<密码>` 这类只在值开头才匹配的凭据由第二次处理识别。
-   - `Selector`：整串、每个条件、每个条件的键和值分别经 `Redactor.Line` 处理，任一有变化时清空，只保留 `Hosts`。脱敏后的 selector 语法仍然合法，但会选中另一组主机。例如标签值 `https://u:p@x` 脱敏后为 `[REDACTED:url_credentials]x`。
-   - `DependsOn` 的每一项：`/` 之后的名称部分先单独处理，再处理整项。
+   - `Attrs`：键本身经 `Redactor.Line` 处理后有变化（例如键是一个 JWT）时，删除该项，值记为凭据。其余键值对处理字符串 `<键>=<值>`。结果仍以 `<键>=` 开头时，取其后部分再单独用 `Redactor.Line` 处理一次作为值；否则值替换为 `[REDACTED]`。这样 `password: x` 这类凭据由键名识别，`-p<密码>` 这类只在值开头才匹配的凭据由第二次处理识别。处理后有变化的原值记为凭据。
+   - `Name`：用 `Redactor.Line` 处理；含有上一步记下的凭据时替换为 `[REDACTED]`。然后按 `q.Name` 过滤。过滤在脱敏之后，原因见第 5 节。
+   - `Selector`：整串、每个条件、每个条件的键和值分别经 `Redactor.Line` 处理，任一有变化，或含有记下的凭据时清空，只保留 `Hosts`。脱敏后的 selector 语法仍然合法，但会选中另一组主机。例如标签值 `https://u:p@x` 脱敏后为 `[REDACTED:url_credentials]x`。
+   - `DependsOn` 的每一项：`/` 之后的名称部分先单独处理，再处理整项；含有记下的凭据时替换为 `[REDACTED]`。
 8. 按 `Kind`、`Name`、`Source` 排序。
 
 `SearchInventory` 不截断。截断在 MCP 层权限过滤之后进行。
@@ -282,7 +282,7 @@ config:
 - 每次 `Resolve` 调用 `Host.Hosts(ctx)`，按标签值分组。`Query.Kind` 与配置的 `kind` 不同时返回空结果。每个不同的值生成一个实体：`Name` 为标签值，`Hosts` 为该值下的主机名（排序）。
 - `Selector` 为 `<label>=<value>`，只在标签键和值都不含 `,`、`=`，且没有首尾空白时生成。否则不生成 selector，只返回 `Hosts`。原因：selector 语法按 `,` 拆分条件、按 `=` 拆分键值、并去掉首尾空白（`internal/gateway/api/hosts.go:55-60`），而标签值允许这些字符（`internal/gateway/api/hosts.go:285`）。拼接这样的值会选中其他主机。
 - 没有该标签的主机不出现在结果中。
-- `label` 名称含 `pass`、`pwd`、`secret`、`token`、`credential`、`auth` 或 `api_key`、`master_key`、`signing_key` 这类词时，`Provision` 报错。测试逐个对照 `internal/redact`：脱敏器按 `<键>=<值>` 识别为凭据的键都必须被拒绝。原因：实体名称就是标签值，网关脱敏名称时没有标签键作为上下文，`password` 标签的值会原样返回。
+- 每个实体带一个属性 `<标签键>: <标签值>`（`reported.` 前缀去掉）。实体名称就是标签值，网关单独脱敏名称时没有标签键作为上下文；有了这个属性，网关按第 6.3 节判断标签值是否为凭据。所以 `label` 的键（去掉 `reported.` 后）必须符合属性键格式 `^[A-Za-z0-9_.-]{1,64}$`，否则 `Provision` 报错。
 - 不缓存。
 
 ## 8. MCP 工具 `entities_search`
@@ -459,7 +459,13 @@ PR #24 第二轮复审（Astra，2026-11-03，基于 `0cefd2e`）。上一轮 2 
 
 | 意见 | 处理 |
 | --- | --- |
-| 凭据标签规则漏掉 `master_key`、`signing_key`、`encrypt(ion)_key` | 采纳。补齐，并增加与 `internal/redact` 对照的测试（第 7.2 节） |
+| 凭据标签规则漏掉 `master_key`、`signing_key`、`encrypt(ion)_key` | 采纳。补齐，并增加与 `internal/redact` 对照的测试。第三轮改为下表的做法，名单已删除 |
 | 非法 `id`、未注册的 `module` 原样出现在启动错误中 | 采纳。用序号或已校验的 ID 标识（第 6.2 节） |
 | `gateway.yaml` 外层解析错误（未知锚点、未知字段、类型错误）引用原值 | 本 PR 不处理。这是整个 `gateway.yaml` 的既有行为，不限于 `plugins` 节，另行处理 |
 
+PR #24 第三轮复审（Astra，2026-11-03，基于 `8881b8b`）。非法 `id`、模块名回显确认关闭。失败测试 `ce96f9d`，修复紧随其后提交：
+
+| 意见 | 处理 |
+| --- | --- |
+| 名单仍漏掉 `--bindpw`、`-p` 等命令行形式的键（脱敏器的候选键中有 28 个漏掉） | 采纳，改变做法：`inventory.host_labels` 不再维护凭据词名单，改为把标签作为属性返回，由网关用脱敏器按 `<键>=<值>` 判断，再从名称、selector、依赖中去掉该值（第 6.3、7.2 节）。用 Astra 生成的 5,132 个被脱敏器识别的候选键逐个经 `SearchInventory` 验证，无泄露 |
+| 设计文档末尾多一个空行 | 采纳 |

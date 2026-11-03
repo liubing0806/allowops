@@ -14,7 +14,7 @@ import (
 
 func init() { plugin.Register(Module{}) }
 
-var credentialLabel = regexp.MustCompile(`(?i)pass|pwd|secret|token|credential|auth|(?:api|access|private|app|sign|signing|master|encrypt(?:ion)?)[_.-]?key`)
+var attrKey = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
 type Module struct {
 	Label string `yaml:"label"`
@@ -30,10 +30,10 @@ func (m *Module) Provision(ctx context.Context, h plugin.Host) error {
 	if m.Label == "" {
 		return fmt.Errorf("label required")
 	}
-	// Entity names are label values; the gateway redacts names without the
-	// label key, so a value under a credential key would be returned as is.
-	if credentialLabel.MatchString(m.Label) {
-		return fmt.Errorf("label must not be a credential label")
+	// The label is returned as an attribute, so the gateway redacts the value
+	// with its key; the key must therefore be a valid attribute key.
+	if !attrKey.MatchString(strings.TrimPrefix(m.Label, "reported.")) {
+		return fmt.Errorf("label must match %s", attrKey)
 	}
 	if m.Kind == "" {
 		m.Kind = "service"
@@ -67,8 +67,10 @@ func (m *Module) Resolve(ctx context.Context, q inventory.Query) ([]inventory.En
 	}
 	for value, hosts := range groups {
 		slices.Sort(hosts)
-		e := inventory.Entity{Kind: m.Kind, Name: value, Hosts: hosts}
-		if !strings.ContainsAny(m.Label, ",=") && strings.TrimSpace(m.Label) == m.Label && !strings.ContainsAny(value, ",=") && strings.TrimSpace(value) == value {
+		// The attribute gives the gateway the label key, so it can tell
+		// whether the value is a credential.
+		e := inventory.Entity{Kind: m.Kind, Name: value, Hosts: hosts, Attrs: map[string]string{strings.TrimPrefix(m.Label, "reported."): value}}
+		if !strings.ContainsAny(value, ",=") && strings.TrimSpace(value) == value {
 			e.Selector = m.Label + "=" + value
 		}
 		out = append(out, e)

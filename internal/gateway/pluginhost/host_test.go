@@ -287,7 +287,7 @@ func TestEnvelopeErrorsOmitContent(t *testing.T) {
 // treats as credential keys only together with the value.
 func TestLabelValuesUnderCredentialKeys(t *testing.T) {
 	const secret = "synthetic-demo-credential"
-	for _, label := range []string{"password", "master_key", "--bindpw", "-p", "reported.--bindpw", "reported.password"} {
+	for _, label := range []string{"password", "master_key", "--bindpw", "-p", "-pdemo", "reported.--bindpw", "reported.password"} {
 		t.Run(label, func(t *testing.T) {
 			key := strings.TrimPrefix(label, "reported.")
 			info := plugin.HostInfo{Hostname: "h1", Labels: map[string]string{key: secret}}

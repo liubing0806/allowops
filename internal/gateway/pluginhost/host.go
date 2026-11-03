@@ -224,36 +224,11 @@ func (h *Host) SearchInventory(ctx context.Context, q Query, sources []string) (
 			if q.Kind != "" && e.Kind != q.Kind {
 				continue
 			}
+			h.redactEntity(&e)
 			// Filter on the redacted name, so a name filter cannot probe a
 			// redacted secret one character at a time.
-			e.Name = h.redactor.Line(e.Name)
 			if !strings.Contains(strings.ToLower(e.Name), strings.ToLower(q.Name)) {
 				continue
-			}
-			for k, v := range e.Attrs {
-				if h.redactor.Line(k) != k {
-					delete(e.Attrs, k)
-					continue
-				}
-				// "password=x" is recognised only with its key; "-px" only
-				// as a standalone value. Redact both forms.
-				prefix := k + "="
-				value := h.redactor.Line(prefix + v)
-				if strings.HasPrefix(value, prefix) {
-					e.Attrs[k] = h.redactor.Line(strings.TrimPrefix(value, prefix))
-				} else {
-					e.Attrs[k] = "[REDACTED]"
-				}
-			}
-			// A redacted selector would select other hosts; keep only Hosts.
-			if h.redacts(e.Selector) {
-				e.Selector = ""
-			}
-			for i, v := range e.DependsOn {
-				if kind, name, ok := strings.Cut(v, "/"); ok {
-					v = kind + "/" + h.redactor.Line(name)
-				}
-				e.DependsOn[i] = h.redactor.Line(v)
 			}
 			results = append(results, Result{Entity: e, Source: call.inst.id})
 		}
@@ -271,6 +246,56 @@ func (h *Host) SearchInventory(ctx context.Context, q Query, sources []string) (
 		return strings.Compare(a.Source, b.Source)
 	})
 	return results, errors
+}
+
+// redactEntity redacts e in place. An attribute value that is redacted only
+// together with its key (password=x, --bindpw=x) is a secret wherever it
+// appears, so the name, selector and dependencies holding it are hidden too.
+func (h *Host) redactEntity(e *inventory.Entity) {
+	var secrets []string
+	for k, v := range e.Attrs {
+		// A key that is itself a secret makes its value one too.
+		if h.redactor.Line(k) != k {
+			delete(e.Attrs, k)
+			if v != "" {
+				secrets = append(secrets, v)
+			}
+			continue
+		}
+		// "password=x" is recognised only with its key; "-px" only as a
+		// standalone value. Redact both forms.
+		prefix := k + "="
+		value := h.redactor.Line(prefix + v)
+		if strings.HasPrefix(value, prefix) {
+			value = h.redactor.Line(strings.TrimPrefix(value, prefix))
+		} else {
+			value = "[REDACTED]"
+		}
+		if value != v && v != "" {
+			secrets = append(secrets, v)
+		}
+		e.Attrs[k] = value
+	}
+	holds := func(s string) bool {
+		return slices.ContainsFunc(secrets, func(secret string) bool { return strings.Contains(s, secret) })
+	}
+	e.Name = h.redactor.Line(e.Name)
+	if holds(e.Name) {
+		e.Name = "[REDACTED]"
+	}
+	// A redacted selector would select other hosts; keep only Hosts.
+	if h.redacts(e.Selector) || holds(e.Selector) {
+		e.Selector = ""
+	}
+	for i, v := range e.DependsOn {
+		if kind, name, ok := strings.Cut(v, "/"); ok {
+			v = kind + "/" + h.redactor.Line(name)
+		}
+		if v = h.redactor.Line(v); holds(v) {
+			v = "[REDACTED]"
+		}
+		e.DependsOn[i] = v
+	}
 }
 
 // redacts reports whether redaction changes the selector or any of its
