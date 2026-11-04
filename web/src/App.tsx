@@ -49,9 +49,6 @@ const System = lazy(() => import('@/pages/System'))
 const JobDetail = lazy(() =>
   import('@/pages/Jobs').then((module) => ({ default: module.JobDetail })),
 )
-const HostDetail = lazy(() =>
-  import('@/pages/Hosts').then((module) => ({ default: module.HostDetail })),
-)
 
 function useDarkTheme() {
   const preference = useThemeStore((state) => state.preference)
@@ -344,8 +341,8 @@ export default function App() {
               <Route path="/login" element={<Login />} />
               <Route element={<Layout />}>
                 <Route index element={<Overview />} />
-                <Route path="hosts" element={<Hosts />} />
-                <Route path="hosts/:hostname" element={<HostDetail />} />
+                {/* One optional-segment route keeps the list mounted while the detail panel opens. */}
+                <Route path="hosts/:hostname?" element={<Hosts />} />
                 <Route path="join-tokens" element={<JoinTokens />} />
                 <Route path="catalog" element={<Catalog />} />
                 <Route path="policies" element={<Policies />} />

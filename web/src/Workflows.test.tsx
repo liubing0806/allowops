@@ -111,6 +111,8 @@ describe('console mutation workflows', () => {
   })
   it('requires deletion confirmation and preserves the host on cancel', async () => {
     await open('/hosts')
+    // Delete lives in the host detail side panel, opened from the hostname link.
+    fireEvent.click(await screen.findByRole('link', { name: 'web-01' }))
     fireEvent.click(
       await screen.findByRole('button', { name: '删除主机 web-01' }),
     )
@@ -567,7 +569,8 @@ describe('English pages', () => {
     ['/login', 'Sign in to console'],
     ['/', 'Overview'],
     ['/hosts', 'Hosts'],
-    ['/hosts/web-01', 'web-01'],
+    // Host detail is a side panel over the host list; its title is level 2.
+    ['/hosts/web-01', 'web-01', 2],
     ['/join-tokens', 'Join tokens'],
     ['/catalog', 'Catalog'],
     ['/policies', 'Policies'],
@@ -577,11 +580,11 @@ describe('English pages', () => {
     ['/audit', 'Audit'],
     ['/users', 'Users & roles'],
     ['/system', 'System'],
-  ])('renders %s in English', async (path, heading) => {
+  ] as [string, string, number?][])('renders %s in English', async (path, heading, level = 1) => {
     await i18n.changeLanguage('en')
     await open(path)
     expect(
-      await screen.findByRole('heading', { name: heading, level: 1 }),
+      await screen.findByRole('heading', { name: heading, level }),
     ).toBeInTheDocument()
   })
 })
