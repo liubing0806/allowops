@@ -36,82 +36,135 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-foreground-2: var(--foreground-2);
+  --color-border-subtle: var(--border-subtle);
+  --color-selection: var(--selection);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-dot-success: var(--dot-success);
+  --color-dot-warning: var(--dot-warning);
+  --color-dot-info: var(--dot-info);
+  --color-dot-destructive: var(--dot-destructive);
+  --color-dot-neutral: var(--dot-neutral);
+  --font-sans: 'Geist Variable', -apple-system, 'PingFang SC', 'Noto Sans SC',
+    system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo,
+    monospace;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.5;
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 1.75);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* docs/console-redesign/README.md §3.1. Text colours on white and on their
+     -soft background keep at least 4.5:1; dots only need 3:1. */
+  --radius: 0.5rem;
+  --background: #fafafa;
+  --foreground: #18181b;
+  --foreground-2: #52525b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: rgb(255 255 255 / 0.97);
+  --popover-foreground: #18181b;
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f1f3;
+  --secondary-foreground: #18181b;
+  --muted: #f1f1f3;
+  --muted-foreground: #6b6b74;
+  --accent: #eeedfd;
+  --accent-foreground: #4338ca;
+  --selection: #f5f5ff;
+  --border: #e4e4e7;
+  --border-subtle: #f0f0f2;
+  --input: #e4e4e7;
+  --ring: #4f46e5;
+  --success: #15803d;
+  --success-soft: #eaf7ee;
+  --warning: #b45309;
+  --warning-soft: #fef3e2;
+  --info: #2563eb;
+  --info-soft: #eaf1fe;
+  --destructive: #d02626;
+  --destructive-soft: #fdecec;
+  --dot-success: #16a34a;
+  --dot-warning: #f59e0b;
+  --dot-info: #3b82f6;
+  --dot-destructive: #dc2626;
+  --dot-neutral: #a1a1aa;
+  --chart-1: #4f46e5;
+  --chart-2: #16a34a;
+  --chart-3: #f59e0b;
+  --chart-4: #3b82f6;
+  --chart-5: #a1a1aa;
+  --sidebar: #f4f4f5;
+  --sidebar-foreground: #18181b;
+  --sidebar-primary: #18181b;
+  --sidebar-primary-foreground: #f4f4f5;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #4f46e5;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #0b0b0d;
+  --foreground: #ededf0;
+  --foreground-2: #b4b4bc;
+  --card: #141417;
+  --card-foreground: #ededf0;
+  --popover: rgb(24 24 28 / 0.97);
+  --popover-foreground: #ededf0;
+  --primary: #a5b4fc;
+  --primary-foreground: #14142a;
+  --secondary: #1f1f24;
+  --secondary-foreground: #ededf0;
+  --muted: #1f1f24;
+  --muted-foreground: #8e8e98;
+  --accent: #25264a;
+  --accent-foreground: #c7d0fe;
+  --selection: #17182a;
+  --border: #27272c;
+  --border-subtle: #1d1d21;
+  --input: #27272c;
+  --ring: #a5b4fc;
+  --success: #4ade80;
+  --success-soft: #132a1c;
+  --warning: #fbbf24;
+  --warning-soft: #33280f;
+  --info: #60a5fa;
+  --info-soft: #142238;
+  --destructive: #f87171;
+  --destructive-soft: #3a1a1c;
+  --dot-success: #4ade80;
+  --dot-warning: #fbbf24;
+  --dot-info: #60a5fa;
+  --dot-destructive: #f87171;
+  --dot-neutral: #a1a1aa;
+  --chart-1: #a5b4fc;
+  --chart-2: #4ade80;
+  --chart-3: #fbbf24;
+  --chart-4: #60a5fa;
+  --chart-5: #71717a;
+  --sidebar: #0f0f12;
+  --sidebar-foreground: #ededf0;
+  --sidebar-primary: #ededf0;
+  --sidebar-primary-foreground: #0f0f12;
+  --sidebar-accent: #141417;
+  --sidebar-accent-foreground: #ededf0;
+  --sidebar-border: #27272c;
+  --sidebar-ring: #a5b4fc;
 }
 
 @layer base {
@@ -120,6 +173,42 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground antialiased;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* Zero specificity: shadcn controls that set outline-none keep their ring. */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+  }
+}
+
+/* The only decorative animation: the running-state dot (README §3.3). */
+@keyframes ao-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--dot-info) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.ao-pulse {
+  animation: ao-pulse 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

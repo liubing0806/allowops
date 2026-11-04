@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import {
-  flexRender,
   getCoreRowModel,
   getPaginationRowModel,
   getSortedRowModel,
@@ -8,11 +8,24 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table'
+
+// flexRender mounts a function cell as a component. Columns are rebuilt on every
+// render, so that would remount every cell and drop focus from the checkbox or
+// link being used. Cells here are plain render functions and are called directly.
+function render<C>(content: unknown, context: C): ReactNode {
+  return typeof content === 'function'
+    ? (content as (context: C) => ReactNode)(context)
+    : (content as ReactNode)
+}
 import { useTranslation } from 'react-i18next'
 import { XIcon } from 'lucide-react'
 import { ApiError } from '@/api'
 import { DialogNotification } from '@/components/console/NotificationProvider'
-import { Badge } from '@/components/ui/badge'
+import { OnceSecretDialog } from '@/components/console/OnceSecretDialog'
+import { CodeBlock } from '@/components/console/CodeBlock'
+import { usePageHeaderSlot } from '@/components/console/page-header'
+import { StatusDot } from '@/components/console/StatusDot'
+import { statusTone, textTone, type Tone } from '@/components/console/tone'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -44,9 +57,28 @@ export function PageTitle({
   action,
 }: {
   title: string
-  description?: string
+  description?: ReactNode
   action?: ReactNode
 }) {
+  const header = usePageHeaderSlot()
+  if (header) {
+    if (!header.slot) return null
+    return createPortal(
+      <>
+        <h1 title={title} className="max-w-full truncate text-sm font-semibold">
+          {title}
+        </h1>
+        {description && (
+          <p className="min-w-0 truncate text-xs text-muted-foreground">
+            {description}
+          </p>
+        )}
+        <span className="hidden flex-1 md:block" />
+        {action}
+      </>,
+      header.slot,
+    )
+  }
   return (
     <header className="flex flex-wrap items-start justify-between gap-3 pb-1">
       <div className="min-w-0 flex-1">
@@ -73,10 +105,10 @@ export function Panel({
 }) {
   return (
     <section className={cn('panel min-w-0', className)}>
-      <Card>
+      <Card className="rounded-xl border ring-0">
         {title && (
           <CardHeader>
-            <h2 className="text-base leading-snug font-medium group-data-[size=sm]/card:text-sm">
+            <h2 className="text-sm leading-snug font-semibold">
               {title}
             </h2>
           </CardHeader>
@@ -117,22 +149,19 @@ export function Field({
   )
 }
 
-function statusVariant(value: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  const upper = value.toUpperCase()
-  if (/(SUCCEEDED|HEALTHY|ALLOW)$/.test(upper)) return 'default'
-  if (/(FAILED|DENIED|DENY|UNAVAILABLE|TIMEOUT)$/.test(upper))
-    return 'destructive'
-  if (/(PENDING|QUEUED|RUNNING|OFFLINE|DEGRADED|EXPIRING)$/.test(upper))
-    return 'secondary'
-  return 'outline'
-}
-
 export function Status({ value }: { value: string }) {
   const { t } = useTranslation()
+  const tone = statusTone(value)
   return (
-    <Badge variant={statusVariant(value)}>
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 text-sm whitespace-nowrap',
+        tone === 'neutral' ? 'text-foreground-2' : textTone[tone],
+      )}
+    >
+      <StatusDot tone={tone} pulse={tone === 'info'} />
       {t(`status.${value}`, { defaultValue: value })}
-    </Badge>
+    </span>
   )
 }
 
@@ -149,7 +178,7 @@ export function MonoId({
       className={cn(
         'inline-block max-w-44 truncate align-bottom font-mono text-xs',
         className === 'hash' &&
-          'rounded bg-muted px-1.5 py-0.5 text-muted-foreground',
+          'rounded bg-muted px-1.5 py-0.5 text-foreground-2',
       )}
     >
       {value}
@@ -167,7 +196,7 @@ export function QueryState({
   const { t } = useTranslation()
   if (error)
     return (
-      <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+      <p role="alert" className="rounded-lg bg-destructive-soft px-3 py-2 text-sm text-destructive">
         {t(error instanceof ApiError ? error.key : 'common.error')}
       </p>
     )
@@ -240,10 +269,16 @@ export function DataTable<T>({
   data,
   columns,
   pager,
+  pageSize = 10,
+  rowClassName,
+  empty,
 }: {
   data: T[]
   columns: ColumnDef<T>[]
   pager?: ServerPager
+  pageSize?: number
+  rowClassName?: (row: T) => string | undefined
+  empty?: ReactNode
 }) {
   const { t } = useTranslation()
   const [sorting, setSorting] = useState<SortingState>([])
@@ -260,17 +295,18 @@ export function DataTable<T>({
     // A server page is one slice of the server order; sorting it alone would
     // misorder the list across pages.
     enableSorting: !pager,
-    initialState: { pagination: { pageSize: 10 } },
+    initialState: { pagination: { pageSize } },
   })
   return (
     <div className="min-w-0">
       <Table>
         <TableHeader>
           {table.getHeaderGroups().map((group) => (
-            <TableRow key={group.id}>
+            <TableRow key={group.id} className="hover:bg-transparent">
               {group.headers.map((header) => (
                 <TableHead
                   key={header.id}
+                  className="h-9 text-xs"
                   aria-sort={
                     header.column.getIsSorted() === 'asc'
                       ? 'ascending'
@@ -288,7 +324,7 @@ export function DataTable<T>({
                         column: String(header.column.columnDef.header),
                       })}
                     >
-                      {flexRender(
+                      {render(
                         header.column.columnDef.header,
                         header.getContext(),
                       )}
@@ -302,7 +338,7 @@ export function DataTable<T>({
                     </button>
                   ) : (
                     <span className="font-medium text-muted-foreground">
-                      {flexRender(
+                      {render(
                         header.column.columnDef.header,
                         header.getContext(),
                       )}
@@ -315,18 +351,24 @@ export function DataTable<T>({
         </TableHeader>
         <TableBody>
           {table.getRowModel().rows.map((row) => (
-            <TableRow key={row.id}>
+            <TableRow
+              key={row.id}
+              className={cn(
+                'group/row border-border-subtle',
+                rowClassName?.(row.original),
+              )}
+            >
               {row.getVisibleCells().map((cell) => (
                 <TableCell key={cell.id}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  {render(cell.column.columnDef.cell, cell.getContext())}
                 </TableCell>
               ))}
             </TableRow>
           ))}
           {!data.length && (
             <TableRow>
-              <TableCell colSpan={columns.length} className="text-center text-muted-foreground">
-                {t('common.empty')}
+              <TableCell colSpan={columns.length} className="py-10 text-center text-muted-foreground">
+                {empty ?? t('common.empty')}
               </TableCell>
             </TableRow>
           )}
@@ -343,7 +385,7 @@ export function DataTable<T>({
           />
         )
       ) : (
-        data.length > 10 && (
+        data.length > pageSize && (
           <PagerFooter
             label={t('common.pagination', {
               page: table.getState().pagination.pageIndex + 1,
@@ -486,49 +528,19 @@ export function SecretDialog({
 }) {
   const { t } = useTranslation()
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        showCloseButton={false}
-        onEscapeKeyDown={(event) => {
-          event.preventDefault()
-          onClose()
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>{t('token.title')}</DialogTitle>
-          <DialogDescription>{t('token.warning')}</DialogDescription>
-        </DialogHeader>
-        <DialogNotification />
-        <pre className="secret overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs break-all whitespace-pre-wrap text-primary">
-          {secret}
-        </pre>
-        {install && (
-          <>
-            {installHint && (
-              <p className="text-xs text-muted-foreground">{installHint}</p>
-            )}
-            <h3 className="text-xs font-semibold text-muted-foreground">
-              {t('join.install')}
-            </h3>
-            <pre className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs whitespace-pre-wrap">
-              {install}
-            </pre>
-          </>
-        )}
-        <DialogFooter>
-          <Button onClick={onClose}>{t('token.saved')}</Button>
-        </DialogFooter>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="absolute top-2 right-2"
-          onClick={onClose}
-          aria-label={t('common.close')}
-        >
-          <XIcon />
-        </Button>
-      </DialogContent>
-    </Dialog>
+    <OnceSecretDialog secret={secret} onClose={onClose}>
+      {install && (
+        <>
+          {installHint && (
+            <p className="text-xs text-muted-foreground">{installHint}</p>
+          )}
+          <h3 className="text-xs font-semibold text-muted-foreground">
+            {t('join.install')}
+          </h3>
+          <CodeBlock code={install} label={t('join.install')} />
+        </>
+      )}
+    </OnceSecretDialog>
   )
 }
 
@@ -553,17 +565,21 @@ export function TokenStatus({
       : left <= 7 * 86400000
         ? 'common.expiring'
         : 'common.active'
+  const tone: Tone =
+    revokedAt || left <= 0
+      ? 'neutral'
+      : left <= 7 * 86400000
+        ? 'warning'
+        : 'success'
   return (
-    <Badge
-      variant={
-        revokedAt || left <= 0
-          ? 'outline'
-          : left <= 7 * 86400000
-            ? 'secondary'
-            : 'default'
-      }
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 text-sm whitespace-nowrap',
+        tone === 'neutral' ? 'text-foreground-2' : textTone[tone],
+      )}
     >
+      <StatusDot tone={tone} />
       {t(key)}
-    </Badge>
+    </span>
   )
 }
