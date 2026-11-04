@@ -539,5 +539,21 @@
   "system.limitPage": "Default / maximum page size",
   "system.limitOutputPage": "Default / maximum output page",
   "system.limitCatalog": "Maximum catalog size",
-  "system.limitCsv": "Maximum CSV import size"
+  "system.limitCsv": "Maximum CSV import size",
+  "overview.summaryTitle": "Current state",
+  "overview.summaryJobs": "{{running}} jobs are running now, and {{failed}} jobs failed in the last 24 hours.",
+  "overview.summaryHosts": "{{online}} of {{total}} hosts are online.",
+  "overview.summaryUnlabeled": "{{count}} hosts have no authorization labels, so agent calls to them are denied.",
+  "overview.metrics": "Key metrics",
+  "overview.hostsHint": "{{offline}} offline · {{unlabeled}} without authorization labels",
+  "overview.catalogAlertHint": "After expiry hosts refuse to load it and no action can run. Publish a new signed catalog from CI.",
+  "overview.viewCatalog": "View catalog",
+  "overview.rotateToken": "Rotate token",
+  "overview.unlabeledAlert": "{{count}} hosts have no authorization labels",
+  "overview.unlabeledAlertHint": "{{hosts}}{{more}} · denied to every agent by default",
+  "overview.setLabels": "Set labels",
+  "overview.agentAlert": "{{count}} hosts run an agent older than gateway {{version}}",
+  "overview.viewSystem": "View system",
+  "overview.allJobs": "All →",
+  "overview.jobHosts": "{{count}} hosts"
 }

@@ -539,5 +539,21 @@
   "system.limitPage": "默认 / 最大分页",
   "system.limitOutputPage": "默认 / 最大输出页",
   "system.limitCatalog": "目录大小上限",
-  "system.limitCsv": "CSV 导入上限"
+  "system.limitCsv": "CSV 导入上限",
+  "overview.summaryTitle": "当前状态",
+  "overview.summaryJobs": "现在有 {{running}} 个 job 在运行，最近 24 小时有 {{failed}} 个 job 失败。",
+  "overview.summaryHosts": "{{online}} / {{total}} 台主机在线。",
+  "overview.summaryUnlabeled": "{{count}} 台主机没有授权标签，agent 调用会被直接拒绝。",
+  "overview.metrics": "关键指标",
+  "overview.hostsHint": "离线 {{offline}} · 无授权标签 {{unlabeled}}",
+  "overview.catalogAlertHint": "到期后主机拒绝加载，所有 action 不可用。请从 CI 发布新签名目录。",
+  "overview.viewCatalog": "查看目录",
+  "overview.rotateToken": "轮换 token",
+  "overview.unlabeledAlert": "{{count}} 台主机没有授权标签",
+  "overview.unlabeledAlertHint": "{{hosts}}{{more}} · 对所有 agent 默认拒绝执行",
+  "overview.setLabels": "设置标签",
+  "overview.agentAlert": "{{count}} 台主机的主机端版本低于网关 {{version}}",
+  "overview.viewSystem": "查看系统",
+  "overview.allJobs": "全部 →",
+  "overview.jobHosts": "{{count}} 台"
 }
