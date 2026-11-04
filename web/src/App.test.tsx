@@ -135,6 +135,11 @@ describe('console pages', () => {
       await screen.findByRole('button', { name: '编辑 readonly-all' }),
     )
     expect(screen.getByRole('button', { name: '保存策略' })).toBeDisabled()
+    // Saving also requires a change to the policy (README §4.5), so the rule
+    // gets an edit before it goes into the draft.
+    fireEvent.change(screen.getByLabelText('风险（逗号分隔）'), {
+      target: { value: 'read,write' },
+    })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '试算' })).toBeEnabled(),

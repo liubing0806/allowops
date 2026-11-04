@@ -276,6 +276,8 @@ describe('console mutation workflows', () => {
   )
   it('simulates and confirms policy rollback as a higher version', async () => {
     await open('/policies')
+    // Version history moved into a side panel opened from the top bar.
+    fireEvent.click(await screen.findByRole('button', { name: '版本历史' }))
     fireEvent.click(await screen.findByRole('button', { name: '试算回滚到 1' }))
     await screen.findByRole('heading', { name: '试算结果' })
     fireEvent.change(screen.getByLabelText('变更原因'), {
