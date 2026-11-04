@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>allowops · 策略</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#4F46E5}a:hover{color:#3730A3}
+@keyframes aoPulse{0%{box-shadow:0 0 0 0 rgba(59,130,246,.55)}70%{box-shadow:0 0 0 6px rgba(59,130,246,0)}100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}}
+.ao-pulse{animation:aoPulse 1.6s ease-out infinite}
+[data-theme="light"] .ao-row:hover,[data-theme="light"] .ao-nav:hover,[data-theme="light"] .ao-ghost:hover{background:#F1F1F3}
+[data-theme="dark"] .ao-row:hover,[data-theme="dark"] .ao-nav:hover,[data-theme="dark"] .ao-ghost:hover{background:#1C1C20}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #6366F1;outline-offset:1px}
+input::placeholder{color:#8E8E96}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="position: relative; min-height: 100vh; display: flex; flex-wrap: wrap; font-family: Geist, -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; font-size: 13px; line-height: 1.5; color: {{t.fg}}; background: {{t.bg}}">
+  <div style="flex: 1 1 232px; max-width: 100%; display: flex"><dc-import name="Sidebar" active="policies" theme="{{theme}}" hint-size="100%,100vh"></dc-import></div>
+  <main style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column">
+    <header style="min-height: 52px; box-sizing: border-box; padding: 8px 20px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid {{t.line}}; flex-wrap: wrap">
+      <h1 style="margin: 0; font-size: 14px; font-weight: 600">策略</h1>
+      <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: {{t.muted}}">v{{version}} · {{ruleCount}} 条规则</span>
+      <sc-if value="{{dirty}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; padding: 1px 8px; border-radius: 999px; background: {{t.amberSoft}}; color: {{t.amber}}">未保存修改</span></sc-if>
+      <span style="flex: 1"></span>
+      <button class="ao-ghost" type="button" onClick="{{toggleHistory}}" style="height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid {{t.line}}; background: transparent; color: {{t.fg}}; font: inherit; font-weight: 500; cursor: pointer">版本历史</button>
+    </header>
+
+    <div style="padding: 16px 20px 32px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start">
+      <section aria-label="规则列表" style="flex: 1 1 360px; max-width: 100%; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 8px"><h2 style="margin: 0; font-size: 13px; font-weight: 600; flex: 1">规则列表</h2><span style="font-size: 12px; color: {{t.muted}}">拒绝优先 · 未匹配即拒绝</span></div>
+        <sc-for list="{{rules}}" as="r" hint-placeholder-count="6">
+          <button type="button" onClick="{{r.pick}}" style="text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid {{r.border}}; background: {{r.bg}}; box-shadow: {{r.shadow}}; font: inherit; color: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 6px">
+            <span style="display: flex; align-items: center; gap: 8px; width: 100%">
+              <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: {{t.muted}}; width: 18px">{{r.idx}}</span>
+              <span style="font-size: 11px; font-weight: 600; padding: 0 7px; border-radius: 999px; background: {{r.effBg}}; color: {{r.effFg}}">{{r.effLabel}}</span>
+              <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{r.name}}</span>
+              <sc-if value="{{r.changed}}" hint-placeholder-val="{{ false }}"><span style="width: 6px; height: 6px; border-radius: 50%; background: #F59E0B" aria-label="已修改"></span></sc-if>
+            </span>
+            <span style="display: flex; flex-wrap: wrap; gap: 4px; padding-left: 26px">
+              <sc-for list="{{r.chips}}" as="c" hint-placeholder-count="3"><span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; padding: 0 6px; border-radius: 5px; background: {{t.pill}}; color: {{t.fg2}}"><span style="color: {{t.muted}}">{{c.k}}</span> {{c.v}}</span></sc-for>
+            </span>
+          </button>
+        </sc-for>
+        <button class="ao-ghost" type="button" onClick="{{addRule}}" style="height: 36px; border-radius: 10px; border: 1px dashed {{t.line}}; background: transparent; color: {{t.fg2}}; font: inherit; cursor: pointer">+ 添加规则</button>
+      </section>
+
+      <div style="flex: 999 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+        <section aria-label="编辑规则" style="border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+            <h2 style="margin: 0; font-size: 13px; font-weight: 600; flex: 1">编辑规则 <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-weight: 500; color: {{t.muted}}">#{{cur.idx}}</span></h2>
+            <div role="group" aria-label="判定" style="display: inline-flex; gap: 2px; padding: 3px; border-radius: 9px; background: {{t.pill}}">
+              <sc-for list="{{effects}}" as="e" hint-placeholder-count="2"><button type="button" onClick="{{e.pick}}" aria-pressed="{{e.pressed}}" style="height: 26px; padding: 0 12px; border-radius: 6px; border: 0; background: {{e.bg}}; box-shadow: {{e.shadow}}; color: {{e.fg}}; font: inherit; font-weight: 500; cursor: pointer">{{e.label}}</button></sc-for>
+            </div>
+            <button class="ao-ghost" type="button" onClick="{{removeRule}}" style="height: 30px; padding: 0 10px; border-radius: 8px; border: 0; background: transparent; color: {{t.red}}; font: inherit; cursor: pointer">删除规则</button>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px">
+            <sc-for list="{{fields}}" as="f" hint-placeholder-count="8">
+              <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: {{t.muted}}">{{f.label}}
+                <input value="{{f.value}}" onChange="{{f.change}}" placeholder="{{f.ph}}" style="height: 34px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.bg}}; color: {{t.fg}}; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">
+              </label>
+            </sc-for>
+          </div>
+        </section>
+
+        <section aria-label="试算" style="border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; overflow: hidden">
+          <div style="padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 10px">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{{t.accent}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"></path></svg>
+              <h2 style="margin: 0; font-size: 13px; font-weight: 600; flex: 1">试算：这次修改会改变谁的权限</h2>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; align-items: end">
+              <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: {{t.muted}}">主体
+                <select value="{{tc.subject}}" onChange="{{onSubject}}" style="height: 34px; padding: 0 8px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.bg}}; color: {{t.fg}}; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px"><sc-for list="{{accountOpts}}" as="o" hint-placeholder-count="4"><option value="{{o.v}}">{{o.v}}</option></sc-for></select>
+              </label>
+              <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: {{t.muted}}">操作
+                <select value="{{tc.op}}" onChange="{{onOp}}" style="height: 34px; padding: 0 8px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.bg}}; color: {{t.fg}}; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px"><option value="execute_action">execute_action</option><option value="view_output">view_output</option><option value="view_hosts">view_hosts</option></select>
+              </label>
+              <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: {{t.muted}}">Action
+                <select value="{{tc.action}}" onChange="{{onAction}}" style="height: 34px; padding: 0 8px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.bg}}; color: {{t.fg}}; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px"><sc-for list="{{actionOpts}}" as="o" hint-placeholder-count="5"><option value="{{o.v}}">{{o.v}}</option></sc-for></select>
+              </label>
+              <label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: {{t.muted}}">目标选择器
+                <input value="{{tc.sel}}" onChange="{{onSel}}" placeholder="env=prod" style="height: 34px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.bg}}; color: {{t.fg}}; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">
+              </label>
+              <button type="button" onClick="{{runTest}}" style="height: 34px; padding: 0 14px; border-radius: 8px; border: 0; background: {{t.fg}}; color: {{t.bg}}; font: inherit; font-weight: 500; cursor: pointer">试算</button>
+            </div>
+            <span style="font-size: 11px; color: {{t.muted}}">网关对当前用户、服务账号、action 和主机试算策略，并检查策略管理权限。时间按 2026-11-04 17:29 Asia/Shanghai 计算。</span>
+          </div>
+          <sc-if value="{{stale}}" hint-placeholder-val="{{ false }}">
+            <div style="margin: 0 16px 12px; padding: 8px 10px; border-radius: 8px; background: {{t.amberSoft}}; color: {{t.amber}}; font-size: 12px">策略、试算或资源快照已变化，请重新试算。</div>
+          </sc-if>
+          <sc-if value="{{hasResult}}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 10px 16px; border-top: 1px solid {{t.line2}}; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: {{t.bg}}">
+              <span style="font-weight: 500">{{summary}}</span>
+              <span style="flex: 1"></span>
+              <span style="font-size: 12px; color: {{adminColor}}">保留策略管理员：{{adminText}}</span>
+            </div>
+            <div style="overflow-x: auto">
+              <div role="table" aria-label="试算结果" style="min-width: 600px">
+                <div role="row" style="display: grid; grid-template-columns: minmax(150px, 1fr) 90px 20px 90px minmax(200px, 1.6fr); gap: 8px; padding: 8px 16px; font-size: 11px; color: {{t.muted}}; border-top: 1px solid {{t.line2}}; border-bottom: 1px solid {{t.line2}}"><span role="columnheader">主机</span><span role="columnheader">原判定</span><span role="columnheader" aria-hidden="true"></span><span role="columnheader">新判定</span><span role="columnheader">匹配规则 / 原因</span></div>
+                <sc-for list="{{results}}" as="x" hint-placeholder-count="5">
+                  <div role="row" style="display: grid; grid-template-columns: minmax(150px, 1fr) 90px 20px 90px minmax(200px, 1.6fr); gap: 8px; padding: 7px 16px; align-items: center; border-bottom: 1px solid {{t.line2}}; background: {{x.bg}}">
+                    <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace">{{x.host}}</span>
+                    <span role="cell" style="color: {{x.bColor}}; font-weight: 500">{{x.before}}</span>
+                    <span role="cell" style="color: {{t.muted}}">→</span>
+                    <span role="cell" style="color: {{x.aColor}}; font-weight: 500">{{x.after}}</span>
+                    <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: {{t.fg2}}">{{x.why}}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+          <div style="padding: 12px 16px; border-top: 1px solid {{t.line2}}; display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+            <label style="flex: 1 1 260px; display: block"><span style="position: absolute; left: -9999px">变更原因</span><input value="{{reason}}" onChange="{{onReason}}" placeholder="变更原因（必填，写入审计）" style="width: 100%; height: 34px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.bg}}; color: {{t.fg}}; font: inherit"></label>
+            <button type="button" onClick="{{save}}" disabled="{{saveDisabled}}" style="height: 34px; padding: 0 16px; border-radius: 8px; border: 0; background: {{saveBg}}; color: #FFFFFF; font: inherit; font-weight: 500; cursor: pointer">保存为 v{{nextVersion}}</button>
+            <span style="flex-basis: 100%; font-size: 11px; color: {{t.muted}}">{{saveHint}}</span>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <sc-if value="{{historyOpen}}" hint-placeholder-val="{{ false }}">
+    <aside aria-label="策略版本历史" style="position: absolute; top: 64px; right: 12px; width: 380px; max-width: calc(100% - 24px); box-sizing: border-box; border-radius: 14px; background: {{t.pop}}; border: 1px solid {{t.line}}; box-shadow: 0 24px 60px rgba(20,22,30,.20); overflow: hidden">
+      <div style="padding: 12px 14px 12px 16px; display: flex; align-items: center; border-bottom: 1px solid {{t.line2}}"><h2 style="margin: 0; font-size: 13px; font-weight: 600; flex: 1">版本历史</h2><button class="ao-ghost" type="button" onClick="{{toggleHistory}}" aria-label="关闭" style="width: 28px; height: 28px; border-radius: 7px; border: 0; background: transparent; color: {{t.fg2}}; cursor: pointer">×</button></div>
+      <sc-for list="{{history}}" as="h" hint-placeholder-count="4">
+        <div style="padding: 12px 16px; border-bottom: 1px solid {{t.line2}}; display: flex; flex-direction: column; gap: 4px">
+          <span style="display: flex; align-items: center; gap: 8px"><span style="font-family: 'Geist Mono', ui-monospace, monospace; font-weight: 500">v{{h.v}}</span><sc-if value="{{h.current}}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; padding: 0 6px; border-radius: 999px; background: {{t.accentSoft}}; color: {{t.accent}}">当前</span></sc-if><span style="flex: 1"></span><span style="font-size: 11px; color: {{t.muted}}">{{h.at}}</span></span>
+          <span style="color: {{t.fg2}}">{{h.reason}}</span>
+          <span style="display: flex; align-items: center; gap: 8px"><span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: {{t.muted}}; flex: 1">{{h.by}}</span>
+            <sc-if value="{{h.canRollback}}" hint-placeholder-val="{{ true }}"><button class="ao-ghost" type="button" onClick="{{h.rollback}}" style="height: 26px; padding: 0 10px; border-radius: 7px; border: 1px solid {{t.line}}; background: transparent; color: {{t.fg}}; font: inherit; font-size: 12px; cursor: pointer">试算回滚到 v{{h.v}}</button></sc-if>
+          </span>
+        </div>
+      </sc-for>
+      <div style="padding: 10px 16px; font-size: 11px; color: {{t.muted}}">回滚会把历史规则保存为更高的新版本，保存前同样需要试算。</div>
+    </aside>
+  </sc-if>
+
+  <sc-if value="{{toast}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position: absolute; right: 20px; top: 64px; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border-radius: 10px; background: {{t.pop}}; border: 1px solid {{t.line}}; box-shadow: 0 8px 24px rgba(0,0,0,.12)">
+      <span style="width: 6px; height: 6px; border-radius: 50%; background: {{t.green}}"></span><span>{{toast}}</span>
+      <button class="ao-ghost" type="button" onClick="{{closeToast}}" aria-label="关闭提示" style="width: 26px; height: 26px; border-radius: 6px; border: 0; background: transparent; color: {{t.muted}}; cursor: pointer">×</button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"]},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const v7 = this.v7();
+    this.state = {
+      saved: v7, draft: v7.map((r) => Object.assign({}, r)), sel: 4, version: 7,
+      tc: { subject: 'ops-maintainer', op: 'execute_action', action: 'nginx_test_config', sel: 'env=prod' },
+      tested: null, reason: '', history: false, toast: '',
+      versions: [
+        { v: 7, at: '2026-10-30 11:02', by: 'user:liu.bing', reason: '新增 java-arthas-l2 时段限制（09–17 时）' },
+        { v: 6, at: '2026-10-21 15:40', by: 'user:liu.bing', reason: '禁止 ops-maintainer 执行危险 action' },
+        { v: 5, at: '2026-10-09 10:17', by: 'user:wang.min', reason: '为订单服务开放 Arthas L1 诊断' },
+        { v: 4, at: '2026-09-26 09:30', by: 'system', reason: '示例策略初始化' }
+      ]
+    };
+  }
+  v7() {
+    const R = (name, effect, roles, teams, operations, actions, risks, labels, from, to, tz) => ({ name, effect, roles, teams, operations, actions, risks, labels, cidrs: '', from, to, tz });
+    return [
+      R('administrators', 'allow', 'admin', '', 'modify_policy, manage_service_accounts, manage_user_roles, manage_hosts, create_join_token, publish_catalog, view_hosts, view_catalog, view_jobs, view_output, view_audit, view_system', '', '', '', '', '', ''),
+      R('readers-inventory', 'allow', 'ops-reader, ops-maintainer', '', 'view_hosts, view_output, view_jobs', '', '', '', '', '', ''),
+      R('prod-read', 'allow', 'ops-reader', '', 'execute_action', 'disk_usage, systemd_service_status, journal_view_log, docker_ps', '', 'env=prod', '', '', ''),
+      R('staging-read', 'allow', 'ops-reader', '', 'execute_action', 'disk_usage, systemd_service_status', '', 'env=staging', '', '', ''),
+      R('maintenance-actions', 'allow', 'ops-maintainer', 'ops', 'execute_action', 'systemd_service_status, nginx_test_config', '', 'tier=web', '8', '18', 'Asia/Shanghai'),
+      R('maintenance-deny-dangerous', 'deny', 'ops-maintainer', '', 'execute_action', '', 'dangerous', '', '', '', ''),
+      R('java-arthas-l1', 'allow', 'java-reader, java-diagnostician', '', 'execute_action, view_output', 'jvm_arthas_dashboard, jvm_arthas_thread_top, jvm_arthas_memory', '', 'svc=order', '', '', ''),
+      R('java-arthas-l2', 'allow', 'java-diagnostician', '', 'execute_action', 'jvm_arthas_watch, jvm_arthas_trace', '', 'svc=order', '9', '17', 'Asia/Shanghai'),
+      R('java-arthas-l2-deny-readers', 'deny', 'java-reader', '', 'execute_action, view_output', 'jvm_arthas_watch, jvm_arthas_trace', '', '', '', '', ''),
+      R('catalog-publisher', 'allow', 'publisher', '', 'publish_catalog', '', '', '', '', '', '')
+    ];
+  }
+  accounts() {
+    return { 'ops-reader': { roles: ['ops-reader'], teams: ['ops'] }, 'ops-maintainer': { roles: ['ops-maintainer'], teams: ['ops'] }, 'java-diag': { roles: ['java-diagnostician'], teams: ['java'] }, 'java-reader-bot': { roles: ['java-reader'], teams: ['java'] }, 'ci-publisher': { roles: ['publisher'], teams: ['platform'] } };
+  }
+  hosts() {
+    return [
+      ['web-prod-01', { env: 'prod', tier: 'web', team: 'platform' }], ['web-prod-02', { env: 'prod', tier: 'web', team: 'platform' }],
+      ['db-prod-mysql-01', { env: 'prod', tier: 'db', engine: 'mysql' }], ['db-prod-mysql-02', { env: 'prod', tier: 'db', engine: 'mysql' }],
+      ['jvm-order-03', { env: 'prod', tier: 'app', svc: 'order' }], ['starrocks-be-07', { env: 'prod', tier: 'olap' }],
+      ['stage-web-01', { env: 'staging', tier: 'web' }], ['build-runner-12', {}], ['ip-10-4-2-31', {}], ['legacy-batch-02', { env: 'prod', tier: 'batch' }]
+    ];
+  }
+  risk(a) { return { agent_upgrade: 'dangerous', jvm_arthas_watch: 'write', jvm_arthas_trace: 'write', jvm_arthas_thread_top: 'write', jvm_arthas_dashboard: 'write', jvm_arthas_memory: 'write' }[a] || 'read'; }
+  list(str) { return String(str || '').split(',').map((x) => x.trim()).filter(Boolean); }
+  labels(str) { const o = {}; this.list(str).forEach((p) => { const i = p.indexOf('='); if (i > 0) o[p.slice(0, i).trim()] = p.slice(i + 1).trim(); }); return o; }
+  evaluate(rules, accName, op, action, hostLabels) {
+    const acc = this.accounts()[accName];
+    const hostOp = op === 'execute_action' || op === 'view_output';
+    if (hostOp && !Object.keys(hostLabels).length) return { eff: 'deny', why: '无授权标签' };
+    const hour = 17;
+    const matched = rules.filter((r) => {
+      if (!this.list(r.roles).some((x) => acc.roles.indexOf(x) >= 0)) return false;
+      const teams = this.list(r.teams); if (teams.length && !teams.some((x) => acc.teams.indexOf(x) >= 0)) return false;
+      if (this.list(r.operations).indexOf(op) < 0) return false;
+      const acts = this.list(r.actions); if (acts.length && acts.indexOf(action) < 0) return false;
+      const risks = this.list(r.risks); if (risks.length && risks.indexOf(this.risk(action)) < 0) return false;
+      const lbl = this.labels(r.labels); if (Object.keys(lbl).some((k) => hostLabels[k] !== lbl[k])) return false;
+      if (r.from !== '' && r.to !== '') { const f = +r.from, to = +r.to; if (!(f <= hour && hour < to)) return false; }
+      return true;
+    });
+    const deny = matched.filter((r) => r.effect === 'deny');
+    if (deny.length) return { eff: 'deny', why: deny.map((r) => r.name).join(', ') };
+    const allow = matched.filter((r) => r.effect === 'allow');
+    if (allow.length) return { eff: 'allow', why: allow.map((r) => r.name).join(', ') };
+    return { eff: 'deny', why: '默认拒绝（无匹配规则）' };
+  }
+  tokens(dark) {
+    return dark
+      ? { bg: '#0B0B0D', card: '#141417', pop: 'rgba(24,24,28,.97)', line: '#27272C', line2: '#1D1D21', fg: '#EDEDF0', fg2: '#B4B4BC', muted: '#8E8E98', pill: '#1F1F24', accent: '#A5B4FC', accentSoft: '#25264A', green: '#4ADE80', greenSoft: '#132A1C', amber: '#FBBF24', amberSoft: '#33280F', red: '#F87171', redSoft: '#3A1A1C', sel: '#17182A', selEdge: '#A5B4FC' }
+      : { bg: '#FAFAFA', card: '#FFFFFF', pop: 'rgba(255,255,255,.97)', line: '#E4E4E7', line2: '#F0F0F2', fg: '#18181B', fg2: '#52525B', muted: '#6B6B74', pill: '#F1F1F3', accent: '#4F46E5', accentSoft: '#EEEDFD', green: '#16A34A', greenSoft: '#EAF7EE', amber: '#B45309', amberSoft: '#FEF3E2', red: '#DC2626', redSoft: '#FDECEC', sel: '#F5F5FF', selEdge: '#4F46E5' };
+  }
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const t = this.tokens(theme === 'dark');
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const sig = (r) => JSON.stringify(r);
+    const savedSig = s.saved.map(sig);
+    const dirty = JSON.stringify(s.draft) !== JSON.stringify(s.saved);
+    const idx = Math.min(s.sel, s.draft.length - 1);
+    const cur = s.draft[idx] || s.draft[0];
+    const updateCur = (patch) => set({ draft: s.draft.map((r, i) => i === idx ? Object.assign({}, r, patch) : r) });
+    const rules = s.draft.map((r, i) => {
+      const on = i === idx;
+      const chips = [];
+      chips.push({ k: '角色', v: r.roles || '—' });
+      if (r.teams) chips.push({ k: '团队', v: r.teams });
+      const ops = this.list(r.operations);
+      chips.push({ k: '操作', v: ops.length > 2 ? ops.length + ' 项' : (ops.join(', ') || '—') });
+      const acts = this.list(r.actions);
+      if (acts.length) chips.push({ k: 'action', v: acts.length > 2 ? acts.length + ' 个' : acts.join(', ') });
+      if (r.risks) chips.push({ k: '风险', v: r.risks });
+      if (r.labels) chips.push({ k: '标签', v: r.labels });
+      if (r.from !== '' && r.to !== '') chips.push({ k: '时段', v: r.from + '–' + r.to + ' ' + (r.tz || 'UTC') });
+      return {
+        idx: i + 1, name: r.name || '(未命名)', chips, changed: savedSig[i] !== sig(r),
+        effLabel: r.effect === 'deny' ? '拒绝' : '允许', effBg: r.effect === 'deny' ? t.redSoft : t.greenSoft, effFg: r.effect === 'deny' ? t.red : t.green,
+        bg: on ? t.card : t.card, border: on ? t.selEdge : t.line, shadow: on ? '0 0 0 1px ' + t.selEdge : 'none',
+        pick: () => set({ sel: i })
+      };
+    });
+    const F = (key, label, ph) => ({ label, value: cur[key], ph, change: (e) => updateCur({ [key]: e.target.value }) });
+    const fields = [
+      F('name', '规则名称', 'maintenance-actions'), F('roles', '角色（逗号分隔）', 'ops-maintainer'),
+      F('operations', '操作（逗号分隔）', 'execute_action'), F('actions', 'Action 名称（逗号分隔）', '留空表示全部'),
+      F('labels', '主机标签', 'env=prod,tier=web'), F('risks', '风险（逗号分隔）', 'read, write, dangerous'),
+      F('teams', '团队（逗号分隔）', 'ops'), F('cidrs', '来源 CIDR（逗号分隔）', '10.0.0.0/8'),
+      F('from', '时段开始（可选）', '8'), F('to', '时段结束（可选）', '18'), F('tz', '时区', 'Asia/Shanghai')
+    ];
+    const effects = [['allow', '允许'], ['deny', '拒绝']].map(([id, label]) => {
+      const on = cur.effect === id;
+      return { label, pressed: on ? 'true' : 'false', bg: on ? t.card : 'transparent', fg: on ? (id === 'deny' ? t.red : t.green) : t.fg2, shadow: on ? '0 1px 2px rgba(0,0,0,.10)' : 'none', pick: () => updateCur({ effect: id }) };
+    });
+
+    const testKey = JSON.stringify([s.draft, s.tc]);
+    const stale = !!s.tested && s.tested.key !== testKey;
+    let results = [], summary = '';
+    if (s.tested) {
+      const changed = s.tested.rows.filter((x) => x.before !== x.after);
+      const up = changed.filter((x) => x.after === 'allow').length;
+      summary = changed.length ? changed.length + ' 台主机判定改变：' + up + ' 台变为允许，' + (changed.length - up) + ' 台变为拒绝' : '判定没有变化，共试算 ' + s.tested.rows.length + ' 台主机';
+      const L = { allow: '允许', deny: '拒绝' };
+      results = s.tested.rows.map((x) => ({
+        host: x.host, before: L[x.before], after: L[x.after], why: x.why,
+        bColor: x.before === 'allow' ? t.green : t.red, aColor: x.after === 'allow' ? t.green : t.red,
+        bg: x.before !== x.after ? (x.after === 'allow' ? t.greenSoft : t.redSoft) : 'transparent'
+      }));
+    }
+    const adminOk = s.draft.some((r) => r.effect === 'allow' && this.list(r.roles).indexOf('admin') >= 0 && this.list(r.operations).indexOf('modify_policy') >= 0);
+    const canSave = dirty && s.tested && !stale && s.reason.trim() && adminOk;
+    const actionOpts = ['nginx_test_config', 'systemd_service_status', 'disk_usage', 'journal_view_log', 'docker_ps', 'jvm_arthas_thread_top', 'jvm_arthas_watch', 'agent_upgrade'].map((v) => ({ v }));
+    const tcSet = (k) => (e) => set({ tc: Object.assign({}, s.tc, { [k]: e.target.value }) });
+    return {
+      theme, t, version: s.version, nextVersion: s.version + 1, ruleCount: s.draft.length, dirty,
+      rules, cur: { idx: idx + 1 }, fields, effects,
+      addRule: () => set({ draft: s.draft.concat([{ name: 'new-rule', effect: 'allow', roles: '', teams: '', operations: 'execute_action', actions: '', risks: '', labels: '', cidrs: '', from: '', to: '', tz: '' }]), sel: s.draft.length }),
+      removeRule: () => set({ draft: s.draft.filter((_, i) => i !== idx), sel: Math.max(0, idx - 1) }),
+      tc: s.tc, accountOpts: Object.keys(this.accounts()).map((v) => ({ v })), actionOpts,
+      onSubject: tcSet('subject'), onOp: tcSet('op'), onAction: tcSet('action'), onSel: tcSet('sel'),
+      runTest: () => {
+        const want = this.labels(s.tc.sel);
+        const rows = this.hosts().filter(([, l]) => Object.keys(want).every((k) => l[k] === want[k])).map(([host, l]) => {
+          const b = this.evaluate(s.saved, s.tc.subject, s.tc.op, s.tc.action, l);
+          const a = this.evaluate(s.draft, s.tc.subject, s.tc.op, s.tc.action, l);
+          return { host, before: b.eff, after: a.eff, why: a.why };
+        });
+        set({ tested: { key: testKey, rows } });
+      },
+      stale, hasResult: !!s.tested && !stale, results, summary,
+      adminText: adminOk ? '是' : '否 — 保存会被拒绝', adminColor: adminOk ? t.muted : t.red,
+      reason: s.reason, onReason: (e) => set({ reason: e.target.value }),
+      saveDisabled: !canSave, saveBg: canSave ? '#4F46E5' : '#A1A1AA',
+      saveHint: !dirty ? '没有修改。' : (!s.tested || stale ? '保存前需要对当前修改试算。' : (!s.reason.trim() ? '请填写变更原因。' : (!adminOk ? '策略必须保留可修改策略的管理员。' : '将保存为新版本并写入审计。'))),
+      save: () => {
+        if (!canSave) return;
+        const v = s.version + 1;
+        set({ saved: s.draft.map((r) => Object.assign({}, r)), version: v, tested: null, reason: '', toast: '策略已保存为 v' + v, versions: [{ v, at: '2026-11-04 17:29', by: 'user:liu.bing', reason: s.reason }].concat(s.versions) });
+      },
+      historyOpen: s.history, toggleHistory: () => set({ history: !s.history }),
+      history: s.versions.map((h) => ({
+        v: h.v, at: h.at, by: h.by, reason: h.reason, current: h.v === s.version, canRollback: h.v !== s.version,
+        rollback: () => {
+          let rules = this.v7();
+          if (h.v <= 6) rules = rules.filter((r) => r.name !== 'java-arthas-l2');
+          if (h.v <= 5) rules = rules.filter((r) => r.name !== 'maintenance-deny-dangerous');
+          if (h.v <= 4) rules = rules.filter((r) => r.name.indexOf('java-') !== 0);
+          set({ draft: rules, sel: 0, history: false, reason: '回滚到 v' + h.v, tc: Object.assign({}, s.tc, { subject: 'ops-maintainer', action: 'agent_upgrade', sel: '' }) });
+        }
+      })),
+      toast: s.toast, closeToast: () => set({ toast: '' })
+    };
+  }
+}
+</script>
+</body>
+</html>

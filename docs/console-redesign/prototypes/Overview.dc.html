@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>allowops · 概览</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#4F46E5}a:hover{color:#3730A3}
+@keyframes aoPulse{0%{box-shadow:0 0 0 0 rgba(59,130,246,.55)}70%{box-shadow:0 0 0 6px rgba(59,130,246,0)}100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}}
+.ao-pulse{animation:aoPulse 1.6s ease-out infinite}
+[data-theme="light"] .ao-row:hover,[data-theme="light"] .ao-nav:hover,[data-theme="light"] .ao-ghost:hover{background:#F1F1F3}
+[data-theme="dark"] .ao-row:hover,[data-theme="dark"] .ao-nav:hover,[data-theme="dark"] .ao-ghost:hover{background:#1C1C20}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #6366F1;outline-offset:1px}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="min-height: 100vh; display: flex; flex-wrap: wrap; font-family: Geist, -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; font-size: 13px; line-height: 1.5; color: {{t.fg}}; background: {{t.bg}}">
+  <div style="flex: 1 1 232px; max-width: 100%; display: flex"><dc-import name="Sidebar" active="overview" theme="{{theme}}" hint-size="100%,100vh"></dc-import></div>
+  <main style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column">
+    <header style="min-height: 52px; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid {{t.line}}; flex-wrap: wrap">
+      <h1 style="margin: 0; font-size: 14px; font-weight: 600">概览</h1>
+      <span style="font-size: 12px; color: {{t.muted}}">主机连接、任务和凭据到期情况</span>
+      <span style="flex: 1"></span>
+      <a href="System.dc.html" style="height: 28px; padding: 0 10px; border-radius: 999px; background: {{t.accentSoft}}; color: {{t.accent}}; text-decoration: none; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{t.accent}}"></span>网关有新版本 v0.9.3</a>
+    </header>
+
+    <div style="padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: 1200px; width: 100%; box-sizing: border-box">
+
+      <section aria-label="过去 24 小时" style="border-radius: 14px; border: 1px solid {{t.line}}; background: {{t.card}}; padding: 16px 18px; display: flex; gap: 12px; align-items: flex-start; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px -12px rgba(20,20,40,.12)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{{t.accent}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"></path><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"></path></svg>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 12px; color: {{t.muted}}">过去 24 小时</span>
+          <p style="margin: 0; font-size: 15px; line-height: 1.6">5 个服务账号发起了 <b>46</b> 次 action 调用，允许 41 次、拒绝 5 次。现在有 <b>2</b> 个 job 在运行；<a href="Jobs.dc.html" style="color: {{t.accent}}">systemd_service_status</a> 在 legacy-batch-02 上因主机离线部分失败。<b>2</b> 台主机没有授权标签，agent 调用会被直接拒绝。</p>
+        </div>
+      </section>
+
+      <section aria-label="关键指标" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px">
+        <sc-for list="{{stats}}" as="s" hint-placeholder-count="4">
+          <a href="{{s.href}}" style="text-decoration: none; color: inherit; border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px">
+            <span style="display: flex; align-items: center; gap: 7px; font-size: 12px; color: {{t.muted}}"><span class="{{s.cls}}" style="width: 7px; height: 7px; border-radius: 50%; background: {{s.dot}}"></span>{{s.label}}</span>
+            <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 26px; font-weight: 500; line-height: 1.1">{{s.value}}<span style="font-size: 14px; color: {{t.muted}}">{{s.of}}</span></span>
+            <span style="font-size: 12px; color: {{t.muted}}">{{s.hint}}</span>
+          </a>
+        </sc-for>
+      </section>
+
+      <section aria-label="需要处理" style="border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; overflow: hidden">
+        <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid {{t.line2}}">
+          <h2 style="margin: 0; font-size: 13px; font-weight: 600">需要处理</h2>
+          <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; padding: 0 6px; border-radius: 999px; background: {{t.amberSoft}}; color: {{t.amber}}">{{alertCount}}</span>
+        </div>
+        <sc-for list="{{alerts}}" as="a" hint-placeholder-count="4">
+          <div class="ao-row" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid {{t.line2}}; flex-wrap: wrap">
+            <span style="width: 28px; height: 28px; border-radius: 8px; background: {{a.soft}}; color: {{a.color}}; display: flex; align-items: center; justify-content: center; flex: none"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{a.icon}}"></path></svg></span>
+            <span style="flex: 1 1 260px; display: flex; flex-direction: column; min-width: 0"><span style="font-weight: 500">{{a.title}}</span><span style="font-size: 12px; color: {{t.muted}}">{{a.sub}}</span></span>
+            <a href="{{a.href}}" style="height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid {{t.line}}; color: {{t.fg}}; text-decoration: none; display: flex; align-items: center; font-weight: 500">{{a.cta}}</a>
+            <button class="ao-ghost" type="button" onClick="{{a.dismiss}}" style="height: 30px; padding: 0 10px; border-radius: 8px; border: 0; background: transparent; color: {{t.muted}}; font: inherit; cursor: pointer">稍后</button>
+          </div>
+        </sc-for>
+        <sc-if value="{{noAlerts}}" hint-placeholder-val="{{ false }}">
+          <div style="padding: 24px 16px; color: {{t.muted}}; text-align: center">当前没有到期提醒</div>
+        </sc-if>
+      </section>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px">
+        <section aria-label="最近 job" style="border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; overflow: hidden">
+          <div style="display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid {{t.line2}}"><h2 style="margin: 0; font-size: 13px; font-weight: 600; flex: 1">最近 job</h2><a href="Jobs.dc.html" style="font-size: 12px; color: {{t.accent}}; text-decoration: none">全部 →</a></div>
+          <sc-for list="{{jobs}}" as="j" hint-placeholder-count="5">
+            <a class="ao-row" href="Jobs.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid {{t.line2}}; color: inherit; text-decoration: none">
+              <span class="{{j.cls}}" style="width: 7px; height: 7px; border-radius: 50%; background: {{j.dot}}; flex: none"></span>
+              <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span style="font-family: 'Geist Mono', ui-monospace, monospace; font-weight: 500">{{j.action}}</span><span style="font-size: 12px; color: {{t.muted}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{j.sub}}</span></span>
+              <span style="display: flex; flex-direction: column; align-items: flex-end"><span style="font-size: 12px; color: {{j.color}}; font-weight: 500">{{j.status}}</span><span style="font-size: 11px; color: {{t.muted}}">{{j.when}}</span></span>
+            </a>
+          </sc-for>
+        </section>
+        <section aria-label="Agent 活动" style="border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; overflow: hidden">
+          <div style="display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid {{t.line2}}"><h2 style="margin: 0; font-size: 13px; font-weight: 600; flex: 1">Agent 活动</h2><a href="Audit.dc.html" style="font-size: 12px; color: {{t.accent}}; text-decoration: none">审计 →</a></div>
+          <sc-for list="{{feed}}" as="f" hint-placeholder-count="6">
+            <div style="display: flex; gap: 10px; padding: 10px 16px; border-bottom: 1px solid {{t.line2}}">
+              <span style="width: 22px; height: 22px; border-radius: 6px; background: {{f.soft}}; color: {{f.color}}; display: flex; align-items: center; justify-content: center; flex: none; font-size: 11px; font-weight: 600">{{f.mark}}</span>
+              <span style="flex: 1; min-width: 0; display: flex; flex-direction: column"><span><span style="font-family: 'Geist Mono', ui-monospace, monospace">{{f.who}}</span> <span style="color: {{t.muted}}">{{f.verb}}</span> <span style="font-family: 'Geist Mono', ui-monospace, monospace">{{f.what}}</span></span><span style="font-size: 12px; color: {{f.subColor}}">{{f.sub}}</span></span>
+              <span style="font-size: 11px; color: {{t.muted}}; white-space: nowrap">{{f.when}}</span>
+            </div>
+          </sc-for>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"]},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { hidden: {} }; }
+  tokens(dark) {
+    return dark
+      ? { bg: '#0B0B0D', card: '#141417', line: '#27272C', line2: '#1D1D21', fg: '#EDEDF0', fg2: '#B4B4BC', muted: '#8E8E98', pill: '#1F1F24', accent: '#A5B4FC', accentSoft: '#25264A', green: '#4ADE80', greenSoft: '#132A1C', amber: '#FBBF24', amberSoft: '#33280F', red: '#F87171', redSoft: '#3A1A1C', blue: '#60A5FA', blueSoft: '#152238' }
+      : { bg: '#FAFAFA', card: '#FFFFFF', line: '#E4E4E7', line2: '#F0F0F2', fg: '#18181B', fg2: '#52525B', muted: '#6B6B74', pill: '#F1F1F3', accent: '#4F46E5', accentSoft: '#EEEDFD', green: '#16A34A', greenSoft: '#EAF7EE', amber: '#B45309', amberSoft: '#FEF3E2', red: '#DC2626', redSoft: '#FDECEC', blue: '#2563EB', blueSoft: '#EAF1FE' };
+  }
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const t = this.tokens(theme === 'dark');
+    const s = this.state || { hidden: {} };
+    const hide = (id) => () => this.setState({ hidden: Object.assign({}, s.hidden, { [id]: true }) });
+    const I = {
+      clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2',
+      key: 'M8 11a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM11 12l9-9M17 6l3 3',
+      ban: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8',
+      up: 'M12 19V5M5 12l7-7 7 7'
+    };
+    const all = [
+      { id: 'cat', icon: I.clock, color: t.amber, soft: t.amberSoft, title: '目录 generic-ops v14 将在 11 天后到期', sub: '到期后主机拒绝加载，所有 action 不可用。请从 CI 发布新签名目录。', cta: '查看目录', href: 'Catalog.dc.html' },
+      { id: 'tok', icon: I.key, color: t.amber, soft: t.amberSoft, title: '1 个服务账号 token 将在 7 天内到期', sub: 'java-diag · tok_9c41 · 5 天后到期，最后使用 14 分钟前', cta: '轮换 token', href: 'ServiceAccounts.dc.html' },
+      { id: 'lbl', icon: I.ban, color: t.red, soft: t.redSoft, title: '2 台主机没有授权标签', sub: 'build-runner-12、ip-10-4-2-31 · 对所有 agent 默认拒绝执行', cta: '设置标签', href: 'Main.dc.html' },
+      { id: 'ver', icon: I.up, color: t.accent, soft: t.accentSoft, title: '3 台主机的主机端版本低于网关', sub: '0.9.1 × 2、0.8.7 × 1 · 网关有新版本 v0.9.3', cta: '查看系统', href: 'System.dc.html' }
+    ];
+    const alerts = all.filter((a) => !s.hidden[a.id]).map((a) => Object.assign({}, a, { dismiss: hide(a.id) }));
+    const st = {
+      running: { dot: t.blue, cls: 'ao-pulse', color: t.blue, label: '运行中' },
+      ok: { dot: t.green, cls: '', color: t.green, label: '成功' },
+      partial: { dot: '#F59E0B', cls: '', color: t.amber, label: '部分失败' },
+      denied: { dot: t.red, cls: '', color: t.red, label: '拒绝' },
+      cancelled: { dot: '#A1A1AA', cls: '', color: t.muted, label: '已取消' }
+    };
+    const J = (action, sub, s2, when) => Object.assign({ action, sub, when, status: st[s2].label }, st[s2]);
+    return {
+      theme, t,
+      stats: [
+        { label: '在线主机', value: '8', of: ' / 10', hint: '2 台离线 · 2 台无授权标签', dot: t.green, cls: '', href: 'Main.dc.html' },
+        { label: '运行中的 job', value: '2', of: '', hint: '覆盖 3 台主机', dot: t.blue, cls: 'ao-pulse', href: 'Jobs.dc.html' },
+        { label: '最近 24 小时失败 job', value: '1', of: '', hint: '部分失败 1 · 失败 0', dot: '#F59E0B', cls: '', href: 'Jobs.dc.html' },
+        { label: '被拒绝的调用', value: '5', of: ' / 46', hint: '无授权标签 3 · 规则拒绝 2', dot: t.red, cls: '', href: 'Audit.dc.html' }
+      ],
+      alerts, alertCount: alerts.length, noAlerts: alerts.length === 0,
+      jobs: [
+        J('journal_view_log', 'ops-reader · 排查 mysqld 慢查询告警 · 2 台', 'running', '2 秒前'),
+        J('disk_usage', 'ops-reader · 巡检磁盘水位 · 3 台', 'running', '8 秒前'),
+        J('nginx_test_config', 'ops-maintainer · 发布前校验 nginx 配置 · 2 台', 'ok', '6 分钟前'),
+        J('jvm_arthas_thread_top', 'java-diag · 订单服务 CPU 飙高 · 1 台', 'ok', '14 分钟前'),
+        J('systemd_service_status', 'ops-maintainer · 检查服务状态 · 3 台', 'partial', '22 分钟前'),
+        J('agent_upgrade', 'ops-maintainer · 升级主机端', 'denied', '1 小时前')
+      ],
+      feed: [
+        { mark: '✓', soft: t.greenSoft, color: t.green, who: 'ops-reader', verb: '调用', what: 'journal_view_log', sub: 'env=prod,tier=db → 2 台 · 允许 · prod-read', subColor: t.muted, when: '2 秒前' },
+        { mark: '✓', soft: t.greenSoft, color: t.green, who: 'ops-reader', verb: '调用', what: 'disk_usage', sub: '3 台 · 允许 · prod-read', subColor: t.muted, when: '8 秒前' },
+        { mark: '⌕', soft: t.pill, color: t.fg2, who: 'ops-reader', verb: '搜索', what: 'hosts_search', sub: 'env=prod · 返回 7 台', subColor: t.muted, when: '10 秒前' },
+        { mark: '✕', soft: t.redSoft, color: t.red, who: 'ops-reader', verb: '调用', what: 'systemd_service_status', sub: 'build-runner-12 · 拒绝 · 无授权标签', subColor: t.red, when: '18 分钟前' },
+        { mark: '✓', soft: t.greenSoft, color: t.green, who: 'java-diag', verb: '调用', what: 'jvm_arthas_thread_top', sub: 'jvm-order-03 · 允许 · java-arthas-l1', subColor: t.muted, when: '14 分钟前' },
+        { mark: '✕', soft: t.redSoft, color: t.red, who: 'ops-maintainer', verb: '调用', what: 'agent_upgrade', sub: 'starrocks-be-07 · 拒绝 · maintenance-deny-dangerous', subColor: t.red, when: '1 小时前' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

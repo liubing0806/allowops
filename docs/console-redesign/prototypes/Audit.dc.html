@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>allowops · 审计</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#4F46E5}a:hover{color:#3730A3}
+@keyframes aoPulse{0%{box-shadow:0 0 0 0 rgba(59,130,246,.55)}70%{box-shadow:0 0 0 6px rgba(59,130,246,0)}100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}}
+.ao-pulse{animation:aoPulse 1.6s ease-out infinite}
+[data-theme="light"] .ao-row:hover,[data-theme="light"] .ao-nav:hover,[data-theme="light"] .ao-ghost:hover{background:#F1F1F3}
+[data-theme="dark"] .ao-row:hover,[data-theme="dark"] .ao-nav:hover,[data-theme="dark"] .ao-ghost:hover{background:#1C1C20}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #6366F1;outline-offset:1px}
+input::placeholder{color:#8E8E96}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="position: relative; min-height: 100vh; display: flex; flex-wrap: wrap; font-family: Geist, -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; font-size: 13px; line-height: 1.5; color: {{t.fg}}; background: {{t.bg}}">
+  <div style="flex: 1 1 232px; max-width: 100%; display: flex"><dc-import name="Sidebar" active="audit" theme="{{theme}}" hint-size="100%,100vh"></dc-import></div>
+  <main style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column">
+    <header style="min-height: 52px; box-sizing: border-box; padding: 8px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid {{t.line}}; flex-wrap: wrap">
+      <h1 style="margin: 0; font-size: 14px; font-weight: 600">审计</h1>
+      <span style="font-size: 12px; color: {{t.muted}}">访问记录与哈希链内部一致性</span>
+      <span style="flex: 1"></span>
+      <button type="button" onClick="{{toggleVerify}}" style="height: 32px; padding: 0 12px; border-radius: 8px; border: 0; background: {{t.fg}}; color: {{t.bg}}; font: inherit; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"></path></svg>校验哈希链</button>
+    </header>
+
+    <div style="padding: 16px 20px 32px; display: flex; flex-direction: column; gap: 12px; min-width: 0">
+      <sc-if value="{{verifyOpen}}" hint-placeholder-val="{{ false }}">
+        <section aria-label="校验哈希链" style="border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap">
+            <label style="flex: 0 1 160px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: {{t.muted}}">起始序列号<input value="{{fromSeq}}" onChange="{{onFromSeq}}" style="height: 34px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.bg}}; color: {{t.fg}}; font-family: 'Geist Mono', ui-monospace, monospace"></label>
+            <label style="flex: 0 1 160px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: {{t.muted}}">结束序列号<input value="{{toSeq}}" onChange="{{onToSeq}}" style="height: 34px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.bg}}; color: {{t.fg}}; font-family: 'Geist Mono', ui-monospace, monospace"></label>
+            <button type="button" onClick="{{verify}}" style="height: 34px; padding: 0 14px; border-radius: 8px; border: 0; background: #4F46E5; color: #FFFFFF; font: inherit; font-weight: 500; cursor: pointer">开始校验</button>
+          </div>
+          <sc-if value="{{verified}}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 10px 12px; border-radius: 10px; background: {{vBg}}; color: {{vFg}}; display: flex; flex-direction: column; gap: 2px">
+              <strong style="font-weight: 600">{{vTitle}}</strong>
+              <span style="font-size: 12px">仅校验内部一致性，未验证外部可信锚。</span>
+            </div>
+          </sc-if>
+        </section>
+      </sc-if>
+
+      <section aria-label="筛选" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+        <div role="group" aria-label="判定" style="display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: {{t.pill}}">
+          <sc-for list="{{decisions}}" as="d" hint-placeholder-count="3"><button type="button" onClick="{{d.pick}}" aria-pressed="{{d.pressed}}" style="height: 28px; padding: 0 10px; border-radius: 7px; border: 0; background: {{d.bg}}; box-shadow: {{d.shadow}}; color: {{d.fg}}; font: inherit; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{d.dot}}"></span>{{d.label}}</button></sc-for>
+        </div>
+        <sc-for list="{{filters}}" as="f" hint-placeholder-count="3">
+          <label style="flex: 0 1 180px; display: block"><span style="position: absolute; left: -9999px">{{f.label}}</span><input value="{{f.value}}" onChange="{{f.change}}" placeholder="{{f.label}}" style="width: 100%; height: 34px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.card}}; color: {{t.fg}}; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px"></label>
+        </sc-for>
+        <span style="flex: 1"></span>
+        <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: {{t.muted}}">2026-11-04 00:00 → 2026-11-05 00:00</span>
+      </section>
+
+      <section aria-label="审计事件" style="border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; overflow: hidden">
+        <div style="overflow-x: auto">
+          <div role="table" aria-label="审计事件" style="min-width: 1000px">
+            <div role="row" style="display: grid; grid-template-columns: 76px 84px minmax(140px, 1fr) 120px minmax(140px, 1fr) minmax(170px, 1.2fr) 70px minmax(150px, 1.1fr) 92px; gap: 10px; padding: 0 16px; height: 36px; align-items: center; font-size: 12px; color: {{t.muted}}; border-bottom: 1px solid {{t.line}}">
+              <span role="columnheader">序列号</span><span role="columnheader">时间</span><span role="columnheader">主体</span><span role="columnheader">操作</span><span role="columnheader">主机</span><span role="columnheader">Action</span><span role="columnheader">判定</span><span role="columnheader">匹配规则</span><span role="columnheader">哈希</span>
+            </div>
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="10">
+              <button class="ao-row" type="button" onClick="{{r.pick}}" role="row" style="width: 100%; text-align: left; display: grid; grid-template-columns: 76px 84px minmax(140px, 1fr) 120px minmax(140px, 1fr) minmax(170px, 1.2fr) 70px minmax(150px, 1.1fr) 92px; gap: 10px; padding: 0 16px; min-height: 40px; align-items: center; border: 0; border-bottom: 1px solid {{t.line2}}; background: {{r.bg}}; box-shadow: {{r.edge}}; font: inherit; color: inherit; cursor: pointer">
+                <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; color: {{t.fg2}}">{{r.seq}}</span>
+                <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: {{t.fg2}}">{{r.at}}</span>
+                <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">{{r.subject}}</span>
+                <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: {{t.fg2}}">{{r.op}}</span>
+                <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">{{r.host}}</span>
+                <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">{{r.action}}</span>
+                <span role="cell"><span style="font-size: 12px; padding: 1px 8px; border-radius: 999px; background: {{r.soft}}; color: {{r.color}}">{{r.decision}}</span></span>
+                <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: {{t.fg2}}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{r.rules}}</span>
+                <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: {{t.muted}}">{{r.hashShort}}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 10px 16px; font-size: 12px; color: {{t.muted}}"><span style="flex: 1">第 1 / 4 页，共 46 条</span><button class="ao-ghost" type="button" style="height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid {{t.line}}; background: transparent; color: {{t.muted}}; font: inherit; font-size: 12px" disabled="{{ true }}">上一页</button><button class="ao-ghost" type="button" style="height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid {{t.line}}; background: transparent; color: {{t.fg}}; font: inherit; font-size: 12px; cursor: pointer">下一页</button></div>
+      </section>
+    </div>
+  </main>
+
+  <sc-if value="{{hasDetail}}" hint-placeholder-val="{{ false }}">
+    <aside aria-label="审计事件详情" style="position: absolute; top: 64px; right: 12px; bottom: 12px; width: 420px; max-width: calc(100% - 24px); box-sizing: border-box; border-radius: 14px; background: {{t.pop}}; border: 1px solid {{t.line}}; box-shadow: 0 24px 60px rgba(20,22,30,.20), 0 2px 8px rgba(20,22,30,.06); display: flex; flex-direction: column; overflow: hidden">
+      <div style="padding: 14px 14px 12px 16px; display: flex; gap: 10px; align-items: flex-start; border-bottom: 1px solid {{t.line2}}">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><h2 style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 15px; font-weight: 500">#{{e.seq}}</h2><span style="font-size: 12px; color: {{t.muted}}">{{e.atFull}}</span></div>
+        <button class="ao-ghost" type="button" onClick="{{closeDetail}}" aria-label="关闭详情" style="width: 30px; height: 30px; border-radius: 7px; border: 0; background: transparent; color: {{t.fg2}}; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+      </div>
+      <div style="flex: 1; overflow-y: auto; padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 16px">
+        <div style="padding: 12px; border-radius: 10px; background: {{e.soft}}; color: {{e.color}}"><strong style="font-weight: 600">{{e.decision}}</strong> · <span style="font-family: 'Geist Mono', ui-monospace, monospace">{{e.subject}}</span> {{e.op}} <span style="font-family: 'Geist Mono', ui-monospace, monospace">{{e.action}}</span> → <span style="font-family: 'Geist Mono', ui-monospace, monospace">{{e.host}}</span></div>
+        <dl style="margin: 0; display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 6px 10px; font-size: 12px">
+          <dt style="color: {{t.muted}}">匹配规则</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace">{{e.rules}}</dd>
+          <dt style="color: {{t.muted}}">策略版本</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace">v7</dd>
+          <dt style="color: {{t.muted}}">Job</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace">{{e.job}}</dd>
+          <dt style="color: {{t.muted}}">Task</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace">{{e.task}}</dd>
+          <dt style="color: {{t.muted}}">输出引用</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace; word-break: break-all">{{e.out}}</dd>
+        </dl>
+        <section style="display: flex; flex-direction: column; gap: 8px">
+          <h3 style="margin: 0; font-size: 12px; font-weight: 500; color: {{t.muted}}">哈希链</h3>
+          <sc-for list="{{e.chain}}" as="c" hint-placeholder-count="3">
+            <div style="display: flex; flex-direction: column; align-items: stretch">
+              <div style="padding: 8px 10px; border-radius: 8px; border: 1px solid {{c.border}}; background: {{c.bg}}; display: flex; flex-direction: column; gap: 2px">
+                <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500">#{{c.seq}}</span>
+                <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: {{t.muted}}; word-break: break-all">prev {{c.prev}}</span>
+                <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; color: {{t.fg2}}; word-break: break-all">hash {{c.hash}}</span>
+              </div>
+              <sc-if value="{{c.link}}" hint-placeholder-val="{{ true }}"><span style="align-self: center; height: 14px; width: 1px; background: {{t.line}}"></span></sc-if>
+            </div>
+          </sc-for>
+        </section>
+      </div>
+    </aside>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"]},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { dec: 'all', subject: '', host: '', action: '', sel: null, verify: false, fromSeq: '48100', toSeq: '48222', result: null };
+  }
+  events() {
+    const E = (seq, at, subject, op, host, action, decision, rules, job) => ({ seq, at, subject, op, host, action, decision, rules, job });
+    return [
+      E(48222, '17:29:02', 'sa:ops-reader', 'execute_action', 'db-prod-mysql-01', 'journal_view_log', 'allow', 'prod-read', 'job_7Hq2Lm'),
+      E(48221, '17:29:02', 'sa:ops-reader', 'execute_action', 'db-prod-mysql-02', 'journal_view_log', 'allow', 'prod-read', 'job_7Hq2Lm'),
+      E(48220, '17:29:01', 'sa:ops-reader', 'view_hosts', '—', 'hosts_search', 'allow', 'readers-inventory', '—'),
+      E(48219, '17:28:56', 'sa:ops-reader', 'execute_action', 'web-prod-01', 'disk_usage', 'allow', 'prod-read', 'job_7Hq1Xa'),
+      E(48218, '17:28:56', 'sa:ops-reader', 'execute_action', 'stage-web-01', 'disk_usage', 'allow', 'staging-read', 'job_7Hq1Xa'),
+      E(48217, '17:22:40', 'user:liu.bing', 'view_output', 'web-prod-02', 'nginx_test_config', 'allow', 'administrators', 'job_7Hp9Qe'),
+      E(48216, '17:22:03', 'sa:ops-maintainer', 'execute_action', 'web-prod-02', 'nginx_test_config', 'allow', 'maintenance-actions', 'job_7Hp9Qe'),
+      E(48215, '17:14:20', 'sa:java-diag', 'execute_action', 'jvm-order-03', 'jvm_arthas_thread_top', 'allow', 'java-arthas-l1', 'job_7Hp6Rt'),
+      E(48214, '17:11:09', 'sa:ops-reader', 'execute_action', 'build-runner-12', 'systemd_service_status', 'deny', '— · 无授权标签', '—'),
+      E(48213, '17:06:31', 'sa:java-reader-bot', 'execute_action', 'jvm-order-03', 'jvm_arthas_watch', 'deny', 'java-arthas-l2-deny-readers', '—'),
+      E(48212, '16:46:03', 'sa:ops-maintainer', 'execute_action', 'starrocks-be-07', 'agent_upgrade', 'deny', 'maintenance-deny-dangerous', 'job_7Hn8Vb'),
+      E(48211, '16:30:12', 'user:liu.bing', 'modify_policy', '—', '—', 'allow', 'administrators', '—')
+    ];
+  }
+  hash(seq) {
+    const h = ['k3Q9', 'Wm1x', 'p7Ld', 'Zr4T', 'b8Nv', 'Hs2e', 'Yq6c', 'Ju0a', 'Fo5g', 'Ci9w', 'Ex3k', 'Vt7m'];
+    return h[seq % 12] + h[(seq * 7) % 12] + 'Q2s+' + h[(seq * 5) % 12] + '…' + h[(seq * 3) % 12] + '=';
+  }
+  tokens(dark) {
+    return dark
+      ? { bg: '#0B0B0D', card: '#141417', pop: 'rgba(24,24,28,.97)', line: '#27272C', line2: '#1D1D21', fg: '#EDEDF0', fg2: '#B4B4BC', muted: '#8E8E98', pill: '#1F1F24', accent: '#A5B4FC', accentSoft: '#25264A', green: '#4ADE80', greenSoft: '#132A1C', amber: '#FBBF24', amberSoft: '#33280F', red: '#F87171', redSoft: '#3A1A1C', sel: '#17182A', selEdge: '#A5B4FC' }
+      : { bg: '#FAFAFA', card: '#FFFFFF', pop: 'rgba(255,255,255,.97)', line: '#E4E4E7', line2: '#F0F0F2', fg: '#18181B', fg2: '#52525B', muted: '#6B6B74', pill: '#F1F1F3', accent: '#4F46E5', accentSoft: '#EEEDFD', green: '#16A34A', greenSoft: '#EAF7EE', amber: '#B45309', amberSoft: '#FEF3E2', red: '#DC2626', redSoft: '#FDECEC', sel: '#F5F5FF', selEdge: '#4F46E5' };
+  }
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const t = this.tokens(theme === 'dark');
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const all = this.events();
+    const has = (v, q) => !q.trim() || String(v).toLowerCase().indexOf(q.trim().toLowerCase()) >= 0;
+    const shown = all.filter((e) => (s.dec === 'all' || e.decision === s.dec) && has(e.subject, s.subject) && has(e.host, s.host) && has(e.action, s.action));
+    const D = { allow: ['允许', t.greenSoft, t.green], deny: ['拒绝', t.redSoft, t.red] };
+    const seg = (on) => ({ bg: on ? t.card : 'transparent', fg: on ? t.fg : t.fg2, shadow: on ? '0 1px 2px rgba(0,0,0,.10), 0 0 0 .5px rgba(0,0,0,.06)' : 'none', pressed: on ? 'true' : 'false' });
+    const fset = (k) => (e) => set({ [k]: e.target.value });
+    const cur = all.find((e) => e.seq === s.sel);
+    let e = {};
+    if (cur) {
+      const d = D[cur.decision];
+      e = {
+        seq: cur.seq, atFull: '2026-11-04 ' + cur.at + ' +08:00', subject: cur.subject, op: cur.op, action: cur.action, host: cur.host, rules: cur.rules,
+        decision: d[0], soft: d[1], color: d[2], job: cur.job, task: cur.job === '—' ? '—' : 'task_' + (cur.seq % 997).toString(16),
+        out: cur.op === 'execute_action' && cur.decision === 'allow' ? 's3://allowops-output/' + cur.job + '/' + cur.host + '/stdout' : '—',
+        chain: [cur.seq - 1, cur.seq, cur.seq + 1].filter((q) => q <= 48222).map((q, i, arr) => ({
+          seq: q, prev: this.hash(q - 1), hash: this.hash(q), link: i < arr.length - 1,
+          border: q === cur.seq ? t.selEdge : t.line, bg: q === cur.seq ? t.sel : t.card
+        }))
+      };
+    }
+    const from = parseInt(s.fromSeq, 10), to = parseInt(s.toSeq, 10);
+    const okRange = from > 0 && to >= from;
+    return {
+      theme, t,
+      decisions: [['all', '全部', t.muted], ['allow', '允许', t.green], ['deny', '拒绝', t.red]].map(([id, label, dot]) => Object.assign({ label, dot, pick: () => set({ dec: id }) }, seg(s.dec === id))),
+      filters: [{ label: '主体 ID', value: s.subject, change: fset('subject') }, { label: '主机', value: s.host, change: fset('host') }, { label: 'Action', value: s.action, change: fset('action') }],
+      rows: shown.map((r) => {
+        const d = D[r.decision];
+        const on = r.seq === s.sel;
+        return { seq: r.seq, at: r.at, subject: r.subject, op: r.op, host: r.host, action: r.action, rules: r.rules, decision: d[0], soft: d[1], color: d[2], hashShort: this.hash(r.seq).slice(0, 8) + '…', bg: on ? t.sel : 'transparent', edge: on ? 'inset 2px 0 0 ' + t.selEdge : 'none', pick: () => set({ sel: r.seq }) };
+      }),
+      hasDetail: !!cur, e, closeDetail: () => set({ sel: null }),
+      verifyOpen: s.verify, toggleVerify: () => set({ verify: !s.verify }),
+      fromSeq: s.fromSeq, toSeq: s.toSeq, onFromSeq: fset('fromSeq'), onToSeq: fset('toSeq'),
+      verify: () => set({ result: okRange ? { ok: true, n: to - from + 1 } : { ok: false } }),
+      verified: !!s.result,
+      vTitle: s.result ? (s.result.ok ? '哈希链校验通过，已校验 ' + s.result.n + ' 条' : '哈希链校验失败：序列号范围无效') : '',
+      vBg: s.result && s.result.ok ? t.greenSoft : t.redSoft, vFg: s.result && s.result.ok ? t.green : t.red
+    };
+  }
+}
+</script>
+</body>
+</html>
