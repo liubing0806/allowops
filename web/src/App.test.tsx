@@ -120,7 +120,8 @@ describe('console pages', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'journal_view_log' }),
     )
-    const dialog = await screen.findByRole('dialog', {
+    // Action details open in a side panel (complementary), not a modal.
+    const dialog = await screen.findByRole('complementary', {
       name: 'journal_view_log',
     })
     expect(await within(dialog).findByText(/journalctl/)).toBeInTheDocument()

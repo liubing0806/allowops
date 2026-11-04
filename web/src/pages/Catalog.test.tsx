@@ -47,7 +47,8 @@ describe('gateway catalog definitions', () => {
         fireEvent.click(
           await screen.findByRole('button', { name: 'journal_view_log' }),
         )
-        const dialog = await screen.findByRole('dialog', {
+        // Action details open in a side panel (complementary), not a modal.
+        const dialog = await screen.findByRole('complementary', {
           name: 'journal_view_log',
         })
         expect(await within(dialog).findByText(text)).toBeInTheDocument()
@@ -100,7 +101,8 @@ describe('gateway catalog definitions', () => {
         window.history.replaceState({}, '', '/catalog')
         render(<App />)
         fireEvent.click(await screen.findByRole('button', { name }))
-        const dialog = await screen.findByRole('dialog', { name })
+        // Action details open in a side panel (complementary), not a modal.
+        const dialog = await screen.findByRole('complementary', { name })
         const config = await within(dialog).findByText(
           (text, element) =>
             element?.tagName === 'PRE' && text.includes(expected),
