@@ -517,5 +517,14 @@
   "audit.step": "step {{step}}",
   "audit.chain": "Hash chain",
   "audit.notLoaded": "not in the current results",
-  "audit.chainHint": "Shows the prev and hash fields recorded in each event; use \"Verify hash chain\" to check consistency."
+  "audit.chainHint": "Shows the prev and hash fields recorded in each event; use \"Verify hash chain\" to check consistency.",
+  "users.search": "Search users",
+  "users.searchPlaceholder": "Name, username or email",
+  "users.memberCount": "{{count}} users",
+  "users.list": "Users",
+  "users.user": "User",
+  "users.fromMapping": "From group mapping",
+  "users.mappingDescription": "Roles granted at login from identity provider groups",
+  "users.removeMapping": "Remove this mapping",
+  "users.unsaved": "Unsaved changes"
 }

@@ -517,5 +517,14 @@
   "audit.step": "第 {{step}} 步",
   "audit.chain": "哈希链",
   "audit.notLoaded": "不在当前查询结果中",
-  "audit.chainHint": "按事件记录的 prev 和 hash 字段展示；一致性请用「校验哈希链」检查。"
+  "audit.chainHint": "按事件记录的 prev 和 hash 字段展示；一致性请用「校验哈希链」检查。",
+  "users.search": "搜索用户",
+  "users.searchPlaceholder": "姓名、用户名或邮箱",
+  "users.memberCount": "{{count}} 人",
+  "users.list": "用户",
+  "users.user": "用户",
+  "users.fromMapping": "来自组映射",
+  "users.mappingDescription": "登录时按身份源组自动授予角色",
+  "users.removeMapping": "删除这条映射",
+  "users.unsaved": "有未保存修改"
 }
