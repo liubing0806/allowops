@@ -526,5 +526,18 @@
   "users.fromMapping": "来自组映射",
   "users.mappingDescription": "登录时按身份源组自动授予角色",
   "users.removeMapping": "删除这条映射",
-  "users.unsaved": "有未保存修改"
+  "users.unsaved": "有未保存修改",
+  "system.startedAt": "启动时间",
+  "system.lastSeen": "最后心跳",
+  "system.drainingHint": "新 job 只派给其他实例，已连接主机会逐步迁移。",
+  "system.hostCount": "{{count}} 台 · 在线 {{online}}",
+  "system.behind": "{{count}} 台主机的主机端版本低于网关 {{version}}。",
+  "system.filterOutdated": "在主机列表中筛选「需升级」→",
+  "system.limits": "服务限制",
+  "system.limitMessage": "单条消息上限",
+  "system.limitChunk": "分块上限",
+  "system.limitPage": "默认 / 最大分页",
+  "system.limitOutputPage": "默认 / 最大输出页",
+  "system.limitCatalog": "目录大小上限",
+  "system.limitCsv": "CSV 导入上限"
 }

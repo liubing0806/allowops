@@ -526,5 +526,18 @@
   "users.fromMapping": "From group mapping",
   "users.mappingDescription": "Roles granted at login from identity provider groups",
   "users.removeMapping": "Remove this mapping",
-  "users.unsaved": "Unsaved changes"
+  "users.unsaved": "Unsaved changes",
+  "system.startedAt": "Started",
+  "system.lastSeen": "Last heartbeat",
+  "system.drainingHint": "New jobs go to other instances; connected hosts move over gradually.",
+  "system.hostCount": "{{count}} hosts · {{online}} online",
+  "system.behind": "{{count}} hosts run an agent older than gateway {{version}}.",
+  "system.filterOutdated": "Filter \"Outdated\" in the host list →",
+  "system.limits": "Service limits",
+  "system.limitMessage": "Maximum message size",
+  "system.limitChunk": "Maximum chunk size",
+  "system.limitPage": "Default / maximum page size",
+  "system.limitOutputPage": "Default / maximum output page",
+  "system.limitCatalog": "Maximum catalog size",
+  "system.limitCsv": "Maximum CSV import size"
 }
