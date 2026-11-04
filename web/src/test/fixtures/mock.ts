@@ -1062,13 +1062,14 @@ export const mockApi: ConsoleApi = {
       ),
     ).revokedAt = date()
   },
-  async listJobs({ statuses = [], action } = {}) {
+  async listJobs({ statuses = [], action, subjectId } = {}) {
     return {
       jobs: copy(
         state.jobs.filter(
           (j) =>
             (!statuses.length || statuses.includes(j.status)) &&
-            (!action || j.action.includes(action)),
+            (!action || j.action.includes(action)) &&
+            (!subjectId || j.subjectId === subjectId),
         ),
       ),
       page,

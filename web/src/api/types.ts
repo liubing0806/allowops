@@ -521,6 +521,7 @@ export interface ConsoleApi {
   listJobs(input?: {
     statuses?: JobStatus[]
     action?: string
+    subjectId?: string
     page?: { pageSize?: number; pageToken?: string }
   }): Promise<{ jobs: Job[]; page: PageResponse }>
   getJob(input: { jobId: string }): Promise<{ job: Job }>
