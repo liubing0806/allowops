@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { api } from '@/api'
@@ -36,9 +36,11 @@ describe('D05 running job auto refresh', () => {
           await screen.findAllByText('运行中', {}, { timeout: 5000 }),
         ).not.toHaveLength(0)
         expect(await screen.findByText('取消 job')).toBeInTheDocument()
-        // Polling must pick up the backend transition on its own.
+        // Polling must pick up the backend transition on its own. The status
+        // filter also has a "成功" button, so look inside the job detail.
+        const detail = screen.getByRole('region', { name: 'Job 详情' })
         expect(
-          await screen.findByText('成功', {}, { timeout: 8000 }),
+          await within(detail).findByText('成功', {}, { timeout: 8000 }),
         ).toBeInTheDocument()
         expect(calls).toBeGreaterThan(1)
       } finally {

@@ -46,9 +46,6 @@ const Jobs = lazy(() => import('@/pages/Jobs'))
 const Audit = lazy(() => import('@/pages/Audit'))
 const UsersPage = lazy(() => import('@/pages/Users'))
 const System = lazy(() => import('@/pages/System'))
-const JobDetail = lazy(() =>
-  import('@/pages/Jobs').then((module) => ({ default: module.JobDetail })),
-)
 
 function useDarkTheme() {
   const preference = useThemeStore((state) => state.preference)
@@ -347,8 +344,8 @@ export default function App() {
                 <Route path="catalog" element={<Catalog />} />
                 <Route path="policies" element={<Policies />} />
                 <Route path="service-accounts" element={<ServiceAccounts />} />
-                <Route path="jobs" element={<Jobs />} />
-                <Route path="jobs/:jobId" element={<JobDetail />} />
+                {/* The job list stays mounted beside the selected job's detail. */}
+                <Route path="jobs/:jobId?" element={<Jobs />} />
                 <Route path="audit" element={<Audit />} />
                 <Route path="users" element={<UsersPage />} />
                 <Route path="system" element={<System />} />

@@ -576,7 +576,8 @@ describe('English pages', () => {
     ['/policies', 'Policies'],
     ['/service-accounts', 'Service accounts'],
     ['/jobs', 'Jobs'],
-    ['/jobs/job-20261013-0042', 'job-20261013-0042'],
+    // Job detail sits beside the job list; its title is level 2.
+    ['/jobs/job-20261013-0042', 'job-20261013-0042', 2],
     ['/audit', 'Audit'],
     ['/users', 'Users & roles'],
     ['/system', 'System'],

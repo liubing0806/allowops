@@ -532,6 +532,8 @@ export interface ConsoleApi {
     hostname: string
     stream: 'OUTPUT_STREAM_STDOUT' | 'OUTPUT_STREAM_STDERR'
     offset: string
+    // Required for composite actions (Task.stepCount > 0), rejected otherwise.
+    stepIndex?: number
     limitBytes?: number
   }): Promise<GetJobOutputResponse>
   cancelJob(input: { jobId: string }): Promise<{ job: Job }>

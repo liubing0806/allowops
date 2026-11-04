@@ -31,12 +31,24 @@ async function serveJobs() {
   })
 }
 
+// The job list is a list of links; each link is named by its job ID and
+// describes the action, subject and progress separately.
 async function ids() {
-  const table = await screen.findByRole('table')
+  const table = await screen.findByRole('list', { name: 'Job 列表' })
   await screen.findAllByRole('link', { name: /^job-page-/ })
   return within(table)
     .getAllByRole('link')
-    .map((link) => link.textContent)
+    .map((link) => link.getAttribute('aria-label'))
+}
+
+// The job status filter is a segmented control instead of a select.
+function pickStatus(label: string) {
+  fireEvent.click(
+    within(screen.getByRole('group', { name: 'Job 状态' })).getByRole(
+      'button',
+      { name: label },
+    ),
+  )
 }
 
 function open() {
@@ -86,9 +98,7 @@ describe('jobs list server pagination', () => {
     await ids()
     fireEvent.click(screen.getByRole('button', { name: '下一页' }))
     expect(await screen.findByText('第 2 页')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Job 状态'), {
-      target: { value: 'JOB_STATUS_RUNNING' },
-    })
+    pickStatus('运行中')
     expect(await screen.findByText('第 1 页')).toBeInTheDocument()
     expect(await ids()).toEqual(Array.from({ length: 10 }, (_, i) => name(i)))
     const last = list.mock.calls.at(-1)?.[0]
@@ -102,10 +112,9 @@ describe('jobs list server pagination', () => {
     await ids()
     fireEvent.click(screen.getByRole('button', { name: '下一页' }))
     expect(await screen.findByText('第 2 页')).toBeInTheDocument()
-    const status = screen.getByLabelText('Job 状态')
-    fireEvent.change(status, { target: { value: 'JOB_STATUS_RUNNING' } })
+    pickStatus('运行中')
     expect(await screen.findByText('第 1 页')).toBeInTheDocument()
-    fireEvent.change(status, { target: { value: '' } })
+    pickStatus('全部')
     expect(await screen.findByText('第 1 页')).toBeInTheDocument()
     expect(await ids()).toEqual(Array.from({ length: 10 }, (_, i) => name(i)))
     expect(list.mock.calls.at(-1)?.[0]?.page?.pageToken || '').toBe('')

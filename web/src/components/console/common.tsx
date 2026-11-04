@@ -233,7 +233,7 @@ export interface ServerPager {
   onNext: () => void
 }
 
-function PagerFooter({
+export function PagerFooter({
   label,
   canPrevious,
   canNext,

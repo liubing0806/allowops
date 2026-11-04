@@ -160,9 +160,13 @@ describe('console pages', () => {
     expect(
       await screen.findByRole('link', { name: 'job-20261013-0042' }),
     ).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Job 状态'), {
-      target: { value: 'JOB_STATUS_RUNNING' },
-    })
+    // The job status filter is a segmented control instead of a select.
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Job 状态' })).getByRole(
+        'button',
+        { name: '运行中' },
+      ),
+    )
     await waitFor(() =>
       expect(
         screen.queryByRole('link', { name: 'job-20261013-0042' }),
