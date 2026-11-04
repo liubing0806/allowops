@@ -197,7 +197,13 @@ describe('console pages', () => {
     expect(
       await screen.findByRole('heading', { name: '审计', level: 1 }),
     ).toBeInTheDocument()
+    // The top-bar button opens the range form; verification starts from the form
+    // once the range defaults to the newest loaded event.
     fireEvent.click(screen.getByRole('button', { name: '校验哈希链' }))
+    await waitFor(() =>
+      expect(screen.getByLabelText('结束序列号')).toHaveValue('3'),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '开始校验' }))
     expect(await screen.findByRole('status')).toHaveTextContent(
       '哈希链校验通过',
     )

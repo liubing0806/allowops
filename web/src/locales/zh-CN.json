@@ -505,5 +505,17 @@
   "host.noLabelsHint": "所有 agent 调用都会被拒绝。设置授权标签，并确认有策略规则覆盖这些标签。",
   "host.registeredAt": "注册时间",
   "host.deleteAction": "删除主机…",
-  "common.justNow": "刚刚"
+  "common.justNow": "刚刚",
+  "audit.verifyStart": "开始校验",
+  "audit.firstInvalid": "首个无效序列号：{{seq}}",
+  "audit.filters": "筛选审计事件",
+  "audit.events": "审计事件",
+  "audit.operation": "操作",
+  "audit.openDetail": "打开审计事件 {{seq}} 详情",
+  "audit.policyVersion": "策略版本",
+  "audit.outputs": "输出引用",
+  "audit.step": "第 {{step}} 步",
+  "audit.chain": "哈希链",
+  "audit.notLoaded": "不在当前查询结果中",
+  "audit.chainHint": "按事件记录的 prev 和 hash 字段展示；一致性请用「校验哈希链」检查。"
 }

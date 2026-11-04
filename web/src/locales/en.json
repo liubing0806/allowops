@@ -505,5 +505,17 @@
   "host.noLabelsHint": "Every agent call is denied. Set authorization labels and make sure a policy rule covers them.",
   "host.registeredAt": "Registered",
   "host.deleteAction": "Delete host…",
-  "common.justNow": "just now"
+  "common.justNow": "just now",
+  "audit.verifyStart": "Start verification",
+  "audit.firstInvalid": "First invalid sequence number: {{seq}}",
+  "audit.filters": "Filter audit events",
+  "audit.events": "Audit events",
+  "audit.operation": "Operation",
+  "audit.openDetail": "Open audit event {{seq}}",
+  "audit.policyVersion": "Policy version",
+  "audit.outputs": "Output references",
+  "audit.step": "step {{step}}",
+  "audit.chain": "Hash chain",
+  "audit.notLoaded": "not in the current results",
+  "audit.chainHint": "Shows the prev and hash fields recorded in each event; use \"Verify hash chain\" to check consistency."
 }
