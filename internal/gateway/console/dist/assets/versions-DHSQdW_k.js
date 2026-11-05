@@ -1,0 +1,1 @@
+var e=/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?$/;function t(t,n){let r=e.exec(t.trim()),i=e.exec(n.trim());if(!r||!i)return null;for(let e=1;e<=3;e++){let t=Number(r[e])-Number(i[e]);if(t)return Math.sign(t)}return r[4]===i[4]?0:r[4]?i[4]?r[4]<i[4]?-1:1:-1:1}function n(e){let n;for(let r of e)t(r,r)!==null&&(!n||(t(r,n)??0)>0)&&(n=r);return n}export{n,t};

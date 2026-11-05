@@ -1,0 +1,1 @@
+var e=[[`year`,31536e3],[`month`,2592e3],[`day`,86400],[`hour`,3600],[`minute`,60],[`second`,1]];function t(t,n,r,i=Date.now()){let a=Math.round((Date.parse(t)-i)/1e3),o=new Intl.RelativeTimeFormat(n,{numeric:`auto`});if(Math.abs(a)<10)return r;for(let[t,n]of e)if(Math.abs(a)>=n||t===`second`)return o.format(Math.trunc(a/n),t);return o.format(a,`second`)}export{t};
