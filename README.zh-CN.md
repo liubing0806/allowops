@@ -25,6 +25,8 @@ ALPN（应用层协议协商）。命令使用固定参数数组。
 ABAC（基于属性的访问控制）只使用网关管理的授权标签。
 没有授权标签的主机拒绝执行动作。
 
+![allowops 控制台：job 列表和选中 job 的每台主机结果](site/public/img/console/zh/job.webp)
+
 ## 快速开始
 
 使用 Linux amd64 检出目录，准备 Docker Compose、Go 1.27.3、OpenSSL、Git
