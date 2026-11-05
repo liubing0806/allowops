@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>allowops · 目录</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#4F46E5}a:hover{color:#3730A3}
+@keyframes aoPulse{0%{box-shadow:0 0 0 0 rgba(59,130,246,.55)}70%{box-shadow:0 0 0 6px rgba(59,130,246,0)}100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}}
+.ao-pulse{animation:aoPulse 1.6s ease-out infinite}
+[data-theme="light"] .ao-row:hover,[data-theme="light"] .ao-nav:hover,[data-theme="light"] .ao-ghost:hover{background:#F1F1F3}
+[data-theme="dark"] .ao-row:hover,[data-theme="dark"] .ao-nav:hover,[data-theme="dark"] .ao-ghost:hover{background:#1C1C20}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #6366F1;outline-offset:1px}
+input::placeholder{color:#8E8E96}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="position: relative; min-height: 100vh; display: flex; flex-wrap: wrap; font-family: Geist, -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; font-size: 13px; line-height: 1.5; color: {{t.fg}}; background: {{t.bg}}">
+  <div style="flex: 1 1 232px; max-width: 100%; display: flex"><dc-import name="Sidebar" active="catalog" theme="{{theme}}" hint-size="100%,100vh"></dc-import></div>
+  <main style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column">
+    <header style="min-height: 52px; box-sizing: border-box; padding: 8px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid {{t.line}}; flex-wrap: wrap">
+      <h1 style="margin: 0; font-size: 14px; font-weight: 600">目录</h1>
+      <span style="font-size: 12px; color: {{t.muted}}">签名目录、动作定义和主机加载情况</span>
+      <span style="flex: 1"></span>
+      <button class="ao-ghost" type="button" onClick="{{copyPublish}}" style="height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid {{t.line}}; background: transparent; color: {{t.fg}}; font: inherit; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>复制发布命令</button>
+    </header>
+
+    <div style="padding: 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px">
+        <section aria-label="当前目录" style="border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+            <span style="width: 32px; height: 32px; border-radius: 9px; background: {{t.accentSoft}}; color: {{t.accent}}; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2zM9 3v18"></path></svg></span>
+            <span style="display: flex; flex-direction: column; line-height: 1.3"><span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 16px; font-weight: 500">generic-ops <span style="color: {{t.muted}}">v14</span></span><span style="font-size: 12px; color: {{t.muted}}">当前目录 · 发布于 2026-10-28 · 133 个 action</span></span>
+            <span style="flex: 1"></span>
+            <span style="font-size: 12px; padding: 2px 8px; border-radius: 999px; background: {{t.greenSoft}}; color: {{t.green}}; display: flex; align-items: center; gap: 5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l4 4 10-10"></path></svg>DSSE 签名有效</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <span style="display: flex; justify-content: space-between; font-size: 12px"><span style="color: {{t.muted}}">目录过期倒计时</span><span style="font-family: 'Geist Mono', ui-monospace, monospace; color: {{t.amber}}; font-weight: 500">11 天 6 小时</span></span>
+            <span style="height: 6px; border-radius: 3px; background: {{t.pill}}; overflow: hidden; display: flex"><span style="width: 62%; background: #F59E0B; border-radius: 3px"></span></span>
+            <span style="font-size: 12px; color: {{t.amber}}">目录将在 14 天内到期，请发布新签名目录。到期后主机拒绝执行该目录中的所有 action。</span>
+          </div>
+          <dl style="margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; font-size: 12px">
+            <div><dt style="color: {{t.muted}}">格式版本</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace">1</dd></div>
+            <div><dt style="color: {{t.muted}}">来源提交</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace">3f9c2ab</dd></div>
+            <div><dt style="color: {{t.muted}}">信封大小</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace">184 KiB</dd></div>
+          </dl>
+        </section>
+        <section aria-label="主机目录版本分布" style="border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+          <h2 style="margin: 0; font-size: 13px; font-weight: 600">主机目录版本分布</h2>
+          <span style="height: 10px; border-radius: 5px; overflow: hidden; display: flex; gap: 2px">
+            <sc-for list="{{dist}}" as="x" hint-placeholder-count="4"><span style="width: {{x.w}}; background: {{x.c}}"></span></sc-for>
+          </span>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <sc-for list="{{dist}}" as="x" hint-placeholder-count="4">
+              <div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 2px; background: {{x.c}}"></span><span style="font-family: 'Geist Mono', ui-monospace, monospace; flex: none; min-width: 64px">{{x.label}}</span><span style="flex: 1; font-size: 12px; color: {{t.muted}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{x.hosts}}</span><span style="font-family: 'Geist Mono', ui-monospace, monospace">{{x.n}}</span></div>
+            </sc-for>
+          </div>
+          <span style="font-size: 12px; color: {{t.muted}}">加载成功不代表每个 action 都能运行，主机可能缺少所需工具或特权依赖。</span>
+        </section>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+        <div role="group" aria-label="视图" style="display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: {{t.pill}}">
+          <sc-for list="{{views}}" as="v" hint-placeholder-count="2"><button type="button" onClick="{{v.pick}}" aria-pressed="{{v.pressed}}" style="height: 28px; padding: 0 12px; border-radius: 7px; border: 0; background: {{v.bg}}; box-shadow: {{v.shadow}}; color: {{v.fg}}; font: inherit; font-weight: 500; cursor: pointer">{{v.label}}</button></sc-for>
+        </div>
+        <sc-if value="{{isActions}}" hint-placeholder-val="{{ true }}">
+          <div role="group" aria-label="按风险筛选" style="display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px; background: {{t.pill}}">
+            <sc-for list="{{risks}}" as="r" hint-placeholder-count="4"><button type="button" onClick="{{r.pick}}" aria-pressed="{{r.pressed}}" style="height: 28px; padding: 0 10px; border-radius: 7px; border: 0; background: {{r.bg}}; box-shadow: {{r.shadow}}; color: {{r.fg}}; font: inherit; cursor: pointer; display: flex; align-items: center; gap: 6px"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{r.dot}}"></span>{{r.label}}</button></sc-for>
+          </div>
+          <span style="flex: 1"></span>
+          <label style="position: relative; display: block; flex: 0 1 260px">
+            <span style="position: absolute; left: -9999px">搜索 action</span>
+            <svg style="position: absolute; left: 10px; top: 9px" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{t.muted}}" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+            <input value="{{q}}" onChange="{{onQ}}" placeholder="action 名称或描述" style="width: 100%; height: 32px; box-sizing: border-box; padding: 0 10px 0 30px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.card}}; color: {{t.fg}}; font: inherit">
+          </label>
+        </sc-if>
+      </div>
+
+      <sc-if value="{{isActions}}" hint-placeholder-val="{{ true }}">
+        <section aria-label="Action 列表" style="border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; overflow: hidden">
+          <div style="overflow-x: auto">
+            <div role="table" aria-label="Action 列表" style="min-width: 820px">
+              <div role="row" style="display: grid; grid-template-columns: minmax(220px, 1.2fr) minmax(240px, 2fr) 90px 150px 70px; gap: 10px; padding: 0 16px; height: 36px; align-items: center; font-size: 12px; color: {{t.muted}}; border-bottom: 1px solid {{t.line}}"><span role="columnheader">Action</span><span role="columnheader">描述</span><span role="columnheader">风险</span><span role="columnheader">执行方式</span><span role="columnheader">参数</span></div>
+              <sc-for list="{{actions}}" as="a" hint-placeholder-count="8">
+                <div class="ao-row" role="row" style="display: grid; grid-template-columns: minmax(220px, 1.2fr) minmax(240px, 2fr) 90px 150px 70px; gap: 10px; padding: 0 16px; min-height: 44px; align-items: center; border-bottom: 1px solid {{t.line2}}; background: {{a.bg}}; box-shadow: {{a.edge}}">
+                  <span role="cell"><button type="button" onClick="{{a.pick}}" style="padding: 0; border: 0; background: transparent; font-family: 'Geist Mono', ui-monospace, monospace; font-weight: 500; color: {{t.fg}}; cursor: pointer; text-align: left">{{a.name}}</button></span>
+                  <span role="cell" style="color: {{t.fg2}}">{{a.desc}}</span>
+                  <span role="cell"><span style="font-size: 12px; padding: 1px 8px; border-radius: 999px; background: {{a.riskBg}}; color: {{a.riskFg}}">{{a.riskLabel}}</span></span>
+                  <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: {{t.fg2}}">{{a.mode}}</span>
+                  <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: {{t.fg2}}">{{a.pc}}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="padding: 10px 16px; font-size: 12px; color: {{t.muted}}">显示 {{shownCount}} / 133 个 action</div>
+        </section>
+      </sc-if>
+
+      <sc-if value="{{isHistory}}" hint-placeholder-val="{{ false }}">
+        <section aria-label="版本历史" style="border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; overflow: hidden">
+          <sc-for list="{{history}}" as="h" hint-placeholder-count="3">
+            <div style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid {{t.line2}}; flex-wrap: wrap">
+              <span style="width: 10px; height: 10px; border-radius: 50%; border: 2px solid {{h.ring}}; background: {{h.fill}}; flex: none"></span>
+              <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-weight: 500; min-width: 120px">generic-ops v{{h.v}}</span>
+              <sc-if value="{{h.current}}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; padding: 0 6px; border-radius: 999px; background: {{t.accentSoft}}; color: {{t.accent}}">当前</span></sc-if>
+              <span style="flex: 1 1 200px; font-size: 12px; color: {{t.fg2}}">发布于 {{h.at}} · {{h.n}} 个 action · 提交 <span style="font-family: 'Geist Mono', ui-monospace, monospace">{{h.commit}}</span></span>
+              <span style="font-size: 12px; color: {{h.expColor}}">{{h.exp}}</span>
+            </div>
+          </sc-for>
+        </section>
+      </sc-if>
+    </div>
+  </main>
+
+  <sc-if value="{{hasDetail}}" hint-placeholder-val="{{ false }}">
+    <aside aria-label="Action 详情" style="position: absolute; top: 64px; right: 12px; bottom: 12px; width: 420px; max-width: calc(100% - 24px); box-sizing: border-box; border-radius: 14px; background: {{t.pop}}; border: 1px solid {{t.line}}; box-shadow: 0 24px 60px rgba(20,22,30,.20), 0 2px 8px rgba(20,22,30,.06); display: flex; flex-direction: column; overflow: hidden">
+      <div style="padding: 14px 14px 12px 16px; display: flex; gap: 10px; align-items: flex-start; border-bottom: 1px solid {{t.line2}}">
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+          <h2 style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 15px; font-weight: 500; word-break: break-all">{{x.name}}</h2>
+          <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: {{t.muted}}"><span style="padding: 0 7px; border-radius: 999px; background: {{x.riskBg}}; color: {{x.riskFg}}">{{x.riskLabel}}</span>{{x.desc}}</span>
+        </div>
+        <button class="ao-ghost" type="button" onClick="{{closeDetail}}" aria-label="关闭详情" style="width: 30px; height: 30px; border-radius: 7px; border: 0; background: transparent; color: {{t.fg2}}; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+      </div>
+      <div style="flex: 1; overflow-y: auto; padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 18px">
+        <section style="display: flex; flex-direction: column; gap: 6px">
+          <h3 style="margin: 0; font-size: 12px; font-weight: 500; color: {{t.muted}}">参数</h3>
+          <sc-if value="{{x.noParams}}" hint-placeholder-val="{{ false }}"><span style="color: {{t.muted}}">无参数</span></sc-if>
+          <sc-for list="{{x.params}}" as="p" hint-placeholder-count="2">
+            <div style="padding: 8px 10px; border-radius: 8px; border: 1px solid {{t.line}}; background: {{t.card}}; display: flex; flex-direction: column; gap: 2px">
+              <span style="display: flex; gap: 8px; align-items: center"><span style="font-family: 'Geist Mono', ui-monospace, monospace; font-weight: 500">{{p.name}}</span><span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; padding: 0 6px; border-radius: 4px; background: {{t.pill}}; color: {{t.fg2}}">{{p.type}}</span></span>
+              <span style="font-size: 12px; color: {{t.fg2}}">{{p.c}}</span>
+            </div>
+          </sc-for>
+        </section>
+        <section style="display: flex; flex-direction: column; gap: 6px">
+          <h3 style="margin: 0; font-size: 12px; font-weight: 500; color: {{t.muted}}">{{x.cmdLabel}}</h3>
+          <pre style="margin: 0; padding: 10px 12px; border-radius: 8px; background: {{t.code}}; color: {{t.codeFg}}; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all">{{x.cmd}}</pre>
+        </section>
+        <dl style="margin: 0; display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px 10px; font-size: 12px">
+          <dt style="color: {{t.muted}}">运行用户</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace">{{x.runAs}}</dd>
+          <dt style="color: {{t.muted}}">执行超时</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace">{{x.timeout}}</dd>
+          <dt style="color: {{t.muted}}">输出上限</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace">{{x.maxOut}}</dd>
+          <dt style="color: {{t.muted}}">脱敏规则</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace">{{x.redact}}</dd>
+          <dt style="color: {{t.muted}}">输出过滤</dt><dd style="margin: 0; font-family: 'Geist Mono', ui-monospace, monospace">{{x.filters}}</dd>
+          <dt style="color: {{t.muted}}">幂等</dt><dd style="margin: 0">{{x.idem}}</dd>
+        </dl>
+        <section style="display: flex; flex-direction: column; gap: 6px; padding-top: 14px; border-top: 1px solid {{t.line2}}">
+          <h3 style="margin: 0; font-size: 12px; font-weight: 500; color: {{t.muted}}">谁能调用</h3>
+          <span style="color: {{t.fg2}}">{{x.who}}</span>
+          <a href="Policies.dc.html" style="font-size: 12px; color: {{t.accent}}; text-decoration: none">在策略中查看 →</a>
+        </section>
+      </div>
+    </aside>
+  </sc-if>
+
+  <sc-if value="{{toast}}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position: absolute; right: 20px; top: 64px; display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; border-radius: 10px; background: {{t.pop}}; border: 1px solid {{t.line}}; box-shadow: 0 8px 24px rgba(0,0,0,.12); max-width: calc(100% - 40px)">
+      <span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">{{toast}}</span>
+      <button class="ao-ghost" type="button" onClick="{{closeToast}}" aria-label="关闭提示" style="width: 26px; height: 26px; border-radius: 6px; border: 0; background: transparent; color: {{t.muted}}; cursor: pointer">×</button>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"]},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { view: 'actions', risk: 'all', q: '', sel: null, toast: '' }; }
+  tokens(dark) {
+    return dark
+      ? { bg: '#0B0B0D', card: '#141417', pop: 'rgba(24,24,28,.97)', line: '#27272C', line2: '#1D1D21', fg: '#EDEDF0', fg2: '#B4B4BC', muted: '#8E8E98', pill: '#1F1F24', accent: '#A5B4FC', accentSoft: '#25264A', green: '#4ADE80', greenSoft: '#132A1C', amber: '#FBBF24', amberSoft: '#33280F', red: '#F87171', redSoft: '#3A1A1C', blue: '#60A5FA', sel: '#17182A', selEdge: '#A5B4FC', code: '#0E0E11', codeFg: '#D4D4DA' }
+      : { bg: '#FAFAFA', card: '#FFFFFF', pop: 'rgba(255,255,255,.97)', line: '#E4E4E7', line2: '#F0F0F2', fg: '#18181B', fg2: '#52525B', muted: '#6B6B74', pill: '#F1F1F3', accent: '#4F46E5', accentSoft: '#EEEDFD', green: '#16A34A', greenSoft: '#EAF7EE', amber: '#B45309', amberSoft: '#FEF3E2', red: '#DC2626', redSoft: '#FDECEC', blue: '#2563EB', sel: '#F5F5FF', selEdge: '#4F46E5', code: '#18181B', codeFg: '#E4E4E7' };
+  }
+  actions() {
+    const A = (name, desc, risk, mode, params, cmd, runAs, timeout, maxOut, redact, filters, idem, who) => ({ name, desc, risk, mode, params, cmd, runAs, timeout, maxOut, redact, filters, idem, who });
+    const P = (name, type, c) => ({ name, type, c });
+    return [
+      A('disk_usage', '查看文件系统磁盘使用率', 'read', 'exec', [], '["/usr/bin/df", "-h"]', 'allowops', '10s', '64KB', 'secrets', 'match, exclude, tail, head, count', '是', 'ops-reader（prod-read，env=prod）· ops-reader（staging-read）'),
+      A('systemd_service_status', '查看允许列表内 systemd 服务的状态', 'read', 'exec', [P('service', 'enum', '签名允许列表：nginx, api')], '["/usr/bin/systemctl", "status", "{service}", "--no-pager"]', 'allowops', '10s', '64KB', 'secrets', 'match, exclude, tail, head, count', '是', 'ops-reader（prod-read）· ops-maintainer（maintenance-actions，08–18 时）'),
+      A('journal_view_log', '查看服务日志末尾若干行', 'read', 'exec', [P('unit', 'enum', 'mysqld, nginx, api'), P('lines', 'int', '1–2000，默认 200')], '["/usr/bin/journalctl", "-u", "{unit}", "-n", "{lines}", "--no-pager"]', 'root（固定 sudo helper）', '15s', '256KB', 'secrets, pii', 'match, exclude, tail, head, count', '是', 'ops-reader（prod-read，env=prod）'),
+      A('nginx_test_config', '校验 nginx 配置语法', 'read', 'exec', [], '["/usr/sbin/nginx", "-t"]', 'root（固定 sudo helper）', '10s', '16KB', 'secrets', '—', '是', 'ops-maintainer（maintenance-actions，tier=web，08–18 时）'),
+      A('docker_ps', '列出运行中的容器', 'read', 'exec', [], '["/usr/bin/docker", "ps", "--format", "{{json .}}"]', 'root（固定 sudo helper）', '10s', '64KB', 'secrets', 'match, exclude, head, count', '是', 'ops-reader（prod-read）'),
+      A('file_view', '查看允许路径内的文件', 'read', 'exec', [P('path', 'path', '仅 /etc/nginx/** 与 /etc/app/**，禁止 ..'), P('lines', 'int', '1–500，默认 200')], '["/usr/bin/head", "-n", "{lines}", "{path}"]', 'allowops', '10s', '64KB', 'secrets, pii', 'match, exclude, tail, head', '是', '没有规则授权'),
+      A('http_get_local', '访问本机 HTTP 端点', 'read', 'builtin: http_get', [P('port', 'enum', '8080, 9090, 22222'), P('path', 'string', '以 / 开头，≤256 字符')], 'builtin http_get → http://127.0.0.1:{port}{path}', 'allowops', '5s', '64KB', 'secrets', 'match, head', '是', '没有规则授权'),
+      A('dremio_query_readonly', '在 Dremio 上执行只读 SQL', 'read', 'builtin: dremio_query', [P('sql', 'string', '经 sqlguard 校验，只允许 SELECT')], 'builtin dremio_query（sqlguard 只读）', 'allowops', '60s', '1MB', 'secrets, pii', 'head, count', '是', '没有规则授权'),
+      A('alertmanager_alerts', '列出 Alertmanager 当前告警', 'read', 'builtin: alertmanager_alerts', [P('filter', 'string', '可选，标签匹配表达式')], 'builtin alertmanager_alerts', 'allowops', '10s', '256KB', 'secrets', 'match, head, count', '是', '没有规则授权'),
+      A('jvm_arthas_thread_top', '按 CPU 列出最忙的 Java 线程', 'write', 'builtin: jvm_arthas', [P('pid', 'int', 'Java 进程号'), P('n', 'int', '1–20，默认 5')], 'step 0 attach → step 1 thread -n {n} → step 2 detach', 'appuser（目标进程属主）', '30s', '256KB', 'secrets', '—', '否', 'java-diag、java-reader-bot（java-arthas-l1，svc=order）'),
+      A('jvm_arthas_watch', '观察方法入参与返回值', 'write', 'builtin: jvm_arthas', [P('pid', 'int', 'Java 进程号'), P('class', 'string', '全限定类名'), P('method', 'string', '方法名'), P('limit', 'int', '1–20 次')], 'step 0 attach → step 1 watch {class} {method} -n {limit} → step 2 detach', 'appuser（目标进程属主）', '60s', '512KB', 'secrets, pii', '—', '否', 'java-diag（java-arthas-l2，09–17 时）；java-reader-bot 被规则拒绝'),
+      A('agent_upgrade', '升级主机端到指定版本', 'dangerous', 'exec', [P('version', 'enum', '0.9.2')], '["/usr/lib/allowops/upgrade", "{version}"]', 'root（固定 sudo helper）', '300s', '64KB', 'secrets', '—', '否', '无人可调用：maintenance-deny-dangerous 拒绝危险 action')
+    ];
+  }
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const t = this.tokens(theme === 'dark');
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const R = { read: ['只读', t.greenSoft, t.green], write: ['写入', t.amberSoft, t.amber], dangerous: ['危险', t.redSoft, t.red] };
+    const seg = (on) => ({ bg: on ? t.card : 'transparent', fg: on ? t.fg : t.fg2, shadow: on ? '0 1px 2px rgba(0,0,0,.10), 0 0 0 .5px rgba(0,0,0,.06)' : 'none', pressed: on ? 'true' : 'false' });
+    const all = this.actions();
+    const ql = s.q.trim().toLowerCase();
+    const shown = all.filter((a) => (s.risk === 'all' || a.risk === s.risk) && (!ql || (a.name + a.desc).toLowerCase().indexOf(ql) >= 0));
+    const sel = all.find((a) => a.name === s.sel);
+    let x = {};
+    if (sel) {
+      const r = R[sel.risk];
+      x = Object.assign({}, sel, { riskLabel: r[0], riskBg: r[1], riskFg: r[2], noParams: !sel.params.length, cmdLabel: sel.mode === 'exec' ? '命令（固定参数数组）' : '内置执行器', redact: sel.redact });
+    }
+    return {
+      theme, t,
+      dist: [
+        { label: 'v14', n: 7, w: '70%', c: t.accent, hosts: 'web-prod-01、web-prod-02、db-prod-mysql-01 等' },
+        { label: 'v13', n: 1, w: '10%', c: '#F59E0B', hosts: 'db-prod-mysql-02（离线）' },
+        { label: 'v12', n: 1, w: '10%', c: t.red, hosts: 'legacy-batch-02（离线）' },
+        { label: '未加载', n: 1, w: '10%', c: '#A1A1AA', hosts: 'ip-10-4-2-31（刚注册）' }
+      ],
+      views: [['actions', 'Action 列表'], ['history', '版本历史']].map(([id, label]) => Object.assign({ label, pick: () => set({ view: id }) }, seg(s.view === id))),
+      isActions: s.view === 'actions', isHistory: s.view === 'history',
+      risks: [['all', '全部', t.muted], ['read', '只读', t.green], ['write', '写入', '#F59E0B'], ['dangerous', '危险', t.red]].map(([id, label, dot]) => Object.assign({ label, dot, pick: () => set({ risk: id }) }, seg(s.risk === id))),
+      q: s.q, onQ: (e) => set({ q: e.target.value }),
+      actions: shown.map((a) => {
+        const r = R[a.risk];
+        const on = a.name === s.sel;
+        return { name: a.name, desc: a.desc, riskLabel: r[0], riskBg: r[1], riskFg: r[2], mode: a.mode, pc: a.params.length ? a.params.length + ' 个' : '—', bg: on ? t.sel : 'transparent', edge: on ? 'inset 2px 0 0 ' + t.selEdge : 'none', pick: () => set({ sel: a.name }) };
+      }),
+      shownCount: shown.length,
+      history: [
+        { v: 14, current: true, at: '2026-10-28', n: 133, commit: '3f9c2ab', exp: '2026-11-15 到期 · 11 天后', expColor: t.amber, ring: t.accent, fill: t.accent },
+        { v: 13, current: false, at: '2026-10-14', n: 131, commit: 'a81d0e4', exp: '2026-11-01 已过期', expColor: t.muted, ring: t.line, fill: 'transparent' },
+        { v: 12, current: false, at: '2026-09-30', n: 128, commit: '5c2f7b1', exp: '2026-10-18 已过期', expColor: t.muted, ring: t.line, fill: 'transparent' }
+      ],
+      hasDetail: !!sel, x, closeDetail: () => set({ sel: null }),
+      toast: s.toast, closeToast: () => set({ toast: '' }),
+      copyPublish: () => set({ toast: '已复制：allowops catalog publish -f catalog.dsse.json --gateway https://gateway.example.org' })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -20,7 +20,8 @@ async function openOutput() {
   })
   await waitFor(() => expect(button).toBeEnabled())
   fireEvent.click(button)
-  return screen.findByRole('dialog', { name: '主机输出：web-01' })
+  // Output opens in a section below the task table instead of a dialog.
+  return screen.findByRole('region', { name: '主机输出：web-01' })
 }
 
 describe('job cancellation notifications', () => {

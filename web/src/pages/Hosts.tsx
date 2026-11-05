@@ -1,17 +1,32 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQuery } from '@tanstack/react-query'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import {
+  Link,
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Trash2Icon } from 'lucide-react'
+import {
+  ExternalLinkIcon,
+  PlusIcon,
+  SearchIcon,
+  TagsIcon,
+  XIcon,
+} from 'lucide-react'
 import {
   api,
   formatLabels,
   labelsRepresentable,
   parseLabels,
+  parseSelector,
   toBase64,
+  type CatalogRef,
+  type CatalogVersion,
   type Host,
   type HostImportRow,
   type LabelChanges,
@@ -26,16 +41,18 @@ import {
   QueryState,
   Time,
 } from '@/components/console/common'
-import { Badge } from '@/components/ui/badge'
+import { DiffLines } from '@/components/console/DiffLines'
+import {
+  BarButton,
+  FloatingActionBar,
+} from '@/components/console/FloatingActionBar'
+import { LabelPill, LabelPills } from '@/components/console/LabelPill'
+import { SegmentedControl } from '@/components/console/SegmentedControl'
+import { PanelSection, SidePanel } from '@/components/console/SidePanel'
+import { StatusDot } from '@/components/console/StatusDot'
+import { useCopy } from '@/components/console/useCopy'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import {
   commaList,
@@ -44,50 +61,111 @@ import {
   selectorText,
 } from '@/lib/forms'
 import { useHostsFilterStore } from '@/lib/hosts-filter-store'
+import { labelDiff, labelsDelta } from '@/lib/label-diff'
 import { useCommand, useNotify } from '@/lib/notifications'
+import { relativeTime } from '@/lib/time'
+import { cn } from '@/lib/utils'
+import { compareVersions, newestVersion } from '@/lib/versions'
 
-const filterSchema = z.object({
-  selector: selectorText,
-  hostname: z.string(),
-  online: z.string(),
-  agentVersion: z.string(),
-})
 const labelSchema = z.object({ labels: labelsText, remove: z.string() })
 const bulkSchema = labelSchema.extend({
   selector: requiredText.pipe(selectorText),
 })
+// Selection mode targets explicit hosts; the selector field stays unused.
+const selectionSchema = labelSchema.extend({ selector: z.string() })
 const csvSchema = z.object({ csv: requiredText })
 
+const statuses = ['all', 'online', 'offline', 'unlabeled', 'outdated'] as const
+type HostStatus = (typeof statuses)[number]
+
+const SUGGESTION_LIMIT = 4
+const PAGE_SIZE = 50
+
+const unlabeled = (host: Host) => !Object.keys(host.authorizationLabels).length
+
+function draftChanges(labels: string, remove: string): LabelChanges | null {
+  try {
+    return { set: parseLabels(labels), remove: commaList(remove) }
+  } catch {
+    return null
+  }
+}
+
+function validSelector(text: string) {
+  try {
+    parseSelector(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Versions the console can compare against: the newest gateway version and the
+// current catalog per catalog id. Either may be missing (no permission, "dev"
+// builds), in which case no upgrade or staleness hint is shown.
+function useReferenceVersions() {
+  const instances = useQuery({
+    queryKey: ['instances'],
+    queryFn: () => api.listGatewayInstances(),
+  })
+  const catalogs = useQuery({
+    queryKey: ['catalogs'],
+    queryFn: () => api.listCatalogs(),
+  })
+  const gateway = newestVersion(
+    instances.data?.instances.map((instance) => instance.version) ?? [],
+  )
+  const current = new Map<string, CatalogVersion>()
+  for (const catalog of catalogs.data?.catalogs ?? [])
+    if (catalog.current) current.set(catalog.catalog.catalogId, catalog)
+  const agentBehind = (host: Host) =>
+    !!gateway && (compareVersions(host.agentVersion, gateway) ?? 0) < 0
+  const catalogBehind = (ref: CatalogRef) => {
+    const latest = current.get(ref.catalogId)
+    return latest
+      ? BigInt(latest.catalog.version) > BigInt(ref.version)
+        ? latest.catalog.version
+        : undefined
+      : undefined
+  }
+  const outdated = (host: Host) =>
+    agentBehind(host) ||
+    host.loadedCatalogs.some((ref) => catalogBehind(ref) !== undefined)
+  return { gateway, agentBehind, catalogBehind, outdated }
+}
+
 export default function Hosts() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { hostname: openHost } = useParams()
+  const [params, setParams] = useSearchParams()
   const filterStore = useHostsFilterStore()
-  const form = useForm<z.infer<typeof filterSchema>>({
-    resolver: zodResolver(filterSchema),
-    mode: 'onChange',
-    defaultValues: { selector: '', hostname: '', online: '', agentVersion: '' },
+  const form = useForm<{ selector: string; hostname: string }>({
+    defaultValues: { selector: '', hostname: '' },
   })
   const values = useWatch({ control: form.control })
+  const selectorValid = validSelector(values.selector ?? '')
   useEffect(() => {
-    filterStore.setFilter({
-      selector: values.selector ?? '',
-      hostname: values.hostname ?? '',
-      online: values.online ?? '',
-      agentVersion: values.agentVersion ?? '',
-    })
+    // An unparsable selector stays in the input; the last valid one keeps filtering.
+    if (selectorValid)
+      filterStore.setFilter({ selector: (values.selector ?? '').trim() })
+    filterStore.setFilter({ hostname: values.hostname ?? '' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [values.selector, values.hostname, values.online, values.agentVersion])
+  }, [values.selector, values.hostname, selectorValid])
   useEffect(
     () => () => {
       useHostsFilterStore.getState().reset()
     },
     [],
   )
+  const status: HostStatus = statuses.includes(
+    params.get('status') as HostStatus,
+  )
+    ? (params.get('status') as HostStatus)
+    : 'all'
   const query = {
     selector: filterStore.selector,
-    hostname: filterStore.hostname,
-    online: filterStore.online
-      ? filterStore.online === 'true'
-      : undefined,
     agentVersion: filterStore.agentVersion,
   }
   const hosts = useQuery({
@@ -98,212 +176,532 @@ export default function Hosts() {
     queryKey: ['hostOptions'],
     queryFn: () => api.listHosts(),
   })
-  const [tool, setTool] = useState<'bulk' | 'csv' | null>(null)
-  const [deleting, setDeleting] = useState<Host | null>(null)
-  const deletion = useCommand(async () => {
-    if (deleting) {
-      await api.deleteHost({
-        hostId: deleting.hostId,
-        expectedRevision: deleting.revision,
-      })
-      setDeleting(null)
-    }
-  }, 'host.deleted')
+  const versions = useReferenceVersions()
+  const [tool, setTool] = useState<'bulk' | 'csv' | 'selection' | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const needle = filterStore.hostname.trim().toLowerCase()
+  const matched = useMemo(
+    () =>
+      (hosts.data?.hosts ?? []).filter(
+        (host) => !needle || host.hostname.toLowerCase().includes(needle),
+      ),
+    [hosts.data, needle],
+  )
+  const tests: Record<HostStatus, (host: Host) => boolean> = {
+    all: () => true,
+    online: (host) => host.online,
+    offline: (host) => !host.online,
+    unlabeled,
+    outdated: versions.outdated,
+  }
+  const rows = matched.filter(tests[status])
+  const filterKey = `${filterStore.selector}\n${needle}\n${status}\n${filterStore.agentVersion}`
+  const [selectionKey, setSelectionKey] = useState(filterKey)
+  if (selectionKey !== filterKey) {
+    // A selection only ever covers rows the user can see under the current filter.
+    setSelectionKey(filterKey)
+    setSelected(new Set())
+    if (tool === 'selection') setTool(null)
+  }
+  const selectedHosts = rows.filter((host) => selected.has(host.hostId))
+  const allSelected = rows.length > 0 && rows.every((host) => selected.has(host.hostId))
+  const toggle = (host: Host) =>
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(host.hostId)) next.delete(host.hostId)
+      else next.add(host.hostId)
+      return next
+    })
+  const clearSelection = () => {
+    setSelected(new Set())
+    if (tool === 'selection') setTool(null)
+  }
+  const { copy } = useCopy('host.targetsCopied')
+  const setStatus = (value: HostStatus) =>
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        if (value === 'all') next.delete('status')
+        else next.set('status', value)
+        return next
+      },
+      { replace: true },
+    )
+  const hostLink = (name: string) => ({
+    pathname: `/hosts/${encodeURIComponent(name)}`,
+    search: location.search,
+  })
+  const closePanel = () => navigate({ pathname: '/hosts', search: location.search })
+  const suggestions = (hosts.data?.authorizationLabelCounts ?? [])
+    .slice()
+    .sort((a, b) => Number(b.count) - Number(a.count))
+    .slice(0, SUGGESTION_LIMIT)
+  const conditions = filterStore.selector
+    ? Object.entries(parseSelector(filterStore.selector))
+    : []
+  const online = matched.filter((host) => host.online).length
+  const counts: Record<HostStatus, number> = {
+    all: matched.length,
+    online,
+    offline: matched.length - online,
+    unlabeled: matched.filter(unlabeled).length,
+    outdated: matched.filter(versions.outdated).length,
+  }
+  const statusOptions = [
+    { value: 'all' as const, label: t('host.all'), tone: 'neutral' as const },
+    { value: 'online' as const, label: t('host.online'), tone: 'success' as const },
+    { value: 'offline' as const, label: t('host.offline'), tone: 'neutral' as const },
+    { value: 'unlabeled' as const, label: t('host.tabUnlabeled'), tone: 'warning' as const },
+    { value: 'outdated' as const, label: t('host.tabOutdated'), tone: 'warning' as const },
+  ].map((option) => ({ ...option, count: counts[option.value] }))
+  const agentVersions = [
+    ...new Set(options.data?.hosts.map((host) => host.agentVersion)),
+  ].sort((a, b) => compareVersions(b, a) ?? b.localeCompare(a))
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3.5">
       <PageTitle
         title={t('nav.hosts')}
-        description={t('host.description')}
+        description={
+          hosts.data ? (
+            <span className="font-mono">
+              {t('host.onlineMeta', { online, total: matched.length })}
+            </span>
+          ) : undefined
+        }
         action={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Button
               variant="outline"
+              aria-pressed={tool === 'csv'}
               onClick={() => setTool(tool === 'csv' ? null : 'csv')}
             >
               {t('host.csv')}
             </Button>
-            <Button onClick={() => setTool(tool === 'bulk' ? null : 'bulk')}>
+            <Button
+              variant="outline"
+              aria-pressed={tool === 'bulk'}
+              onClick={() => setTool(tool === 'bulk' ? null : 'bulk')}
+            >
               {t('host.bulk')}
+            </Button>
+            <Button asChild>
+              <Link to="/join-tokens" className="hover:no-underline">
+                <PlusIcon />
+                {t('host.register')}
+              </Link>
             </Button>
           </div>
         }
       />
-      <Panel>
+      <section
+        aria-label={t('host.filters')}
+        className="rounded-2xl border bg-card p-1 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_-12px_rgb(20_20_40/0.12)]"
+      >
         <form
           noValidate
-          className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+          className="flex flex-col sm:flex-row"
           onSubmit={(event) => event.preventDefault()}
         >
-          <Field label={t('host.hostname')}>
-            <Input {...form.register('hostname')} />
-          </Field>
-          <Field
-            label={t('host.selector')}
-            error={form.formState.errors.selector?.message}
-          >
-            <Input placeholder="env=prod" {...form.register('selector')} />
-          </Field>
-          <Field label={t('host.connection')}>
-            <Select
-              value={values.online === '' ? 'all' : (values.online ?? 'all')}
-              onValueChange={(value) =>
-                form.setValue('online', value === 'all' ? '' : value, {
-                  shouldValidate: true,
-                })
-              }
-            >
-              <SelectTrigger aria-label={t('host.connection')}>
-                <SelectValue placeholder={t('host.all')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('host.all')}</SelectItem>
-                <SelectItem value="true">{t('host.online')}</SelectItem>
-                <SelectItem value="false">{t('host.offline')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label={t('host.agentVersion')}>
-            <Select
-              value={
-                values.agentVersion === ''
-                  ? 'all'
-                  : (values.agentVersion ?? 'all')
-              }
-              onValueChange={(value) =>
-                form.setValue(
-                  'agentVersion',
-                  value === 'all' ? '' : value,
-                  { shouldValidate: true },
-                )
-              }
-            >
-              <SelectTrigger aria-label={t('host.agentVersion')}>
-                <SelectValue placeholder={t('host.all')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('host.all')}</SelectItem>
-                {[...new Set(options.data?.hosts.map((h) => h.agentVersion))].map(
-                  (v) => (
-                    <SelectItem key={v} value={v}>
-                      {v}
-                    </SelectItem>
-                  ),
-                )}
-              </SelectContent>
-            </Select>
-          </Field>
+          <label className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-1.5">
+            <SearchIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+            <span className="sr-only">{t('host.hostname')}</span>
+            <input
+              {...form.register('hostname')}
+              placeholder={t('host.searchPlaceholder')}
+              className="h-8 min-w-0 flex-1 bg-transparent font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
+            />
+          </label>
+          <div className="flex min-w-0 flex-[1.4] items-center gap-2.5 border-t border-border-subtle px-2.5 py-1.5 sm:border-t-0 sm:border-l">
+            <label className="flex min-w-0 flex-1 items-center gap-2.5">
+              <TagsIcon aria-hidden="true" className="size-4 shrink-0 text-primary" />
+              <span className="sr-only">{t('host.selector')}</span>
+              <input
+                {...form.register('selector')}
+                aria-invalid={!selectorValid}
+                placeholder={t('host.selectorPlaceholder')}
+                className="h-8 min-w-0 flex-1 bg-transparent font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
+              />
+            </label>
+            {(values.selector || values.hostname) && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t('host.clearFilters')}
+                onClick={() => form.reset({ selector: '', hostname: '' })}
+              >
+                <XIcon />
+              </Button>
+            )}
+          </div>
         </form>
-        <small className="text-xs text-muted-foreground">{t('host.selectorHint')}</small>
-      </Panel>
-      {tool === 'bulk' && <BulkLabels />}
+        <div className="flex min-h-9 flex-wrap items-center gap-1.5 border-t border-border-subtle px-2.5 py-2 text-xs text-muted-foreground">
+          {!selectorValid ? (
+            <span role="alert" className="text-destructive">
+              {t('error.labels')} {t('host.selectorHint')}
+            </span>
+          ) : conditions.length || needle ? (
+            <>
+              <span>{t('host.conditions')}</span>
+              {needle && (
+                <LabelPill name={t('host.hostnameContains', { text: needle })} tone="accent" />
+              )}
+              {conditions.map(([key, value]) =>
+                key.startsWith('reported.') ? (
+                  <LabelPill key={key} name={key.slice(9)} value={value} reported />
+                ) : (
+                  <LabelPill key={key} name={key} value={value} tone="accent" />
+                ),
+              )}
+              <span className="flex-1" />
+              <span className="font-mono">
+                {t('host.matchCount', { count: matched.length })}
+              </span>
+            </>
+          ) : (
+            <>
+              <span>{suggestions.length ? t('host.suggestions') : t('host.selectorHint')}</span>
+              {suggestions.map((label) => (
+                <button
+                  key={`${label.key}=${label.value}`}
+                  type="button"
+                  onClick={() =>
+                    form.setValue('selector', `${label.key}=${label.value}`)
+                  }
+                  className="flex h-[26px] items-center gap-1.5 rounded-full border bg-background px-2.5 font-mono text-foreground-2 hover:border-primary/60 hover:text-foreground"
+                >
+                  {label.key}={label.value}
+                  <span className="text-muted-foreground">{label.count}</span>
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      </section>
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <SegmentedControl
+          label={t('host.filterStatus')}
+          value={status}
+          onChange={setStatus}
+          options={
+            versions.gateway
+              ? statusOptions
+              : statusOptions.filter((option) => option.value !== 'outdated' || status === 'outdated')
+          }
+        />
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          {t('host.agentVersion')}
+          <select
+            value={filterStore.agentVersion}
+            onChange={(event) =>
+              filterStore.setFilter({ agentVersion: event.target.value })
+            }
+            className="h-[30px] rounded-lg border bg-card px-2 font-mono text-xs text-foreground"
+          >
+            <option value="">{t('host.all')}</option>
+            {agentVersions.map((version) => (
+              <option key={version} value={version}>
+                {version === versions.gateway
+                  ? t('host.versionLatest', { version })
+                  : version}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {tool === 'bulk' && <BulkLabels mode={{ kind: 'selector' }} />}
       {tool === 'csv' && <ImportLabels />}
-      <Panel>
+      <section
+        aria-label={t('host.list')}
+        className="overflow-hidden rounded-xl border bg-card"
+      >
         <QueryState pending={hosts.isPending} error={hosts.error} />
         {hosts.data && (
           <DataTable<Host>
-            data={hosts.data.hosts}
+            data={rows}
+            pageSize={PAGE_SIZE}
+            rowClassName={(host) =>
+              cn(
+                (selected.has(host.hostId) || host.hostname === openHost) &&
+                  'bg-selection hover:bg-selection',
+                host.hostname === openHost && 'shadow-[inset_2px_0_0_var(--primary)]',
+              )
+            }
+            empty={
+              <span className="flex flex-col items-center gap-2">
+                {t('host.noMatch')}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    form.reset({ selector: '', hostname: '' })
+                    filterStore.setFilter({ agentVersion: '' })
+                    setStatus('all')
+                  }}
+                >
+                  {t('host.clearFilters')}
+                </Button>
+              </span>
+            }
             columns={[
               {
-                accessorKey: 'hostname',
-                header: t('host.hostname'),
+                id: 'select',
+                header: () => (
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    disabled={!rows.length}
+                    onChange={() =>
+                      setSelected(
+                        allSelected
+                          ? new Set()
+                          : new Set(rows.map((host) => host.hostId)),
+                      )
+                    }
+                    aria-label={t('host.selectAll')}
+                    className="size-3.5 accent-primary"
+                  />
+                ),
                 cell: ({ row }) => (
-                  <Link
-                    to={`/hosts/${row.original.hostname}`}
-                    className="font-medium text-primary underline-offset-4 hover:underline"
-                  >
-                    {row.original.hostname}
-                  </Link>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(row.original.hostId)}
+                    onChange={() => toggle(row.original)}
+                    aria-label={t('host.selectHost', {
+                      name: row.original.hostname,
+                    })}
+                    className="size-3.5 accent-primary"
+                  />
                 ),
               },
               {
-                accessorKey: 'online',
-                header: t('host.connection'),
+                accessorKey: 'hostname',
+                header: t('nav.hosts'),
                 cell: ({ row }) => (
-                  <Badge
-                    variant={row.original.online ? 'default' : 'secondary'}
-                  >
-                    {t(row.original.online ? 'host.online' : 'host.offline')}
-                  </Badge>
+                  <span className="flex min-w-0 flex-col py-1">
+                    <Link
+                      to={hostLink(row.original.hostname)}
+                      className="self-start font-mono text-sm font-medium text-foreground hover:underline"
+                    >
+                      {row.original.hostname}
+                    </Link>
+                    <span className="max-w-64 truncate font-mono text-[11px] text-muted-foreground">
+                      {formatLabels(row.original.reportedLabels) ||
+                        t('common.none')}
+                    </span>
+                  </span>
+                ),
+              },
+              {
+                id: 'status',
+                header: t('common.status'),
+                cell: ({ row }) => (
+                  <span className="flex flex-col leading-snug">
+                    <span className="flex items-center gap-[7px]">
+                      <StatusDot tone={row.original.online ? 'success' : 'neutral'} />
+                      {t(row.original.online ? 'host.online' : 'host.offline')}
+                    </span>
+                    <span className="pl-3.5 text-[11px] text-muted-foreground">
+                      {row.original.lastSeen
+                        ? row.original.online
+                          ? t('host.heartbeat', {
+                              time: relativeTime(row.original.lastSeen, i18n.language, t('common.justNow')),
+                            })
+                          : relativeTime(row.original.lastSeen, i18n.language, t('common.justNow'))
+                        : t('common.none')}
+                    </span>
+                  </span>
                 ),
               },
               {
                 id: 'labels',
                 header: t('host.labels'),
-                cell: ({ row }) => (
-                  <span className="font-mono text-xs whitespace-pre-line text-muted-foreground">
-                    {formatLabels(row.original.authorizationLabels) ||
-                      t('common.none')}
-                  </span>
-                ),
-              },
-              { accessorKey: 'agentVersion', header: t('host.agentVersion') },
-              {
-                id: 'catalog',
-                header: t('host.catalogVersion'),
                 cell: ({ row }) =>
-                  row.original.loadedCatalogs.map((c) => c.version).join(', '),
+                  unlabeled(row.original) ? (
+                    <span className="flex items-center gap-1.5 text-xs text-warning">
+                      <StatusDot tone="warning" size={6} />
+                      {t('host.unlabeledShort')}
+                    </span>
+                  ) : (
+                    <span className="flex max-w-80 py-1">
+                      <LabelPills labels={row.original.authorizationLabels} />
+                    </span>
+                  ),
+              },
+              // B1 ("Agent can run") and B2 ("Latest job") columns go here once
+              // the gateway returns that data; nothing is inferred client-side.
+              {
+                accessorKey: 'agentVersion',
+                header: t('common.version'),
+                cell: ({ row }) => {
+                  const staleCatalog = row.original.loadedCatalogs.some(
+                    (ref) => versions.catalogBehind(ref) !== undefined,
+                  )
+                  return (
+                    <span className="flex flex-col leading-snug">
+                      <span className="font-mono text-xs">
+                        {row.original.agentVersion || t('common.none')}
+                      </span>
+                      {versions.agentBehind(row.original) ? (
+                        <span className="text-[11px] text-warning">
+                          {t('host.upgradable', { version: versions.gateway })}
+                        </span>
+                      ) : (
+                        staleCatalog && (
+                          <span className="text-[11px] text-warning">
+                            {t('host.catalogBehind')}
+                          </span>
+                        )
+                      )}
+                    </span>
+                  )
+                },
               },
               {
-                id: 'delete',
-                header: t('common.actions'),
+                id: 'open',
+                header: () => <span className="sr-only">{t('common.actions')}</span>,
                 cell: ({ row }) => (
                   <Button
+                    asChild
                     variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground hover:text-destructive"
-                    aria-label={t('host.deleteTitle', {
-                      name: row.original.hostname,
-                    })}
-                    onClick={() => setDeleting(row.original)}
+                    size="icon-sm"
+                    className="text-foreground-2 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
                   >
-                    <Trash2Icon />
-                    {t('common.delete')}
+                    <Link
+                      to={hostLink(row.original.hostname)}
+                      aria-label={t('host.openDetail', {
+                        name: row.original.hostname,
+                      })}
+                    >
+                      <ExternalLinkIcon />
+                    </Link>
                   </Button>
                 ),
               },
             ]}
           />
         )}
-      </Panel>
-      {deleting && (
-        <ConfirmDialog
-          title={t('host.deleteTitle', { name: deleting.hostname })}
-          description={t('host.deleteHint')}
-          onClose={() => setDeleting(null)}
-          onConfirm={() => deletion.mutate()}
-          pending={deletion.isPending}
+      </section>
+      <p className="text-xs text-muted-foreground">{t('host.authHint')}</p>
+      {selectedHosts.length > 0 && (
+        <FloatingActionBar
+          label={t('host.selectionActions')}
+          summary={t('host.selected', { count: selectedHosts.length })}
+          above={
+            tool === 'selection' && (
+              <BulkLabels
+                mode={{ kind: 'hosts', hosts: selectedHosts }}
+                onApplied={clearSelection}
+                floating
+              />
+            )
+          }
+        >
+          <BarButton
+            primary
+            aria-pressed={tool === 'selection'}
+            onClick={() => setTool(tool === 'selection' ? null : 'selection')}
+          >
+            {t('host.setLabels')}
+          </BarButton>
+          <BarButton
+            onClick={() =>
+              void copy(
+                JSON.stringify({
+                  targets: { hosts: selectedHosts.map((host) => host.hostname) },
+                  expected_count: selectedHosts.length,
+                }),
+                { count: selectedHosts.length },
+              )
+            }
+          >
+            {t('host.copyTargets')}
+          </BarButton>
+          <button
+            type="button"
+            onClick={clearSelection}
+            aria-label={t('host.clearSelection')}
+            className="grid size-8 place-items-center rounded-lg text-zinc-400 hover:bg-zinc-700 hover:text-zinc-50"
+          >
+            <XIcon aria-hidden="true" className="size-3.5" />
+          </button>
+        </FloatingActionBar>
+      )}
+      {openHost && (
+        <HostPanel
+          key={openHost}
+          hostname={openHost}
+          versions={versions}
+          onClose={closePanel}
         />
       )}
     </div>
   )
 }
 
-function BulkLabels() {
+type BulkMode = { kind: 'selector' } | { kind: 'hosts'; hosts: Host[] }
+
+interface BulkPreview {
+  hosts: Host[]
+  missing: number
+  selector?: string
+  changes: LabelChanges
+  seq: number
+  // Selection the preview was built for; a different selection hides it.
+  targets: string
+}
+
+// Every bulk change is previewed against freshly read hosts and applied with
+// their revisions, so a host changed in between makes the gateway reject it.
+function BulkLabels({
+  mode,
+  onApplied,
+  floating = false,
+}: {
+  mode: BulkMode
+  onApplied?: () => void
+  floating?: boolean
+}) {
   const { t } = useTranslation()
   const notify = useNotify()
   const form = useForm<z.infer<typeof bulkSchema>>({
-    resolver: zodResolver(bulkSchema),
+    resolver: zodResolver(mode.kind === 'selector' ? bulkSchema : selectionSchema),
     defaultValues: { selector: '', labels: '', remove: '' },
   })
   const seq = useRef(0)
-  const [preview, setPreview] = useState<{
-    hosts: Host[]
-    selector: string
-    changes: LabelChanges
-    seq: number
-  } | null>(null)
+  const [draftPreview, setPreview] = useState<BulkPreview | null>(null)
+  const targetKey =
+    mode.kind === 'hosts' ? mode.hosts.map((host) => host.hostId).join(',') : ''
+  const preview = draftPreview?.targets === targetKey ? draftPreview : null
   const previewing = useCommand(async (values: z.infer<typeof bulkSchema>) => {
     const my = ++seq.current
-    const result = await api.listHosts({ query: { selector: values.selector } })
+    const changes = {
+      set: parseLabels(values.labels),
+      remove: commaList(values.remove),
+    }
+    if (mode.kind === 'selector') {
+      const result = await api.listHosts({ query: { selector: values.selector } })
+      if (seq.current !== my) return
+      setPreview({
+        hosts: result.hosts,
+        missing: 0,
+        selector: values.selector,
+        changes,
+        seq: my,
+        targets: targetKey,
+      })
+      return
+    }
+    const ids = new Set(mode.hosts.map((host) => host.hostId))
+    const result = await api.listHosts()
     if (seq.current !== my) return
+    const fresh = result.hosts.filter((host) => ids.has(host.hostId))
     setPreview({
-      hosts: result.hosts,
-      selector: values.selector,
-      changes: {
-        set: parseLabels(values.labels),
-        remove: commaList(values.remove),
-      },
+      hosts: fresh,
+      missing: ids.size - fresh.length,
+      changes,
       seq: my,
+      targets: targetKey,
     })
   })
   const applying = useCommand(async () => {
@@ -313,7 +711,9 @@ function BulkLabels() {
       return
     }
     const result = await api.setHostLabels({
-      targets: { selector: preview.selector },
+      targets: preview.selector
+        ? { selector: preview.selector }
+        : { hosts: { names: preview.hosts.map((host) => host.hostname) } },
       expectedCount: String(preview.hosts.length),
       changes: preview.changes,
       expectedRevisions: preview.hosts.map((h) => ({
@@ -323,53 +723,84 @@ function BulkLabels() {
     })
     setPreview(null)
     notify({ key: 'host.bulkSaved', values: { count: result.updatedCount } })
+    onApplied?.()
   })
-  return (
-    <Panel title={t('host.bulk')}>
-      <p className="text-sm text-muted-foreground">{t('host.bulkHint')}</p>
+  const hasChanges =
+    !!preview &&
+    (Object.keys(preview.changes.set).length > 0 ||
+      preview.changes.remove.length > 0)
+  const body = (
+    <>
+      <p className="text-xs text-muted-foreground">{t('host.bulkHint')}</p>
       <form
         noValidate
-        className="grid grid-cols-1 gap-3 md:grid-cols-3"
+        className={cn(
+          'grid grid-cols-1 gap-3',
+          mode.kind === 'selector' ? 'md:grid-cols-3' : 'sm:grid-cols-2',
+        )}
         onChange={() => {
           seq.current += 1
           setPreview(null)
         }}
         onSubmit={form.handleSubmit((values) => previewing.mutate(values))}
       >
-        <Field
-          label={t('host.selector')}
-          error={form.formState.errors.selector?.message}
-        >
-          <Input {...form.register('selector')} />
-        </Field>
+        {mode.kind === 'selector' && (
+          <Field
+            label={t('host.selector')}
+            error={form.formState.errors.selector?.message}
+          >
+            <Input className="font-mono" {...form.register('selector')} />
+          </Field>
+        )}
         <Field
           label={t('host.labels')}
           error={form.formState.errors.labels?.message}
         >
           <Textarea
             rows={3}
+            className="font-mono"
             placeholder={t('host.labelsPlaceholder')}
             {...form.register('labels')}
           />
         </Field>
         <Field label={t('host.removeKeys')}>
-          <Input {...form.register('remove')} />
+          <Input className="font-mono" {...form.register('remove')} />
         </Field>
-        <div className="md:col-span-3">
-          <Button type="submit" disabled={previewing.isPending}>
+        <div className={mode.kind === 'selector' ? 'md:col-span-3' : 'sm:col-span-2'}>
+          <Button type="submit" variant="outline" disabled={previewing.isPending}>
             {t('host.bulkPreview')}
           </Button>
         </div>
       </form>
       {preview && (
-        <div className="flex flex-col gap-2 border-t pt-3">
-          <p className="text-sm text-muted-foreground">
-            {preview.hosts.map((h) => h.hostname).join(', ') ||
-              t('common.empty')}
-          </p>
+        <div className="flex flex-col gap-2 border-t border-border-subtle pt-3">
+          {preview.missing > 0 && (
+            <p role="note" className="text-xs text-warning">
+              {t('host.previewMissing', { count: preview.missing })}
+            </p>
+          )}
+          {preview.hosts.length ? (
+            <ul className="max-h-48 overflow-y-auto rounded-lg border bg-card">
+              {preview.hosts.map((host) => (
+                <li
+                  key={host.hostId}
+                  className="flex flex-col gap-1 border-b border-border-subtle px-2.5 py-1.5 last:border-b-0"
+                >
+                  <span className="font-mono text-xs font-medium">
+                    {host.hostname}
+                  </span>
+                  <DiffLines
+                    lines={labelDiff(host.authorizationLabels, preview.changes)}
+                  />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t('common.empty')}</p>
+          )}
           <div>
             <Button
-              disabled={!preview.hosts.length || applying.isPending}
+              disabled={!preview.hosts.length || !hasChanges || applying.isPending}
               onClick={() => applying.mutate()}
             >
               {t('host.bulkApply', { count: preview.hosts.length })}
@@ -377,7 +808,19 @@ function BulkLabels() {
           </div>
         </div>
       )}
-    </Panel>
+    </>
+  )
+  if (!floating) return <Panel title={t('host.bulk')}>{body}</Panel>
+  return (
+    <section
+      aria-labelledby="host-selection-labels"
+      className="flex max-h-[60vh] flex-col gap-2.5 overflow-y-auto rounded-2xl border bg-popover p-3.5 text-popover-foreground shadow-[0_16px_44px_rgb(20_22_30/0.18),0_2px_8px_rgb(20_22_30/0.06)] backdrop-blur"
+    >
+      <h2 id="host-selection-labels" className="text-sm font-semibold">
+        {t('host.selectionLabels', { count: mode.kind === 'hosts' ? mode.hosts.length : 0 })}
+      </h2>
+      {body}
+    </section>
   )
 }
 
@@ -419,7 +862,7 @@ function ImportLabels() {
   })
   return (
     <Panel title={t('host.csv')}>
-      <p className="text-sm text-muted-foreground">{t('host.csvHint')}</p>
+      <p className="text-xs text-muted-foreground">{t('host.csvHint')}</p>
       <Field label={t('host.csvFile')}>
         <Input
           type="file"
@@ -461,17 +904,20 @@ function ImportLabels() {
         >
           <Textarea
             rows={4}
+            className="font-mono text-xs"
             placeholder={'hostname,set:env,remove:tier\nweb-01,prod,true'}
             {...form.register('csv')}
           />
         </Field>
         <div>
-          <Button disabled={previewing.isPending}>{t('host.preview')}</Button>
+          <Button variant="outline" disabled={previewing.isPending}>
+            {t('host.preview')}
+          </Button>
         </div>
       </form>
       {preview && (
-        <div className="flex flex-col gap-2 border-t pt-3">
-          <p className="text-sm text-muted-foreground">
+        <div className="flex flex-col gap-2 border-t border-border-subtle pt-3">
+          <p className="text-xs text-muted-foreground">
             {t('host.previewExpiry')}:{' '}
             <Time value={preview.preview.expiresAt} />
           </p>
@@ -479,32 +925,35 @@ function ImportLabels() {
             data={preview.rows}
             columns={[
               { accessorKey: 'line', header: t('host.row') },
-              { accessorKey: 'hostname', header: t('host.hostname') },
               {
-                id: 'before',
-                header: t('host.before'),
+                accessorKey: 'hostname',
+                header: t('host.hostname'),
                 cell: ({ row }) => (
-                  <span className="whitespace-pre-line">
-                    {formatLabels(row.original.before)}
-                  </span>
+                  <span className="font-mono text-xs">{row.original.hostname}</span>
                 ),
               },
               {
-                id: 'after',
-                header: t('host.after'),
+                id: 'diff',
+                header: `${t('host.before')} → ${t('host.after')}`,
                 cell: ({ row }) => (
-                  <span className="whitespace-pre-line">
-                    {formatLabels(row.original.after)}
-                  </span>
+                  <DiffLines
+                    lines={labelsDelta(row.original.before, row.original.after)}
+                  />
                 ),
               },
               {
                 id: 'errors',
                 header: t('host.violations'),
                 cell: ({ row }) =>
-                  row.original.violations
-                    .map((v) => t(v.description))
-                    .join('; ') || t('common.none'),
+                  row.original.violations.length ? (
+                    <span className="text-destructive">
+                      {row.original.violations
+                        .map((v) => t(v.description))
+                        .join('; ')}
+                    </span>
+                  ) : (
+                    t('common.none')
+                  ),
               },
             ]}
           />
@@ -524,42 +973,74 @@ function ImportLabels() {
   )
 }
 
-export function HostDetail() {
-  const { hostname = '' } = useParams()
-  const { t } = useTranslation()
+function HostPanel({
+  hostname,
+  versions,
+  onClose,
+}: {
+  hostname: string
+  versions: ReturnType<typeof useReferenceVersions>
+  onClose: () => void
+}) {
+  const { t, i18n } = useTranslation()
   const query = useQuery({
     queryKey: ['host', hostname],
     queryFn: () => api.getHost({ hostname }),
   })
+  const host = query.data?.host
   return (
-    <div className="flex flex-col gap-3">
-      <Link
-        to="/hosts"
-        className="text-sm text-muted-foreground hover:text-foreground hover:no-underline"
-      >
-        {t('common.back')}
-      </Link>
-      <PageTitle title={hostname} />
+    <SidePanel
+      title={hostname}
+      onClose={onClose}
+      subtitle={
+        host && (
+          <>
+            <StatusDot tone={host.online ? 'success' : 'neutral'} />
+            {t(host.online ? 'host.online' : 'host.offline')}
+            {host.lastSeen && (
+              <span>· {relativeTime(host.lastSeen, i18n.language, t('common.justNow'))}</span>
+            )}
+          </>
+        )
+      }
+    >
       <QueryState pending={query.isPending} error={query.error} />
-      {query.data && (
-        <HostEditor key={query.data.host.revision} host={query.data.host} />
+      {host && (
+        <HostEditor
+          key={host.revision}
+          host={host}
+          versions={versions}
+          onDeleted={onClose}
+        />
       )}
-    </div>
+    </SidePanel>
   )
 }
 
-function HostEditor({ host }: { host: Host }) {
+function HostEditor({
+  host,
+  versions,
+  onDeleted,
+}: {
+  host: Host
+  versions: ReturnType<typeof useReferenceVersions>
+  onDeleted: () => void
+}) {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const [deleting, setDeleting] = useState(false)
+  // Labels written through the API or CLI may not fit one key=value per line;
+  // saving the text would then store different labels.
   const representable = labelsRepresentable(host.authorizationLabels)
   const form = useForm<z.infer<typeof labelSchema>>({
     resolver: zodResolver(labelSchema),
+    mode: 'onChange',
     defaultValues: {
       labels: formatLabels(host.authorizationLabels),
       remove: '',
     },
   })
+  const draft = useWatch({ control: form.control })
+  const pending = draftChanges(draft.labels ?? '', draft.remove ?? '')
   const saving = useCommand(async (values: z.infer<typeof labelSchema>) => {
     await api.setHostLabels({
       targets: { hosts: { names: [host.hostname] } },
@@ -576,22 +1057,25 @@ function HostEditor({ host }: { host: Host }) {
       hostId: host.hostId,
       expectedRevision: host.revision,
     })
-    navigate('/hosts')
+    onDeleted()
   }, 'host.deleted')
+  const pendingLines = pending ? labelDiff(host.authorizationLabels, pending) : []
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-      <Panel title={t('host.labels')}>
-        {!Object.keys(host.authorizationLabels).length && (
-          <p
-            role="note"
-            className="rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground"
-          >
-            {t('host.noLabels')}
-          </p>
-        )}
+    <>
+      {!Object.keys(host.authorizationLabels).length && (
+        <div
+          role="note"
+          className="flex flex-col gap-1 rounded-[10px] bg-warning-soft px-3 py-2.5 text-warning"
+        >
+          <strong className="font-semibold">{t('host.noLabels')}</strong>
+          <span className="text-xs">{t('host.noLabelsHint')}</span>
+        </div>
+      )}
+      {/* B1: per-service-account actions and matching rules render here. */}
+      <PanelSection>
         <form
           noValidate
-          className="flex flex-col gap-3"
+          className="flex flex-col gap-2.5"
           onSubmit={form.handleSubmit((values) => saving.mutate(values))}
         >
           <Field
@@ -604,53 +1088,100 @@ function HostEditor({ host }: { host: Host }) {
           >
             <Textarea
               rows={3}
+              className="font-mono"
               placeholder={t('host.labelsPlaceholder')}
               {...form.register('labels')}
             />
           </Field>
           <Field label={t('host.removeKeys')}>
-            <Input {...form.register('remove')} />
+            <Input className="font-mono" {...form.register('remove')} />
           </Field>
-          <div>
+          {pendingLines.length > 0 && <DiffLines lines={pendingLines} />}
+          <div className="flex items-center gap-2">
             <Button disabled={saving.isPending || !representable}>
               {t('host.saveLabels')}
             </Button>
+            <span className="text-[11px] text-muted-foreground">
+              {t('host.revision')} {host.revision}
+            </span>
           </div>
         </form>
-      </Panel>
-      <Panel>
-        <dl className="grid grid-cols-[88px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+      </PanelSection>
+      <PanelSection title={t('host.reportedLabels')}>
+        {Object.keys(host.reportedLabels).length ? (
+          <LabelPills labels={host.reportedLabels} reported />
+        ) : (
+          <span className="text-muted-foreground">{t('common.none')}</span>
+        )}
+      </PanelSection>
+      <PanelSection title={t('host.catalogVersion')}>
+        {host.loadedCatalogs.length ? (
+          <ul className="flex flex-col gap-1">
+            {host.loadedCatalogs.map((ref) => {
+              const latest = versions.catalogBehind(ref)
+              return (
+                <li
+                  key={`${ref.catalogId}@${ref.version}`}
+                  className="flex justify-between gap-2 text-xs"
+                >
+                  <span className="font-mono">
+                    {ref.catalogId} {ref.version}
+                  </span>
+                  {latest && (
+                    <span className="text-warning">
+                      {t('host.catalogBehindLatest', { version: latest })}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            {t('catalog.notLoaded')}
+          </span>
+        )}
+        <span className="text-[11px] text-muted-foreground">
+          {t('host.catalogHint')}
+        </span>
+      </PanelSection>
+      <PanelSection>
+        <dl className="grid grid-cols-[88px_minmax(0,1fr)] gap-x-2.5 gap-y-1.5 text-xs">
           <dt className="text-muted-foreground">{t('host.id')}</dt>
           <dd className="min-w-0">
             <MonoId value={host.hostId} />
           </dd>
-          <dt className="text-muted-foreground">{t('host.connection')}</dt>
-          <dd className="min-w-0">
-            <Badge variant={host.online ? 'default' : 'secondary'}>
-              {t(host.online ? 'host.online' : 'host.offline')}
-            </Badge>
-          </dd>
-          <dt className="text-muted-foreground">{t('host.reportedLabels')}</dt>
-          <dd className="min-w-0 font-mono text-xs break-all whitespace-pre-line">
-            {formatLabels(host.reportedLabels)}
-          </dd>
-          <dt className="text-muted-foreground">{t('host.catalogVersion')}</dt>
-          <dd className="min-w-0 break-words">{host.loadedCatalogs.map((c) => c.version).join(', ')}</dd>
           <dt className="text-muted-foreground">{t('host.agentVersion')}</dt>
-          <dd className="min-w-0 break-words">{host.agentVersion}</dd>
+          <dd className="min-w-0 font-mono break-words">
+            {host.agentVersion}
+            {versions.agentBehind(host) && (
+              <span className="ml-1.5 font-sans text-warning">
+                {t('host.upgradable', { version: versions.gateway })}
+              </span>
+            )}
+          </dd>
+          <dt className="text-muted-foreground">{t('host.registeredAt')}</dt>
+          <dd className="min-w-0">
+            <Time value={host.registeredAt} />
+          </dd>
           <dt className="text-muted-foreground">{t('host.lastSeen')}</dt>
           <dd className="min-w-0">
             <Time value={host.lastSeen} />
           </dd>
-          <dt className="text-muted-foreground">{t('host.revision')}</dt>
-          <dd className="min-w-0 break-words">{host.revision}</dd>
         </dl>
-        <div className="pt-1">
-          <Button variant="destructive" onClick={() => setDeleting(true)}>
-            {t('common.delete')}
+      </PanelSection>
+      <PanelSection className="border-t border-border-subtle pt-3.5">
+        <div>
+          <Button
+            variant="ghost"
+            className="text-destructive hover:bg-destructive-soft hover:text-destructive"
+            aria-label={t('host.deleteTitle', { name: host.hostname })}
+            onClick={() => setDeleting(true)}
+          >
+            {t('host.deleteAction')}
           </Button>
         </div>
-      </Panel>
+      </PanelSection>
       {deleting && (
         <ConfirmDialog
           title={t('host.deleteTitle', { name: host.hostname })}
@@ -660,6 +1191,6 @@ function HostEditor({ host }: { host: Host }) {
           pending={deletion.isPending}
         />
       )}
-    </div>
+    </>
   )
 }

@@ -43,6 +43,26 @@ describe('gateway version', () => {
   })
 })
 
+describe('current user', () => {
+  it('shows the username when the directory has no display name', async () => {
+    const current = await api.getCurrentSession()
+    const spy = vi.spyOn(api, 'getCurrentSession').mockResolvedValue({
+      ...current,
+      user: { ...current.user, displayName: '', username: 'demo-admin' },
+    })
+    try {
+      await open('/')
+      const nav = screen.getByRole('complementary')
+      expect(
+        within(nav).getByRole('link', { name: '当前用户' }),
+      ).toHaveTextContent('demo-admin')
+      expect(within(nav).getByText('DE')).toBeInTheDocument()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
 describe('console pages', () => {
   it('logs in with the local LDAP form', async () => {
     await open('/login')
@@ -92,8 +112,9 @@ describe('console pages', () => {
   })
   it('edits authorization labels in host detail', async () => {
     await open('/hosts/web-01')
+    // Host detail is a side panel over the host list; its title is level 2.
     expect(
-      await screen.findByRole('heading', { name: 'web-01', level: 1 }),
+      await screen.findByRole('heading', { name: 'web-01', level: 2 }),
     ).toBeInTheDocument()
     fireEvent.change(await screen.findByLabelText('授权标签'), {
       target: { value: 'env=prod\ntier=edge' },
@@ -119,7 +140,8 @@ describe('console pages', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'journal_view_log' }),
     )
-    const dialog = await screen.findByRole('dialog', {
+    // Action details open in a side panel (complementary), not a modal.
+    const dialog = await screen.findByRole('complementary', {
       name: 'journal_view_log',
     })
     expect(await within(dialog).findByText(/journalctl/)).toBeInTheDocument()
@@ -134,6 +156,11 @@ describe('console pages', () => {
       await screen.findByRole('button', { name: '编辑 readonly-all' }),
     )
     expect(screen.getByRole('button', { name: '保存策略' })).toBeDisabled()
+    // Saving also requires a change to the policy (README §4.5), so the rule
+    // gets an edit before it goes into the draft.
+    fireEvent.change(screen.getByLabelText('风险（逗号分隔）'), {
+      target: { value: 'read,write' },
+    })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() =>
       expect(screen.getByRole('button', { name: '试算' })).toBeEnabled(),
@@ -159,9 +186,13 @@ describe('console pages', () => {
     expect(
       await screen.findByRole('link', { name: 'job-20261013-0042' }),
     ).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Job 状态'), {
-      target: { value: 'JOB_STATUS_RUNNING' },
-    })
+    // The job status filter is a segmented control instead of a select.
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Job 状态' })).getByRole(
+        'button',
+        { name: '运行中' },
+      ),
+    )
     await waitFor(() =>
       expect(
         screen.queryByRole('link', { name: 'job-20261013-0042' }),
@@ -186,7 +217,13 @@ describe('console pages', () => {
     expect(
       await screen.findByRole('heading', { name: '审计', level: 1 }),
     ).toBeInTheDocument()
+    // The top-bar button opens the range form; verification starts from the form
+    // once the range defaults to the newest loaded event.
     fireEvent.click(screen.getByRole('button', { name: '校验哈希链' }))
+    await waitFor(() =>
+      expect(screen.getByLabelText('结束序列号')).toHaveValue('3'),
+    )
+    fireEvent.click(screen.getByRole('button', { name: '开始校验' }))
     expect(await screen.findByRole('status')).toHaveTextContent(
       '哈希链校验通过',
     )

@@ -3,7 +3,6 @@ import { create } from 'zustand'
 export interface HostsFilter {
   selector: string
   hostname: string
-  online: string
   agentVersion: string
 }
 
@@ -15,7 +14,6 @@ interface HostsFilterState extends HostsFilter {
 const initial: HostsFilter = {
   selector: '',
   hostname: '',
-  online: '',
   agentVersion: '',
 }
 

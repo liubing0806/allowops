@@ -13,31 +13,27 @@ import {
   Navigate,
   Route,
   Routes,
-  useLocation,
   useNavigate,
 } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import {
-  BookOpen,
-  ClipboardList,
-  KeyRound,
-  LayoutDashboard,
-  ListChecks,
-  ScrollText,
-  Server,
-  Settings,
-  ShieldCheck,
-  Users,
-} from 'lucide-react'
+import { Check, LogOut, Moon, Search, Sun } from 'lucide-react'
 import { Code } from '@connectrpc/connect'
 import { api, ApiError } from '@/api'
 import { PageTitle, QueryState } from '@/components/console/common'
+import { statusTone } from '@/components/console/tone'
+import { CommandPalette } from '@/components/console/CommandPalette'
+import { navigationGroups } from '@/components/console/navigation'
+import { PageHeaderContext } from '@/components/console/page-header'
+import { StatusDot } from '@/components/console/StatusDot'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import { useCommand } from '@/lib/notifications'
 import { NotificationProvider } from '@/components/console/NotificationProvider'
 import { displayVersion, releaseNotesUrl } from '@/lib/release'
-import { applyTheme, useThemeStore } from '@/lib/theme-store'
+import {
+  applyTheme,
+  resolveTheme,
+  useThemeStore,
+} from '@/lib/theme-store'
 import { cn } from '@/lib/utils'
 const Login = lazy(() => import('@/pages/Login'))
 const Overview = lazy(() => import('@/pages/Overview'))
@@ -50,29 +46,50 @@ const Jobs = lazy(() => import('@/pages/Jobs'))
 const Audit = lazy(() => import('@/pages/Audit'))
 const UsersPage = lazy(() => import('@/pages/Users'))
 const System = lazy(() => import('@/pages/System'))
-const HostDetail = lazy(() =>
-  import('@/pages/Hosts').then((module) => ({ default: module.HostDetail })),
-)
-const JobDetail = lazy(() =>
-  import('@/pages/Jobs').then((module) => ({ default: module.JobDetail })),
-)
-const navigation = [
-  { path: '/', key: 'nav.overview', icon: LayoutDashboard },
-  { path: '/hosts', key: 'nav.hosts', icon: Server },
-  { path: '/join-tokens', key: 'nav.joinTokens', icon: KeyRound },
-  { path: '/catalog', key: 'nav.catalog', icon: BookOpen },
-  { path: '/policies', key: 'nav.policies', icon: ListChecks },
-  { path: '/service-accounts', key: 'nav.accounts', icon: ShieldCheck },
-  { path: '/jobs', key: 'nav.jobs', icon: ClipboardList },
-  { path: '/audit', key: 'nav.audit', icon: ScrollText },
-  { path: '/users', key: 'nav.users', icon: Users },
-  { path: '/system', key: 'nav.system', icon: Settings },
-]
+
+function useDarkTheme() {
+  const preference = useThemeStore((state) => state.preference)
+  const setPreference = useThemeStore((state) => state.setPreference)
+  const systemDark =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  const dark = resolveTheme(preference, systemDark) === 'dark'
+  return { dark, toggle: () => setPreference(dark ? 'light' : 'dark') }
+}
+
+function GatewayHealth() {
+  const { t } = useTranslation()
+  const status = useQuery({
+    queryKey: ['systemStatus'],
+    queryFn: () => api.getSystemStatus(),
+    refetchInterval: 30000,
+  })
+  // An unreadable status is shown as unknown, never as healthy.
+  const value = status.data?.status
+  const tone = value ? statusTone(value) : 'neutral'
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+      <StatusDot tone={tone} size={6} />
+      <span className="truncate">
+        {t('shell.gateway')} ·{' '}
+        {value
+          ? t(`status.${value}`)
+          : status.isPending
+            ? t('common.loading')
+            : t('shell.gatewayUnknown')}
+      </span>
+    </span>
+  )
+}
+
 function Layout() {
   const { t, i18n } = useTranslation()
-  const location = useLocation()
   const navigate = useNavigate()
   const client = useQueryClient()
+  const theme = useDarkTheme()
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
+  const [palette, setPalette] = useState(false)
   const logout = useCommand(async () => {
     await api.logout()
     client.clear()
@@ -85,6 +102,16 @@ function Layout() {
     // appear without a reload.
     refetchInterval: 10 * 60 * 1000,
   })
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setPalette((open) => !open)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
   if (
     session.error instanceof ApiError &&
     session.error.code === Code.Unauthenticated
@@ -96,10 +123,10 @@ function Layout() {
         <QueryState pending={session.isPending} error={session.error} />
       </div>
     )
-  const current =
-    navigation.find(
-      (item) => item.path !== '/' && location.pathname.startsWith(item.path),
-    ) ?? navigation[0]
+  const user = session.data.user
+  // Directory users may have no display name; the username is always set.
+  const name = user.displayName || user.username
+  const initials = name.slice(0, 2).toUpperCase()
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground md:flex-row">
       <a
@@ -108,23 +135,23 @@ function Layout() {
       >
         {t('common.skip')}
       </a>
-      <aside className="flex w-full shrink-0 flex-col border-b bg-sidebar text-sidebar-foreground md:sticky md:top-0 md:h-screen md:w-52 md:border-r md:border-b-0">
-        <div className="flex h-12 items-center gap-2 px-3">
+      <aside className="flex w-full shrink-0 flex-col gap-0.5 border-b bg-sidebar px-2.5 py-3 text-sidebar-foreground md:sticky md:top-0 md:h-screen md:w-[232px] md:border-r md:border-b-0">
+        <div className="flex items-start gap-2 pb-3">
           <Link
             to="/"
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 hover:no-underline"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 pt-1.5 hover:no-underline"
           >
-            <span className="grid size-6 shrink-0 place-items-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-              <ShieldCheck aria-hidden="true" className="size-4" />
+            <span className="grid size-6 shrink-0 place-items-center rounded-[7px] bg-sidebar-primary text-sidebar-primary-foreground">
+              <Check aria-hidden="true" className="size-3.5" strokeWidth={2.6} />
             </span>
-            <span className="min-w-0 leading-tight">
-              <span className="block truncate text-sm font-semibold">
+            <span className="flex min-w-0 flex-col leading-tight">
+              <span className="truncate text-sm font-semibold">
                 {t('app.name')}
               </span>
-              <span className="block truncate text-[11px] text-muted-foreground">
+              <span className="truncate text-[11px] text-muted-foreground">
                 {t('app.subtitle')}
               </span>
-              <span className="block truncate text-[11px] text-muted-foreground">
+              <span className="truncate font-mono text-[11px] text-muted-foreground">
                 {displayVersion(session.data.gatewayVersion)}
               </span>
             </span>
@@ -137,87 +164,129 @@ function Layout() {
               aria-label={t('app.updateAvailableLabel', {
                 version: session.data.gatewayUpdate.latestVersion,
               })}
-              className="shrink-0 self-end mb-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] leading-none font-medium text-primary hover:bg-primary/15 hover:no-underline"
+              className="mt-2 shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-[10px] leading-none font-medium text-accent-foreground hover:no-underline"
             >
               {t('app.updateAvailable')}
             </a>
           )}
         </div>
-        <Separator />
-        <nav aria-label={t('nav.label')} className="flex flex-row flex-wrap gap-0.5 p-2 md:flex-1 md:flex-col md:flex-nowrap md:overflow-y-auto">
-          {navigation.map(({ path, key, icon: Icon }) => (
-            <NavLink
-              key={path}
-              to={path}
-              end={path === '/'}
-              className={({ isActive }) =>
-                cn(
-                  'flex h-8 shrink-0 items-center gap-2 rounded-lg px-2 text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:no-underline',
-                  isActive &&
-                    'bg-sidebar-accent font-medium text-sidebar-accent-foreground',
-                )
-              }
-            >
-              <Icon size={16} aria-hidden="true" className="shrink-0" />
-              <span className="truncate">{t(key)}</span>
-            </NavLink>
+        <button
+          type="button"
+          onClick={() => setPalette(true)}
+          className="mb-2.5 flex h-[34px] items-center gap-2 rounded-lg border bg-card pr-2 pl-2.5 text-sm text-muted-foreground shadow-[0_1px_2px_rgb(0_0_0/0.04)] hover:text-foreground"
+        >
+          <Search aria-hidden="true" className="size-3.5" />
+          <span className="flex-1 text-left">{t('shell.search')}</span>
+          <kbd className="rounded border bg-muted px-1.5 font-mono text-[11px] text-foreground-2">
+            ⌘K
+          </kbd>
+        </button>
+        <nav
+          aria-label={t('nav.label')}
+          className="flex flex-row flex-wrap gap-0.5 md:flex-1 md:flex-col md:flex-nowrap md:overflow-y-auto"
+        >
+          {navigationGroups.map((group) => (
+            <div key={group.key} className="contents md:flex md:flex-col md:gap-0.5">
+              <div className="hidden px-2.5 pt-3 pb-1 text-[11px] font-medium text-muted-foreground md:block">
+                {t(group.key)}
+              </div>
+              {group.items.map(({ path, key, icon: Icon }) => (
+                <NavLink
+                  key={path}
+                  to={path}
+                  end={path === '/'}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex h-8 shrink-0 items-center gap-2.5 rounded-[7px] px-2.5 text-sm text-foreground-2 hover:bg-muted hover:text-foreground hover:no-underline',
+                      isActive &&
+                        'bg-sidebar-accent font-medium text-sidebar-accent-foreground shadow-[0_1px_2px_rgb(0_0_0/0.06),0_0_0_0.5px_var(--border)] hover:bg-sidebar-accent',
+                    )
+                  }
+                >
+                  <Icon size={15} strokeWidth={1.8} aria-hidden="true" className="shrink-0" />
+                  <span className="truncate">{t(key)}</span>
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
-      </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b bg-background/95 px-4 py-2 backdrop-blur md:h-12 md:flex-nowrap md:py-0">
-          <span className="flex min-w-0 items-center gap-1.5 text-sm">
-            <span className="hidden text-muted-foreground sm:inline">
-              {t('app.name')}
-            </span>
-            <span aria-hidden="true" className="hidden text-muted-foreground sm:inline">
-              /
-            </span>
-            <b className="truncate font-semibold">{t(current.key)}</b>
+        <div className="mt-2 flex items-center gap-2.5 rounded-lg p-2">
+          <span
+            aria-hidden="true"
+            className="grid size-[26px] shrink-0 place-items-center rounded-full bg-accent text-[11px] font-semibold text-accent-foreground"
+          >
+            {initials}
           </span>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span className="hidden md:inline">{t('common.language')}</span>
-              <select
-                value={i18n.language}
-                onChange={(event) =>
-                  void i18n.changeLanguage(event.target.value)
-                }
-                className="h-8 rounded-lg border border-input bg-background px-2 text-xs"
-              >
-                <option value="zh-CN">{t('common.zh')}</option>
-                <option value="en">{t('common.en')}</option>
-              </select>
-            </label>
+          <span className="flex min-w-0 flex-1 flex-col leading-tight">
+            {/* Opening the login page switches identity; the session is replaced on success. */}
             <Link
-              className="flex h-8 items-center gap-1.5 rounded-full bg-muted px-2 py-0 text-xs font-medium hover:bg-accent hover:no-underline"
               to="/login"
               aria-label={t('common.currentUser')}
+              title={name}
+              className="truncate font-medium text-foreground hover:underline"
             >
-              <span
-                aria-hidden="true"
-                className="grid size-5 place-items-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground"
-              >
-                {session.data?.user.displayName.slice(0, 1).toUpperCase()}
-              </span>
-              <span className="hidden max-w-28 truncate lg:inline">
-                {session.data?.user.displayName}
-              </span>
+              {name}
             </Link>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={logout.isPending}
-              onClick={() => logout.mutate()}
-            >
-              {t('common.logout')}
-            </Button>
-          </div>
-        </header>
-        <main id="main-content" className="mx-auto flex w-full max-w-6xl min-w-0 flex-1 flex-col gap-3 p-3 md:p-4">
-          <Outlet />
-        </main>
-      </div>
+            <GatewayHealth />
+          </span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={logout.isPending}
+            onClick={() => logout.mutate()}
+            aria-label={t('common.logout')}
+            title={t('common.logout')}
+          >
+            <LogOut />
+          </Button>
+        </div>
+      </aside>
+      <PageHeaderContext.Provider value={{ slot }}>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="z-10 flex min-h-[52px] md:sticky md:top-0 flex-wrap items-center gap-x-3 gap-y-2 border-b bg-background/95 px-5 py-2 backdrop-blur md:flex-nowrap md:py-0">
+            <div
+              ref={setSlot}
+              className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2 md:flex-nowrap"
+            />
+            <div className="flex items-center gap-1">
+              <label className="flex items-center">
+                <span className="sr-only">{t('common.language')}</span>
+                <select
+                  value={i18n.language}
+                  onChange={(event) =>
+                    void i18n.changeLanguage(event.target.value)
+                  }
+                  className="h-8 rounded-lg bg-transparent px-1.5 text-xs text-foreground-2 hover:bg-muted"
+                >
+                  <option value="zh-CN">{t('common.zh')}</option>
+                  <option value="en">{t('common.en')}</option>
+                </select>
+              </label>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={theme.toggle}
+                aria-label={t(theme.dark ? 'shell.themeToLight' : 'shell.themeToDark')}
+                title={t(theme.dark ? 'shell.themeToLight' : 'shell.themeToDark')}
+                className="text-foreground-2"
+              >
+                {theme.dark ? <Sun /> : <Moon />}
+              </Button>
+            </div>
+          </header>
+          <main
+            id="main-content"
+            className="mx-auto flex w-full max-w-[1440px] min-w-0 flex-1 flex-col gap-3.5 p-3 pb-24 md:p-5 md:pb-24"
+          >
+            <Outlet />
+          </main>
+        </div>
+      </PageHeaderContext.Provider>
+      <CommandPalette
+        open={palette}
+        onOpenChange={setPalette}
+        onToggleTheme={theme.toggle}
+      />
     </div>
   )
 }
@@ -271,14 +340,14 @@ export default function App() {
               <Route path="/login" element={<Login />} />
               <Route element={<Layout />}>
                 <Route index element={<Overview />} />
-                <Route path="hosts" element={<Hosts />} />
-                <Route path="hosts/:hostname" element={<HostDetail />} />
+                {/* One optional-segment route keeps the list mounted while the detail panel opens. */}
+                <Route path="hosts/:hostname?" element={<Hosts />} />
                 <Route path="join-tokens" element={<JoinTokens />} />
                 <Route path="catalog" element={<Catalog />} />
                 <Route path="policies" element={<Policies />} />
                 <Route path="service-accounts" element={<ServiceAccounts />} />
-                <Route path="jobs" element={<Jobs />} />
-                <Route path="jobs/:jobId" element={<JobDetail />} />
+                {/* The job list stays mounted beside the selected job's detail. */}
+                <Route path="jobs/:jobId?" element={<Jobs />} />
                 <Route path="audit" element={<Audit />} />
                 <Route path="users" element={<UsersPage />} />
                 <Route path="system" element={<System />} />

@@ -521,6 +521,7 @@ export interface ConsoleApi {
   listJobs(input?: {
     statuses?: JobStatus[]
     action?: string
+    subjectId?: string
     page?: { pageSize?: number; pageToken?: string }
   }): Promise<{ jobs: Job[]; page: PageResponse }>
   getJob(input: { jobId: string }): Promise<{ job: Job }>
@@ -532,6 +533,8 @@ export interface ConsoleApi {
     hostname: string
     stream: 'OUTPUT_STREAM_STDOUT' | 'OUTPUT_STREAM_STDERR'
     offset: string
+    // Required for composite actions (Task.stepCount > 0), rejected otherwise.
+    stepIndex?: number
     limitBytes?: number
   }): Promise<GetJobOutputResponse>
   cancelJob(input: { jobId: string }): Promise<{ job: Job }>

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>allowops · Join token</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#4F46E5}a:hover{color:#3730A3}
+@keyframes aoPulse{0%{box-shadow:0 0 0 0 rgba(59,130,246,.55)}70%{box-shadow:0 0 0 6px rgba(59,130,246,0)}100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}}
+.ao-pulse{animation:aoPulse 1.6s ease-out infinite}
+[data-theme="light"] .ao-row:hover,[data-theme="light"] .ao-nav:hover,[data-theme="light"] .ao-ghost:hover{background:#F1F1F3}
+[data-theme="dark"] .ao-row:hover,[data-theme="dark"] .ao-nav:hover,[data-theme="dark"] .ao-ghost:hover{background:#1C1C20}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #6366F1;outline-offset:1px}
+input::placeholder{color:#8E8E96}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="position: relative; min-height: 100vh; display: flex; flex-wrap: wrap; font-family: Geist, -apple-system, 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif; font-size: 13px; line-height: 1.5; color: {{t.fg}}; background: {{t.bg}}">
+  <div style="flex: 1 1 232px; max-width: 100%; display: flex"><dc-import name="Sidebar" active="join" theme="{{theme}}" hint-size="100%,100vh"></dc-import></div>
+  <main style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column">
+    <header style="min-height: 52px; box-sizing: border-box; padding: 8px 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid {{t.line}}; flex-wrap: wrap">
+      <h1 style="margin: 0; font-size: 14px; font-weight: 600">Join token</h1>
+      <span style="font-size: 12px; color: {{t.muted}}">签发有限次数、有期限的主机注册凭据</span>
+    </header>
+
+    <div style="padding: 20px; display: flex; flex-direction: column; gap: 14px; max-width: 1080px; width: 100%; box-sizing: border-box">
+      <section aria-label="创建 join token" style="border-radius: 14px; border: 1px solid {{t.line}}; background: {{t.card}}; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px -12px rgba(20,20,40,.12); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+        <h2 style="margin: 0; font-size: 13px; font-weight: 600">注册新主机</h2>
+        <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap">
+          <label style="flex: 0 1 180px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: {{t.muted}}">最大使用次数<input value="{{uses}}" onChange="{{onUses}}" inputmode="numeric" style="height: 36px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid {{usesBorder}}; background: {{t.bg}}; color: {{t.fg}}; font-family: 'Geist Mono', ui-monospace, monospace"></label>
+          <label style="flex: 0 1 180px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: {{t.muted}}">有效期（小时）<input value="{{ttl}}" onChange="{{onTtl}}" inputmode="numeric" style="height: 36px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid {{ttlBorder}}; background: {{t.bg}}; color: {{t.fg}}; font-family: 'Geist Mono', ui-monospace, monospace"></label>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap">
+            <sc-for list="{{presets}}" as="p" hint-placeholder-count="3"><button class="ao-ghost" type="button" onClick="{{p.pick}}" style="height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid {{t.line}}; background: transparent; color: {{t.fg2}}; font: inherit; font-size: 12px; cursor: pointer">{{p.label}}</button></sc-for>
+          </div>
+          <span style="flex: 1"></span>
+          <button type="button" onClick="{{create}}" disabled="{{createDisabled}}" style="height: 36px; padding: 0 16px; border-radius: 8px; border: 0; background: {{createBg}}; color: #FFFFFF; font: inherit; font-weight: 500; cursor: pointer">创建 join token</button>
+        </div>
+        <sc-if value="{{invalid}}" hint-placeholder-val="{{ false }}"><span style="font-size: 12px; color: {{t.red}}">请输入正整数</span></sc-if>
+
+        <sc-if value="{{hasSecret}}" hint-placeholder-val="{{ false }}">
+          <div style="border-top: 1px solid {{t.line2}}; padding-top: 14px; display: flex; flex-direction: column; gap: 12px">
+            <div style="padding: 8px 10px; border-radius: 8px; background: {{t.amberSoft}}; color: {{t.amber}}; font-size: 12px">secret 只显示一次，关闭后无法再次查看。{{secretMeta}}</div>
+            <sc-for list="{{steps}}" as="st" hint-placeholder-count="3">
+              <div style="display: flex; gap: 12px">
+                <span style="width: 22px; height: 22px; border-radius: 50%; background: {{t.accentSoft}}; color: {{t.accent}}; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none">{{st.n}}</span>
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+                  <span style="font-weight: 500">{{st.title}}</span>
+                  <div style="position: relative">
+                    <pre style="margin: 0; padding: 10px 70px 10px 12px; border-radius: 8px; background: {{t.code}}; color: {{t.codeFg}}; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all">{{st.cmd}}</pre>
+                    <button type="button" onClick="{{st.copy}}" style="position: absolute; top: 6px; right: 6px; height: 26px; padding: 0 10px; border-radius: 6px; border: 0; background: #27272A; color: #FAFAFA; font: inherit; font-size: 12px; cursor: pointer">{{st.copyLabel}}</button>
+                  </div>
+                  <span style="font-size: 12px; color: {{t.muted}}">{{st.hint}}</span>
+                </div>
+              </div>
+            </sc-for>
+            <div style="display: flex; justify-content: flex-end"><button type="button" onClick="{{closeSecret}}" style="height: 32px; padding: 0 14px; border-radius: 8px; border: 1px solid {{t.line}}; background: transparent; color: {{t.fg}}; font: inherit; font-weight: 500; cursor: pointer">我已保存，关闭</button></div>
+          </div>
+        </sc-if>
+      </section>
+
+      <section aria-label="Join token 列表" style="border-radius: 12px; border: 1px solid {{t.line}}; background: {{t.card}}; overflow: hidden">
+        <div style="overflow-x: auto">
+          <div role="table" aria-label="Join token" style="min-width: 760px">
+            <div role="row" style="display: grid; grid-template-columns: minmax(150px, 1fr) minmax(160px, 1.2fr) 120px 160px 100px 90px; gap: 10px; padding: 0 16px; height: 36px; align-items: center; font-size: 12px; color: {{t.muted}}; border-bottom: 1px solid {{t.line}}"><span role="columnheader">Token</span><span role="columnheader">使用次数</span><span role="columnheader">创建时间</span><span role="columnheader">到期时间</span><span role="columnheader">状态</span><span role="columnheader" style="position: absolute; left: -9999px">操作</span></div>
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="5">
+              <div class="ao-row" role="row" style="display: grid; grid-template-columns: minmax(150px, 1fr) minmax(160px, 1.2fr) 120px 160px 100px 90px; gap: 10px; padding: 0 16px; min-height: 48px; align-items: center; border-bottom: 1px solid {{t.line2}}; background: {{r.bg}}">
+                <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; font-weight: 500">{{r.id}}</span>
+                <span role="cell" style="display: flex; align-items: center; gap: 8px"><span style="flex: 1; max-width: 110px; height: 4px; border-radius: 2px; background: {{t.pill}}; overflow: hidden; display: flex"><span style="width: {{r.pct}}; background: {{r.barColor}}"></span></span><span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">{{r.used}}/{{r.max}}</span></span>
+                <span role="cell" style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: {{t.fg2}}">{{r.created}}</span>
+                <span role="cell" style="display: flex; flex-direction: column; line-height: 1.3"><span style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px">{{r.expires}}</span><span style="font-size: 11px; color: {{r.relColor}}">{{r.rel}}</span></span>
+                <span role="cell"><span style="font-size: 12px; padding: 1px 8px; border-radius: 999px; background: {{r.soft}}; color: {{r.color}}">{{r.status}}</span></span>
+                <span role="cell" style="display: flex; justify-content: flex-end"><sc-if value="{{r.canRevoke}}" hint-placeholder-val="{{ true }}"><button class="ao-ghost" type="button" onClick="{{r.revoke}}" style="height: 28px; padding: 0 10px; border-radius: 7px; border: 0; background: transparent; color: {{t.red}}; font: inherit; font-size: 12px; cursor: pointer">{{r.revokeLabel}}</button></sc-if></span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <sc-if value="{{confirming}}" hint-placeholder-val="{{ false }}"><div style="padding: 10px 16px; background: {{t.redSoft}}; color: {{t.red}}; font-size: 12px">吊销会阻止新主机注册，不影响已签发的主机证书。再点一次「确认吊销」。</div></sc-if>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"light","options":["light","dark"]},"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      uses: '5', ttl: '24', secret: null, copied: {}, confirm: null,
+      tokens: [
+        { id: 'jt_4f9a21', used: 1, max: 5, created: '11-04 16:40', expires: '2026-11-05 16:40', rel: '23 小时后', status: 'active' },
+        { id: 'jt_c81e07', used: 2, max: 2, created: '11-03 10:12', expires: '2026-11-04 22:12', rel: '5 小时后', status: 'exhausted' },
+        { id: 'jt_0b3d5c', used: 3, max: 10, created: '11-01 09:00', expires: '2026-11-04 21:00', rel: '3 小时后', status: 'expiring' },
+        { id: 'jt_77e2aa', used: 0, max: 1, created: '10-28 14:31', expires: '2026-10-29 14:31', rel: '6 天前', status: 'expired' },
+        { id: 'jt_19fd40', used: 4, max: 20, created: '10-20 08:15', expires: '2026-10-27 08:15', rel: '吊销于 10-21', status: 'revoked' }
+      ]
+    };
+  }
+  tokens(dark) {
+    return dark
+      ? { bg: '#0B0B0D', card: '#141417', line: '#27272C', line2: '#1D1D21', fg: '#EDEDF0', fg2: '#B4B4BC', muted: '#8E8E98', pill: '#1F1F24', accent: '#A5B4FC', accentSoft: '#25264A', green: '#4ADE80', greenSoft: '#132A1C', amber: '#FBBF24', amberSoft: '#33280F', red: '#F87171', redSoft: '#3A1A1C', sel: '#17182A', code: '#0E0E11', codeFg: '#D4D4DA' }
+      : { bg: '#FAFAFA', card: '#FFFFFF', line: '#E4E4E7', line2: '#F0F0F2', fg: '#18181B', fg2: '#52525B', muted: '#6B6B74', pill: '#F1F1F3', accent: '#4F46E5', accentSoft: '#EEEDFD', green: '#16A34A', greenSoft: '#EAF7EE', amber: '#B45309', amberSoft: '#FEF3E2', red: '#DC2626', redSoft: '#FDECEC', sel: '#F5F5FF', code: '#18181B', codeFg: '#E4E4E7' };
+  }
+  renderVals() {
+    const theme = this.props.theme ?? 'light';
+    const t = this.tokens(theme === 'dark');
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const pos = (v) => /^\d+$/.test(String(v).trim()) && +v > 0;
+    const ok = pos(s.uses) && pos(s.ttl);
+    const ST = { active: ['有效', t.greenSoft, t.green], expiring: ['即将到期', t.amberSoft, t.amber], exhausted: ['已用尽', t.pill, t.muted], expired: ['已过期', t.pill, t.muted], revoked: ['已吊销', t.pill, t.muted] };
+    const copy = (k) => () => set({ copied: Object.assign({}, s.copied, { [k]: true }) });
+    let steps = [];
+    if (s.secret) {
+      steps = [
+        { n: 1, title: '把 secret 以 0600 权限保存到文件', cmd: "umask 077 && printf '%s' '" + s.secret.secret + "' > /absolute/path/join-token.txt", hint: '不要通过命令行参数传递 secret，避免出现在进程列表和 shell 历史中。', key: 'a' },
+        { n: 2, title: '在目标主机上注册', cmd: 'allowops-agent join --upstream gateway.example.org:443 --token-file /absolute/path/join-token.txt --ca-pin ' + s.secret.pin, hint: '主机端以 allowops 用户运行，通过 mTLS 主动连接网关。', key: 'b' },
+        { n: 3, title: '给新主机设置授权标签', cmd: 'allowops-agent status', hint: '注册后的主机没有授权标签，对所有 agent 默认拒绝执行。到「主机」页为它设置标签。', key: 'c' }
+      ].map((x) => Object.assign({}, x, { copy: copy(x.key + s.secret.id), copyLabel: s.copied[x.key + s.secret.id] ? '已复制' : '复制' }));
+    }
+    return {
+      theme, t, uses: s.uses, ttl: s.ttl,
+      onUses: (e) => set({ uses: e.target.value }), onTtl: (e) => set({ ttl: e.target.value }),
+      usesBorder: pos(s.uses) ? t.line : t.red, ttlBorder: pos(s.ttl) ? t.line : t.red, invalid: !ok,
+      presets: [['单台 · 1 小时', '1', '1'], ['一批 · 24 小时', '20', '24'], ['扩容 · 72 小时', '50', '72']].map(([label, u, h]) => ({ label, pick: () => set({ uses: u, ttl: h }) })),
+      createDisabled: !ok, createBg: ok ? '#4F46E5' : '#A1A1AA',
+      create: () => {
+        if (!ok) return;
+        const id = 'jt_' + (0x5a3c10 + s.tokens.length * 4099).toString(16);
+        const tok = { id, used: 0, max: +s.uses, created: '11-04 17:29', expires: s.ttl + ' 小时后', rel: '刚创建', status: 'active' };
+        set({ tokens: [tok].concat(s.tokens), secret: { id, secret: 'aops_join_' + id.slice(3) + '_EXAMPLE', pin: 'sha256:9e1f…c42a', meta: '' } });
+      },
+      hasSecret: !!s.secret, steps, secretMeta: s.secret ? '（' + s.secret.id + '，最多 ' + s.uses + ' 次，' + s.ttl + ' 小时内有效）' : '',
+      closeSecret: () => set({ secret: null }),
+      confirming: !!s.confirm,
+      rows: s.tokens.map((k) => {
+        const st = ST[k.status];
+        const live = k.status === 'active' || k.status === 'expiring';
+        const conf = s.confirm === k.id;
+        return {
+          id: k.id, used: k.used, max: k.max, pct: Math.round(100 * k.used / k.max) + '%', barColor: live ? t.accent : '#A1A1AA',
+          created: k.created, expires: k.expires, rel: k.rel, relColor: k.status === 'expiring' ? t.amber : t.muted,
+          status: st[0], soft: st[1], color: st[2], bg: k.rel === '刚创建' ? t.sel : 'transparent',
+          canRevoke: live, revokeLabel: conf ? '确认吊销' : '吊销',
+          revoke: () => conf ? set({ confirm: null, tokens: s.tokens.map((x) => x.id === k.id ? Object.assign({}, x, { status: 'revoked', rel: '吊销于 11-04' }) : x) }) : set({ confirm: k.id })
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>

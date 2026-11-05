@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
@@ -87,6 +93,12 @@ describe('output dialog state belongs to one job', () => {
     )
     expect(calls.filter((call) => call.jobId === OTHER_JOB)[0].offset).toBe('0')
     await screen.findAllByText(`${OTHER_JOB}-first`)
-    expect(screen.queryAllByText(new RegExp(JOB))).toHaveLength(0)
+    // The job list stays beside the detail and still names the first job, so
+    // the check covers the detail region that holds the output.
+    expect(
+      within(screen.getByRole('region', { name: 'Job 详情' })).queryAllByText(
+        new RegExp(JOB),
+      ),
+    ).toHaveLength(0)
   }, 30000)
 })
