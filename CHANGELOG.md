@@ -1,5 +1,47 @@
 # Release notes
 
+## Unreleased
+
+Changes on `main` since v0.2.0. They are not in a release yet.
+
+### New
+
+- The web console is redesigned (#27). The design handoff and prototypes are
+  in [docs/console-redesign/](docs/console-redesign/README.md). The change is
+  frontend only: no API, schema, or policy change, and no upgrade step.
+  - A complete dark theme and self-hosted Geist and Geist Mono fonts. The
+    console loads no external resources.
+  - The sidebar groups pages into run, govern, and manage, and shows the
+    current user and gateway health. Ctrl+K or ⌘K opens a command palette that
+    jumps to a host by name, to a page, or to the unlabeled and outdated host
+    filters.
+  - Hosts: hostname search and label selector input, status filters for online,
+    offline, unlabeled, and outdated hosts, and a detail side panel that keeps
+    the list in view. Selected hosts can get labels through a per-host diff
+    preview that is applied with the expected revisions, or be copied as MCP
+    `targets` with `expected_count`.
+  - Jobs: list and detail side by side, task progress per job, and an output
+    viewer with stdout and stderr, steps of composite actions, and paged reads.
+  - Policies: simulation for all subjects or for one subject, operation,
+    action, and selector, with each host's decision before and after the change
+    and the matching rules. Version history and rollback use the same
+    simulate-and-save flow.
+  - Catalog: envelope size, expiry, the catalog version loaded on hosts, a risk
+    filter for actions, and a copyable publish command.
+  - Service accounts show a running-job indicator. Join tokens show when they
+    were created. The one-time secret dialogs list the next steps.
+  - Audit: matched rules in the table, and an event side panel with the
+    previous, current, and next hash as recorded.
+  - Overview: a summary built from gateway numbers, and a list of items that
+    need attention, including unlabeled hosts, agents older than the gateway,
+    and a newer gateway release.
+
+### Fixes
+
+- The console reads the output of composite actions step by step. Before,
+  opening the output of a composite action failed with `INVALID_OUTPUT_STEP`.
+- The sidebar shows the username when a directory user has no display name.
+
 ## v0.2.0 — 2026-11-03 (pre-release)
 
 Adds JVM diagnostics, log queries, monitoring and SQL actions, gateway inventory

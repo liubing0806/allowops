@@ -81,11 +81,11 @@ export default {
     lede: 'The console uses the same API and permissions as the CLI and MCP. These are real screenshots of the local demo environment.',
     tabs: ['Overview', 'Hosts', 'Catalog', 'Job detail', 'Audit'],
     caps: [
-      'Online hosts, running jobs, and catalogs and tokens close to expiry.',
-      'Authorization labels, agent versions and loaded catalog versions.',
-      'The current signed catalog, its expiry and the risk of every action.',
-      'Per-host state, exit code, duration and whether output was stored.',
-      'Each audit event has a sequence number and hash, and can be exported and verified offline.',
+      'A one-line summary, online hosts, running and failed jobs, and what needs attention, such as tokens close to expiry.',
+      'Search by hostname or label selector, filter by status, and see authorization labels and agent versions.',
+      'The current signed catalog, its expiry, the versions loaded on hosts and the risk of every action.',
+      'The job list beside the selected job: per-host state, exit code, duration and whether output was stored.',
+      'Each audit event has a sequence number and hash; the event panel shows the recorded hash chain, which can be exported and verified offline.',
     ],
   },
   details: {

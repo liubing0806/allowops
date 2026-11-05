@@ -27,6 +27,8 @@ paths, timeouts, output limits, signatures and catalog versions are checked on
 the host. Attribute-based access control (ABAC) uses gateway-managed authorization
 labels. Unlabeled hosts reject execution.
 
+![The allowops console: the job list beside the selected job's per-host results](site/public/img/console/en/job.webp)
+
 ## Quick start
 
 Use a Linux amd64 checkout with Docker Compose, Go 1.27.3, OpenSSL, Git and
