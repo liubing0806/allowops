@@ -43,6 +43,26 @@ describe('gateway version', () => {
   })
 })
 
+describe('current user', () => {
+  it('shows the username when the directory has no display name', async () => {
+    const current = await api.getCurrentSession()
+    const spy = vi.spyOn(api, 'getCurrentSession').mockResolvedValue({
+      ...current,
+      user: { ...current.user, displayName: '', username: 'demo-admin' },
+    })
+    try {
+      await open('/')
+      const nav = screen.getByRole('complementary')
+      expect(
+        within(nav).getByRole('link', { name: '当前用户' }),
+      ).toHaveTextContent('demo-admin')
+      expect(within(nav).getByText('DE')).toBeInTheDocument()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
 describe('console pages', () => {
   it('logs in with the local LDAP form', async () => {
     await open('/login')
