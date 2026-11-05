@@ -12,7 +12,6 @@ import {
 } from '@/api'
 import {
   DataTable,
-  MonoId,
   PageTitle,
   QueryState,
   Time,
@@ -380,8 +379,11 @@ function CatalogCard({
         </div>
         <div className="min-w-0">
           <dt className="text-muted-foreground">{t('catalog.commit')}</dt>
-          <dd>
-            <MonoId value={catalog.gitCommit || t('common.none')} />
+          <dd
+            title={catalog.gitCommit || undefined}
+            className="truncate font-mono"
+          >
+            {catalog.gitCommit || t('common.none')}
           </dd>
         </div>
         <div className="min-w-0">

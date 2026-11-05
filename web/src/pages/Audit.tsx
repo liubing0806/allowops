@@ -314,7 +314,10 @@ export default function Audit() {
                   header: t('audit.subject'),
                   enableSorting: false,
                   cell: ({ row }) => (
-                    <span className="font-mono text-xs">
+                    <span
+                      title={row.original.subjectId}
+                      className="block max-w-40 truncate font-mono text-xs"
+                    >
                       {row.original.subjectId}
                     </span>
                   ),
@@ -324,7 +327,10 @@ export default function Audit() {
                   header: t('audit.operation'),
                   enableSorting: false,
                   cell: ({ row }) => (
-                    <span className="font-mono text-xs text-foreground-2">
+                    <span
+                      title={row.original.operation}
+                      className="block max-w-52 truncate font-mono text-xs text-foreground-2"
+                    >
                       {row.original.operation}
                     </span>
                   ),
