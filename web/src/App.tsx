@@ -124,7 +124,9 @@ function Layout() {
       </div>
     )
   const user = session.data.user
-  const initials = user.displayName.slice(0, 2).toUpperCase()
+  // Directory users may have no display name; the username is always set.
+  const name = user.displayName || user.username
+  const initials = name.slice(0, 2).toUpperCase()
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground md:flex-row">
       <a
@@ -220,10 +222,10 @@ function Layout() {
             <Link
               to="/login"
               aria-label={t('common.currentUser')}
-              title={user.displayName}
+              title={name}
               className="truncate font-medium text-foreground hover:underline"
             >
-              {user.displayName}
+              {name}
             </Link>
             <GatewayHealth />
           </span>
