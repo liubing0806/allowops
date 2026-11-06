@@ -156,7 +156,7 @@ h2 { margin: 0; font-size: 42px; line-height: 1.1; font-weight: 680; letter-spac
 .shot-bar .lights { display: flex; gap: 6px; }
 .shot-bar .lights i { width: 10px; height: 10px; border-radius: 50%; background: #d4d4d8; }
 .shot-bar .tabs { margin: 0 auto; }
-.shot img { border-radius: 10px; border: 1px solid var(--line2); aspect-ratio: 1280 / 800; width: 100%; background: #fff; }
+.shot img { border-radius: 10px; border: 1px solid var(--line2); aspect-ratio: 1280 / 800; width: 100%; height: auto; background: #fff; }
 .shot-cap { margin: 12px 4px 2px; font-size: 13.5px; color: var(--muted); }
 
 /* terminal */
