@@ -20,12 +20,14 @@ ca_key: /etc/allowops/host-ca.key
 catalog_keys: /etc/allowops/catalog-keys
 gateway:
   version: '0.2.0'
-  certificate_ttl: 24h
+  certificate_ttl: 168h
   single_join_ttl: 24h
   multi_join_ttl: 24h
 ```
 
 配置覆盖 `hostconn.DefaultConfig()`；未知字段拒绝。发布构建默认使用构建版本，开发版本 `dev` 默认使用 `0.1.0`，配置须提供有效 SemVer。空 `catalog_keys` 不信任任何签名密钥；P5/P6 应使用 `server.Server.Catalogs` 接入发布入口。
+
+`gateway.certificate_ttl` 默认 7 天（`168h`），可配置更短或更长的正时长。签发时，主机证书的到期时间必须在主机证书颁发机构（CA）的有效期内。新期限在主机注册或续签时生效。保留显式的 `certificate_ttl: 24h` 配置时，网关按 24 小时签发。
 
 ## 内部接口
 
@@ -62,7 +64,7 @@ ALLOWOPS_REQUIRE_DOCKER=1 go test -race -count=1 -v ./internal/gateway/... ./int
 ALLOWOPS_REQUIRE_DOCKER=1 go test -race -count=1 -v ./cmd/allowops-gateway -run TestGatewayCommands
 ```
 
-已确认（负责人答复，见 main `9952ee8` 的 `docs/architecture-decisions.md` §21）：A9 执行中断线时 task 标记 offline，不重放，P4 提供断线 hook，业务状态归 P6；A11 多目录 action 名全局唯一，发布冲突拒绝；A14 主机证书及单次/多次 join token 默认 24h，均可配置。A10 的 CSV/批量标签行为已确认，仍不在 P4 范围。MCP、用户认证、OPA、job、审计及上传 RPC 均由后续节点实现。P4 没有剩余待确认项。
+已确认（负责人答复，见 main `9952ee8` 的 `docs/architecture-decisions.md` §21）：A9 执行中断线时 task 标记 offline，不重放，P4 提供断线 hook，业务状态归 P6；A11 多目录 action 名全局唯一，发布冲突拒绝。A10 的 CSV/批量标签行为已确认，仍不在 P4 范围。MCP、用户认证、OPA、job、审计及上传 RPC 均由后续节点实现。P4 没有剩余待确认项。
 
 P4B 的配置、TLS CA pin、管理接口、CLI 和系统统计限制见 [管理接口说明](p4b-management-api.md) 与 [配置示例](../examples/gateway.yaml)。
 

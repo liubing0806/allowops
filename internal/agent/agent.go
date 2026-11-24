@@ -83,7 +83,7 @@ func New(config Config, options Options) (*Agent, error) {
 		return nil, errors.New("IDENTITY_CONFIG_MISMATCH")
 	}
 	if !value.ExpiresAt.After(time.Now()) {
-		return nil, errors.New("CERTIFICATE_EXPIRED")
+		return nil, expiredCertificateError(options.DataDir)
 	}
 	if len(value.ClientCA) == 0 {
 		return nil, errors.New("INVALID_IDENTITY")
@@ -95,6 +95,10 @@ func New(config Config, options Options) (*Agent, error) {
 	catalogs := &catalogs{loaded: map[string]*catalog.Package{}, cache: cache, limits: config.Limits}
 	catalogs.restore()
 	return &Agent{config: config, options: options, identity: &identityStore{value: value}, catalogs: catalogs}, nil
+}
+
+func expiredCertificateError(dataDir string) error {
+	return fmt.Errorf("CERTIFICATE_EXPIRED: delete the old host in the console, remove the local identity file %s, then run `allowops-agent join` again", filepath.Join(dataDir, "identity.json"))
 }
 
 func sleep(ctx context.Context, delay time.Duration) error {
@@ -198,7 +202,7 @@ func (a *Agent) Run(parent context.Context) error {
 				return
 			}
 			if !a.identity.get().ExpiresAt.After(time.Now()) {
-				renewErr <- errors.New("CERTIFICATE_EXPIRED")
+				renewErr <- expiredCertificateError(a.options.DataDir)
 				cancel()
 				return
 			}

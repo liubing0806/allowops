@@ -17,6 +17,10 @@ host registration and use the separate host CA for mutual TLS. Use secure
 OIDC/LDAP configuration and verified certificates. Store private keys and tokens
 through your credential manager, never in the catalog or public documentation.
 
+Host client certificates default to 7 days (`168h`). The `gateway.certificate_ttl`
+setting accepts any positive duration covered by the host CA's validity period.
+An expired host certificate cannot authenticate a renewal request.
+
 Run the agent as its dedicated low-privilege user without extra groups. The
 root helper accepts only its fixed stdin protocol. Do not widen sudoers or add
 an interactive shell action. Interpreter exceptions and signed scripts need

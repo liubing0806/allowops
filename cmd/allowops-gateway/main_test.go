@@ -131,6 +131,43 @@ func TestServeDrainsAfterAuditWorkerFailure(t *testing.T) {
 	}
 }
 
+func TestCertificateTTLConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		yaml  string
+		want  time.Duration
+		valid bool
+	}{
+		{"default", "gateway: {}", 7 * 24 * time.Hour, true},
+		{"shorter", "gateway:\n  certificate_ttl: 24h", 24 * time.Hour, true},
+		{"longer", "gateway:\n  certificate_ttl: 336h", 14 * 24 * time.Hour, true},
+		{"zero", "gateway:\n  certificate_ttl: 0s", 0, false},
+		{"negative", "gateway:\n  certificate_ttl: -1h", -time.Hour, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "gateway.yaml")
+			if err := os.WriteFile(path, []byte(tc.yaml), 0600); err != nil {
+				t.Fatal(err)
+			}
+			file, err := os.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer file.Close()
+			cfg, err := decodeConfiguration(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Gateway.CertificateTTL != tc.want {
+				t.Fatalf("certificate_ttl = %s, want %s", cfg.Gateway.CertificateTTL, tc.want)
+			}
+			if err := cfg.Gateway.Validate(); (err == nil) != tc.valid {
+				t.Fatalf("gateway config validation = %v, want valid=%t", err, tc.valid)
+			}
+		})
+	}
+}
+
 func TestGatewayCommands(t *testing.T) {
 	dsn := testpg.Start(t)
 	dir := t.TempDir()

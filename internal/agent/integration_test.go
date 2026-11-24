@@ -485,6 +485,45 @@ func TestJoinPinAndIdentity(t *testing.T) {
 	}
 }
 
+func TestExpiredCertificateRecovery(t *testing.T) {
+	_, _, config := startGateway(t, false)
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.Mkdir(dataDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	identity, err := Join(t.Context(), config, "test-token", "test-host", dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := Options{DataDir: dataDir, KeysDir: t.TempDir(), KeyOwner: os.Getuid()}
+	want := "CERTIFICATE_EXPIRED: delete the old host in the console, remove the local identity file " + filepath.Join(dataDir, "identity.json") + ", then run `allowops-agent join` again"
+
+	t.Run("while running", func(t *testing.T) {
+		a, err := New(config, options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		shortLived := identity
+		shortLived.ExpiresAt = time.Now().Add(100 * time.Millisecond)
+		a.identity.set(shortLived)
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+		if err := a.Run(ctx); err == nil || err.Error() != want {
+			t.Fatalf("Run() error = %v, want %q", err, want)
+		}
+	})
+	t.Run("at startup", func(t *testing.T) {
+		expired := identity
+		expired.ExpiresAt = time.Now().Add(-time.Hour)
+		if err := saveIdentity(dataDir, expired); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := New(config, options); err == nil || err.Error() != want {
+			t.Fatalf("New() error = %v, want %q", err, want)
+		}
+	})
+}
+
 func TestAgentLifecycleAndOutputs(t *testing.T) {
 	g, _, config := startGateway(t, true)
 	a, _ := startAgent(t, config)

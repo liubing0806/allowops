@@ -108,6 +108,12 @@ dependency health. Catalog expiry and token expiry require renewal before use
 ends. Inventory load reports reflect the last complete report, including for
 offline hosts; they do not prove the host's present execution environment.
 
+Host certificates have a default lifetime of 7 days (`168h`). The agent starts
+renewal after two-thirds of the lifetime, with 56 hours remaining by default.
+If the agent reports `CERTIFICATE_EXPIRED`, delete the old host in the console,
+remove `/var/lib/allowops/identity.json` on that host, and run `allowops-agent join`
+again with a valid join token.
+
 Use short join-token lifetimes and bounded uses. Set authorization labels only
 after checking the registered host identity. Deletion invalidates certificates;
 a same-name replacement has a new immutable ID. No host credential is an API

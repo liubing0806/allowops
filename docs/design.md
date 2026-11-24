@@ -204,7 +204,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 
 ### 主机身份与标签
 
-- 注册：`allowops-agent join --upstream <addr> --token <join token> --ca-pin sha256:<指纹>`，换取网关内部 CA 签发的短期证书（如 24 小时），到期前自动续期。
+- 注册：`allowops-agent join --upstream <addr> --token <join token> --ca-pin sha256:<指纹>`，换取网关内部 CA 签发的短期证书（默认 7 天），到期前自动续期。
 - join token 可单次或多次使用；多次使用时必须设有效期（默认 24 小时）和最大次数。
 - 主机名全局唯一，同名注册被拒绝。新主机无授权标签，默认全部拒绝。
 - 标签：授权标签只在网关端设置（控制台、CLI、CSV 导入），策略只按授权标签判定；主机上报标签（系统、内核等）只用于展示和筛选。
