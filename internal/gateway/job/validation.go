@@ -16,6 +16,7 @@ import (
 	"github.com/liubing0806/allowops/internal/execd"
 	"github.com/liubing0806/allowops/internal/executor"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/cluster"
 	"github.com/liubing0806/allowops/internal/params"
 	"google.golang.org/protobuf/proto"
 )
@@ -70,6 +71,22 @@ func format(value string) (string, error) {
 		return "", failure(connect.CodeInvalidArgument, "INVALID_RESPONSE_FORMAT")
 	}
 	return value, nil
+}
+
+func groupingMode(value string, defaultMode cluster.GroupingMode) (cluster.GroupingMode, error) {
+	switch value {
+	case "":
+		if defaultMode == "" {
+			return cluster.GroupingExact, nil
+		}
+		return defaultMode, nil
+	case string(cluster.GroupingExact):
+		return cluster.GroupingExact, nil
+	case string(cluster.GroupingNormalized):
+		return cluster.GroupingNormalized, nil
+	default:
+		return "", failure(connect.CodeInvalidArgument, "INVALID_GROUPING")
+	}
 }
 
 func (s *Service) waitValue(value *uint32, defaultValue uint32) (uint32, error) {

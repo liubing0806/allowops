@@ -14,6 +14,7 @@ import (
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/audit"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/cluster"
 	"github.com/liubing0806/allowops/internal/gateway/hostconn"
 	"github.com/liubing0806/allowops/internal/gateway/output"
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
@@ -54,7 +55,10 @@ type Service struct {
 	activeJobs                  atomic.Int64
 	activePersists              atomic.Int64
 	submitMu                    sync.Mutex
+	analysisSem                 chan struct{}
 }
+
+const analysisConcurrency = 8
 
 func New(db *store.Store, access AccessChecker, router hostconn.Router, storage output.Storage, auditor audit.Appender, trusted map[string]ed25519.PublicKey, c Config) (*Service, error) {
 	if db == nil || access == nil || router == nil || storage == nil || auditor == nil {
@@ -68,12 +72,24 @@ func New(db *store.Store, access AccessChecker, router hostconn.Router, storage 
 		return nil, errors.New("job router instance metadata required")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &Service{Store: db, Access: access, Router: router, Storage: storage, Audit: auditor, Trusted: trusted, Config: c, ctx: ctx, cancel: cancel, outputs: map[string]*taskOutput{}, dispatches: map[string]context.CancelFunc{}, cancelWorkers: map[string]bool{}}
+	s := &Service{Store: db, Access: access, Router: router, Storage: storage, Audit: auditor, Trusted: trusted, Config: c, ctx: ctx, cancel: cancel, outputs: map[string]*taskOutput{}, dispatches: map[string]context.CancelFunc{}, cancelWorkers: map[string]bool{}, analysisSem: make(chan struct{}, analysisConcurrency)}
 	s.Previews = &DatabasePreviews{Store: db}
 	s.instanceID = owner.InstanceID
 	s.lostAfter = hostconn.InstanceLostAfter(owner.Config)
 	s.recoveryInterval = min(owner.Config.CleanupInterval, s.lostAfter/2)
 	return s, nil
+}
+
+func (s *Service) acquireAnalysis(ctx context.Context) (func(), error) {
+	if s == nil || s.analysisSem == nil {
+		return func() {}, nil
+	}
+	select {
+	case s.analysisSem <- struct{}{}:
+		return func() { <-s.analysisSem }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (s *Service) Close() {
@@ -120,6 +136,7 @@ type operationKey struct{}
 
 type operationState struct {
 	JobID                               string
+	Resource                            string
 	Version                             uint64
 	Rules                               []string
 	Committed, AuthorizationAuditFailed bool
@@ -130,9 +147,9 @@ func operationInfo(ctx context.Context) *operationState {
 	return state
 }
 
-func (s *Service) audit(ctx context.Context, op, phase, outcome, jobID string, version uint64, rules []string) error {
+func (s *Service) audit(ctx context.Context, op, phase, outcome, jobID, resource string, version uint64, rules []string) error {
 	actor, ip := reqctx.RequestInfo(ctx)
-	_, err := s.Audit.Append(ctx, audit.Payload{SubjectID: actor, SourceIP: ip, Operation: op, Reason: phase, Decision: outcome, JobID: jobID, PolicyVersion: version, MatchedRules: rules})
+	_, err := s.Audit.Append(ctx, audit.Payload{SubjectID: actor, SourceIP: ip, Operation: op, Resource: resource, Reason: phase, Decision: outcome, JobID: jobID, PolicyVersion: version, MatchedRules: rules})
 	if err != nil {
 		if phase == "authorized" {
 			if state := operationInfo(ctx); state != nil {
@@ -158,7 +175,7 @@ func (s *Service) operation(ctx context.Context, op string, write bool, fn func(
 		}
 		resultCtx, cancelResult := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancelResult()
-		if aerr := s.audit(resultCtx, op, "result", outcome, state.JobID, state.Version, state.Rules); aerr != nil {
+		if aerr := s.audit(resultCtx, op, "result", outcome, state.JobID, state.Resource, state.Version, state.Rules); aerr != nil {
 			result = nil
 			if state.Committed && write {
 				err = failure(connect.CodeUnavailable, "AUDIT_RESULT_UNAVAILABLE")
@@ -185,6 +202,10 @@ func (s *Service) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobRe
 			return nil, failure(connect.CodeUnavailable, "GATEWAY_DRAINING")
 		}
 		f, err := format(r.ResponseFormat)
+		if err != nil {
+			return nil, err
+		}
+		grouping, err := groupingMode(r.Grouping, cluster.GroupingExact)
 		if err != nil {
 			return nil, err
 		}
@@ -240,7 +261,7 @@ func (s *Service) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobRe
 		if len(denials) > 0 {
 			outcome = "deny"
 		}
-		if err := s.audit(ctx, "run_job", "authorized", outcome, "", version, rules); err != nil {
+		if err := s.audit(ctx, "run_job", "authorized", outcome, "", "", version, rules); err != nil {
 			return nil, err
 		}
 		actor, _ := reqctx.RequestInfo(ctx)
@@ -278,7 +299,7 @@ func (s *Service) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobRe
 		if err != nil {
 			return nil, err
 		}
-		summary, err := s.summary(ctx, j, f)
+		summary, err := s.summary(ctx, j, f, grouping)
 		if err != nil {
 			return nil, err
 		}
