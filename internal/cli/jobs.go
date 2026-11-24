@@ -52,21 +52,216 @@ func jobError(err error) error {
 	return rpcError(err)
 }
 
+func cliGroupSeverity(s v1.GroupSeverity) string {
+	switch s {
+	case v1.GroupSeverity_GROUP_SEVERITY_FAILURE:
+		return "failure"
+	case v1.GroupSeverity_GROUP_SEVERITY_ANOMALY:
+		return "anomaly"
+	case v1.GroupSeverity_GROUP_SEVERITY_NORMAL:
+		return "normal"
+	default:
+		return "-"
+	}
+}
+
+func cliTaskStatus(s v1.TaskStatus) string {
+	return strings.ToLower(strings.TrimPrefix(s.String(), "TASK_STATUS_"))
+}
+
+func validateCLIGrouping(grouping string) error {
+	if grouping != "exact" && grouping != "normalized" {
+		return fmt.Errorf("--grouping must be exact or normalized")
+	}
+	return nil
+}
+
 func printJob(c *cobra.Command, j *v1.Job, summary *v1.JobSummary) error {
 	w := tabwriter.NewWriter(c.OutOrStdout(), 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "JOB\tACTION\tSTATUS\tTASKS")
 	fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", j.GetJobId(), j.GetAction(), strings.ToLower(strings.TrimPrefix(j.GetStatus().String(), "JOB_STATUS_")), j.GetTotalTasks())
 	if summary != nil {
-		fmt.Fprintln(w, "HOSTS\tEXIT\tSTDOUT\tSTDERR\tTRUNCATED")
+		hasSeverity := false
 		for _, g := range summary.Groups {
-			exit := "-"
-			if g.ExitCode != nil {
-				exit = strconv.FormatInt(int64(*g.ExitCode), 10)
+			if g.GetSeverity() != v1.GroupSeverity_GROUP_SEVERITY_UNSPECIFIED || g.GetAnomalyReason() != "" {
+				hasSeverity = true
+				break
 			}
-			fmt.Fprintf(w, "%s (%d)\t%s\t%q\t%q\t%t\n", strings.Join(g.Hosts, ","), g.HostCount, exit, g.Stdout, g.Stderr, g.Truncated)
+		}
+		if hasSeverity {
+			fmt.Fprintln(w, "SEVERITY\tANOMALY\tHOSTS\tEXIT\tSTDOUT\tSTDERR\tTRUNCATED")
+			for _, g := range summary.Groups {
+				exit := "-"
+				if g.ExitCode != nil {
+					exit = strconv.FormatInt(int64(*g.ExitCode), 10)
+				}
+				anomaly := g.AnomalyReason
+				if anomaly == "" {
+					anomaly = "-"
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s (%d)\t%s\t%q\t%q\t%t\n", cliGroupSeverity(g.Severity), anomaly, strings.Join(g.Hosts, ","), g.HostCount, exit, g.Stdout, g.Stderr, g.Truncated)
+			}
+		} else {
+			fmt.Fprintln(w, "HOSTS\tEXIT\tSTDOUT\tSTDERR\tTRUNCATED")
+			for _, g := range summary.Groups {
+				exit := "-"
+				if g.ExitCode != nil {
+					exit = strconv.FormatInt(int64(*g.ExitCode), 10)
+				}
+				fmt.Fprintf(w, "%s (%d)\t%s\t%q\t%q\t%t\n", strings.Join(g.Hosts, ","), g.HostCount, exit, g.Stdout, g.Stderr, g.Truncated)
+			}
+		}
+		if summary.Grouping != "" || summary.OmittedGroups > 0 || summary.OmittedHosts > 0 || summary.FoldedNormalHosts > 0 || summary.UnfinishedHostsCount > 0 || len(summary.OfflineHosts) > 0 {
+			var parts []string
+			if summary.Grouping != "" {
+				parts = append(parts, "grouping="+summary.Grouping)
+			}
+			if summary.Ranking != "" {
+				parts = append(parts, "ranking="+summary.Ranking)
+			}
+			if summary.TotalGroups > 0 {
+				parts = append(parts, fmt.Sprintf("total_groups=%d", summary.TotalGroups))
+			}
+			if summary.OmittedGroups > 0 {
+				parts = append(parts, fmt.Sprintf("omitted_groups=%d", summary.OmittedGroups))
+			}
+			if summary.OmittedHosts > 0 {
+				parts = append(parts, fmt.Sprintf("omitted_hosts=%d", summary.OmittedHosts))
+			}
+			if summary.FoldedNormalHosts > 0 {
+				parts = append(parts, fmt.Sprintf("folded_normal=%d", summary.FoldedNormalHosts))
+			}
+			if summary.UnfinishedHostsCount > 0 {
+				parts = append(parts, fmt.Sprintf("unfinished=%d", summary.UnfinishedHostsCount))
+			}
+			if len(summary.OfflineHosts) > 0 {
+				parts = append(parts, "offline="+strings.Join(summary.OfflineHosts, ","))
+			}
+			fmt.Fprintln(w, strings.Join(parts, " "))
 		}
 	}
 	return w.Flush()
+}
+
+func formatMetricValue(v float64, unit string) string {
+	s := strconv.FormatFloat(v, 'f', -1, 64)
+	if unit != "" {
+		return s + unit
+	}
+	return s
+}
+
+func formatExitStatus(status v1.TaskStatus, code *int32) string {
+	name := cliTaskStatus(status)
+	if code == nil {
+		return name
+	}
+	return fmt.Sprintf("%s(exit=%d)", name, *code)
+}
+
+func printJobDiff(c *cobra.Command, resp *v1.DiffJobsResponse) error {
+	diff := resp.GetDiff()
+	base := resp.GetBaseJob()
+	target := resp.GetTargetJob()
+	w := tabwriter.NewWriter(c.OutOrStdout(), 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "BASE\tTARGET\tACTION\tGROUPING\tUNCHANGED\tADDED\tREMOVED\tREPLACED\tTRUNCATED")
+	fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%d\t%d\t%d\t%t\n",
+		base.GetJobId(), target.GetJobId(), target.GetAction(), diff.GetGrouping(),
+		diff.GetUnchangedHostsCount(), diff.GetAddedHostsCount(), diff.GetRemovedHostsCount(), diff.GetReplacedHostsCount(), diff.GetTruncated(),
+	)
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	out := c.OutOrStdout()
+	if diff.GetActionDefinitionChanged() {
+		fmt.Fprintln(out, "Note: action definition digest changed between base and target jobs.")
+	}
+	if diff.GetPreviewTruncated() {
+		fmt.Fprintln(out, "Note: some host output previews were truncated at 4 KiB; use `allowops jobs output` for complete host output.")
+	}
+	if len(diff.GetAddedHosts()) > 0 || len(diff.GetRemovedHosts()) > 0 || len(diff.GetReplacedHosts()) > 0 {
+		fmt.Fprintln(out, "\nHOST SET CHANGES")
+		if len(diff.AddedHosts) > 0 {
+			fmt.Fprintf(out, "  added (%d): %s\n", diff.AddedHostsCount, strings.Join(diff.AddedHosts, ", "))
+		}
+		if len(diff.RemovedHosts) > 0 {
+			fmt.Fprintf(out, "  removed (%d): %s\n", diff.RemovedHostsCount, strings.Join(diff.RemovedHosts, ", "))
+		}
+		if len(diff.ReplacedHosts) > 0 {
+			fmt.Fprintf(out, "  replaced (%d): %s\n", diff.ReplacedHostsCount, strings.Join(diff.ReplacedHosts, ", "))
+		}
+	}
+	if len(diff.GetStatusTransitions()) > 0 {
+		fmt.Fprintln(out, "\nSTATUS TRANSITIONS")
+		tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(tw, "FROM\tTO\tHOSTS\tDEGRADATION\tREASON")
+		for _, st := range diff.StatusTransitions {
+			reason := st.Reason
+			if reason == "" {
+				reason = "-"
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s (%d)\t%t\t%s\n",
+				formatExitStatus(st.FromStatus, st.FromExitCode),
+				formatExitStatus(st.ToStatus, st.ToExitCode),
+				strings.Join(st.Hosts, ","), st.HostCount, st.Degradation, reason,
+			)
+		}
+		if err := tw.Flush(); err != nil {
+			return err
+		}
+	}
+	if len(diff.GetPatternChanges()) > 0 || diff.GetOmittedPatternChanges() > 0 {
+		fmt.Fprintln(out, "\nPATTERN CHANGES")
+		for i, pc := range diff.PatternChanges {
+			tag := ""
+			if pc.Unchanged {
+				tag = " [unchanged]"
+			}
+			fmt.Fprintf(out, "  #%d %s -> %s (%d hosts: %s)%s\n",
+				i+1, cliGroupSeverity(pc.BaseSeverity), cliGroupSeverity(pc.TargetSeverity),
+				pc.HostCount, strings.Join(pc.Hosts, ","), tag,
+			)
+			for _, line := range pc.RemovedLines {
+				fmt.Fprintf(out, "    - %s\n", line)
+			}
+			for _, line := range pc.AddedLines {
+				fmt.Fprintf(out, "    + %s\n", line)
+			}
+			if !pc.DiffComputed && (pc.BasePreview != "" || pc.TargetPreview != "") {
+				fmt.Fprintf(out, "    base:   %q\n", pc.BasePreview)
+				fmt.Fprintf(out, "    target: %q\n", pc.TargetPreview)
+			}
+		}
+		if diff.GetOmittedPatternChanges() > 0 {
+			fmt.Fprintf(out, "  (%d additional pattern changes omitted due to response budget)\n", diff.OmittedPatternChanges)
+		}
+	}
+	if len(diff.GetMetricDrifts()) > 0 {
+		fmt.Fprintln(out, "\nMETRIC DRIFTS (untrusted host-derived labels)")
+		dw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(dw, "METRIC\tBASE P50\tTARGET P50\tMAX DELTA\tMAX HOST\tAFFECTED")
+		for _, d := range diff.MetricDrifts {
+			delta := formatMetricValue(d.MaxDelta, d.Unit)
+			if d.MaxDelta > 0 {
+				delta = "+" + delta
+			}
+			if d.MaxDeltaPct != nil {
+				delta = fmt.Sprintf("%s (%+.1f%%)", delta, *d.MaxDeltaPct)
+			}
+			fmt.Fprintf(dw, "%s\t%s\t%s\t%s\t%s\t%d/%d\n",
+				d.Label,
+				formatMetricValue(d.BaseP50, d.Unit),
+				formatMetricValue(d.TargetP50, d.Unit),
+				delta,
+				d.MaxHost,
+				d.AffectedHosts, d.HostCount,
+			)
+		}
+		if err := dw.Flush(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func printJobJSON(c *cobra.Command, m proto.Message) error {
@@ -123,7 +318,7 @@ func typedParameters(raw []string, a catalog.Action) ([]byte, error) {
 }
 
 func NewRunCmd() *cobra.Command {
-	var selector, reason, responseFormat string
+	var selector, reason, responseFormat, grouping string
 	var names, raw []string
 	var expected uint64
 	var wait, batch, failures uint32
@@ -138,11 +333,14 @@ func NewRunCmd() *cobra.Command {
 		if strings.TrimSpace(reason) == "" {
 			return fmt.Errorf("--reason required")
 		}
+		if err := validateCLIGrouping(grouping); err != nil {
+			return err
+		}
 		jobs, catalogs, err := jobClients()
 		if err != nil {
 			return err
 		}
-		r := &v1.RunJobRequest{Action: args[0], Reason: reason, ResponseFormat: responseFormat, Params: &v1.Parameters{Json: []byte("{}")}, Targets: &v1.HostTargets{}}
+		r := &v1.RunJobRequest{Action: args[0], Reason: reason, ResponseFormat: responseFormat, Grouping: grouping, Params: &v1.Parameters{Json: []byte("{}")}, Targets: &v1.HostTargets{}}
 		if selector != "" {
 			r.Targets.Selection = &v1.HostTargets_Selector{Selector: selector}
 		} else {
@@ -217,13 +415,14 @@ func NewRunCmd() *cobra.Command {
 	c.Flags().Uint32Var(&batch, "batch-size", 20, "Tighten the signed/default batch size")
 	c.Flags().Uint32Var(&failures, "max-failures", 5, "Tighten the signed/default failure threshold")
 	c.Flags().StringVar(&responseFormat, "response-format", "concise", "concise or detailed")
+	c.Flags().StringVar(&grouping, "grouping", "exact", "exact or normalized")
 	c.Flags().BoolVar(&jsonOutput, "json", false, "Print JSON")
 	return c
 }
 
 func NewJobsCmd() *cobra.Command {
 	var jsonOutput bool
-	root := &cobra.Command{Use: "jobs", Short: "List, inspect, read output or cancel jobs", SilenceUsage: true}
+	root := &cobra.Command{Use: "jobs", Short: "List, inspect, diff, read output or cancel jobs", SilenceUsage: true}
 	root.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Print JSON")
 	var pageSize uint32
 	var pageToken string
@@ -249,13 +448,16 @@ func NewJobsCmd() *cobra.Command {
 	list.Flags().Uint32Var(&pageSize, "page-size", 50, "Page size (maximum 200)")
 	list.Flags().StringVar(&pageToken, "page-token", "", "Page cursor")
 	var wait uint32
-	var responseFormat string
+	var responseFormat, getGrouping string
 	get := &cobra.Command{Use: "get <job-id>", Args: cobra.ExactArgs(1), RunE: func(c *cobra.Command, args []string) error {
+		if err := validateCLIGrouping(getGrouping); err != nil {
+			return err
+		}
 		jobs, _, err := jobClients()
 		if err != nil {
 			return err
 		}
-		r, err := jobs.GetJob(c.Context(), connect.NewRequest(&v1.GetJobRequest{JobId: args[0], WaitSeconds: &wait, ResponseFormat: responseFormat}))
+		r, err := jobs.GetJob(c.Context(), connect.NewRequest(&v1.GetJobRequest{JobId: args[0], WaitSeconds: &wait, ResponseFormat: responseFormat, Grouping: getGrouping}))
 		if err != nil {
 			return jobError(err)
 		}
@@ -266,6 +468,33 @@ func NewJobsCmd() *cobra.Command {
 	}}
 	get.Flags().Uint32Var(&wait, "wait-seconds", 0, "Wait for terminal job status")
 	get.Flags().StringVar(&responseFormat, "response-format", "concise", "concise or detailed")
+	get.Flags().StringVar(&getGrouping, "grouping", "exact", "exact or normalized")
+	var diffGrouping string
+	var onlyChanged bool
+	diff := &cobra.Command{Use: "diff <base-job-id> <target-job-id>", Short: "Compare two finished jobs of the same action", Args: cobra.ExactArgs(2), RunE: func(c *cobra.Command, args []string) error {
+		if err := validateCLIGrouping(diffGrouping); err != nil {
+			return err
+		}
+		jobs, _, err := jobClients()
+		if err != nil {
+			return err
+		}
+		r, err := jobs.DiffJobs(c.Context(), connect.NewRequest(&v1.DiffJobsRequest{
+			BaseJobId:   args[0],
+			TargetJobId: args[1],
+			Grouping:    diffGrouping,
+			OnlyChanged: &onlyChanged,
+		}))
+		if err != nil {
+			return jobError(err)
+		}
+		if jsonOutput {
+			return printJobJSON(c, r.Msg)
+		}
+		return printJobDiff(c, r.Msg)
+	}}
+	diff.Flags().StringVar(&diffGrouping, "grouping", "normalized", "normalized or exact")
+	diff.Flags().BoolVar(&onlyChanged, "only-changed", true, "Show only changed output patterns")
 	cancel := &cobra.Command{Use: "cancel <job-id>", Args: cobra.ExactArgs(1), RunE: func(c *cobra.Command, args []string) error {
 		jobs, _, err := jobClients()
 		if err != nil {
@@ -321,6 +550,6 @@ func NewJobsCmd() *cobra.Command {
 	out.Flags().Uint32Var(&step, "step", 0, "Zero-based step index for steps actions")
 	out.Flags().Uint64Var(&offset, "offset", 0, "Byte offset")
 	out.Flags().Uint32Var(&limit, "limit", 16<<10, "Output page bytes (maximum 24576)")
-	root.AddCommand(list, get, out, cancel)
+	root.AddCommand(list, get, diff, out, cancel)
 	return root
 }
