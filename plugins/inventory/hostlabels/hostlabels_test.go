@@ -4,17 +4,27 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/liubing0806/allowops/plugin"
 	"github.com/liubing0806/allowops/plugin/inventory"
+	"github.com/liubing0806/allowops/plugin/plugintest"
 )
 
 type testHost struct {
 	hosts []plugin.HostInfo
 	err   error
 }
+
+func (testHost) HTTPClient() *http.Client { return nil }
+func (testHost) Credential(string) ([]byte, error) {
+	return nil, errors.New("plugin credential: unavailable")
+}
+func (testHost) Cache() plugin.Cache { return nil }
+func (testHost) Now() time.Time      { return time.Now().UTC() }
 
 func (testHost) InstanceID() string                                 { return "test" }
 func (testHost) Logger() *slog.Logger                               { return slog.Default() }
@@ -83,4 +93,12 @@ func TestProvisionAndHostErrors(t *testing.T) {
 	if _, err := m.Resolve(context.Background(), inventory.Query{}); err == nil {
 		t.Fatal("host error lost")
 	}
+}
+
+func TestResolverContract(t *testing.T) {
+	plugintest.RunResolverContract(t, Module{}, "label: service", plugintest.WithHosts([]plugin.HostInfo{
+		{Hostname: "one", Labels: map[string]string{"service": "api"}},
+		{Hostname: "two", Labels: map[string]string{"service": "worker"}},
+		{Hostname: "three", Labels: map[string]string{"service": "api"}},
+	}))
 }

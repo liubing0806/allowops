@@ -45,9 +45,27 @@ Inputs below use snake_case. Unknown inputs are rejected.
 | Tool | Inputs |
 |---|---|
 | `hosts_search` | Optional `selector` or `hostname` (mutually exclusive), `next_cursor`. With neither, list all visible hosts. |
+| `entities_search` | Listed when at least one inventory plugin is ready. Optional `kind`, `name`, `sources`, `limit` (1–100, default 20). Requires `view_inventory`. |
+| `changes_list` | Listed when at least one changes plugin is ready. Optional `services`, `from`, `to` (RFC3339, max 7-day window), `sources`, `limit` (1–100, default 20). Requires `view_changes`. |
+| `runbooks_search` | Listed when at least one knowledge plugin is ready. Optional `query`, `tags`, `sources`, `limit` (1–100, default 20). Requires `view_knowledge`. |
+| `runbooks_read` | Listed when at least one knowledge plugin is ready. Required `source`, `id`; optional `section`, `offset`, `max_bytes`, `revision`. Requires `view_knowledge`. |
 | `jobs_get` | Required `job_id`; optional `host`, `wait_seconds`, `response_format`, `next_cursor`, `stream`, `offset`, `step_index`. |
 | `jobs_list` | Optional `next_cursor`; recent jobs belonging to the current identity. |
 | `jobs_cancel` | Required `job_id`; stops future batches and requests termination of running task process groups. |
+
+`entities_search`, `changes_list`, `runbooks_search` and `runbooks_read` are
+read-only context tools backed by configured gateway plugins. All four write
+authorization and result audit events, redact returned strings with the
+`secrets` rules, mark responses `output_trust: untrusted`, and fit within the
+32 KiB result budget. `entities_search` filters hosts by `view_hosts` per
+source before merging matching entities across sources and reporting attribute
+or selector `conflicts`. When at least one knowledge plugin is ready, the
+gateway also exposes MCP Resources (`resources/list`,
+`resources/templates/list` and `resources/read` for
+`allowops://runbooks/{source}/{+id}`) under the same `view_knowledge` policy,
+redaction, audit and 32 KiB rules. `entities_search`, `changes_list`,
+`runbooks_search` and `runbooks_read` are reserved names and cannot be used as
+catalog action names.
 
 `hosts_search` returns hostnames, online state, labels, total count and label
 distribution. Inspect `labels_truncated` and `label_counts_truncated` and narrow
