@@ -1,11 +1,16 @@
 package gitdocs
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,6 +18,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -430,3 +436,323 @@ var (
 	_ plugin.Provisioner = (*Module)(nil)
 	_ knowledge.Store    = (*Module)(nil)
 )
+
+type tarEntry struct {
+	name     string
+	typeflag byte
+	body     []byte
+	linkname string
+}
+
+func buildTarGz(t *testing.T, entries []tarEntry) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for _, e := range entries {
+		tf := e.typeflag
+		if tf == 0 {
+			tf = tar.TypeReg
+		}
+		hdr := &tar.Header{
+			Name:     e.name,
+			Mode:     0o644,
+			Size:     int64(len(e.body)),
+			Typeflag: tf,
+			Linkname: e.linkname,
+		}
+		if tf == tar.TypeDir {
+			hdr.Mode = 0o755
+			hdr.Size = 0
+		}
+		if tf == tar.TypeSymlink || tf == tar.TypeLink {
+			hdr.Size = 0
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatal(err)
+		}
+		if len(e.body) > 0 && tf == tar.TypeReg {
+			if _, err := tw.Write(e.body); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestArchiveModeStoreContractAndAuth(t *testing.T) {
+	archive := buildTarGz(t, []tarEntry{
+		{name: "repo-main/", typeflag: tar.TypeDir},
+		{name: "repo-main/.git/HEAD", body: []byte("ref: refs/heads/main\n")},
+		{name: "repo-main/docs/", typeflag: tar.TypeDir},
+		{name: "repo-main/docs/link.md", typeflag: tar.TypeSymlink, linkname: "/etc/passwd"},
+		{name: "repo-main/docs/hardlink.md", typeflag: tar.TypeLink, linkname: "repo-main/docs/api.md"},
+		{name: "repo-main/docs/api.md", body: []byte("---\ntitle: API Runbook\nsummary: Restart API\ntags: [api]\n---\n# API\n## Restart\n")},
+		{name: "repo-main/docs/db.md", body: []byte("# DB Runbook\n## Failover\n")},
+	})
+
+	const bearerSecret = "super-secret-archive-token-123"
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer "+bearerSecret {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("unauthorized response body secret-echo"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(archive)
+	}))
+	defer srv.Close()
+
+	cfg := fmt.Sprintf("archive_url: %q\ncredential_ref: tok\nsubdir: docs\n", srv.URL+"/archive.tar.gz")
+	plugintest.RunStoreContract(
+		t,
+		Module{},
+		cfg,
+		plugintest.WithHTTPServer(srv),
+		plugintest.WithCredential("tok", []byte(bearerSecret)),
+		plugintest.WithExpectHTTP(),
+	)
+
+	// Verify symlinks and hardlinks were excluded and only regular .md files loaded.
+	h := plugintest.NewHost(t, plugintest.WithHTTPServer(srv), plugintest.WithCredential("tok", []byte(bearerSecret)))
+	m := &Module{ArchiveURL: srv.URL + "/archive.tar.gz", CredentialRef: "tok", Subdir: "docs"}
+	if err := m.Provision(t.Context(), h); err != nil {
+		t.Fatal(err)
+	}
+	docs, err := m.Search(t.Context(), knowledge.SearchQuery{MaxDocs: 100})
+	if err != nil || len(docs) != 2 || docs[0].ID != "api.md" || docs[1].ID != "db.md" {
+		t.Fatalf("unexpected archive docs: %+v %v", docs, err)
+	}
+	if _, err := m.Read(t.Context(), "link.md"); !errors.Is(err, knowledge.ErrNotFound) {
+		t.Fatalf("symlink entry should not be readable: %v", err)
+	}
+	if _, err := m.Read(t.Context(), "hardlink.md"); !errors.Is(err, knowledge.ErrNotFound) {
+		t.Fatalf("hardlink entry should not be readable: %v", err)
+	}
+
+	// Verify JSON bearer_token and Basic auth credentials, and no credential/body leakage on error.
+	t.Run("json bearer and basic auth", func(t *testing.T) {
+		var gotAuth string
+		authSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotAuth = r.Header.Get("Authorization")
+			_, _ = w.Write(archive)
+		}))
+		defer authSrv.Close()
+
+		hBearer := plugintest.NewHost(t, plugintest.WithHTTPServer(authSrv), plugintest.WithCredential("c", []byte(`{"bearer_token":"json-tok"}`)))
+		mb := &Module{ArchiveURL: authSrv.URL + "/a.tar.gz", CredentialRef: "c", Subdir: "docs"}
+		if err := mb.Provision(t.Context(), hBearer); err != nil {
+			t.Fatal(err)
+		}
+		if gotAuth != "Bearer json-tok" {
+			t.Fatalf("got auth %q", gotAuth)
+		}
+
+		hBasic := plugintest.NewHost(t, plugintest.WithHTTPServer(authSrv), plugintest.WithCredential("c", []byte(`{"username":"bot","password":"pw"}`)))
+		mu := &Module{ArchiveURL: authSrv.URL + "/a.tar.gz", CredentialRef: "c", Subdir: "docs"}
+		if err := mu.Provision(t.Context(), hBasic); err != nil {
+			t.Fatal(err)
+		}
+		wantBasic := "Basic " + base64.StdEncoding.EncodeToString([]byte("bot:pw"))
+		if gotAuth != wantBasic {
+			t.Fatalf("got auth %q, want %q", gotAuth, wantBasic)
+		}
+	})
+
+	t.Run("errors never leak credential or response body", func(t *testing.T) {
+		badSecret := "do-not-echo-this-secret"
+		hBad := plugintest.NewHost(t, plugintest.WithHTTPServer(srv), plugintest.WithCredential("tok", []byte(badSecret)))
+		mBad := &Module{ArchiveURL: srv.URL + "/archive.tar.gz", CredentialRef: "tok"}
+		err := mBad.Provision(t.Context(), hBad)
+		if err == nil {
+			t.Fatal("expected 401 error")
+		}
+		if strings.Contains(err.Error(), badSecret) || strings.Contains(err.Error(), "secret-echo") {
+			t.Fatalf("error leaked secret or response body: %v", err)
+		}
+	})
+}
+
+func TestArchiveModeValidation(t *testing.T) {
+	neg := -1
+	five := 5
+	zero := 0
+
+	valid := []Module{
+		{ArchiveURL: "https://example.com/repo.tar.gz", CredentialRef: "tok", StripComponents: &zero},
+		{ArchiveURL: "http://example.com/public.tar.gz"},
+	}
+	for i, m := range valid {
+		if err := m.Validate(); err != nil {
+			t.Errorf("valid[%d] failed: %v", i, err)
+		}
+	}
+
+	invalid := []Module{
+		{Dir: "/tmp/a", ArchiveURL: "https://example.com/a.tar.gz"},
+		{Dir: "/tmp/a", CredentialRef: "tok"},
+		{ArchiveURL: "http://example.com/repo.tar.gz", CredentialRef: "tok"},
+		{ArchiveURL: "ftp://example.com/repo.tar.gz"},
+		{ArchiveURL: "https://user:pass@example.com/repo.tar.gz"},
+		{ArchiveURL: "https://example.com/repo.tar.gz", CredentialRef: "BadRef!"},
+		{ArchiveURL: "https://example.com/repo.tar.gz", StripComponents: &neg},
+		{ArchiveURL: "https://example.com/repo.tar.gz", StripComponents: &five},
+		{ArchiveURL: "https://example.com/repo.tar.gz", MaxArchiveBytes: maxArchiveBytesLimit + 1},
+		{ArchiveURL: "https://example.com/repo.tar.gz", MaxDecompressedBytes: maxDecompressedBytesLimit + 1},
+	}
+	for i, m := range invalid {
+		if err := m.Validate(); err == nil {
+			t.Errorf("invalid[%d] unexpectedly passed: %+v", i, m)
+		}
+	}
+}
+
+func TestArchiveModeSecurityAndLimits(t *testing.T) {
+	serve := func(t *testing.T, payload []byte) (*httptest.Server, *plugintest.TestHost) {
+		t.Helper()
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write(payload)
+		}))
+		t.Cleanup(srv.Close)
+		return srv, plugintest.NewHost(t, plugintest.WithHTTPServer(srv))
+	}
+
+	t.Run("full-stream decompression bomb rejected even in skipped non-md file", func(t *testing.T) {
+		// 2 MiB of zeros compresses to ~2 KiB in gzip, well below max_archive_bytes,
+		// but exceeds max_decompressed_bytes=64 KiB via countingReader between gz and tar.
+		bomb := buildTarGz(t, []tarEntry{
+			{name: "repo/filler.bin", body: make([]byte, 2<<20)},
+			{name: "repo/ok.md", body: []byte("# OK\n")},
+		})
+		if len(bomb) > 64<<10 {
+			t.Fatalf("expected highly compressed bomb, got %d bytes", len(bomb))
+		}
+		srv, h := serve(t, bomb)
+		m := &Module{
+			ArchiveURL:           srv.URL + "/bomb.tar.gz",
+			MaxArchiveBytes:      1 << 20,
+			MaxDecompressedBytes: 64 << 10,
+		}
+		if err := m.Provision(t.Context(), h); !errors.Is(err, errDecompressedLimit) {
+			t.Fatalf("expected errDecompressedLimit, got %v", err)
+		}
+	})
+
+	t.Run("max_archive_bytes rejected", func(t *testing.T) {
+		payload := buildTarGz(t, []tarEntry{{name: "repo/a.md", body: []byte(strings.Repeat("abcdef123456", 500))}})
+		srv, h := serve(t, payload)
+		m := &Module{ArchiveURL: srv.URL + "/a.tar.gz", MaxArchiveBytes: len(payload) - 1}
+		if err := m.Provision(t.Context(), h); !errors.Is(err, errArchiveSizeLimit) {
+			t.Fatalf("expected errArchiveSizeLimit, got %v", err)
+		}
+	})
+
+	t.Run("max_entries rejected", func(t *testing.T) {
+		entries := make([]tarEntry, 0, 5)
+		for i := range 5 {
+			entries = append(entries, tarEntry{name: fmt.Sprintf("repo/f%d.txt", i), body: []byte("x")})
+		}
+		srv, h := serve(t, buildTarGz(t, entries))
+		m := &Module{ArchiveURL: srv.URL + "/e.tar.gz", MaxEntries: 3}
+		if err := m.Provision(t.Context(), h); !errors.Is(err, errEntryLimit) {
+			t.Fatalf("expected errEntryLimit, got %v", err)
+		}
+	})
+
+	for _, badName := range []string{
+		"../escape.md",
+		"repo/../../escape.md",
+		"/etc/passwd",
+		`repo\evil.md`,
+	} {
+		t.Run("path traversal rejected "+badName, func(t *testing.T) {
+			payload := buildTarGz(t, []tarEntry{{name: badName, body: []byte("# Evil\n")}})
+			srv, h := serve(t, payload)
+			m := &Module{ArchiveURL: srv.URL + "/evil.tar.gz"}
+			if err := m.Provision(t.Context(), h); !errors.Is(err, errArchivePath) {
+				t.Fatalf("badName=%q: expected errArchivePath, got %v", badName, err)
+			}
+		})
+	}
+
+	t.Run("path traversal on symlink rejected", func(t *testing.T) {
+		payload := buildTarGz(t, []tarEntry{{name: "repo/../link.md", typeflag: tar.TypeSymlink, linkname: "/etc/passwd"}})
+		srv, h := serve(t, payload)
+		m := &Module{ArchiveURL: srv.URL + "/symlink-trav.tar.gz"}
+		if err := m.Provision(t.Context(), h); !errors.Is(err, errArchivePath) {
+			t.Fatalf("expected errArchivePath, got %v", err)
+		}
+	})
+
+	t.Run("nul byte rejected in archive path", func(t *testing.T) {
+		if _, err := validateArchivePath("repo/bad\x00name.md"); !errors.Is(err, errArchivePath) {
+			t.Fatalf("expected errArchivePath for NUL byte, got %v", err)
+		}
+	})
+
+	t.Run("invalid credential returns fixed error without echo", func(t *testing.T) {
+		srv, _ := serve(t, buildTarGz(t, []tarEntry{{name: "repo/a.md", body: []byte("# A\n")}}))
+		for _, badCred := range []string{
+			"",
+			"   ",
+			"tok\r\nX-Injected: secret-val",
+			`{"bearer_token":"secret-val","username":"u","password":"p"}`,
+			`{"unknown":"secret-val"}`,
+			`{"username":"u"}`,
+		} {
+			h := plugintest.NewHost(t, plugintest.WithHTTPServer(srv), plugintest.WithCredential("tok", []byte(badCred)))
+			m := &Module{ArchiveURL: srv.URL + "/a.tar.gz", CredentialRef: "tok"}
+			err := m.Provision(t.Context(), h)
+			if !errors.Is(err, errInvalidCredential) || strings.Contains(err.Error(), "secret-val") {
+				t.Fatalf("badCred=%q: got err=%v", badCred, err)
+			}
+		}
+	})
+
+	t.Run("strip_components and atomic refresh", func(t *testing.T) {
+		v1 := buildTarGz(t, []tarEntry{{name: "guide.md", body: []byte("# V1\n")}})
+		v2 := buildTarGz(t, []tarEntry{{name: "guide.md", body: []byte("# V2\n")}})
+		var version atomic.Int32
+		version.Store(1)
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if version.Load() == 1 {
+				_, _ = w.Write(v1)
+			} else {
+				_, _ = w.Write(v2)
+			}
+		}))
+		defer srv.Close()
+
+		start := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+		h := &clockHost{
+			TestHost: plugintest.NewHost(t, plugintest.WithHTTPServer(srv), plugintest.WithNow(start)),
+			now:      start,
+		}
+		zero := 0
+		ttl := time.Minute
+		m := &Module{ArchiveURL: srv.URL + "/docs.tar.gz", StripComponents: &zero, RefreshTTL: &ttl}
+		if err := m.Provision(t.Context(), h); err != nil {
+			t.Fatal(err)
+		}
+		res, err := m.Read(t.Context(), "guide.md")
+		if err != nil || res.Doc.Title != "V1" {
+			t.Fatalf("v1 read: %+v %v", res, err)
+		}
+		version.Store(2)
+		h.Advance(2 * time.Minute)
+		res, err = m.Read(t.Context(), "guide.md")
+		if err != nil || res.Doc.Title != "V2" {
+			t.Fatalf("v2 read after refresh: %+v %v", res, err)
+		}
+	})
+}
