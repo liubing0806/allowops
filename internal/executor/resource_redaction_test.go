@@ -204,12 +204,29 @@ func TestRedisResultRedactsPEMAcrossValues(t *testing.T) {
 	if !rootExecutorTest(t) {
 		return
 	}
+	values := map[string]string{
+		"begin":  "-----BEGIN PRIVATE KEY-----",
+		"body":   "redis-pem-body",
+		"end":    "-----END PRIVATE KEY-----",
+		"public": "public",
+	}
 	address, credential := redisResponseFixture(t, func(args []string) any {
 		switch strings.ToLower(args[0]) {
 		case "strlen":
-			return 32
-		case "mget":
-			return []any{"-----BEGIN PRIVATE KEY-----", nil, "redis-pem-body", "-----END PRIVATE KEY-----", "public"}
+			return len(values[args[1]])
+		case "getrange":
+			v := values[args[1]]
+			start, _ := strconv.Atoi(args[2])
+			end, _ := strconv.Atoi(args[3])
+			if start >= len(v) {
+				return ""
+			}
+			return v[start:min(end+1, len(v))]
+		case "exists":
+			if _, ok := values[args[1]]; ok {
+				return 1
+			}
+			return 0
 		}
 		return fmt.Errorf("ERR unexpected command")
 	})

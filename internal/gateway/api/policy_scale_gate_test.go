@@ -77,7 +77,7 @@ func addTrialHosts(t *testing.T, f *fixture, hosts int) {
 func defaultTrialEvaluations(subjects, hosts, actions int) int {
 	// For each subject: 12 global checks, view/manage per host, catalog per
 	// action, jobs/output per action on the empty and real hosts, execute per pair.
-	return subjects * (12 + 2*hosts + actions + 2*actions*(1+hosts) + actions*hosts)
+	return subjects * (len(consoleOperations) + 2*hosts + actions + 2*actions*(1+hosts) + actions*hosts)
 }
 
 func scaleTrialRequest(cases ...*v1.PolicyTestCase) *connect.Request[v1.TestPolicyRequest] {

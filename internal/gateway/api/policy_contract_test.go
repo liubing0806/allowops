@@ -96,7 +96,7 @@ func TestPolicyTrialAndSaveWithManyHostsSharingLabels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const evaluated = 2 * (12 + 2*hostCount + 3*actionCount + 3*actionCount*hostCount)
+	evaluated := uint64(2 * (len(consoleOperations) + 2*hostCount + 3*actionCount + 3*actionCount*hostCount))
 	if tested.Msg.Test.EvaluatedCount != evaluated || tested.Msg.Test.ChangedCount != hostCount/2 {
 		t.Fatalf("trial=%v; want evaluated=%d changed=%d", tested.Msg.Test, evaluated, hostCount/2)
 	}
@@ -143,7 +143,7 @@ func TestPolicyTrialAndSaveWithManyHostsSharingLabels(t *testing.T) {
 	}
 	// Three label sets (prod, dev and empty), including the global empty target
 	// in host permissions and per-action job/output checks.
-	const groupedEvaluations = 2 * (12 + 2*2 + actionCount + 3*actionCount*3)
+	groupedEvaluations := 2 * (len(consoleOperations) + 2*2 + actionCount + 3*actionCount*3)
 	f.service.Config.MaxTestEvaluations = groupedEvaluations
 	saved, err := p.SavePolicy(ctx, connect.NewRequest(&v1.SavePolicyRequest{BaseVersion: 1, Rules: rules, TestId: tested.Msg.Test.TestId}))
 	if err != nil || saved.Msg.Policy.Version != 2 {
