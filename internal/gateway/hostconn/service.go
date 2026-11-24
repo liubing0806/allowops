@@ -647,6 +647,13 @@ func (s *Service) enqueue(c *connection, item outbound) error {
 	}
 }
 
+// ConnectedHosts counts the Agent sessions owned by this Gateway instance.
+func (s *Service) ConnectedHosts() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.connections)
+}
+
 func (s *Service) snapshot() []*connection {
 	s.mu.Lock()
 	defer s.mu.Unlock()

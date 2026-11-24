@@ -67,6 +67,7 @@ type testGateway struct {
 	packages    map[string][]byte
 	badOffset   bool
 	renewSoon   bool
+	renewError  func(int32) error
 	// hello overrides the gateway hello. A nil response sends none; an error ends the stream.
 	hello func() (*v1.ConnectResponse, error)
 	// silent stops the gateway from answering agent heartbeats.
@@ -148,7 +149,15 @@ func (g *testGateway) Join(_ context.Context, request *connect.Request[v1.JoinRe
 }
 
 func (g *testGateway) RenewCertificate(_ context.Context, request *connect.Request[v1.RenewCertificateRequest]) (*connect.Response[v1.RenewCertificateResponse], error) {
-	g.renewals.Add(1)
+	attempt := g.renewals.Add(1)
+	g.mu.Lock()
+	renewError := g.renewError
+	g.mu.Unlock()
+	if renewError != nil {
+		if err := renewError(attempt); err != nil {
+			return nil, err
+		}
+	}
 	certificate, err := g.issue(request.Msg.CsrPem)
 	return connect.NewResponse(&v1.RenewCertificateResponse{Certificate: certificate}), err
 }

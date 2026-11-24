@@ -33,9 +33,15 @@ const MCPALPN = "allowops-mcp/1"
 type Option func(*options)
 
 type options struct {
-	identity *api.Service
-	audit    *audit.Service
-	mcp      http.Handler
+	identity       *api.Service
+	audit          *audit.Service
+	mcp            http.Handler
+	getCertificate func(*tls.ClientHelloInfo) (*tls.Certificate, error)
+}
+
+// WithCertificateSource selects the server certificate for each TLS handshake.
+func WithCertificateSource(getCertificate func(*tls.ClientHelloInfo) (*tls.Certificate, error)) Option {
+	return func(o *options) { o.getCertificate = getCertificate }
 }
 
 // WithIdentity mounts the identity API (design P5B) without changing host ALPN or catalog synchronization.
@@ -83,6 +89,11 @@ func New(agent *hostconn.Service, certificate tls.Certificate, opts ...Option) *
 	roots := x509.NewCertPool()
 	roots.AppendCertsFromPEM(agent.CA.PEM)
 	base := &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{certificate}}
+	if o.getCertificate != nil {
+		// With a static certificate present, TLS can skip GetCertificate for clients without SNI.
+		base.Certificates = nil
+		base.GetCertificate = o.getCertificate
+	}
 	s := &Server{Agent: agent, connections: map[net.Conn]struct{}{}}
 	base.GetConfigForClient = func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
 		cfg := base.Clone()
@@ -157,6 +168,10 @@ func (s *Server) handler(protocol string) http.Handler {
 		}
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/metrics" {
+			http.NotFound(w, r)
+			return
+		}
 		switch protocol {
 		case AgentALPN:
 			if r.URL.Path == allowopsv1connect.AgentServiceJoinProcedure || r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -48,6 +47,7 @@ func main() {
 
 type configuration struct {
 	Address        string          `yaml:"address"`
+	MetricsAddress string          `yaml:"metrics_address,omitempty"`
 	TLSCertificate string          `yaml:"tls_certificate"`
 	TLSKey         string          `yaml:"tls_key"`
 	CACertificate  string          `yaml:"ca_certificate"`
@@ -231,6 +231,16 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 	if err != nil {
 		return err
 	}
+	if cfg.MetricsAddress != "" {
+		metricsListener, err := net.Listen("tcp", cfg.MetricsAddress)
+		if err != nil {
+			listener.Close()
+			agent.Close()
+			return fmt.Errorf("listen metrics: %w", err)
+		}
+		stopMetrics := startMetrics(metricsListener, db, agent)
+		defer stopMetrics()
+	}
 	auditErrors, stopAudit, waitUpdateCheck := startBackgroundWorkers(&cfg, db, auditStore)
 	defer func() { stopAudit(); waitUpdateCheck() }()
 	return serveUntilDone(ctx, cfg, srv, agent, listener, auditErrors, stopAudit)
@@ -251,18 +261,18 @@ func startIdentity(ctx context.Context, db *store.Store, cfg configuration, audi
 	return identity, nil
 }
 
-func loadTrustMaterial(cfg configuration) (*hostconn.CA, tls.Certificate, map[string]ed25519.PublicKey, error) {
+func loadTrustMaterial(cfg configuration) (*hostconn.CA, *certificateFiles, map[string]ed25519.PublicKey, error) {
 	ca, err := hostconn.OpenCA(cfg.CACertificate, cfg.CAKey)
 	if err != nil {
-		return nil, tls.Certificate{}, nil, fmt.Errorf("load host CA: %w", err)
+		return nil, nil, nil, fmt.Errorf("load host CA: %w", err)
 	}
-	certificate, err := tls.LoadX509KeyPair(cfg.TLSCertificate, cfg.TLSKey)
+	certificate, err := loadCertificateFiles(cfg.TLSCertificate, cfg.TLSKey)
 	if err != nil {
-		return nil, tls.Certificate{}, nil, fmt.Errorf("load gateway TLS certificate")
+		return nil, nil, nil, fmt.Errorf("load gateway TLS certificate")
 	}
 	trusted, err := loadCatalogKeys(cfg.CatalogKeys)
 	if err != nil {
-		return nil, tls.Certificate{}, nil, err
+		return nil, nil, nil, err
 	}
 	return ca, certificate, trusted, nil
 }
@@ -305,10 +315,10 @@ func startJobServices(identity *api.Service, agent *hostconn.Service, objects *o
 
 // newGatewayServer configures management and MCP and assembles the server.
 // On failure it closes the agent and the listener.
-func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service, agent *hostconn.Service, listener net.Listener, certificate tls.Certificate, trusted map[string]ed25519.PublicKey, auditStore *audit.Store, objects *output.S3, jobs *job.Service, inventoryHost *pluginhost.Host) (*server.Server, error) {
+func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service, agent *hostconn.Service, listener net.Listener, certificate *certificateFiles, trusted map[string]ed25519.PublicKey, auditStore *audit.Store, objects *output.S3, jobs *job.Service, inventoryHost *pluginhost.Host) (*server.Server, error) {
 	catalogs := &catalogsvc.Service{Store: db, Trusted: trusted, MaxEnvelopeBytes: cfg.Gateway.EnvelopeBytes, MaxActionBytes: cfg.Gateway.ActionBytes, MaxReferenceBytes: cfg.Gateway.MessageBytes - cfg.Gateway.ChunkBytes - 1024}
 	if cfg.Management.CAPin == "" {
-		cfg.Management.CAPin = api.TLSCAPin(certificate.Certificate)
+		cfg.Management.CAPin = api.TLSCAPin(certificate.current.Certificate)
 	}
 	if cfg.Management.CAPin == "" {
 		fmt.Fprintln(os.Stderr, "gateway TLS CA pin unavailable; CreateJoinToken disabled; configure management.ca_pin")
@@ -324,7 +334,8 @@ func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service
 		listener.Close()
 		return nil, err
 	}
-	srv := server.New(agent, certificate,
+	srv := server.New(agent, *certificate.current,
+		server.WithCertificateSource(certificate.GetCertificate),
 		server.WithIdentity(identity),
 		server.WithAudit(&audit.Service{Store: auditStore}),
 		server.WithMCP(mcpService.Handler()),

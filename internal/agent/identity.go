@@ -53,6 +53,9 @@ func parsePin(pin string) ([]byte, error) {
 	return data, nil
 }
 
+var errCAPinMismatch = errors.New("CA_PIN_MISMATCH")
+var errALPNMismatch = errors.New("ALPN_MISMATCH")
+
 // Pin is SHA-256 of the DER-encoded CA certificate, not its public key. Trust
 // only a CA with that digest, and still verify the chain, hostname and validity.
 func pinnedTLS(config Config) (*tls.Config, error) {
@@ -68,7 +71,7 @@ func pinnedTLS(config Config) (*tls.Config, error) {
 	return &tls.Config{MinVersion: tls.VersionTLS13, ServerName: u.Hostname(), NextProtos: []string{AgentALPN}, InsecureSkipVerify: true, // verified below
 		VerifyConnection: func(state tls.ConnectionState) error {
 			if len(state.PeerCertificates) == 0 {
-				return errors.New("CA_PIN_MISMATCH")
+				return errCAPinMismatch
 			}
 			roots := x509.NewCertPool()
 			intermediates := x509.NewCertPool()
@@ -83,7 +86,7 @@ func pinnedTLS(config Config) (*tls.Config, error) {
 				}
 			}
 			if !matched {
-				return errors.New("CA_PIN_MISMATCH")
+				return errCAPinMismatch
 			}
 			_, err := state.PeerCertificates[0].Verify(x509.VerifyOptions{Roots: roots, Intermediates: intermediates, DNSName: u.Hostname()})
 			return err
@@ -122,7 +125,7 @@ func newClient(config Config, identity *identityStore) (allowopsv1connect.AgentS
 		}
 		if connection.(*tls.Conn).ConnectionState().NegotiatedProtocol != protocol {
 			connection.Close()
-			return nil, errors.New("ALPN_MISMATCH")
+			return nil, errALPNMismatch
 		}
 		return connection, nil
 	}}
@@ -298,7 +301,7 @@ func renew(ctx context.Context, client allowopsv1connect.AgentServiceClient, con
 	}
 	response, err := client.RenewCertificate(ctx, connect.NewRequest(&v1.RenewCertificateRequest{CsrPem: csr}))
 	if err != nil {
-		return errors.New("RENEW_FAILED")
+		return err
 	}
 	value, err := acceptCertificate(config, current.Hostname, private, response.Msg.Certificate, current.HostID, current.ClientCA)
 	if err != nil {
