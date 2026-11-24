@@ -2,18 +2,28 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 	"reflect"
 	"slices"
 	"testing"
+	"time"
 
+	"github.com/liubing0806/allowops/extensions/inventory/hostlabels"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/plugin"
 	"github.com/liubing0806/allowops/plugin/inventory"
-	"github.com/liubing0806/allowops/plugins/inventory/hostlabels"
 )
 
 type inventoryHosts []plugin.HostInfo
+
+func (inventoryHosts) HTTPClient() *http.Client { return nil }
+func (inventoryHosts) Credential(string) ([]byte, error) {
+	return nil, errors.New("plugin credential: unavailable")
+}
+func (inventoryHosts) Cache() plugin.Cache { return nil }
+func (inventoryHosts) Now() time.Time      { return time.Now().UTC() }
 
 func (inventoryHosts) InstanceID() string                                 { return "test" }
 func (inventoryHosts) Logger() *slog.Logger                               { return slog.Default() }

@@ -48,7 +48,7 @@ func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, available ma
 	// failures and unknown/denied tools without duplicating the authorized event (design G49).
 	if auditErr := s.identity.AppendResultAudit(ctx, event); auditErr != nil {
 		message := "result audit unavailable"
-		if state.jobID != "" && (r.Params.Name == "jobs_cancel" || !strings.HasPrefix(r.Params.Name, "jobs_") && r.Params.Name != "hosts_search" && r.Params.Name != "entities_search") {
+		if state.jobID != "" && (r.Params.Name == "jobs_cancel" || !strings.HasPrefix(r.Params.Name, "jobs_") && !isReadOnlyFixedTool(r.Params.Name)) {
 			message += "; operation may have committed"
 		}
 		err = accessError(connect.CodeUnavailable, message)
@@ -146,15 +146,30 @@ func toolError(err error, state *callState) *sdk.CallToolResult {
 	return sdkResult(result)
 }
 
+func isReadOnlyFixedTool(name string) bool {
+	switch name {
+	case "hosts_search", "entities_search", "changes_list", "runbooks_search", "runbooks_read":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, available map[string]bool, state *callState) (*ToolResult, error) {
 	if !available[r.Params.Name] {
 		return nil, accessError(connect.CodeNotFound, "tool removed or unavailable for this identity; call tools/list to refresh")
 	}
-	if r.Params.Name == "hosts_search" {
+	switch r.Params.Name {
+	case "hosts_search":
 		return s.searchHosts(ctx, r.Params.Arguments)
-	}
-	if r.Params.Name == "entities_search" {
+	case "entities_search":
 		return s.searchEntities(ctx, r.Params.Arguments)
+	case "changes_list":
+		return s.listChanges(ctx, r.Params.Arguments)
+	case "runbooks_search":
+		return s.searchRunbooks(ctx, r.Params.Arguments)
+	case "runbooks_read":
+		return s.readRunbook(ctx, r.Params.Arguments)
 	}
 	if s.jobs == nil {
 		return nil, accessError(connect.CodeUnavailable, "job service unavailable")

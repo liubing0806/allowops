@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/ed25519"
 	"crypto/tls"
@@ -13,9 +14,13 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+	_ "github.com/liubing0806/allowops/extensions/standard"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/api"
 	"github.com/liubing0806/allowops/internal/gateway/audit"
@@ -28,8 +33,8 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/server"
 	"github.com/liubing0806/allowops/internal/gateway/updatecheck"
 	"github.com/liubing0806/allowops/internal/store"
+	storedb "github.com/liubing0806/allowops/internal/store/db"
 	"github.com/liubing0806/allowops/plugin"
-	_ "github.com/liubing0806/allowops/plugins/standard"
 	"gopkg.in/yaml.v3"
 )
 
@@ -63,12 +68,12 @@ type configuration struct {
 		MaxFileBytes    int64  `yaml:"max_file_bytes"`
 		CursorKeyFile   string `yaml:"cursor_key_file"`
 	} `yaml:"audit"`
-	Management api.ManagementConfig `yaml:"management"`
-	Identity   api.Config           `yaml:"identity"`
-	Providers  []api.ProviderConfig `yaml:"providers"`
-	Plugins    []pluginhost.Config  `yaml:"plugins"`
-	Jobs       job.Config           `yaml:"jobs"`
-	Output     output.Config        `yaml:"output"`
+	Management api.ManagementConfig  `yaml:"management"`
+	Identity   api.Config            `yaml:"identity"`
+	Providers  []api.ProviderConfig  `yaml:"providers"`
+	Plugins    pluginhost.ConfigList `yaml:"plugins"`
+	Jobs       job.Config            `yaml:"jobs"`
+	Output     output.Config         `yaml:"output"`
 	// Opt-in: the gateway makes no outbound request unless enabled.
 	UpdateCheck updatecheck.Config `yaml:"update_check"`
 }
@@ -193,28 +198,20 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 	if err != nil {
 		return err
 	}
-	inventoryHost, err := pluginhost.New(ctx, cfg.Plugins, pluginhost.Deps{Logger: slog.Default(), Hosts: func(ctx context.Context) ([]plugin.HostInfo, error) {
-		rows, err := db.Queries.ListActiveHostLabels(ctx)
-		if err != nil {
-			return nil, err
-		}
-		hosts := make([]plugin.HostInfo, 0, len(rows))
-		for _, row := range rows {
-			host := plugin.HostInfo{Hostname: row.Hostname}
-			if err := json.Unmarshal(row.AuthorizationLabels, &host.Labels); err != nil {
-				return nil, err
-			}
-			if err := json.Unmarshal(row.ReportedLabels, &host.ReportedLabels); err != nil {
-				return nil, err
-			}
-			hosts = append(hosts, host)
-		}
-		return hosts, nil
-	}})
+	pluginHost, err := pluginhost.New(ctx, cfg.Plugins, pluginhost.Deps{
+		Logger:              slog.Default(),
+		Hosts:               activeHostsReader(db),
+		ControlPlaneChanges: controlPlaneChangesReader(db),
+	})
 	if err != nil {
 		return err
 	}
-	identity.ConfigurePluginHealth(inventoryHost.Health)
+	defer func() {
+		closeCtx, done := context.WithTimeout(context.Background(), 5*time.Second)
+		defer done()
+		pluginHost.Close(closeCtx)
+	}()
+	identity.ConfigurePluginHealth(pluginHost.Health)
 	agent, objects, jobs, err := newJobServices(ctx, db, identity, ca, cfg, auditStore, trusted)
 	if err != nil {
 		return err
@@ -224,7 +221,7 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 	if err != nil {
 		return err
 	}
-	srv, err := newGatewayServer(&cfg, db, identity, agent, listener, certificate, trusted, auditStore, objects, jobs, inventoryHost)
+	srv, err := newGatewayServer(&cfg, db, identity, agent, listener, certificate, trusted, auditStore, objects, jobs, pluginHost)
 	if err != nil {
 		return err
 	}
@@ -300,9 +297,98 @@ func startJobServices(identity *api.Service, agent *hostconn.Service, objects *o
 	return listener, nil
 }
 
+func activeHostsReader(db *store.Store) func(context.Context) ([]plugin.HostInfo, error) {
+	return func(ctx context.Context) ([]plugin.HostInfo, error) {
+		rows, err := db.Queries.ListActiveHostLabels(ctx)
+		if err != nil {
+			return nil, err
+		}
+		hosts := make([]plugin.HostInfo, 0, len(rows))
+		for _, row := range rows {
+			host := plugin.HostInfo{Hostname: row.Hostname}
+			if err := json.Unmarshal(row.AuthorizationLabels, &host.Labels); err != nil {
+				return nil, err
+			}
+			if err := json.Unmarshal(row.ReportedLabels, &host.ReportedLabels); err != nil {
+				return nil, err
+			}
+			hosts = append(hosts, host)
+		}
+		return hosts, nil
+	}
+}
+
+func controlPlaneChangesReader(db *store.Store) func(context.Context, time.Time, time.Time, int) ([]plugin.ControlPlaneChange, bool, error) {
+	return func(ctx context.Context, from, to time.Time, limit int) ([]plugin.ControlPlaneChange, bool, error) {
+		fetchLimit := int32(limit + 1)
+		fromTS := pgtype.Timestamptz{Time: from.UTC(), Valid: true}
+		toTS := pgtype.Timestamptz{Time: to.UTC(), Valid: true}
+		catRows, err := db.Queries.ListCatalogChangeHistory(ctx, storedb.ListCatalogChangeHistoryParams{
+			PublishedAt:   fromTS,
+			PublishedAt_2: toTS,
+			Limit:         fetchLimit,
+		})
+		if err != nil {
+			return nil, false, err
+		}
+		polRows, err := db.Queries.ListPolicyChangeHistory(ctx, storedb.ListPolicyChangeHistoryParams{
+			CreatedAt:   fromTS,
+			CreatedAt_2: toTS,
+			Limit:       fetchLimit,
+		})
+		if err != nil {
+			return nil, false, err
+		}
+		hasMore := len(catRows) > limit || len(polRows) > limit
+		if len(catRows) > limit {
+			catRows = catRows[:limit]
+		}
+		if len(polRows) > limit {
+			polRows = polRows[:limit]
+		}
+		items := make([]plugin.ControlPlaneChange, 0, len(catRows)+len(polRows))
+		for _, r := range catRows {
+			items = append(items, plugin.ControlPlaneChange{
+				At:          r.PublishedAt.Time.UTC(),
+				Kind:        "catalog",
+				CatalogID:   r.CatalogID,
+				Version:     r.Version,
+				ActionCount: int(r.ActionCount),
+			})
+		}
+		for _, r := range polRows {
+			items = append(items, plugin.ControlPlaneChange{
+				At:             r.CreatedAt.Time.UTC(),
+				Kind:           "policy",
+				Version:        r.Version,
+				Actor:          r.CreatedBy,
+				Reason:         r.Reason,
+				RolledBackFrom: r.RolledBackFrom,
+			})
+		}
+		slices.SortStableFunc(items, func(a, b plugin.ControlPlaneChange) int {
+			if n := b.At.Compare(a.At); n != 0 {
+				return n
+			}
+			if n := strings.Compare(a.Kind, b.Kind); n != 0 {
+				return n
+			}
+			if n := strings.Compare(a.CatalogID, b.CatalogID); n != 0 {
+				return n
+			}
+			return cmp.Compare(b.Version, a.Version)
+		})
+		if len(items) > limit {
+			hasMore = true
+			items = items[:limit]
+		}
+		return items, hasMore, nil
+	}
+}
+
 // newGatewayServer configures management and MCP and assembles the server.
 // On failure it closes the agent and the listener.
-func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service, agent *hostconn.Service, listener net.Listener, certificate tls.Certificate, trusted map[string]ed25519.PublicKey, auditStore *audit.Store, objects *output.S3, jobs *job.Service, inventoryHost *pluginhost.Host) (*server.Server, error) {
+func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service, agent *hostconn.Service, listener net.Listener, certificate tls.Certificate, trusted map[string]ed25519.PublicKey, auditStore *audit.Store, objects *output.S3, jobs *job.Service, pluginHost *pluginhost.Host) (*server.Server, error) {
 	catalogs := &catalogsvc.Service{Store: db, Trusted: trusted, MaxEnvelopeBytes: cfg.Gateway.EnvelopeBytes, MaxActionBytes: cfg.Gateway.ActionBytes, MaxReferenceBytes: cfg.Gateway.MessageBytes - cfg.Gateway.ChunkBytes - 1024}
 	if cfg.Management.CAPin == "" {
 		cfg.Management.CAPin = api.TLSCAPin(certificate.Certificate)
@@ -315,7 +401,7 @@ func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service
 		listener.Close()
 		return nil, err
 	}
-	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcp.Config{Jobs: cfg.Jobs, Inventory: inventoryHost})
+	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcp.Config{Jobs: cfg.Jobs, Inventory: pluginHost, Changes: pluginHost, Knowledge: pluginHost})
 	if err != nil {
 		agent.Close()
 		listener.Close()

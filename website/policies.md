@@ -17,32 +17,46 @@ to the same rule.
 
 | Role | Initial permissions |
 |---|---|
-| `admin` | Management and reading, including inventory, plus all actions on labeled hosts, including dangerous actions. |
-| `operator` | Host management/reading, join tokens, inventory, job metadata and system status. |
+| `admin` | Management and reading, including inventory, changes and knowledge, plus all actions on labeled hosts, including dangerous actions. |
+| `operator` | Host management/reading, join tokens, inventory, changes, knowledge, job metadata and system status. |
 | `auditor` | Audit, job metadata and output. |
-| `viewer` | Host/catalog/job metadata and inventory. |
+| `viewer` | Host/catalog/job metadata, inventory, changes and knowledge. |
 | `publisher` | Publish catalogs. |
 
 Only admin has default execution access. The other roles need explicit action
 rules. Configuration `bootstrap_admins` preserves policy modification access as
 a recovery path; it is not an unrestricted execution identity.
 
-## Inventory access after an upgrade
+## Context plugin access after an upgrade
 
-`entities_search` requires `view_inventory`. New installations grant it to
-admin, operator and viewer. Upgrades preserve the stored policy, so existing
-roles do not gain this permission automatically.
+`entities_search` requires `view_inventory`, `changes_list` requires
+`view_changes`, and `runbooks_search`, `runbooks_read` and MCP runbook
+resources require `view_knowledge`. New installations grant all three to admin,
+operator and viewer. Upgrades preserve the stored policy, so existing roles do
+not gain these permissions automatically.
 
-As an administrator, export the current policy with `allowops policy get > rules.yaml`.
-Add `view_inventory` to the rules for the roles that need inventory access.
-Retain the other rules, run `allowops policy test -f rules.yaml`, then run
-`allowops policy apply -f rules.yaml --reason 'grant inventory access'`.
-You can also edit, simulate and save the policy in the console.
+Follow this upgrade order to avoid disruption in rolling deployments:
 
-`view_inventory` is a global operation. A rule with `host_labels` does not match
-it. Hostnames in inventory results still require `view_hosts` for each host.
-Entities whose associated hosts are all hidden are removed. Entities configured
-without hosts remain visible to callers with `view_inventory`. Passing a returned
+1. Before upgrading binaries, rename, re-sign and publish any active catalog
+   action named `entities_search`, `changes_list`, `runbooks_search` or
+   `runbooks_read` (these names are reserved; catalog verification rejects them
+   and serves HTTP 503 on `/mcp`).
+2. Upgrade all `allowops-gateway` instances to the new binary first so every
+   instance recognizes `view_changes` and `view_knowledge`.
+3. Export the current policy with `allowops policy get > rules.yaml`, add
+   `view_inventory`, `view_changes` and/or `view_knowledge` to the rules for
+   the roles that need them, retain all other rules, run
+   `allowops policy test -f rules.yaml`, then run
+   `allowops policy apply -f rules.yaml --reason 'grant context plugin access'`.
+   You can also edit, simulate and save the policy in the console.
+4. Before rolling back to an older gateway binary, remove `view_changes` and
+   `view_knowledge` from the active policy first.
+
+`view_inventory`, `view_changes` and `view_knowledge` are global operations. A
+rule with `host_labels` does not match them. Hostnames in inventory results
+still require `view_hosts` for each host. Entities whose associated hosts are
+all hidden are removed before cross-source merging. Entities configured without
+hosts remain visible to callers with `view_inventory`. Passing a returned
 selector to an action checks execution permission on each target.
 
 ## Rule shape
@@ -77,7 +91,8 @@ without copying deployment addresses into a public policy repository.
 
 Operation names are `execute_action`, `modify_policy`, `manage_service_accounts`,
 `manage_hosts`, `create_join_token`, `manage_user_roles`, `publish_catalog`,
-`view_hosts`, `view_inventory`, `view_catalog`, `view_jobs`, `view_output`, `view_audit` and `view_system`.
+`view_hosts`, `view_inventory`, `view_changes`, `view_knowledge`,
+`view_catalog`, `view_jobs`, `view_output`, `view_audit` and `view_system`.
 
 ## Review and apply
 

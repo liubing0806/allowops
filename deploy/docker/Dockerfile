@@ -5,6 +5,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
+COPY plugin ./plugin
+COPY extensions ./extensions
 COPY gen ./gen
 COPY deploy/packaging/notices.sh ./deploy/packaging/notices.sh
 COPY LICENSE ./LICENSE

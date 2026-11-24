@@ -218,7 +218,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 |---|---|
 | 主体 | 服务账号、控制台用户（角色、团队、负责人） |
 | 资源 | 主机（授权标签）、action（risk、名称） |
-| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和标签、创建 join token、管理用户角色、发布目录、查看资源清单（`view_inventory`）、查看 job、查看输出、查看审计 |
+| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和标签、创建 join token、管理用户角色、发布目录、查看资源清单（`view_inventory`）、查看变更记录（`view_changes`）、查看排查知识（`view_knowledge`）、查看 job、查看输出、查看审计 |
 | 环境 | 请求时间、来源 IP |
 
 - 判定结果 `allow`、`deny`；deny 优先；未匹配任何规则时 deny。MVP 不做审批。
@@ -242,14 +242,17 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 | 工具 | 作用 |
 |---|---|
 | `hosts_search` | 按标签选择器或主机名查询主机：主机、标签、在线状态、总数、标签分布 |
-| `entities_search` | 存在可用 Inventory 实例时列出；按类型、名称和来源查询实体，需 `view_inventory` 权限 |
+| `entities_search` | 存在可用 Inventory 实例时列出；按类型、名称和来源查询实体、合并多源并报告属性/选择器冲突，需 `view_inventory` 权限 |
+| `changes_list` | 存在可用 Changes 实例时列出；按服务和最多 7 天时间窗口倒序合并变更时间线，需 `view_changes` 权限 |
+| `runbooks_search` | 存在可用 Knowledge 实例时列出；按关键词、标签和来源检索排查手册元数据，需 `view_knowledge` 权限 |
+| `runbooks_read` | 存在可用 Knowledge 实例时列出；按来源、文档 ID、章节或 UTF-8 字节偏移分页读取排查手册正文，需 `view_knowledge` 权限 |
 | `<action>` | 每个 action 一个工具，只列出该身份可能被允许的 action |
 | `jobs_get` | job 汇总（支持 `grouping=exact\|normalized`）；传 `host` 时分页返回该主机完整输出；支持 `wait_seconds` |
 | `jobs_list` | 当前服务账号最近的 job |
 | `jobs_diff` | 对比同一 action 的两次已结束非拒绝 job；按不可变 `host_id` 对齐，默认 `grouping=normalized`，受 32KB 预算限制且不分页 |
 | `jobs_cancel` | 取消 job |
 
-- `entities_search` 先按主机可见性过滤，再按 `limit`（默认 20，范围 1~100）和完整结果的 32KB 上限截断。返回内容标记为不可信数据。返回的 selector 作为 action 目标时仍逐台检查权限。
+- `entities_search`、`changes_list`、`runbooks_search`、`runbooks_read` 均在调用前后写入审计，结果经 `secrets` 规则脱敏、受 32KB 上限裁剪并标记 `output_trust: untrusted`。存在可用 Knowledge 实例时，网关同时通过 MCP Resources（`allowops://runbooks/{source}/{+id}`）提供 `resources/list`、`resources/templates/list` 和 `resources/read`，同样受 `view_knowledge` 鉴权、脱敏与 32KB 预算约束。`entities_search` 先逐源按主机可见性过滤再合并多源实体；返回的 selector 作为 action 目标时仍逐台检查权限。
 - action 工具公共参数：`targets`（`hosts` 或 `selector`）、`expected_count`、`reason`、`wait_seconds`、`batch_size`、`max_failures`、`response_format`、`grouping`（默认 `exact`，高噪多主机命令可传 `normalized`）。
 - 用 `selector` 时必须带 `expected_count`，与实际数量不符时拒绝并返回实际数量。
 - action 设置了 `max_targets` 时，目标数（`selector` 为解析后的主机数）超过该值则拒绝整个 job：返回 `isError: true`、原因 `MAX_TARGETS_EXCEEDED`、实际数量和上限；不创建 job，不下发 task。工具描述和 `targets` 的 schema 写明上限。

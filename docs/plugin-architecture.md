@@ -1,8 +1,8 @@
 # allowops 插件架构
 
-状态：方向已确认（2026-11-03），尚未实施。决定见 `architecture-decisions.md` 第 22 节（PL1~PL10）。图示见 [plugin-architecture.html](plugin-architecture.html)（浏览器打开；截图 [plugin-architecture.png](plugin-architecture.png)）。
+状态：阶段 0~3（排障前序上下文闭环：底座与契约测试、动态 Inventory、Changes、Knowledge/MCP Resources）已实现（2026-11-24），阶段 4（Trigger）与阶段 5（进程外插件/`allowops build`）待定。决定见 `architecture-decisions.md` 第 22 节（PL1~PL10）。图示见 [plugin-architecture.html](plugin-architecture.html)（浏览器打开；截图 [plugin-architecture.png](plugin-architecture.png)）。
 
-阶段 0、1 的实现设计见 [plugin-stage01-design.md](plugin-stage01-design.md)。该文第 10 节列出实现与本文的差异，包括本文第 2.2 节的一处推断更正、第 5、6、7 节的简化和第 7.2 节审计描述的修正；两者不一致时以实现设计为准。
+阶段 0、1 的实现设计见 [plugin-stage01-design.md](plugin-stage01-design.md)。阶段 A~D（出站安全底座与契约测试、动态 Inventory 与多源合并、Changes 与 `changes_list`、Knowledge 与 `runbooks_*`/MCP Resources）的实现设计见 [plugin-stage0203-design.md](plugin-stage0203-design.md)，实施计划见 [plugin-stage0203-plan.md](plugin-stage0203-plan.md)。实现细节与本文不一致时以阶段实现设计为准。
 
 本文说明三件事：
 
@@ -86,11 +86,11 @@ plugin/changes/             扩展点接口：Lister
 plugin/knowledge/           扩展点接口：Store
 plugin/trigger/             扩展点接口：Source、WebhookSource
 plugin/plugintest/          契约测试套件
-plugins/standard/           官方插件集合，网关 main 空白导入
-plugins/inventory/static/       inventory.static
-plugins/inventory/hostlabels/   inventory.host_labels
-plugins/changes/allowops/       changes.allowops（目录和策略版本）
-plugins/knowledge/gitdocs/      knowledge.git_markdown
+extensions/standard/           官方插件集合，网关 main 空白导入
+extensions/inventory/static/       inventory.static
+extensions/inventory/hostlabels/   inventory.host_labels
+extensions/changes/allowops/       changes.allowops（目录和策略版本）
+extensions/knowledge/gitdocs/      knowledge.git_markdown
 internal/gateway/pluginhost/  网关内部：配置解析、构造、健康状态、调用包装、停止
 internal/gateway/mcp/         新增固定工具 entities_search、changes_list、runbooks_search、runbooks_read
 internal/gateway/authz/       新增操作 view_inventory、view_changes、view_knowledge
@@ -98,7 +98,7 @@ internal/builtin/registry     主机端 builtin 注册表（阶段 0）
 cmd/allowops/ 的 build 子命令  自定义构建，加入第三方插件
 ```
 
-`plugin/` 和 `plugins/` 放在 `internal/` 之外。Go 不允许其他 module 导入 `internal/` 下的包，第三方插件需要导入 `plugin/`。
+`plugin/` 和 `extensions/` 放在 `internal/` 之外。Go 不允许其他 module 导入 `internal/` 下的包，第三方插件需要导入 `plugin/`。
 
 ## 5. 插件核心机制
 
@@ -158,7 +158,7 @@ func (Module) Module() plugin.ModuleInfo {
 网关的 `main` 用空白导入决定包含哪些插件：
 
 ```go
-import _ "github.com/liubing0806/allowops/plugins/standard"
+import _ "github.com/liubing0806/allowops/extensions/standard"
 ```
 
 不使用 Go 标准库的 `plugin` 包（运行时加载 `.so`）。它要求插件和主程序使用相同的工具链和依赖版本，只支持 Linux 和 macOS（PL1）。
@@ -174,7 +174,7 @@ allowops build --with github.com/acme/allowops-cmdb@v1.2.0 --output allowops-gat
 `allowops build` 生成一个带空白导入的 `main.go`，然后执行 `go build`。规则：
 
 - 插件依赖的 allowops 版本必须和网关版本一致，由 `go.mod` 确定。
-- 官方发布的二进制只包含 `plugins/standard`。
+- 官方发布的二进制只包含 `extensions/standard`。
 - 网关启动时把已编译的模块 ID 和来源 module 版本写入日志，控制台系统页显示同样的列表。
 
 ### 5.3 配置
@@ -440,14 +440,14 @@ type WebhookSource interface {
 
 ## 12. 实施阶段
 
-| 阶段 | 内容 | 完成条件 |
-| --- | --- | --- |
-| 0 | 主机端 builtin 改为注册表；`agent.go` 的能力列表从注册表生成 | 现有测试通过；新增测试检查能力列表与注册表一致 |
-| 1 | `plugin/` 包、`pluginhost`、配置解析、健康状态；Inventory 扩展点；`inventory.static`、`inventory.host_labels`；`entities_search` 和 `view_inventory` | 契约测试通过；第 11 节的 MCP 端到端测试通过 |
-| 2 | Changes 扩展点；`changes.allowops`；`changes_list` 和 `view_changes` | `changes_list` 返回按时间合并的目录和策略变更 |
-| 3 | Knowledge 扩展点；`knowledge.git_markdown`；`runbooks_search`、`runbooks_read` | Git 仓库中的 Markdown 可以检索和读取 |
-| 4 | Trigger 扩展点 | 依赖 PL9 编排层边界的决定 |
-| 5 | 进程外插件适配器；`allowops build` | 按需要开始 |
+| 阶段 | 内容 | 完成条件 | 状态 |
+| --- | --- | --- | --- |
+| 0 | 主机端 builtin 改为注册表；`agent.go` 的能力列表从注册表生成 | 现有测试通过；新增测试检查能力列表与注册表一致 | 已完成 |
+| 1 | `plugin/` 包、`pluginhost`、配置解析、健康状态；Inventory 扩展点；`inventory.static`、`inventory.host_labels`；`entities_search` 和 `view_inventory` | 契约测试通过；第 11 节的 MCP 端到端测试通过 | 已完成 |
+| 2（阶段 A~C） | `plugin.Host` 出站安全/凭据/缓存与 `plugin/plugintest`；动态 Inventory（`inventory.k8s`、`inventory.prometheus_targets`、`inventory.cmdb_http`）与多源合并/冲突报告；Changes 扩展点（`changes.allowops`、`changes.k8s_rollout`、`changes.http`）；`changes_list` 和 `view_changes` | 契约测试、SSRF/凭据单测与端到端测试通过；`changes_list` 返回按时间合并的变更 | 已完成 |
+| 3（阶段 D） | Knowledge 扩展点；`knowledge.git_markdown`（本地 `dir` 与远程 `archive_url` 双模式）；`runbooks_search`、`runbooks_read`、MCP Resources 与 `view_knowledge` | Markdown 排查手册可检索、分页读取与经 MCP Resources 访问 | 已完成 |
+| 4 | Trigger 扩展点 | 依赖 PL9 编排层边界的决定 | 待定 |
+| 5 | 进程外插件适配器；`allowops build` | 按需要开始 | 待定 |
 
 ## 13. 以后的功能对应哪类插件
 

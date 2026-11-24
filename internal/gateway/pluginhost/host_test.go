@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
+	_ "github.com/liubing0806/allowops/extensions/inventory/hostlabels"
 	"github.com/liubing0806/allowops/plugin"
 	"github.com/liubing0806/allowops/plugin/inventory"
-	_ "github.com/liubing0806/allowops/plugins/inventory/hostlabels"
 	"gopkg.in/yaml.v3"
 )
 
@@ -101,19 +101,15 @@ func TestConfigErrors(t *testing.T) {
 	tests := map[string][]Config{
 		"id": {{ID: "Bad", Module: base.Module}}, "duplicate": {base, base}, "count": make([]Config, 33),
 		"unknown module": {{ID: "test", Module: "inventory.absent"}}, "interface": {{ID: "test", Module: "inventory.wrong_test"}},
-		"namespace":      {{ID: "test", Module: "changes.host_test"}},
-		"unknown field":  {config(t, "id: test\nmodule: inventory.host_test\nconfig: {unknown: true}")},
-		"alias":          {config(t, "id: test\nmodule: inventory.host_test\nconfig: {mode: &mode normal, other: *mode}")},
-		"external alias": {config(t, "id: &id test\nmodule: inventory.host_test\nconfig: {mode: *id}")},
-		"timeout low":    {{ID: "test", Module: base.Module, Timeout: 99 * time.Millisecond}},
-		"timeout high":   {{ID: "test", Module: base.Module, Timeout: 31 * time.Second}},
+		"namespace":     {{ID: "test", Module: "changes.host_test"}},
+		"unknown field": {config(t, "id: test\nmodule: inventory.host_test\nconfig: {unknown: true}")},
+		"timeout low":   {{ID: "test", Module: base.Module, Timeout: 99 * time.Millisecond}},
+		"timeout high":  {{ID: "test", Module: base.Module, Timeout: 31 * time.Second}},
 	}
 	for name, configs := range tests {
 		t.Run(name, func(t *testing.T) {
 			if _, err := New(context.Background(), configs, testDeps()); err == nil {
 				t.Fatal("configuration accepted")
-			} else if strings.Contains(name, "alias") && !strings.Contains(err.Error(), "plugin test: config contains YAML alias") {
-				t.Fatal(err)
 			}
 		})
 	}

@@ -10,13 +10,58 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type ConfigList []Config
+
 type Config struct {
-	ID       string        `yaml:"id"`
-	Module   string        `yaml:"module"`
-	Disabled bool          `yaml:"disabled"`
-	Required bool          `yaml:"required"`
-	Timeout  time.Duration `yaml:"timeout"`
-	Config   yaml.Node     `yaml:"config"`
+	ID                        string            `yaml:"id"`
+	Module                    string            `yaml:"module"`
+	Disabled                  bool              `yaml:"disabled"`
+	Required                  bool              `yaml:"required"`
+	Timeout                   time.Duration     `yaml:"timeout"`
+	MaxConcurrency            int               `yaml:"max_concurrency"`
+	Egress                    []string          `yaml:"egress"`
+	AllowPrivateEgress        bool              `yaml:"allow_private_egress"`
+	AllowCrossOriginRedirects bool              `yaml:"allow_cross_origin_redirects"`
+	CAFile                    string            `yaml:"ca_file"`
+	Credentials               map[string]string `yaml:"credentials"`
+	AllowProjectedCredentials bool              `yaml:"allow_projected_credentials"`
+	Config                    yaml.Node         `yaml:"config"`
+}
+
+func (list *ConfigList) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.SequenceNode {
+		return fmt.Errorf("plugins: invalid configuration at line %d", value.Line)
+	}
+	configs := make(ConfigList, 0, len(value.Content))
+	for _, node := range value.Content {
+		var c Config
+		if err := c.UnmarshalYAML(node); err != nil {
+			return err
+		}
+		configs = append(configs, c)
+	}
+	*list = configs
+	return nil
+}
+
+func (c *Config) UnmarshalYAML(value *yaml.Node) error {
+	invalid := fmt.Errorf("invalid plugin configuration at line %d", value.Line)
+	if value.Kind != yaml.MappingNode || hasAlias(value) {
+		return invalid
+	}
+	data, err := yaml.Marshal(value)
+	if err != nil {
+		return invalid
+	}
+	type plainConfig Config
+	var decoded plainConfig
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&decoded); err != nil {
+		return invalid
+	}
+	*c = Config(decoded)
+	return nil
 }
 
 var yamlErrorLine = regexp.MustCompile(`line (\d+)`)
@@ -27,7 +72,7 @@ func decodeConfig(c Config, m plugin.Module) error {
 	}
 	data, err := yaml.Marshal(&c.Config)
 	if err != nil {
-		return fmt.Errorf("plugin %s: %w", c.ID, err)
+		return fmt.Errorf("plugin %s: invalid config", c.ID)
 	}
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
