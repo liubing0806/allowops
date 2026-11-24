@@ -88,6 +88,9 @@ const schema = z
 const testOperations = [
   'execute_action',
   'view_hosts',
+  'view_inventory',
+  'view_changes',
+  'view_knowledge',
   'view_catalog',
   'view_jobs',
   'view_output',

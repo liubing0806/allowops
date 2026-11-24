@@ -57,15 +57,21 @@ func (s *Service) serverFor(ctx context.Context) (*sdk.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	var sources []string
+	var invSources, changeSources, knowledgeSources []string
 	if s.config.Inventory != nil {
-		sources = s.config.Inventory.InventorySources()
+		invSources = s.config.Inventory.InventorySources()
 	}
-	definitions, available, unsupported, err := visibleTools(ctx, engine, snap.id, actions, s.config.Jobs, sources...)
+	if s.config.Changes != nil {
+		changeSources = s.config.Changes.ChangesSources()
+	}
+	if s.config.Knowledge != nil {
+		knowledgeSources = s.config.Knowledge.KnowledgeSources()
+	}
+	definitions, available, unsupported, err := visiblePluginTools(ctx, engine, snap.id, actions, s.config.Jobs, invSources, changeSources, knowledgeSources)
 	if err != nil {
 		return nil, err
 	}
-	server := s.newServer(definitions, available, unsupported)
+	server := s.newServer(definitions, available, unsupported, len(knowledgeSources) > 0)
 	s.storeServer(snap.key, server)
 	return server, nil
 }
@@ -167,7 +173,11 @@ func projectRules(rules []authz.Rule) ruleSnapshot {
 // visibleTools returns the tool definitions to register, plus the set of
 // callable names and the subset whose schema the SDK cannot register.
 func visibleTools(ctx context.Context, engine *authz.Engine, id *reqctx.Identity, actions map[string]catalog.Action, cfg job.Config, sources ...string) ([]ToolDefinition, map[string]bool, map[string]bool, error) {
-	definitions := fixedTools(cfg, sources...)
+	return visiblePluginTools(ctx, engine, id, actions, cfg, sources, nil, nil)
+}
+
+func visiblePluginTools(ctx context.Context, engine *authz.Engine, id *reqctx.Identity, actions map[string]catalog.Action, cfg job.Config, invSources, changeSources, knowledgeSources []string) ([]ToolDefinition, map[string]bool, map[string]bool, error) {
+	definitions := fixedPluginTools(cfg, invSources, changeSources, knowledgeSources)
 	names := slices.Collect(maps.Keys(actions))
 	slices.Sort(names)
 	available := map[string]bool{}
@@ -201,16 +211,31 @@ func visibleTools(ctx context.Context, engine *authz.Engine, id *reqctx.Identity
 	return definitions, available, unsupported, nil
 }
 
-func (s *Service) newServer(definitions []ToolDefinition, available, unsupported map[string]bool) *sdk.Server {
-	server := sdk.NewServer(&sdk.Implementation{Name: "allowops", Version: "1"}, &sdk.ServerOptions{Instructions: toolInstructions, PageSize: s.identity.PageSize(), Capabilities: &sdk.ServerCapabilities{Tools: &sdk.ToolCapabilities{}}, SetCacheable: func(_ context.Context, _ sdk.Request, c *sdk.Cacheable) { c.TTLMs = 0; c.CacheScope = "private" }})
+func (s *Service) newServer(definitions []ToolDefinition, available, unsupported map[string]bool, hasKnowledge bool) *sdk.Server {
+	caps := &sdk.ServerCapabilities{Tools: &sdk.ToolCapabilities{}}
+	if hasKnowledge {
+		caps.Resources = &sdk.ResourceCapabilities{}
+	}
+	server := sdk.NewServer(&sdk.Implementation{Name: "allowops", Version: "1"}, &sdk.ServerOptions{Instructions: toolInstructions, PageSize: s.identity.PageSize(), Capabilities: caps, SetCacheable: func(_ context.Context, _ sdk.Request, c *sdk.Cacheable) { c.TTLMs = 0; c.CacheScope = "private" }})
 	for _, definition := range definitions {
 		tool := &sdk.Tool{Name: definition.Name, Description: definition.Description, InputSchema: definition.InputSchema, Annotations: &sdk.ToolAnnotations{ReadOnlyHint: definition.Annotations.ReadOnlyHint, DestructiveHint: definition.Annotations.DestructiveHint, IdempotentHint: definition.Annotations.IdempotentHint}}
 		server.AddTool(tool, func(ctx context.Context, r *sdk.CallToolRequest) (*sdk.CallToolResult, error) {
 			return s.call(ctx, r, available)
 		})
 	}
+	if hasKnowledge {
+		server.AddResourceTemplate(&sdk.ResourceTemplate{
+			URITemplate: runbookResourceTemplateURI,
+			Name:        "allowops-runbooks",
+			Description: "Read-only team runbooks (untrusted data).",
+			MIMEType:    "text/markdown",
+		}, s.readRunbookResource)
+	}
 	server.AddReceivingMiddleware(func(next sdk.MethodHandler) sdk.MethodHandler {
 		return func(ctx context.Context, method string, r sdk.Request) (sdk.Result, error) {
+			if hasKnowledge && (method == "resources/list" || method == "resources/templates/list" || method == "resources/read") {
+				return s.handleKnowledgeResourceMethod(ctx, method, r, next)
+			}
 			if method != "tools/call" {
 				return next(ctx, method, r)
 			}

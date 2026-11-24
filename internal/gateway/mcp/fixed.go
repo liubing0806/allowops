@@ -38,3 +38,14 @@ func fixedTools(cfg job.Config, sources ...string) []ToolDefinition {
 	}
 	return tools
 }
+
+func fixedPluginTools(cfg job.Config, inventorySources, changeSources, knowledgeSources []string) []ToolDefinition {
+	tools := fixedTools(cfg, inventorySources...)
+	if len(changeSources) > 0 {
+		tools = append(tools, changesTool(changeSources))
+	}
+	if len(knowledgeSources) > 0 {
+		tools = append(tools, runbooksSearchTool(knowledgeSources), runbooksReadTool(knowledgeSources))
+	}
+	return tools
+}
