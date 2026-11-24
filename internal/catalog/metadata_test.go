@@ -147,27 +147,34 @@ func TestMetadataYAMLMergeKeysAndAliases(t *testing.T) {
 		t.Fatalf("decoded alias metadata: %q %q %q", a.Toolset, a.Tags, a.EntityKinds)
 	}
 
-	// Mapping key aliases must resolve to their effective field names, matching
-	// yaml.v3 struct decoding rather than indexing by anchor name.
+	// Mapping key aliases and !!binary keys must resolve to their effective
+	// field names, matching yaml.v3 struct decoding rather than raw k.Value.
 	aliasedKey := validAction + "tags: [&k toolset]\n*k: jvm\n"
 	a, err = ParseAction([]byte(aliasedKey))
 	if err != nil || a.Toolset != "jvm" || !slices.Equal(a.Tags, []string{"toolset"}) {
 		t.Fatalf("valid aliased mapping key: toolset=%q tags=%q err=%v", a.Toolset, a.Tags, err)
 	}
+	binaryKey := validAction + "!!binary dG9vbHNldA==: jvm\n"
+	a, err = ParseAction([]byte(binaryKey))
+	if err != nil || a.Toolset != "jvm" {
+		t.Fatalf("valid binary mapping key: toolset=%q err=%v", a.Toolset, err)
+	}
 
-	// Merge keys and aliases (for values or mapping keys) carrying non-string
-	// or empty metadata values or non-integer max_targets must fail ParseAction.
+	// Merge keys and aliases (for values or mapping keys, including !!binary
+	// keys) carrying non-string/empty metadata or non-integer max_targets must fail.
 	for name, doc := range map[string]string{
-		"merge bool toolset":          validAction + "<<: {toolset: true}\n",
-		"merge null toolset":          validAction + "<<: {toolset: null}\n",
-		"merge empty tags":            validAction + "<<: {tags: []}\n",
-		"merge int tag":               validAction + "<<: {tags: [123]}\n",
-		"merge bool kind":             validAction + "<<: {entity_kinds: [false]}\n",
-		"merge float max_targets":     validAction + "<<: {max_targets: 1.5}\n",
-		"merge list bad second":       validAction + "<<: [{toolset: jvm}, {tags: []}]\n",
-		"alias bool element":          validAction + "idempotent: &flag true\ntags: [*flag]\n",
-		"alias key bool toolset":      validAction + "tags: [&k toolset]\n*k: true\n",
-		"alias key float max_targets": validAction + "tags: [&k max_targets]\n*k: 1.5\n",
+		"merge bool toolset":           validAction + "<<: {toolset: true}\n",
+		"merge null toolset":           validAction + "<<: {toolset: null}\n",
+		"merge empty tags":             validAction + "<<: {tags: []}\n",
+		"merge int tag":                validAction + "<<: {tags: [123]}\n",
+		"merge bool kind":              validAction + "<<: {entity_kinds: [false]}\n",
+		"merge float max_targets":      validAction + "<<: {max_targets: 1.5}\n",
+		"merge list bad second":        validAction + "<<: [{toolset: jvm}, {tags: []}]\n",
+		"alias bool element":           validAction + "idempotent: &flag true\ntags: [*flag]\n",
+		"alias key bool toolset":       validAction + "tags: [&k toolset]\n*k: true\n",
+		"alias key float max_targets":  validAction + "tags: [&k max_targets]\n*k: 1.5\n",
+		"binary key bool toolset":      validAction + "!!binary dG9vbHNldA==: true\n",
+		"binary key float max_targets": validAction + "!!binary bWF4X3RhcmdldHM=: 1.5\n",
 	} {
 		if _, err := ParseAction([]byte(doc)); err == nil {
 			t.Errorf("%s: accepted invalid YAML metadata", name)

@@ -235,6 +235,17 @@ func packRecommendations(out inventoryResult, actions map[string]catalog.Action)
 	if len(groups) == 0 {
 		return nil, 0, false, nil
 	}
+	// Try all groups with the final truncation flag first, so a set that fits
+	// completely is not dropped just to reserve bytes for a truncation marker
+	// that would not be emitted.
+	allCandidate := out
+	allCandidate.RecommendedActions = groups
+	allCandidate.RecommendedActionsTruncated = truncated
+	if full, size, err := toolResult(allCandidate); err != nil {
+		return nil, 0, true, err
+	} else if size <= resultByteLimit {
+		return full, size, true, nil
+	}
 	added := map[string][]recommendedAction{}
 	for _, kind := range slices.Sorted(maps.Keys(groups)) {
 		// Measure with the truncation marker set, so that clearing it later

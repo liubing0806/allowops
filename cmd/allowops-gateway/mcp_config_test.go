@@ -17,13 +17,17 @@ func TestMCPConfiguration(t *testing.T) {
 		mode      string
 		threshold int
 	}{
-		"mcp:\n  mode: progressive\n":                      {"progressive", 40},
-		"mcp:\n  mode: auto\n  auto_threshold: 1\n":        {"auto", 1},
-		"mcp:\n  mode: auto\n  auto_threshold: 1000\n":     {"auto", 1000},
-		"mcp:\n  mode: flat\n  auto_threshold: 60\n":       {"flat", 60},
-		"mcp:\n  auto_threshold: 25\n":                     {"flat", 25},
-		"mcp: {}\n":                                        {"flat", 40},
-		"mcp:\n  mode: progressive\n  auto_threshold: 7\n": {"progressive", 7},
+		"mcp:\n  mode: progressive\n":                                           {"progressive", 40},
+		"mcp:\n  mode: auto\n  auto_threshold: 1\n":                             {"auto", 1},
+		"mcp:\n  mode: auto\n  auto_threshold: 1000\n":                          {"auto", 1000},
+		"mcp:\n  mode: flat\n  auto_threshold: 60\n":                            {"flat", 60},
+		"mcp:\n  auto_threshold: 25\n":                                          {"flat", 25},
+		"mcp: {}\n":                                                             {"flat", 40},
+		"mcp:\n  mode: progressive\n  auto_threshold: 7\n":                      {"progressive", 7},
+		"mcp: {<<: {mode: auto, auto_threshold: 25}}\n":                         {"auto", 25},
+		"mcp:\n  <<: {mode: auto, auto_threshold: 25}\n  auto_threshold: 10\n":  {"auto", 10},
+		"mcp:\n  <<: [{mode: progressive}, {mode: auto, auto_threshold: 15}]\n": {"progressive", 15},
+		"mcp:\n  <<: {auto_threshold: null}\n  auto_threshold: 25\n":            {"flat", 25},
 	} {
 		cfg, err := decodeConfig(strings.NewReader(yaml))
 		if err != nil || cfg.MCP.Mode != want.mode || !cfg.MCP.AutoThreshold.set || cfg.MCP.AutoThreshold.value != want.threshold {
@@ -39,6 +43,10 @@ func TestMCPConfiguration(t *testing.T) {
 		"null threshold":          "mcp:\n  auto_threshold: null\n",
 		"tilde null threshold":    "mcp:\n  auto_threshold: ~\n",
 		"empty threshold":         "mcp:\n  auto_threshold:\n",
+		"merge null threshold":    "mcp: {<<: {auto_threshold: null}}\n",
+		"merge float threshold":   "mcp: {<<: {auto_threshold: 1.5}}\n",
+		"merge unknown key":       "mcp: {<<: {page_size: 10}}\n",
+		"duplicate key":           "mcp:\n  mode: flat\n  mode: auto\n",
 		"float threshold":         "mcp:\n  auto_threshold: 1.5\n",
 		"float whole threshold":   "mcp:\n  auto_threshold: 10.0\n",
 		"string threshold":        "mcp:\n  auto_threshold: forty\n",

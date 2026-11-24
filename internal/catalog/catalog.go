@@ -159,8 +159,12 @@ func collectMapping(node *yaml.Node, out map[string]*yaml.Node, seen map[*yaml.N
 			merges = append(merges, v)
 			continue
 		}
-		if _, exists := out[k.Value]; !exists {
-			out[k.Value] = resolveAlias(v)
+		var name string
+		if err := k.Decode(&name); err != nil {
+			continue
+		}
+		if _, exists := out[name]; !exists {
+			out[name] = resolveAlias(v)
 		}
 	}
 	for _, m := range merges {

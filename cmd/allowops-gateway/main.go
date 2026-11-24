@@ -96,28 +96,15 @@ type mcpConfig struct {
 }
 
 // UnmarshalYAML decodes mcpConfig strictly so explicit null/empty values and
-// floats cannot silently fall back to defaults or truncate to integers.
+// floats cannot silently fall back to defaults or truncate to integers, while
+// preserving YAML merge key (<<) and alias compatibility.
 func (c *mcpConfig) UnmarshalYAML(value *yaml.Node) error {
-	if value.Kind != yaml.MappingNode {
-		return errors.New("mcp must be a YAML mapping")
+	fields, err := decodeMCPMapping(value, map[*yaml.Node]bool{})
+	if err != nil {
+		return err
 	}
-	seen := map[string]bool{}
-	for i := 0; i+1 < len(value.Content); i += 2 {
-		k, v := value.Content[i], value.Content[i+1]
-		for k != nil && k.Kind == yaml.AliasNode {
-			k = k.Alias
-		}
-		for v != nil && v.Kind == yaml.AliasNode {
-			v = v.Alias
-		}
-		if k == nil || k.Kind != yaml.ScalarNode || k.Tag != "!!str" {
-			return errors.New("invalid mcp configuration key")
-		}
-		if seen[k.Value] {
-			return fmt.Errorf("duplicate mcp configuration key %q", k.Value)
-		}
-		seen[k.Value] = true
-		switch k.Value {
+	for name, v := range fields {
+		switch name {
 		case "mode":
 			if v == nil || v.Kind != yaml.ScalarNode || v.Tag != "!!str" {
 				return errors.New("mcp.mode allowed: flat, progressive, auto")
@@ -133,10 +120,82 @@ func (c *mcpConfig) UnmarshalYAML(value *yaml.Node) error {
 			}
 			c.AutoThreshold = optionalInt{set: true, value: parsed}
 		default:
-			return fmt.Errorf("field %s not found in type mcpConfig", k.Value)
+			return fmt.Errorf("field %s not found in type mcpConfig", name)
 		}
 	}
 	return nil
+}
+
+func resolveYAMLNode(node *yaml.Node) *yaml.Node {
+	for node != nil && node.Kind == yaml.AliasNode {
+		node = node.Alias
+	}
+	return node
+}
+
+func decodeMCPMapping(node *yaml.Node, seen map[*yaml.Node]bool) (map[string]*yaml.Node, error) {
+	node = resolveYAMLNode(node)
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil, errors.New("mcp must be a YAML mapping")
+	}
+	if seen[node] {
+		return nil, errors.New("cyclic YAML alias in mcp configuration")
+	}
+	seen[node] = true
+	defer delete(seen, node)
+	out := map[string]*yaml.Node{}
+	var merges []*yaml.Node
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		k, v := resolveYAMLNode(node.Content[i]), node.Content[i+1]
+		if k == nil || k.Kind != yaml.ScalarNode {
+			return nil, errors.New("invalid mcp configuration key")
+		}
+		if k.Tag == "!!merge" {
+			merges = append(merges, v)
+			continue
+		}
+		var name string
+		if err := k.Decode(&name); err != nil {
+			return nil, errors.New("invalid mcp configuration key")
+		}
+		if _, duplicate := out[name]; duplicate {
+			return nil, fmt.Errorf("duplicate mcp configuration key %q", name)
+		}
+		out[name] = resolveYAMLNode(v)
+	}
+	mergeOne := func(target *yaml.Node) error {
+		inherited, err := decodeMCPMapping(target, seen)
+		if err != nil {
+			return err
+		}
+		for name, v := range inherited {
+			if _, exists := out[name]; !exists {
+				out[name] = v
+			}
+		}
+		return nil
+	}
+	for _, m := range merges {
+		m = resolveYAMLNode(m)
+		if m == nil {
+			return nil, errors.New("invalid YAML merge in mcp configuration")
+		}
+		switch m.Kind {
+		case yaml.MappingNode:
+			if err := mergeOne(m); err != nil {
+				return nil, err
+			}
+		case yaml.SequenceNode:
+			for _, item := range m.Content {
+				if err := mergeOne(item); err != nil {
+					return nil, err
+				}
+			}
+		default:
+			return nil, errors.New("invalid YAML merge in mcp configuration")
+		}
+	}
+	return out, nil
 }
 
 // validate applies the auto_threshold default and checks both values. An

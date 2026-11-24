@@ -195,6 +195,49 @@ func TestEntitiesSearchRecommendationLimits(t *testing.T) {
 	if size := len(mustJSON(t, result)); size > resultByteLimit || !out.Truncated || !out.RecommendedActionsTruncated || out.RecommendedActions != nil || len(out.Entities) != 1 {
 		t.Fatalf("tight boundary both truncated: size=%d entities=%d truncated=%v recTrunc=%v recommended=%v", size, len(out.Entities), out.Truncated, out.RecommendedActionsTruncated, out.RecommendedActions)
 	}
+
+	// Tight boundary C: after trimming e1, e0 + smallAction fits right at the
+	// 32 KiB limit (within 30 bytes) when recommended_actions_truncated is false,
+	// even though adding recommended_actions_truncated:true would exceed 32 KiB.
+	// The complete recommendation set must still be included without truncation.
+	var tightE0 string
+	for pad := 15000; pad < 17000; pad += 4 {
+		cand := "e0-" + strings.Repeat("a", pad)
+		probeOut := inventoryResult{
+			Entities: []inventoryEntity{
+				{Kind: "jvm", Name: cand, Hosts: []string{}, Selector: "app=jvm", Source: "static"},
+			},
+			RecommendedActions: map[string][]recommendedAction{
+				"jvm": {{Name: "jvm_00", Description: "small", Risk: "read"}},
+			},
+			Truncated:    true,
+			SourceErrors: []pluginhost.SourceError{},
+			OutputTrust:  "untrusted",
+		}
+		_, sz, err := toolResult(probeOut)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sz > resultByteLimit-30 && sz <= resultByteLimit {
+			tightE0 = cand
+			break
+		}
+	}
+	if tightE0 == "" {
+		t.Fatal("failed to construct tight-fit e0 + recommendation")
+	}
+	s.config.Inventory = entitySource(
+		inventory.Entity{Kind: "jvm", Name: tightE0, Selector: "app=jvm"},
+		inventory.Entity{Kind: "jvm", Name: "e1-" + strings.Repeat("x", 500), Selector: "app=jvm"},
+	)
+	result, err = s.searchEntities(context.Background(), nil, smallAction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out = result.StructuredContent.(inventoryResult)
+	if size := len(mustJSON(t, result)); size > resultByteLimit || !out.Truncated || out.RecommendedActionsTruncated || len(out.Entities) != 1 || !reflect.DeepEqual(recommendNames(out, "jvm"), []string{"jvm_00"}) {
+		t.Fatalf("tight boundary exact fit: size=%d entities=%d truncated=%v recTrunc=%v recommended=%v", size, len(out.Entities), out.Truncated, out.RecommendedActionsTruncated, out.RecommendedActions)
+	}
 }
 
 // The tool call passes the request scope, so toolset narrowing also narrows
