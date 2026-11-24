@@ -2,7 +2,7 @@ package catalog
 
 import (
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/liubing0806/allowops/internal/params"
@@ -18,7 +18,7 @@ func CheckCommand(argv []string, allowInterpreter bool) error {
 	if _, dynamic := params.Placeholder(command); dynamic || command == "" || strings.HasPrefix(command, "-") {
 		return fmt.Errorf("fixed command required")
 	}
-	name := strings.ToLower(filepath.Base(command))
+	name := strings.ToLower(path.Base(command))
 	if name == "sudo" {
 		return fmt.Errorf("sudo forbidden; use run_as")
 	}
@@ -55,12 +55,12 @@ func executionPrefix(argv []string) (int, error) {
 	if len(argv) == 0 {
 		return 0, fmt.Errorf("command required")
 	}
-	nested, err := nestedCommand(strings.ToLower(filepath.Base(argv[0])), argv[1:])
+	nested, err := nestedCommand(strings.ToLower(path.Base(argv[0])), argv[1:])
 	if err != nil {
 		return 0, err
 	}
 	if nested == nil {
-		if name := strings.ToLower(filepath.Base(argv[0])); name == "docker" || name == "kubectl" {
+		if name := strings.ToLower(path.Base(argv[0])); name == "docker" || name == "kubectl" {
 			return len(argv), nil
 		}
 		return 1, nil
@@ -318,11 +318,11 @@ func validateExec(template []any, defs map[string]params.Definition, allow bool)
 		return fmt.Errorf("exec required")
 	}
 	program, ok := template[0].(string)
-	if !ok || !filepath.IsAbs(program) {
+	if !ok || !path.IsAbs(program) {
 		return fmt.Errorf("exec[0] must be a fixed absolute path")
 	}
 	for _, word := range words(template) {
-		if filepath.Base(word) == "sudo" {
+		if path.Base(word) == "sudo" {
 			return fmt.Errorf("sudo forbidden in exec; use run_as")
 		}
 	}

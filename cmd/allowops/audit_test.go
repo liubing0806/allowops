@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -37,9 +38,9 @@ func TestAuditCommands(t *testing.T) {
 		}
 		final = e.Hash
 	}
-	binary, err := filepath.Abs("../../bin/allowops")
-	if err != nil {
-		t.Fatal(err)
+	binary := filepath.Join(t.TempDir(), "allowops")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
 	}
 	build := exec.Command("go", "build", "-o", binary, ".")
 	build.Env = append(os.Environ(), "CGO_ENABLED=0")
@@ -67,10 +68,10 @@ func TestAuditCommands(t *testing.T) {
 		t.Fatalf("export lines=%d want 3", bytes.Count(data, []byte{'\n'}))
 	}
 	info, err := os.Stat(file)
-	if err != nil || info.Mode().Perm() != 0600 {
+	if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0600) {
 		t.Fatalf("export permissions=%v err=%v", info, err)
 	}
-	t.Logf("./bin/allowops audit export --from <fixture> --to <fixture> --output <fixture>: exit 0, lines=3 bytes=%d", len(data))
+	t.Logf("allowops audit export --from <fixture> --to <fixture> --output <fixture>: exit 0, lines=3 bytes=%d", len(data))
 	for _, args := range [][]string{
 		{"audit", "verify", "--from-seq", "1", "--to-seq", "3"},
 		{"audit", "verify", "--file", file, "--from-seq", "1", "--to-seq", "3", "--expected-final-hash", hex.EncodeToString(final)},
@@ -83,7 +84,7 @@ func TestAuditCommands(t *testing.T) {
 		if err := json.Unmarshal(output, &v); err != nil || !v.Valid || v.CheckedCount != 3 {
 			t.Fatalf("verify=%s err=%v", output, err)
 		}
-		t.Logf("./bin/allowops audit verify (%s): exit 0: %s", map[bool]string{true: "file + external anchor", false: "PostgreSQL"}[len(args) > 6], strings.TrimSpace(string(output)))
+		t.Logf("allowops audit verify (%s): exit 0: %s", map[bool]string{true: "file + external anchor", false: "PostgreSQL"}[len(args) > 6], strings.TrimSpace(string(output)))
 	}
 	if _, err := db.Pool.Exec(ctx, "UPDATE audit_events SET reason='tampered' WHERE seq=2"); err != nil {
 		t.Fatal(err)

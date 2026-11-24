@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"path/filepath"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -58,7 +58,7 @@ type Result struct {
 }
 
 func (c Config) Validate() error {
-	if !filepath.IsAbs(c.Credential) {
+	if !path.IsAbs(c.Credential) {
 		return errors.New("credential must be an absolute file path")
 	}
 	if c.MaxRows < 0 || c.MaxRows > DefaultMaxRows {
@@ -95,7 +95,7 @@ func parseAddress(address string) (string, string, error) {
 		}
 		return "tcp", u.Host, nil
 	case "unix":
-		if u.Host != "" || !filepath.IsAbs(u.Path) || u.Path == "/" || strings.ContainsRune(u.Path, 0) {
+		if u.Host != "" || !path.IsAbs(u.Path) || u.Path == "/" || strings.ContainsRune(u.Path, 0) {
 			return "", "", invalid
 		}
 		return "unix", u.Path, nil

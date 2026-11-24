@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -40,8 +41,8 @@ func TestCatalogCommands(t *testing.T) {
 	if _, _, err := runCommand("keygen", "--private-key", private, "--public-key", public); err != nil {
 		t.Fatal(err)
 	}
-	if info, _ := os.Stat(private); info.Mode().Perm() != 0600 {
-		t.Fatalf("private key mode %v", info.Mode())
+	if info, err := os.Stat(private); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0600) {
+		t.Fatalf("private key permissions=%v err=%v", info, err)
 	}
 	if _, _, err := runCommand("keygen", "--private-key", private, "--public-key", public); err == nil {
 		t.Fatal("overwrote key")
@@ -82,6 +83,12 @@ func TestCatalogCommands(t *testing.T) {
 		t.Fatalf("append signature: %#v %v", e, err)
 	}
 	output, warnings, err := runCommand("try", "echo_value", "--dir", dir, "--param", "value=$(id)", "--param", "n=-2")
+	if runtime.GOOS != "linux" {
+		if err == nil || err.Error() != "catalog try requires Linux" {
+			t.Fatalf("catalog try error = %v, want Linux-only error", err)
+		}
+		return
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

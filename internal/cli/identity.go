@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -27,7 +28,7 @@ import (
 	rpc "github.com/liubing0806/allowops/gen/allowops/v1/allowopsv1connect"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
-	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
@@ -88,7 +89,10 @@ func loadCredentials() (credentials, error) {
 	if err != nil {
 		return credentials{}, errors.New("login required")
 	}
-	if !st.Mode().IsRegular() || st.Mode().Perm()&0077 != 0 {
+	if !st.Mode().IsRegular() {
+		return credentials{}, errors.New("credentials must be a regular file")
+	}
+	if runtime.GOOS != "windows" && st.Mode().Perm()&0077 != 0 {
 		return credentials{}, errors.New("credentials must be a regular file with permissions 0600")
 	}
 	b, err := os.ReadFile(path)
@@ -228,31 +232,52 @@ func NewLoginCmd() *cobra.Command {
 }
 
 func readPassword(c *cobra.Command, stdin bool) (string, error) {
+	const maxPasswordInput = 4096
 	input := c.InOrStdin()
-	if !stdin {
-		file, ok := input.(*os.File)
-		if !ok {
-			return "", errors.New("use --password-stdin for non-terminal input")
-		}
-		original, err := unix.IoctlGetTermios(int(file.Fd()), unix.TCGETS)
-		if err != nil {
-			return "", errors.New("use --password-stdin for non-terminal input")
-		}
-		hidden := *original
-		hidden.Lflag &^= unix.ECHO
-		if err := unix.IoctlSetTermios(int(file.Fd()), unix.TCSETS, &hidden); err != nil {
-			return "", err
-		}
-		defer unix.IoctlSetTermios(int(file.Fd()), unix.TCSETS, original)
-		fmt.Fprint(c.ErrOrStderr(), "LDAP password: ")
-		defer fmt.Fprintln(c.ErrOrStderr())
-	}
-	// main cancels the command context on SIGINT instead of exiting, so the
-	// prompt waits on it too; the deferred restore then turns echo back on.
-	// A cancelled read is abandoned; the process exits after the command.
 	ctx := c.Context()
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if !stdin {
+		file, ok := input.(*os.File)
+		if !ok || !term.IsTerminal(int(file.Fd())) {
+			return "", errors.New("use --password-stdin for non-terminal input")
+		}
+		fd := int(file.Fd())
+		state, err := term.GetState(fd)
+		if err != nil {
+			return "", err
+		}
+		defer func() {
+			//allowops:ignore-error best-effort terminal echo restore on prompt exit
+			_ = term.Restore(fd, state)
+		}()
+		fmt.Fprint(c.ErrOrStderr(), "LDAP password: ")
+		defer fmt.Fprintln(c.ErrOrStderr())
+		// main cancels the command context on SIGINT instead of exiting, so the
+		// prompt waits on it too; the deferred restore then turns echo back on.
+		// A cancelled read is abandoned; the process exits after the command.
+		type result struct {
+			password []byte
+			err      error
+		}
+		read := make(chan result, 1)
+		go func() {
+			password, err := term.ReadPassword(fd)
+			read <- result{password, err}
+		}()
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case r := <-read:
+			if r.err != nil && r.err != io.EOF {
+				return "", r.err
+			}
+			if len(r.password) > maxPasswordInput {
+				return "", errors.New("password exceeds input limit")
+			}
+			return string(r.password), nil
+		}
 	}
 	type result struct {
 		line string
@@ -260,7 +285,7 @@ func readPassword(c *cobra.Command, stdin bool) (string, error) {
 	}
 	read := make(chan result, 1)
 	go func() {
-		line, err := bufio.NewReader(io.LimitReader(input, 4097)).ReadString('\n')
+		line, err := bufio.NewReader(io.LimitReader(input, maxPasswordInput+1)).ReadString('\n')
 		read <- result{line, err}
 	}()
 	var line string
@@ -273,10 +298,21 @@ func readPassword(c *cobra.Command, stdin bool) (string, error) {
 		}
 		line = r.line
 	}
-	if len(line) > 4096 {
+	if len(line) > maxPasswordInput {
 		return "", errors.New("password exceeds input limit")
 	}
 	return strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"), nil
+}
+
+func browserCommand(goos, loginURL string) *exec.Cmd {
+	switch goos {
+	case "darwin":
+		return exec.Command("open", loginURL)
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", loginURL)
+	default:
+		return exec.Command("xdg-open", loginURL)
+	}
 }
 
 func oidcLogin(c *cobra.Command, auth rpc.AuthServiceClient, gateway, provider string, noBrowser bool) (*v1.CliSession, string, error) {
@@ -317,7 +353,7 @@ func oidcLogin(c *cobra.Command, auth rpc.AuthServiceClient, gateway, provider s
 	go func() { _ = server.Serve(listener) }()
 	fmt.Fprintln(c.OutOrStdout(), result.Msg.AuthorizationUrl)
 	if !noBrowser {
-		if err := exec.Command("xdg-open", result.Msg.AuthorizationUrl).Run(); err != nil {
+		if err := browserCommand(runtime.GOOS, result.Msg.AuthorizationUrl).Run(); err != nil {
 			fmt.Fprintln(c.ErrOrStderr(), "Open the login URL in your browser.")
 		}
 	}

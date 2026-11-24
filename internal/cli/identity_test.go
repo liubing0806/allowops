@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +24,86 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestBrowserCommand(t *testing.T) {
+	const loginURL = "https://gateway.example.org/auth/oidc/start?a=1&b=2"
+	for _, tt := range []struct {
+		goos string
+		args []string
+	}{
+		{"darwin", []string{"open", loginURL}},
+		{"windows", []string{"rundll32", "url.dll,FileProtocolHandler", loginURL}},
+		{"linux", []string{"xdg-open", loginURL}},
+	} {
+		t.Run(tt.goos, func(t *testing.T) {
+			if got := browserCommand(tt.goos, loginURL).Args; !slices.Equal(got, tt.args) {
+				t.Fatalf("browser command = %q, want %q", got, tt.args)
+			}
+		})
+	}
+}
+
+func useTestConfigDir(t *testing.T, dir string) string {
+	t.Helper()
+	switch runtime.GOOS {
+	case "windows":
+		t.Setenv("APPDATA", dir)
+	case "darwin":
+		t.Setenv("HOME", dir)
+		return filepath.Join(dir, "Library", "Application Support")
+	default:
+		t.Setenv("XDG_CONFIG_HOME", dir)
+	}
+	return dir
+}
+
+func TestCredentials(t *testing.T) {
+	configDir := useTestConfigDir(t, t.TempDir())
+	path := filepath.Join(configDir, "allowops", "credentials")
+	if _, err := loadCredentials(); err == nil || err.Error() != "login required" {
+		t.Fatalf("missing credentials error = %v", err)
+	}
+
+	want := credentials{
+		Gateway:   "https://gateway.example.org",
+		CAFile:    "ca.pem",
+		ExpiresAt: time.Now().UTC().Add(time.Hour).Truncate(time.Second),
+	}
+	for _, token := range []string{"first-session", "replacement-session"} {
+		want.Token = token
+		if err := saveCredentials(want); err != nil {
+			t.Fatal(err)
+		}
+		got, err := loadCredentials()
+		if err != nil || got != want {
+			t.Fatalf("loadCredentials() = %+v, %v, want %+v", got, err, want)
+		}
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		if info.Mode().Perm() != 0600 {
+			t.Fatalf("credentials permissions = %04o, want 0600", info.Mode().Perm())
+		}
+		if err := os.Chmod(path, 0644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := loadCredentials(); err == nil || !strings.Contains(err.Error(), "permissions 0600") {
+			t.Fatalf("0644 credentials error = %v", err)
+		}
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadCredentials(); err == nil || !strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("directory credentials error = %v", err)
+	}
+}
 
 func TestRPCErrorReportsPossibleCommitWithoutEchoingServerSecrets(t *testing.T) {
 	err := connect.NewError(connect.CodeUnavailable, errors.New("provider-password-must-not-leak"))

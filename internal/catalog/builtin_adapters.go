@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 	"time"
 
@@ -94,7 +94,7 @@ func logSearchConfig(input map[string]any) (logsearch.Config, error) {
 		return logsearch.Config{}, fmt.Errorf("allowed_roots required")
 	}
 	for _, root := range fields.AllowedRoots {
-		if !filepath.IsAbs(root) || strings.ContainsAny(root, "\x00\r\n") {
+		if !path.IsAbs(root) || strings.ContainsAny(root, "\x00\r\n") {
 			return logsearch.Config{}, fmt.Errorf("allowed_roots must be absolute paths without NUL/newlines")
 		}
 	}

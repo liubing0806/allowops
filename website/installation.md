@@ -5,6 +5,24 @@ helper from the same verified release. Verify release checksums and signatures
 against a separately trusted release key before installation. Review the
 software bill of materials and third-party notices supplied with the release.
 
+## CLI
+
+Download the archive for your platform from the release, verify its checksum,
+and extract `allowops` (`allowops.exe` on Windows) to a directory on your `PATH`.
+Run `allowops --version` to check the installation.
+
+| Platform | Archive filename suffix |
+|---|---|
+| Linux amd64 | `_linux_amd64.tar.gz` |
+| Linux arm64 | `_linux_arm64.tar.gz` |
+| macOS Intel | `_darwin_amd64.tar.gz` |
+| macOS Apple silicon | `_darwin_arm64.tar.gz` |
+| Windows amd64 | `_windows_amd64.zip` |
+
+The Linux amd64 archive includes the CLI, gateway, agent and helper. The other
+archives contain the CLI. Each archive includes `LICENSE` and `THIRD_PARTY_NOTICES`.
+`allowops catalog try` requires Linux for local action execution.
+
 ## Local Compose demonstration
 
 Prerequisites are Docker Compose using a local Unix socket, Go 1.27.3, OpenSSL,

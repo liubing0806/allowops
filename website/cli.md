@@ -1,5 +1,8 @@
 # CLI reference
 
+The `allowops` CLI is available for Linux and macOS on amd64 and arm64, and
+for Windows on amd64 (`allowops.exe`). See [installation](installation.md#cli).
+
 Use the binaries from one release. `allowops --help` and each subcommand's
 `--help` are the authoritative interface for that release. The gateway uses a
 different command parser. Serve checks `ALLOWOPS_DATABASE_URL` before parsing
@@ -30,7 +33,7 @@ environment variable. See [identity](identity.md).
 | `allowops catalog build` | `--dir`, `--out`, `--git-commit`, `--ttl` (2160h default). |
 | `allowops catalog sign` | `--in`, `--out`, repeated `--key` for multiple signatures. |
 | `allowops catalog publish` | `-f`/`--file`, `--gateway`, `--ca-file`, `--token-env`, `--json`. |
-| `allowops catalog try <action>` | `--dir`, repeated `--param name=value`; executes locally as the current user. |
+| `allowops catalog try <action>` | Linux only. `--dir`, repeated `--param name=value`; executes locally as the current user. |
 
 Build expiry starts at build time; sign preserves it. `--out -` writes to stdout.
 Private keys are read from files. See [publishing](publishing.md).

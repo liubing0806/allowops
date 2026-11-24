@@ -6,12 +6,13 @@ builds:
     main: ./cmd/allowops
     binary: allowops
     env: [CGO_ENABLED=0]
-    goos: [linux]
-    goarch: [amd64]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
     goamd64: [v1]
     ldflags: ['-s -w -X main.version={{ .Version }}']
-    hooks:
-      post: sh deploy/packaging/notices.sh
   - id: allowops-gateway
     main: ./cmd/allowops-gateway
     binary: allowops-gateway
@@ -20,6 +21,9 @@ builds:
     goarch: [amd64]
     goamd64: [v1]
     ldflags: ['-s -w -X main.version={{ .Version }}']
+    hooks:
+      # Run once for the release, since post-build hooks run per target.
+      post: sh deploy/packaging/notices.sh
   - id: allowops-agent
     main: ./cmd/allowops-agent
     binary: allowops-agent
@@ -38,7 +42,14 @@ builds:
     ldflags: ['-s -w -X main.version={{ .Version }}']
 
 archives:
-  - formats: [tar.gz]
+  - id: platform-binaries
+    ids: [allowops, allowops-gateway, allowops-agent, allowops-exec]
+    # The Linux amd64 archive includes all four binaries. Other targets ship the CLI.
+    allow_different_binary_count: true
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     files:
       - LICENSE

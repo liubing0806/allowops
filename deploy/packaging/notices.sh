@@ -3,8 +3,14 @@ set -eu
 
 dist=dist
 licenses="$dist/licenses"
-go run github.com/google/go-licenses/v2@"${GO_LICENSES_VERSION:-v2.0.1}" save \
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+GOBIN="$work" go install github.com/google/go-licenses/v2@"${GO_LICENSES_VERSION:-v2.0.1}"
+"$work/go-licenses" save \
     ./cmd/... --ignore github.com/liubing0806/allowops --save_path "$licenses"
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 "$work/go-licenses" save \
+    ./cmd/allowops --ignore github.com/liubing0806/allowops --save_path "$work/windows"
+cp -Rn "$work/windows/." "$licenses/"
 
 {
     printf 'Third-party licenses for the shipped Go binaries\n'
