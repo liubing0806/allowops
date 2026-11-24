@@ -487,9 +487,9 @@ func clusterTier0(tasks []TaskInput, idxs []int, grouping GroupingMode, detailed
 type pass2Accum struct {
 	group       Group
 	allHosts    []string
+	taskIdxs    []int
 	hasStderr   bool
 	metrics     *clusterMetrics
-	hostData    map[string]*TaskInput
 	rawNormOut  string
 	rawNormErr  string
 	hasOutliers bool
@@ -500,29 +500,13 @@ func clusterPass2(tasks []TaskInput, idxs []int, grouping GroupingMode, detailed
 		return nil, false
 	}
 
-	byKey := make(map[string]*pass2Accum, min(len(idxs), MaxClusters))
-	var order []string
-	var overflow *pass2Accum
-
-	var outMode, errMode PreviewMode
-	if grouping == GroupingNormalized {
-		outSamples := make([]PreviewSample, len(idxs))
-		errSamples := make([]PreviewSample, len(idxs))
-		for i, idx := range idxs {
+	if grouping == GroupingExact {
+		byKey := make(map[string]*pass2Accum, min(len(idxs), MaxClusters))
+		var order []string
+		for _, idx := range idxs {
 			t := &tasks[idx]
-			outSamples[i] = PreviewSample{Data: t.Stdout, TotalSize: t.StdoutSize}
-			errSamples[i] = PreviewSample{Data: t.Stderr, TotalSize: t.StderrSize}
-		}
-		outMode = DetectStreamMode(outSamples)
-		errMode = DetectStreamMode(errSamples)
-	}
-
-	for _, idx := range idxs {
-		t := &tasks[idx]
-		taskHasStderr := t.StderrSize > 0 || len(t.Stderr) > 0
-
-		if grouping == GroupingExact {
-			key := hex.EncodeToString(t.StdoutHash) + ":" + hex.EncodeToString(t.StderrHash)
+			taskHasStderr := t.StderrSize > 0 || len(t.Stderr) > 0
+			key := string(t.StdoutHash) + string(t.StderrHash)
 			acc := byKey[key]
 			if acc == nil {
 				outStr, errStr := boundedPreviewPair(t.Stdout, t.Stderr)
@@ -545,29 +529,87 @@ func clusterPass2(tasks []TaskInput, idxs []int, grouping GroupingMode, detailed
 			if taskHasStderr {
 				acc.hasStderr = true
 			}
-			continue
 		}
+		var maxSucceededHosts uint64
+		for _, key := range order {
+			if hc := byKey[key].group.HostCount; hc > maxSucceededHosts {
+				maxSucceededHosts = hc
+			}
+		}
+		totalSucceededClusters := len(order)
+		groups := make([]Group, 0, len(order))
+		for _, key := range order {
+			acc := byKey[key]
+			acc.group.Hosts = selectGroupHosts(acc.allHosts, detailed, "", "")
+			switch {
+			case acc.hasStderr:
+				acc.group.Severity = SeverityAnomaly
+				acc.group.SeveritySub = 0
+				acc.group.AnomalyReason = ReasonStderrPresent
+			case totalSucceededClusters >= 2 && acc.group.HostCount < maxSucceededHosts:
+				acc.group.Severity = SeverityAnomaly
+				acc.group.SeveritySub = 1
+				acc.group.AnomalyReason = ReasonMinorityCluster
+			default:
+				acc.group.Severity = SeverityNormal
+				acc.group.SeveritySub = 0
+				acc.group.AnomalyReason = ReasonMajorityNormal
+			}
+			groups = append(groups, acc.group)
+		}
+		return groups, false
+	}
 
-		// Normalized Pass 2 clustering.
+	byHash := make(map[[32]byte]*pass2Accum, min(len(idxs), MaxClusters))
+	var order [][32]byte
+	var overflow *pass2Accum
+
+	outSamples := make([]PreviewSample, len(idxs))
+	errSamples := make([]PreviewSample, len(idxs))
+	for i, idx := range idxs {
+		t := &tasks[idx]
+		outSamples[i] = PreviewSample{Data: t.Stdout, TotalSize: t.StdoutSize}
+		errSamples[i] = PreviewSample{Data: t.Stderr, TotalSize: t.StderrSize}
+	}
+	outMode := DetectStreamMode(outSamples)
+	errMode := DetectStreamMode(errSamples)
+
+	hasher := sha256.New()
+	var zeroSep = [1]byte{0}
+	var outScratch normalizeScratch
+	var errScratch normalizeScratch
+
+	for _, idx := range idxs {
+		t := &tasks[idx]
+		taskHasStderr := t.StderrSize > 0 || len(t.Stderr) > 0
+
 		outOpts := NormalizeOptions{
 			Hostname:  t.Hostname,
 			MaskIPs:   maskIPs,
 			Mode:      outMode,
 			Truncated: t.StdoutSize > uint64(len(t.Stdout)) || len(t.Stdout) > MaxPreviewBytesPerStream,
 		}
-		errOpts := NormalizeOptions{
-			Hostname:     t.Hostname,
-			MaskIPs:      maskIPs,
-			Mode:         errMode,
-			Truncated:    t.StderrSize > uint64(len(t.Stderr)) || len(t.Stderr) > MaxPreviewBytesPerStream,
-			StreamPrefix: "stderr.",
+		normOut := normalizePreviewWithScratch(t.Stdout, outOpts, &outScratch, false)
+		var normErr NormalizeResult
+		if len(t.Stderr) > 0 {
+			errOpts := NormalizeOptions{
+				Hostname:     t.Hostname,
+				MaskIPs:      maskIPs,
+				Mode:         errMode,
+				Truncated:    t.StderrSize > uint64(len(t.Stderr)) || len(t.Stderr) > MaxPreviewBytesPerStream,
+				StreamPrefix: "stderr.",
+			}
+			normErr = normalizePreviewWithScratch(t.Stderr, errOpts, &errScratch, false)
 		}
-		normOut := NormalizePreview(t.Stdout, outOpts)
-		normErr := NormalizePreview(t.Stderr, errOpts)
-		tmplHash := combineTemplateHash(normOut.Template, normErr.Template)
-		key := string(tmplHash[:])
 
-		acc := byKey[key]
+		hasher.Reset()
+		hasher.Write([]byte(normOut.Template))
+		hasher.Write(zeroSep[:])
+		hasher.Write([]byte(normErr.Template))
+		var tmplHash [32]byte
+		hasher.Sum(tmplHash[:0])
+
+		acc := byHash[tmplHash]
 		if acc == nil {
 			if len(order) >= MaxClusters {
 				if overflow == nil {
@@ -600,15 +642,15 @@ func clusterPass2(tasks []TaskInput, idxs []int, grouping GroupingMode, detailed
 					Truncated:    isTaskTruncated(t, outStr, errStr) || normOut.Truncated || normErr.Truncated,
 				},
 				metrics:    newClusterMetrics(),
-				hostData:   make(map[string]*TaskInput, 4),
 				rawNormOut: normOut.Template,
 				rawNormErr: normErr.Template,
 			}
-			byKey[key] = acc
-			order = append(order, key)
+			byHash[tmplHash] = acc
+			order = append(order, tmplHash)
 		}
 		acc.group.HostCount++
 		acc.allHosts = append(acc.allHosts, t.Hostname)
+		acc.taskIdxs = append(acc.taskIdxs, idx)
 		if taskHasStderr {
 			acc.hasStderr = true
 		}
@@ -617,15 +659,11 @@ func clusterPass2(tasks []TaskInput, idxs []int, grouping GroupingMode, detailed
 		}
 		acc.metrics.addHostSlots(t.Hostname, normOut.Slots)
 		acc.metrics.addHostSlots(t.Hostname, normErr.Slots)
-		if _, exists := acc.hostData[t.Hostname]; !exists {
-			acc.hostData[t.Hostname] = t
-		}
 	}
 
-	// Determine max_succeeded_hosts across non-overflow succeeded groups.
 	var maxSucceededHosts uint64
 	for _, key := range order {
-		if hc := byKey[key].group.HostCount; hc > maxSucceededHosts {
+		if hc := byHash[key].group.HostCount; hc > maxSucceededHosts {
 			maxSucceededHosts = hc
 		}
 	}
@@ -633,7 +671,7 @@ func clusterPass2(tasks []TaskInput, idxs []int, grouping GroupingMode, detailed
 	totalSucceededClusters := len(order)
 	groups := make([]Group, 0, len(order)+1)
 	for _, key := range order {
-		acc := byKey[key]
+		acc := byHash[key]
 		var typicalHost, extremeHost string
 		if acc.metrics != nil {
 			acc.group.Variances, typicalHost, extremeHost = acc.metrics.summarize()
@@ -643,21 +681,21 @@ func clusterPass2(tasks []TaskInput, idxs []int, grouping GroupingMode, detailed
 		}
 
 		acc.group.Hosts = selectGroupHosts(acc.allHosts, detailed, typicalHost, extremeHost)
-		if typicalHost != "" && acc.hostData != nil {
-			if rep := acc.hostData[typicalHost]; rep != nil {
-				applyRepresentativeSample(&acc.group, rep)
+		if typicalHost != "" {
+			for _, ti := range acc.taskIdxs {
+				if tasks[ti].Hostname == typicalHost {
+					applyRepresentativeSample(&acc.group, &tasks[ti])
+					break
+				}
 			}
 		}
-		if grouping == GroupingNormalized {
-			if acc.rawNormOut != acc.group.Stdout {
-				acc.group.TemplateStdout = acc.rawNormOut
-			}
-			if acc.rawNormErr != acc.group.Stderr {
-				acc.group.TemplateStderr = acc.rawNormErr
-			}
+		if acc.rawNormOut != acc.group.Stdout {
+			acc.group.TemplateStdout = acc.rawNormOut
+		}
+		if acc.rawNormErr != acc.group.Stderr {
+			acc.group.TemplateStderr = acc.rawNormErr
 		}
 
-		// Classify Tier 1 (ANOMALY) vs Tier 2 (NORMAL) per design 5.1.
 		switch {
 		case acc.hasStderr:
 			acc.group.Severity = SeverityAnomaly

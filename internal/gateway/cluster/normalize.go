@@ -83,13 +83,22 @@ func DetectStreamMode(samples []PreviewSample) PreviewMode {
 		if len(s.Data) == 0 {
 			continue
 		}
-		truncated := s.TotalSize > uint64(len(s.Data)) || len(s.Data) > MaxPreviewBytesPerStream
 		capped := capPreviewBytes(s.Data)
+		first, ok := firstNonWhitespaceByte(capped)
+		if !ok {
+			continue
+		}
+		hasNonEmpty = true
+		if first != '{' {
+			// Neither a JSON object nor NDJSON of JSON objects can start with anything other than '{'.
+			return PreviewModeText
+		}
+
+		truncated := s.TotalSize > uint64(len(s.Data)) || len(s.Data) > MaxPreviewBytesPerStream
 		trimmed := strings.TrimSpace(toValidUTF8(capped))
 		if trimmed == "" {
 			continue
 		}
-		hasNonEmpty = true
 
 		if allSingleJSON {
 			if truncated || trimmed[0] != '{' || !isBoundedJSONObject(trimmed) {
@@ -121,9 +130,51 @@ func DetectStreamMode(samples []PreviewSample) PreviewMode {
 	return PreviewModeText
 }
 
+func firstNonWhitespaceByte(b []byte) (byte, bool) {
+	for _, c := range b {
+		if c != ' ' && c != '\t' && c != '\r' && c != '\n' {
+			return c, true
+		}
+	}
+	return 0, false
+}
+
 // NormalizePreview normalizes a single stream preview into a deterministic template
 // and extracts bounded finite numeric slots.
 func NormalizePreview(raw []byte, opts NormalizeOptions) NormalizeResult {
+	var sc normalizeScratch
+	res := normalizePreviewWithScratch(raw, opts, &sc, true)
+	// Detach slots slice when backed by scratch (already standalone on single call).
+	return res
+}
+
+// normalizeScratch holds per-call reusable buffers for Cluster and Diff loops.
+// It is never shared across goroutines.
+type normalizeScratch struct {
+	out         strings.Builder
+	lineSlots   []rawLineSlot
+	tokens      []byteSpan
+	usedLabels  map[string]int
+	labelIntern map[string]string
+	slots       []MetricSlot
+	labelBuf    [MaxLabelBytes + 16]byte
+}
+
+func (sc *normalizeScratch) internLabel(b []byte) string {
+	if sc.labelIntern == nil {
+		sc.labelIntern = make(map[string]string, 64)
+	}
+	if s, ok := sc.labelIntern[string(b)]; ok {
+		return s
+	}
+	s := string(b)
+	if len(sc.labelIntern) < 1024 {
+		sc.labelIntern[s] = s
+	}
+	return s
+}
+
+func normalizePreviewWithScratch(raw []byte, opts NormalizeOptions, sc *normalizeScratch, copyResult bool) NormalizeResult {
 	wasTruncated := opts.Truncated || len(raw) > MaxPreviewBytesPerStream
 	capped := capPreviewBytes(raw)
 	if len(capped) == 0 {
@@ -138,15 +189,20 @@ func NormalizePreview(raw []byte, opts NormalizeOptions) NormalizeResult {
 
 	mode := opts.Mode
 	if mode == PreviewModeAuto {
-		trimmed := strings.TrimSpace(toValidUTF8(capped))
-		if trimmed == "" {
+		first, ok := firstNonWhitespaceByte(capped)
+		if !ok || first != '{' {
 			mode = PreviewModeText
-		} else if !wasTruncated && trimmed[0] == '{' && isBoundedJSONObject(trimmed) {
-			mode = PreviewModeJSON
-		} else if isBoundedNDJSON(preparePreviewText(capped, wasTruncated)) {
-			mode = PreviewModeNDJSON
 		} else {
-			mode = PreviewModeText
+			trimmed := strings.TrimSpace(toValidUTF8(capped))
+			if trimmed == "" {
+				mode = PreviewModeText
+			} else if !wasTruncated && trimmed[0] == '{' && isBoundedJSONObject(trimmed) {
+				mode = PreviewModeJSON
+			} else if isBoundedNDJSON(preparePreviewText(capped, wasTruncated)) {
+				mode = PreviewModeNDJSON
+			} else {
+				mode = PreviewModeText
+			}
 		}
 	}
 
@@ -163,7 +219,6 @@ func NormalizePreview(raw []byte, opts NormalizeOptions) NormalizeResult {
 				Truncated: wasTruncated,
 			}
 		}
-		// Fallback cleanly to text if forced JSON fails bounded validation.
 		mode = PreviewModeText
 	case PreviewModeNDJSON:
 		prepared := preparePreviewText(capped, wasTruncated)
@@ -180,7 +235,12 @@ func NormalizePreview(raw []byte, opts NormalizeOptions) NormalizeResult {
 	}
 
 	prepared := preparePreviewText(capped, wasTruncated)
-	tmpl, slots, lineTrunc := normalizeTextPreview(prepared, hostMatcher, opts.MaskIPs, opts.StreamPrefix)
+	tmpl, slots, lineTrunc := normalizeTextPreviewWithScratch(prepared, hostMatcher, opts.MaskIPs, opts.StreamPrefix, sc)
+	if copyResult && len(slots) > 0 {
+		cp := make([]MetricSlot, len(slots))
+		copy(cp, slots)
+		slots = cp
+	}
 	return NormalizeResult{
 		Template:  tmpl,
 		Hash:      sha256.Sum256([]byte(tmpl)),
@@ -204,6 +264,12 @@ func SanitizeLabel(s string) string {
 	if s == "" {
 		return ""
 	}
+	// Fast path: already clean ASCII <= MaxLabelBytes with no control chars,
+	// no leading/trailing spaces, and no repeated spaces.
+	if len(s) <= MaxLabelBytes && isCleanASCIILabel(s) {
+		return s
+	}
+
 	var b strings.Builder
 	b.Grow(min(len(s), MaxLabelBytes))
 	inSpace := true // trims leading whitespace
@@ -237,6 +303,28 @@ func SanitizeLabel(s string) string {
 	return out
 }
 
+func isCleanASCIILabel(s string) bool {
+	if s[0] == ' ' || s[len(s)-1] == ' ' {
+		return false
+	}
+	prevSpace := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < 0x20 || c >= 0x7f {
+			return false
+		}
+		if c == ' ' {
+			if prevSpace {
+				return false
+			}
+			prevSpace = true
+		} else {
+			prevSpace = false
+		}
+	}
+	return true
+}
+
 func isFiniteFloat(v float64) bool {
 	return !math.IsNaN(v) && !math.IsInf(v, 0)
 }
@@ -246,9 +334,7 @@ func capPreviewBytes(raw []byte) []byte {
 		return raw
 	}
 	b := raw[:MaxPreviewBytesPerStream]
-	// Trim any trailing incomplete UTF-8 sequence created by slicing.
 	for len(b) > 0 && len(b) > MaxPreviewBytesPerStream-4 && !utf8.Valid(b) {
-		// Only trim trailing continuation/start bytes that form an incomplete rune.
 		last := b[len(b)-1]
 		if last < 0x80 {
 			break
@@ -294,16 +380,21 @@ func preparePreviewText(capped []byte, truncated bool) string {
 
 // hostMatcher holds the full hostname and optional eligible short hostname.
 type hostMatcher struct {
-	full  string
-	short string
+	full      string
+	short     string
+	firstByte byte
 }
 
 func newHostMatcher(hostname string) hostMatcher {
+	// Sanitize hostname to valid UTF-8 so matching can never split a multi-byte rune.
+	if !utf8.ValidString(hostname) {
+		hostname = strings.ToValidUTF8(hostname, "")
+	}
 	h := strings.TrimSpace(hostname)
 	if h == "" {
 		return hostMatcher{}
 	}
-	m := hostMatcher{full: h}
+	m := hostMatcher{full: h, firstByte: h[0]}
 	if dot := strings.IndexByte(h, '.'); dot >= 0 {
 		cand := h[:dot]
 		if len(cand) >= 3 && hasDigitOrHyphen(cand) {
@@ -323,21 +414,24 @@ func hasDigitOrHyphen(s string) bool {
 }
 
 func (m hostMatcher) match(line string, i int) int {
-	if m.full == "" {
+	if m.full == "" || line[i] != m.firstByte {
 		return 0
 	}
 	if i > 0 && isAlphaNum(line[i-1]) {
 		return 0
 	}
+	if !utf8.RuneStart(line[i]) {
+		return 0
+	}
 	if len(m.full) <= len(line)-i && line[i:i+len(m.full)] == m.full {
 		end := i + len(m.full)
-		if end == len(line) || !isAlphaNum(line[end]) {
+		if end == len(line) || (!isAlphaNum(line[end]) && utf8.RuneStart(line[end])) {
 			return len(m.full)
 		}
 	}
 	if m.short != "" && len(m.short) <= len(line)-i && line[i:i+len(m.short)] == m.short {
 		end := i + len(m.short)
-		if end == len(line) || !isAlphaNum(line[end]) {
+		if end == len(line) || (!isAlphaNum(line[end]) && utf8.RuneStart(line[end])) {
 			return len(m.short)
 		}
 	}
@@ -349,21 +443,121 @@ type tableHeaderInfo struct {
 	hasLeadingW bool
 }
 
-func normalizeTextPreview(text string, hm hostMatcher, maskIPs bool, streamPrefix string) (string, []MetricSlot, bool) {
+type byteSpan struct {
+	start int
+	end   int
+}
+
+func normalizeTextPreviewWithScratch(text string, hm hostMatcher, maskIPs bool, streamPrefix string, sc *normalizeScratch) (string, []MetricSlot, bool) {
 	if text == "" {
 		return "", nil, false
 	}
 
-	var out strings.Builder
-	out.Grow(len(text))
+	line0LeadingWS := text[0] == ' ' || text[0] == '\t'
+	// Collapse per-line whitespace across the entire preview in a single pass
+	// (1 allocation instead of 1 per line).
+	collapsedText, truncated := collapsePreviewLines(text)
 
-	var slots []MetricSlot
-	usedLabels := make(map[string]int, 16)
+	sc.out.Reset()
+	if sc.out.Cap() < len(collapsedText) {
+		sc.out.Grow(len(collapsedText))
+	}
+	sc.slots = sc.slots[:0]
+	if sc.usedLabels != nil {
+		clear(sc.usedLabels)
+	}
 	var header *tableHeaderInfo
 
 	lineIdx := 0
-	truncated := false
 	pos := 0
+	for pos <= len(collapsedText) {
+		if lineIdx >= MaxLinesPerPreview {
+			truncated = true
+			break
+		}
+		nl := strings.IndexByte(collapsedText[pos:], '\n')
+		var collapsed string
+		var hasNL bool
+		if nl < 0 {
+			collapsed = collapsedText[pos:]
+			pos = len(collapsedText) + 1
+		} else {
+			collapsed = collapsedText[pos : pos+nl]
+			pos += nl + 1
+			hasNL = true
+		}
+		if len(collapsed) > MaxLineBytes {
+			collapsed = truncateUTF8Bytes(collapsed, MaxLineBytes)
+			truncated = true
+		}
+
+		if lineIdx > 0 {
+			sc.out.WriteByte('\n')
+		}
+		sc.lineSlots = sc.lineSlots[:0]
+		collectSlots := len(sc.slots) < MaxSlotsPerTask
+		scanLineInto(&sc.out, collapsed, hm, maskIPs, collectSlots, &sc.lineSlots)
+
+		if lineIdx == 0 && len(sc.lineSlots) == 0 && collapsed != "" {
+			if cols := splitHeaderColumns(collapsed); len(cols) >= 2 {
+				header = &tableHeaderInfo{cols: cols, hasLeadingW: line0LeadingWS}
+			}
+		}
+
+		if len(sc.lineSlots) > 0 && len(sc.slots) < MaxSlotsPerTask {
+			if sc.usedLabels == nil {
+				sc.usedLabels = make(map[string]int, 32)
+			}
+			assignLineSlotLabelsWithScratch(collapsed, lineIdx, header, sc.lineSlots, streamPrefix, sc)
+		}
+
+		lineIdx++
+		if hasNL && pos == len(collapsedText) {
+			break
+		}
+	}
+
+	return sc.out.String(), sc.slots, truncated
+}
+
+// collapsePreviewLines collapses runs of space/tab within each line to a single
+// space, trims trailing space/tab and '\r' before '\n', and enforces MaxLineBytes
+// per line before collapsing (returning the original string if already clean).
+func collapsePreviewLines(text string) (string, bool) {
+	// Fast check: if no '\t', no '\r', no "  ", and no space before '\n' or EOF, zero-copy.
+	needs := false
+	prevSpace := false
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		if c == '\t' || c == '\r' {
+			needs = true
+			break
+		}
+		if c == ' ' {
+			if prevSpace {
+				needs = true
+				break
+			}
+			prevSpace = true
+		} else if c == '\n' {
+			if prevSpace {
+				needs = true
+				break
+			}
+			prevSpace = false
+		} else {
+			prevSpace = false
+		}
+	}
+	if !needs && !prevSpace {
+		return text, false
+	}
+
+	var b strings.Builder
+	b.Grow(len(text))
+	pos := 0
+	lineIdx := 0
+	truncated := false
 	for pos <= len(text) {
 		if lineIdx >= MaxLinesPerPreview {
 			truncated = true
@@ -387,61 +581,89 @@ func normalizeTextPreview(text string, hm hostMatcher, maskIPs bool, streamPrefi
 			rawLine = truncateUTF8Bytes(rawLine, MaxLineBytes)
 			truncated = true
 		}
-
-		// Preserve knowledge of leading whitespace before collapsing for table header detection.
-		leadingWS := len(rawLine) > 0 && (rawLine[0] == ' ' || rawLine[0] == '\t')
-		collapsed := collapseWhitespace(rawLine)
-
-		normLine, lineSlots := scanLine(collapsed, hm, maskIPs)
-		if lineIdx == 0 && len(lineSlots) == 0 && collapsed != "" {
-			if cols := splitHeaderColumns(collapsed); len(cols) >= 2 {
-				header = &tableHeaderInfo{cols: cols, hasLeadingW: leadingWS}
+		if lineIdx > 0 {
+			b.WriteByte('\n')
+		}
+		end := len(rawLine)
+		for end > 0 && (rawLine[end-1] == ' ' || rawLine[end-1] == '\t') {
+			end--
+		}
+		inWS := false
+		for i := 0; i < end; i++ {
+			c := rawLine[i]
+			if c == ' ' || c == '\t' {
+				if !inWS {
+					b.WriteByte(' ')
+					inWS = true
+				}
+			} else {
+				b.WriteByte(c)
+				inWS = false
 			}
 		}
-
-		if len(lineSlots) > 0 && len(slots) < MaxSlotsPerTask {
-			assignLineSlotLabels(collapsed, lineIdx, header, lineSlots, streamPrefix, usedLabels, &slots)
-		}
-
-		if lineIdx > 0 {
-			out.WriteByte('\n')
-		}
-		out.WriteString(normLine)
 		lineIdx++
-
 		if hasNL && pos == len(text) {
-			// Trailing newline at end of input: preserve cleanly without emitting an extra phantom line
-			// unless input was only "\n".
+			b.WriteByte('\n')
 			break
 		}
 	}
-
-	return out.String(), slots, truncated
+	return b.String(), truncated
 }
 
-// collapseWhitespace collapses runs of space/tab into a single space and trims
-// trailing spaces/tabs.
-func collapseWhitespace(s string) string {
+// collapseWhitespaceInto collapses runs of space/tab into a single space and
+// trims trailing spaces/tabs, reusing scratch to avoid per-line allocations.
+func collapseWhitespaceInto(s string, scratch *strings.Builder) string {
 	if s == "" {
 		return ""
 	}
-	var b strings.Builder
-	b.Grow(len(s))
+	// Fast path: check if line already has no tabs, no consecutive spaces, and no trailing space.
+	needsCopy := false
+	prevSpace := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '\t' {
+			needsCopy = true
+			break
+		}
+		if c == ' ' {
+			if prevSpace {
+				needsCopy = true
+				break
+			}
+			prevSpace = true
+		} else {
+			prevSpace = false
+		}
+	}
+	if !needsCopy {
+		if prevSpace {
+			return s[:len(s)-1]
+		}
+		return s
+	}
+
+	scratch.Reset()
+	scratch.Grow(len(s))
 	inWS := false
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if c == ' ' || c == '\t' {
 			if !inWS {
-				b.WriteByte(' ')
+				scratch.WriteByte(' ')
 				inWS = true
 			}
 		} else {
-			b.WriteByte(c)
+			scratch.WriteByte(c)
 			inWS = false
 		}
 	}
-	res := b.String()
+	res := scratch.String()
 	return strings.TrimRight(res, " ")
+}
+
+func collapseWhitespace(s string) string {
+	var b strings.Builder
+	return collapseWhitespaceInto(s, &b)
 }
 
 func splitHeaderColumns(collapsed string) []string {
@@ -450,7 +672,6 @@ func splitHeaderColumns(collapsed string) []string {
 		return nil
 	}
 	fields := strings.Fields(trimmed)
-	// Reject lines that look like prose sentences or key-value lines with colons.
 	for _, f := range fields {
 		if strings.HasSuffix(f, ":") || strings.Contains(f, "=") {
 			return nil
@@ -467,35 +688,31 @@ type rawLineSlot struct {
 	isInteger bool
 }
 
-type byteSpan struct {
-	start int
-	end   int
-}
-
-func assignLineSlotLabels(
+func assignLineSlotLabelsWithScratch(
 	collapsed string,
 	lineIdx int,
 	header *tableHeaderInfo,
 	lineSlots []rawLineSlot,
 	streamPrefix string,
-	usedLabels map[string]int,
-	dst *[]MetricSlot,
+	sc *normalizeScratch,
 ) {
-	// Precompute whitespace token spans for table column lookup.
-	var tokens []byteSpan
-	for i := 0; i < len(collapsed); {
-		for i < len(collapsed) && collapsed[i] == ' ' {
-			i++
+	tokens := sc.tokens[:0]
+	if header != nil && lineIdx > 0 {
+		for i := 0; i < len(collapsed); {
+			for i < len(collapsed) && collapsed[i] == ' ' {
+				i++
+			}
+			if i >= len(collapsed) {
+				break
+			}
+			st := i
+			for i < len(collapsed) && collapsed[i] != ' ' {
+				i++
+			}
+			tokens = append(tokens, byteSpan{st, i})
 		}
-		if i >= len(collapsed) {
-			break
-		}
-		st := i
-		for i < len(collapsed) && collapsed[i] != ' ' {
-			i++
-		}
-		tokens = append(tokens, byteSpan{st, i})
 	}
+	sc.tokens = tokens
 
 	var rowKey string
 	if header != nil && lineIdx > 0 && len(tokens) >= 2 {
@@ -506,19 +723,20 @@ func assignLineSlotLabels(
 	}
 
 	for idx, rs := range lineSlots {
-		if len(*dst) >= MaxSlotsPerTask {
+		if len(sc.slots) >= MaxSlotsPerTask {
 			return
 		}
-		baseLabel := inferSlotLabel(collapsed, lineIdx, idx, rs, header, tokens, rowKey)
-		if streamPrefix != "" {
-			baseLabel = streamPrefix + baseLabel
-		}
-		label := dedupSanitizedLabel(baseLabel, usedLabels)
-		unit := SanitizeLabel(rs.unit)
 		if !isFiniteFloat(rs.value) {
 			continue
 		}
-		*dst = append(*dst, MetricSlot{
+		buf := sc.labelBuf[:0]
+		if streamPrefix != "" {
+			buf = append(buf, streamPrefix...)
+		}
+		buf = appendInferredSlotLabel(buf, collapsed, lineIdx, idx, rs, header, tokens, rowKey)
+		label := dedupSanitizedLabelFromBytes(buf, sc)
+		unit := SanitizeLabel(rs.unit)
+		sc.slots = append(sc.slots, MetricSlot{
 			Label:     label,
 			Unit:      unit,
 			Value:     rs.value,
@@ -527,16 +745,8 @@ func assignLineSlotLabels(
 	}
 }
 
-func isSlotStartingAt(slots []rawLineSlot, pos int) bool {
-	for _, s := range slots {
-		if s.start == pos {
-			return true
-		}
-	}
-	return false
-}
-
-func inferSlotLabel(
+func appendInferredSlotLabel(
+	buf []byte,
 	line string,
 	lineIdx int,
 	slotIdx int,
@@ -544,13 +754,17 @@ func inferSlotLabel(
 	header *tableHeaderInfo,
 	tokens []byteSpan,
 	rowKey string,
-) string {
-	// 1. Check immediate KV prefix before rs.start (e.g. "Memory: 12.4M", "used=4123", "limit: 19062").
-	if key := findKVKeyBefore(line, rs.start); key != "" {
-		return key
+) []byte {
+	if key, commaIdx := findKVKeyBeforeParts(line, rs.start); key != "" {
+		buf = append(buf, key...)
+		if commaIdx > 0 {
+			buf = append(buf, '[')
+			buf = strconv.AppendInt(buf, int64(commaIdx), 10)
+			buf = append(buf, ']')
+		}
+		return buf
 	}
 
-	// 2. Check table header mapping (e.g. df -h, free -m).
 	if header != nil && rowKey != "" {
 		colIdx := -1
 		for ti, tok := range tokens {
@@ -565,24 +779,38 @@ func inferSlotLabel(
 				hIdx = colIdx - 1
 			}
 			if hIdx >= 0 && hIdx < len(header.cols) {
-				return rowKey + "." + header.cols[hIdx]
+				buf = append(buf, rowKey...)
+				buf = append(buf, '.')
+				buf = append(buf, header.cols[hIdx]...)
+				return buf
 			}
 		}
 	}
 
-	// 3. Fallback positional label.
-	return "line" + strconv.Itoa(lineIdx) + ".slot" + strconv.Itoa(slotIdx)
+	buf = append(buf, "line"...)
+	buf = strconv.AppendInt(buf, int64(lineIdx), 10)
+	buf = append(buf, ".slot"...)
+	buf = strconv.AppendInt(buf, int64(slotIdx), 10)
+	return buf
 }
 
-func findKVKeyBefore(line string, start int) string {
+func isSlotStartingAt(slots []rawLineSlot, pos int) bool {
+	for _, s := range slots {
+		if s.start == pos {
+			return true
+		}
+	}
+	return false
+}
+
+func findKVKeyBeforeParts(line string, start int) (string, int) {
 	j := start
 	for j > 0 && line[j-1] == ' ' {
 		j--
 	}
 	if j == 0 {
-		return ""
+		return "", 0
 	}
-	// Handle comma-separated values after a key like "load average: 0.42, 0.38, 0.35".
 	commaIdx := 0
 	for j > 0 && (line[j-1] == ',' || line[j-1] == ' ' || isDigit(line[j-1]) || line[j-1] == '.') {
 		if line[j-1] == ',' {
@@ -591,7 +819,7 @@ func findKVKeyBefore(line string, start int) string {
 		j--
 	}
 	if j == 0 || (line[j-1] != ':' && line[j-1] != '=') {
-		return ""
+		return "", 0
 	}
 	sep := line[j-1]
 	j--
@@ -599,13 +827,11 @@ func findKVKeyBefore(line string, start int) string {
 		j--
 	}
 	if j == 0 {
-		return ""
+		return "", 0
 	}
-	// If commaIdx > 0, only allow multi-value keys with ':'.
 	if commaIdx > 0 && sep != ':' {
-		return ""
+		return "", 0
 	}
-	// Scan key backwards (allow letters, digits, '_', '-', '.', '/', and up to 1 space for two-word keys like "load average").
 	end := j
 	spaces := 0
 	for j > 0 {
@@ -613,7 +839,6 @@ func findKVKeyBefore(line string, start int) string {
 		if isAlphaNum(c) || c == '_' || c == '-' || c == '.' || c == '/' {
 			j--
 		} else if c == ' ' && sep == ':' && spaces < 1 {
-			// Peek whether previous char is a letter.
 			if j >= 2 && isAlpha(line[j-2]) {
 				spaces++
 				j--
@@ -626,12 +851,70 @@ func findKVKeyBefore(line string, start int) string {
 	}
 	key := strings.TrimSpace(line[j:end])
 	if key == "" || !containsAlpha(key) {
-		return ""
+		return "", 0
 	}
-	if commaIdx > 0 {
-		return key + "[" + strconv.Itoa(commaIdx) + "]"
+	return key, commaIdx
+}
+
+func dedupSanitizedLabelFromBytes(raw []byte, sc *normalizeScratch) string {
+	var cleanBuf [MaxLabelBytes + 12]byte
+	var clean []byte
+	if len(raw) > 0 && len(raw) <= MaxLabelBytes && isCleanASCIILabelBytes(raw) {
+		clean = append(cleanBuf[:0], raw...)
+	} else {
+		s := SanitizeLabel(string(raw))
+		clean = append(cleanBuf[:0], s...)
 	}
-	return key
+	if len(clean) == 0 {
+		clean = append(cleanBuf[:0], "metric"...)
+	}
+	cnt := sc.usedLabels[string(clean)]
+	if cnt == 0 {
+		interned := sc.internLabel(clean)
+		sc.usedLabels[interned] = 1
+		return interned
+	}
+	// Increment existing entry using zero-alloc string conversion lookup.
+	baseInterned := sc.internLabel(clean)
+	sc.usedLabels[baseInterned] = cnt + 1
+
+	var sufBuf [12]byte
+	suf := append(sufBuf[:0], '#')
+	suf = strconv.AppendInt(suf, int64(cnt+1), 10)
+	if len(clean)+len(suf) > MaxLabelBytes {
+		maxBase := MaxLabelBytes - len(suf)
+		for maxBase > 0 && !utf8.RuneStart(clean[maxBase]) {
+			maxBase--
+		}
+		clean = clean[:maxBase]
+		for len(clean) > 0 && clean[len(clean)-1] == ' ' {
+			clean = clean[:len(clean)-1]
+		}
+	}
+	clean = append(clean, suf...)
+	return sc.internLabel(clean)
+}
+
+func isCleanASCIILabelBytes(s []byte) bool {
+	if s[0] == ' ' || s[len(s)-1] == ' ' {
+		return false
+	}
+	prevSpace := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < 0x20 || c >= 0x7f {
+			return false
+		}
+		if c == ' ' {
+			if prevSpace {
+				return false
+			}
+			prevSpace = true
+		} else {
+			prevSpace = false
+		}
+	}
+	return true
 }
 
 func containsAlpha(s string) bool {
@@ -663,23 +946,108 @@ func dedupSanitizedLabel(raw string, used map[string]int) string {
 
 // scanLine runs the single-pass O(N) lexical scanner on a whitespace-collapsed line.
 func scanLine(line string, hm hostMatcher, maskIPs bool) (string, []rawLineSlot) {
-	n := len(line)
-	if n == 0 {
+	if line == "" {
 		return "", nil
 	}
-
 	var b strings.Builder
-	b.Grow(n)
+	b.Grow(len(line))
 	var slots []rawLineSlot
+	scanLineInto(&b, line, hm, maskIPs, true, &slots)
+	return b.String(), slots
+}
 
+// scanLineInto writes the normalized version of collapsed line directly into b,
+// appending extracted numeric slots to *slots when collectSlots is true.
+func scanLineInto(b *strings.Builder, line string, hm hostMatcher, maskIPs bool, collectSlots bool, slots *[]rawLineSlot) {
+	n := len(line)
 	for i := 0; i < n; {
-		// Priority 1: [REDACTED:...] preserved verbatim.
-		if line[i] == '[' && strings.HasPrefix(line[i:], "[REDACTED:") {
-			if closeIdx := strings.IndexByte(line[i:], ']'); closeIdx > 0 {
-				b.WriteString(line[i : i+closeIdx+1])
-				i += closeIdx + 1
+		c := line[i]
+
+		// Fast path: space never starts a lexical token (unless hostname somehow starts with space, which TrimSpace prevents).
+		if c == ' ' {
+			b.WriteByte(' ')
+			i++
+			continue
+		}
+
+		// Non-ASCII UTF-8 bytes: never split multi-byte runes.
+		if c >= utf8.RuneSelf {
+			if mLen := hm.match(line, i); mLen > 0 {
+				b.WriteString("<HOST>")
+				i += mLen
 				continue
 			}
+			// Priority 10b: systemd CGroup tree PID ("├─12345" or "└─12345").
+			if c == 0xe2 {
+				if pidPrefixLen, pidTotalLen, pidSuffix := matchCGroupPID(line, i); pidTotalLen > 0 {
+					b.WriteString(line[i : i+pidPrefixLen])
+					b.WriteString("<PID>")
+					b.WriteString(pidSuffix)
+					i += pidTotalLen
+					continue
+				}
+			}
+			_, size := utf8.DecodeRuneInString(line[i:])
+			b.WriteString(line[i : i+size])
+			i += size
+			continue
+		}
+
+		// Fast path for '[': only [REDACTED:...], bracketed IPv6, syslog [PID]:, or hostname.
+		if c == '[' {
+			// Priority 1: [REDACTED:...] preserved verbatim.
+			if strings.HasPrefix(line[i:], "[REDACTED:") {
+				if closeIdx := strings.IndexByte(line[i:], ']'); closeIdx > 0 {
+					b.WriteString(line[i : i+closeIdx+1])
+					i += closeIdx + 1
+					continue
+				}
+			}
+			if mLen := hm.match(line, i); mLen > 0 {
+				b.WriteString("<HOST>")
+				i += mLen
+				continue
+			}
+			if ipLen, hasPort := matchBracketIPv6(line, i); ipLen > 0 {
+				if maskIPs {
+					if hasPort {
+						b.WriteString("<IP_PORT>")
+					} else {
+						b.WriteString("<IP>")
+					}
+				} else {
+					b.WriteString(line[i : i+ipLen])
+				}
+				i += ipLen
+				continue
+			}
+			if pidPrefixLen, pidTotalLen, pidSuffix := matchBracketPID(line, i); pidTotalLen > 0 {
+				b.WriteString(line[i : i+pidPrefixLen])
+				b.WriteString("<PID>")
+				b.WriteString(pidSuffix)
+				i += pidTotalLen
+				continue
+			}
+			b.WriteByte('[')
+			i++
+			continue
+		}
+
+		// If previous byte is alphanumeric, NO token other than '[' (handled above) can start here;
+		// copy the entire remaining alphanumeric run in one tight loop.
+		if i > 0 && isAlphaNum(line[i-1]) {
+			if isAlphaNum(c) {
+				start := i
+				i++
+				for i < n && isAlphaNum(line[i]) {
+					i++
+				}
+				b.WriteString(line[start:i])
+				continue
+			}
+			b.WriteByte(c)
+			i++
+			continue
 		}
 
 		// Priority 2: Task's own hostname & eligible short hostname -> <HOST>.
@@ -689,139 +1057,238 @@ func scanLine(line string, hm hostMatcher, maskIPs bool) (string, []rawLineSlot)
 			continue
 		}
 
-		// Priority 3: Timestamps (ISO8601/RFC3339, slash date, CLF date, syslog/systemd datetime) -> <TS>.
-		if tsLen := matchTimestamp(line, i); tsLen > 0 {
-			b.WriteString("<TS>")
-			i += tsLen
-			continue
-		}
-
-		// Priority 4: Pure clock time HH:MM:SS(.fff) -> <TIME>.
-		if timeLen := matchClockTime(line, i); timeLen > 0 {
-			b.WriteString("<TIME>")
-			i += timeLen
-			continue
-		}
-
-		// Priority 5: UUID (8-4-4-4-12 hex) -> <UUID>.
-		if uuidLen := matchUUID(line, i); uuidLen > 0 {
-			b.WriteString("<UUID>")
-			i += uuidLen
-			continue
-		}
-
-		// Priority 6: IPv4 / IPv6 (with optional :port / /cidr) -> <IP> / <IP_PORT> (or verbatim if !maskIPs).
-		if ipLen, hasPort := matchIP(line, i); ipLen > 0 {
-			if maskIPs {
-				if hasPort {
-					b.WriteString("<IP_PORT>")
+		if isDigit(c) {
+			// Priority 3: ISO / slash / CLF timestamps starting with digit.
+			if tsLen := matchDigitTimestamp(line, i); tsLen > 0 {
+				b.WriteString("<TS>")
+				i += tsLen
+				continue
+			}
+			// Priority 4: Pure clock time HH:MM:SS(.fff).
+			if timeLen := matchClockTime(line, i); timeLen > 0 {
+				b.WriteString("<TIME>")
+				i += timeLen
+				continue
+			}
+			// Priority 5: UUID (8-4-4-4-12 hex).
+			if uuidLen := matchUUID(line, i); uuidLen > 0 {
+				b.WriteString("<UUID>")
+				i += uuidLen
+				continue
+			}
+			// Priority 6: IPv4 / bare IPv6 starting with digit.
+			if ipLen, hasPort := matchBareIP(line, i); ipLen > 0 {
+				if maskIPs {
+					if hasPort {
+						b.WriteString("<IP_PORT>")
+					} else {
+						b.WriteString("<IP>")
+					}
 				} else {
-					b.WriteString("<IP>")
+					b.WriteString(line[i : i+ipLen])
 				}
-			} else {
-				b.WriteString(line[i : i+ipLen])
+				i += ipLen
+				continue
 			}
-			i += ipLen
-			continue
-		}
-
-		// Priority 7: 0xHEX and length >= 8 hex strings containing at least one digit and one hex letter -> <HEX>.
-		if hexLen := matchHexToken(line, i); hexLen > 0 {
-			b.WriteString("<HEX>")
-			i += hexLen
-			continue
-		}
-
-		// Priority 9a (before Priority 8 for HTTP/1.1 500): Semantic status / exit code contexts -> preserve verbatim.
-		if semLen := matchSemanticCode(line, i); semLen > 0 {
-			b.WriteString(line[i : i+semLen])
-			i += semLen
-			continue
-		}
-
-		// Priority 8: Version numbers (SemVer / name/x.y[.z]) -> preserve verbatim.
-		if verLen := matchVersion(line, i); verLen > 0 {
-			b.WriteString(line[i : i+verLen])
-			i += verLen
-			continue
-		}
-
-		// Priority 10: Explicit PID contexts (pid=123, PID: 123, Main PID: 123, [123]:, ├─123) -> <PID>.
-		if pidPrefixLen, pidTotalLen, pidSuffix := matchPID(line, i); pidTotalLen > 0 {
-			b.WriteString(line[i : i+pidPrefixLen])
-			b.WriteString("<PID>")
-			b.WriteString(pidSuffix)
-			i += pidTotalLen
-			continue
-		}
-
-		// Priority 11: Durations (123ms, 4.5s, 12m34s, 3h20m, 2h 30min, 42 days, 5 hours, 3 min) -> <DUR>.
-		if durLen, msVal, ok := matchDuration(line, i); ok {
-			b.WriteString("<DUR>")
-			if isFiniteFloat(msVal) {
-				slots = append(slots, rawLineSlot{
-					start: i,
-					end:   i + durLen,
-					unit:  "ms",
-					value: msVal,
-				})
+			// Priority 7: 0xHEX or >= 8 hex token.
+			if hexLen := matchHexToken(line, i); hexLen > 0 {
+				b.WriteString("<HEX>")
+				i += hexLen
+				continue
 			}
-			i += durLen
-			continue
-		}
-
-		// Priority 12: Percentages (42%, 99.2%) -> <PCT>.
-		if pctLen, pctVal, ok := matchPercentage(line, i); ok {
-			b.WriteString("<PCT>")
-			if isFiniteFloat(pctVal) {
-				slots = append(slots, rawLineSlot{
-					start: i,
-					end:   i + pctLen,
-					unit:  "%",
-					value: pctVal,
-				})
+			// Priority 8: Dotted SemVer starting with digit (e.g. 1.24.0).
+			if verLen := matchDigitVersion(line, i); verLen > 0 {
+				b.WriteString(line[i : i+verLen])
+				i += verLen
+				continue
 			}
-			i += pctLen
-			continue
-		}
-
-		// Priority 13: Byte / capacity units (128K, 4.2G, 512MiB, 1024KB, 2.5T, 4096B) -> <SIZE>.
-		if sizeLen, byteVal, ok := matchSize(line, i); ok {
-			b.WriteString("<SIZE>")
-			if isFiniteFloat(byteVal) {
-				slots = append(slots, rawLineSlot{
-					start: i,
-					end:   i + sizeLen,
-					unit:  "bytes",
-					value: byteVal,
-				})
+			// Priority 11: Durations -> <DUR>.
+			if durLen, msVal, ok := matchDuration(line, i, collectSlots); ok {
+				b.WriteString("<DUR>")
+				if collectSlots && isFiniteFloat(msVal) {
+					*slots = append(*slots, rawLineSlot{
+						start: i,
+						end:   i + durLen,
+						unit:  "ms",
+						value: msVal,
+					})
+				}
+				i += durLen
+				continue
 			}
-			i += sizeLen
-			continue
-		}
-
-		// Priority 14: Standalone integers / floats -> <NUM>.
-		if numLen, numVal, isInt, finite, ok := matchStandaloneNumber(line, i); ok {
-			b.WriteString("<NUM>")
-			if finite {
-				slots = append(slots, rawLineSlot{
-					start:     i,
-					end:       i + numLen,
-					unit:      "",
-					value:     numVal,
-					isInteger: isInt,
-				})
+			// Priority 12: Percentages -> <PCT>.
+			if pctLen, pctVal, ok := matchPercentage(line, i, collectSlots); ok {
+				b.WriteString("<PCT>")
+				if collectSlots && isFiniteFloat(pctVal) {
+					*slots = append(*slots, rawLineSlot{
+						start: i,
+						end:   i + pctLen,
+						unit:  "%",
+						value: pctVal,
+					})
+				}
+				i += pctLen
+				continue
 			}
-			i += numLen
+			// Priority 13: Byte / capacity units -> <SIZE>.
+			if sizeLen, byteVal, ok := matchSize(line, i, collectSlots); ok {
+				b.WriteString("<SIZE>")
+				if collectSlots && isFiniteFloat(byteVal) {
+					*slots = append(*slots, rawLineSlot{
+						start: i,
+						end:   i + sizeLen,
+						unit:  "bytes",
+						value: byteVal,
+					})
+				}
+				i += sizeLen
+				continue
+			}
+			// Priority 14: Standalone integers / floats -> <NUM>.
+			if numLen, numVal, isInt, finite, ok := matchStandaloneNumber(line, i, collectSlots); ok {
+				b.WriteString("<NUM>")
+				if collectSlots && finite {
+					*slots = append(*slots, rawLineSlot{
+						start:     i,
+						end:       i + numLen,
+						unit:      "",
+						value:     numVal,
+						isInteger: isInt,
+					})
+				}
+				i += numLen
+				continue
+			}
+			// Unmatched digit token (e.g. "0th" or "123abc"): copy alphanumeric run at once.
+			start := i
+			i++
+			for i < n && isAlphaNum(line[i]) {
+				i++
+			}
+			b.WriteString(line[start:i])
 			continue
 		}
 
-		// Default: copy byte verbatim.
-		b.WriteByte(line[i])
+		if isAlpha(c) {
+			// Priority 3: Weekday / Month timestamps (only uppercase starting letters).
+			if c >= 'A' && c <= 'Z' {
+				if tsLen := matchAlphaTimestamp(line, i); tsLen > 0 {
+					b.WriteString("<TS>")
+					i += tsLen
+					continue
+				}
+			}
+			// Priority 5, 6, 7: UUID, bare IPv6, Hex (only when starting with hex letter a-f/A-F).
+			if isHexLetter(c) {
+				if uuidLen := matchUUID(line, i); uuidLen > 0 {
+					b.WriteString("<UUID>")
+					i += uuidLen
+					continue
+				}
+				if ipLen, hasPort := matchBareIPv6(line, i); ipLen > 0 {
+					if maskIPs {
+						if hasPort {
+							b.WriteString("<IP_PORT>")
+						} else {
+							b.WriteString("<IP>")
+						}
+					} else {
+						b.WriteString(line[i : i+ipLen])
+					}
+					i += ipLen
+					continue
+				}
+				if hexLen := matchHexToken(line, i); hexLen > 0 {
+					b.WriteString("<HEX>")
+					i += hexLen
+					continue
+				}
+			}
+			// Priority 9: Semantic status / exit code contexts (HTTP, Exited, status, exit_code, signal, errno, code).
+			lc := toLowerASCII(c)
+			if lc == 'h' || lc == 'e' || lc == 's' || lc == 'c' {
+				if semLen := matchSemanticCode(line, i); semLen > 0 {
+					b.WriteString(line[i : i+semLen])
+					i += semLen
+					continue
+				}
+			}
+			// Priority 8: Version numbers (v1.2.3 or name/1.24.0).
+			if verLen := matchAlphaVersion(line, i); verLen > 0 {
+				b.WriteString(line[i : i+verLen])
+				i += verLen
+				continue
+			}
+			// Priority 10: Explicit keyword PID (Main PID, pid, ppid, tgid).
+			if lc == 'm' || lc == 'p' || lc == 't' {
+				if pidPrefixLen, pidTotalLen, pidSuffix := matchKeywordPID(line, i); pidTotalLen > 0 {
+					b.WriteString(line[i : i+pidPrefixLen])
+					b.WriteString("<PID>")
+					b.WriteString(pidSuffix)
+					i += pidTotalLen
+					continue
+				}
+			}
+			// Plain word/identifier: copy entire alphanumeric run at once!
+			start := i
+			i++
+			for i < n && isAlphaNum(line[i]) {
+				i++
+			}
+			b.WriteString(line[start:i])
+			continue
+		}
+
+		if c == '-' && i+1 < n && isDigit(line[i+1]) {
+			if pctLen, pctVal, ok := matchPercentage(line, i, collectSlots); ok {
+				b.WriteString("<PCT>")
+				if collectSlots && isFiniteFloat(pctVal) {
+					*slots = append(*slots, rawLineSlot{
+						start: i,
+						end:   i + pctLen,
+						unit:  "%",
+						value: pctVal,
+					})
+				}
+				i += pctLen
+				continue
+			}
+			if numLen, numVal, isInt, finite, ok := matchStandaloneNumber(line, i, collectSlots); ok {
+				b.WriteString("<NUM>")
+				if collectSlots && finite {
+					*slots = append(*slots, rawLineSlot{
+						start:     i,
+						end:       i + numLen,
+						unit:      "",
+						value:     numVal,
+						isInteger: isInt,
+					})
+				}
+				i += numLen
+				continue
+			}
+		}
+
+		if c == ':' && i+1 < n && line[i+1] == ':' {
+			if ipLen, hasPort := matchBareIPv6(line, i); ipLen > 0 {
+				if maskIPs {
+					if hasPort {
+						b.WriteString("<IP_PORT>")
+					} else {
+						b.WriteString("<IP>")
+					}
+				} else {
+					b.WriteString(line[i : i+ipLen])
+				}
+				i += ipLen
+				continue
+			}
+		}
+
+		// Default: copy punctuation byte verbatim.
+		b.WriteByte(c)
 		i++
 	}
-
-	return b.String(), slots
 }
 
 func isDigit(b byte) bool {
@@ -840,8 +1307,12 @@ func isIdentChar(b byte) bool {
 	return isAlphaNum(b) || b == '_'
 }
 
+func isHexLetter(b byte) bool {
+	return (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+}
+
 func isHexChar(b byte) bool {
-	return isDigit(b) || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+	return isDigit(b) || isHexLetter(b)
 }
 
 func toLowerASCII(b byte) byte {
@@ -900,7 +1371,6 @@ func isMonth3(s string) bool {
 }
 
 func isTimezoneAbbr(s string) int {
-	// Common 3-4 letter uppercase TZ abbreviations (UTC, GMT, CST, EST, PST, EDT, PDT, CET, CEST, JST, IST, BST, MST, MDT).
 	if len(s) >= 4 {
 		switch s[:4] {
 		case "CEST", "AEDT", "AEST", "AKST", "AKDT", "ACST", "AWST":
@@ -920,7 +1390,6 @@ func isTimezoneAbbr(s string) int {
 	return 0
 }
 
-// matchTimePart matches HH:MM:SS(.frac)? starting at s[0], returning bytes consumed.
 func matchTimePart(s string) int {
 	if len(s) < 8 || s[2] != ':' || s[5] != ':' {
 		return 0
@@ -944,7 +1413,6 @@ func matchTimePart(s string) int {
 	return pos
 }
 
-// matchTZPart matches optional timezone suffix: Z, +HH:MM, +HHMM, " +HHMM", " UTC", " +0800 CST".
 func matchTZPart(s string) int {
 	if len(s) == 0 {
 		return 0
@@ -972,7 +1440,6 @@ func matchTZPart(s string) int {
 		rest := s[1:]
 		if tzOff := matchTZPart(rest); tzOff > 0 && rest[0] != ' ' {
 			total := 1 + tzOff
-			// Handle " +0800 CST" as produced by docker ps CreatedAt.
 			if total < len(s) && s[total] == ' ' {
 				if abbr := isTimezoneAbbr(s[total+1:]); abbr > 0 {
 					total += 1 + abbr
@@ -987,19 +1454,13 @@ func matchTZPart(s string) int {
 	return 0
 }
 
-// matchTimestamp matches Priority 3 timestamps at line[i].
-func matchTimestamp(line string, i int) int {
-	if i > 0 && isAlphaNum(line[i-1]) {
-		return 0
-	}
+func matchAlphaTimestamp(line string, i int) int {
 	s := line[i:]
 	n := len(s)
-	if n < 10 {
+	if n < 14 {
 		return 0
 	}
-
-	// 3a. Optional weekday prefix for systemd / asctime: "Mon 2026-11-24 10:00:00 UTC" or "Mon Nov 24 12:34:56 UTC 2026"
-	if n >= 15 && isWeekday3(s) && s[3] == ' ' {
+	if n >= 15 && s[3] == ' ' && isWeekday3(s) {
 		rest := s[4:]
 		if sub := matchISODateTime(rest, true); sub > 0 {
 			end := 4 + sub
@@ -1014,15 +1475,29 @@ func matchTimestamp(line string, i int) int {
 			}
 		}
 	}
-
-	// 3b. ISO8601/RFC3339 or slash date: YYYY-MM-DD[...] or YYYY/MM/DD[...]
-	if sub := matchISODateTime(s, false); sub > 0 {
-		if sub == n || !isAlphaNum(s[sub]) {
-			return sub
+	if s[3] == ' ' {
+		if sub := matchSyslogDateTime(s, false); sub > 0 {
+			if sub == n || !isAlphaNum(s[sub]) {
+				return sub
+			}
 		}
 	}
+	return 0
+}
 
-	// 3c. CLF date: DD/Mon/YYYY:HH:MM:SS( +HHMM)?
+func matchDigitTimestamp(line string, i int) int {
+	s := line[i:]
+	n := len(s)
+	if n < 10 {
+		return 0
+	}
+	if (s[4] == '-' || s[4] == '/') && s[7] == s[4] {
+		if sub := matchISODateTime(s, false); sub > 0 {
+			if sub == n || !isAlphaNum(s[sub]) {
+				return sub
+			}
+		}
+	}
 	if n >= 20 && s[2] == '/' && s[6] == '/' && s[11] == ':' {
 		dd, ok1 := parse2Digits(s[0:2])
 		yy, ok2 := parse4Digits(s[7:11])
@@ -1036,14 +1511,6 @@ func matchTimestamp(line string, i int) int {
 			}
 		}
 	}
-
-	// 3d. Syslog date: Mon DD HH:MM:SS (or Mon D HH:MM:SS)
-	if sub := matchSyslogDateTime(s, false); sub > 0 {
-		if sub == n || !isAlphaNum(s[sub]) {
-			return sub
-		}
-	}
-
 	return 0
 }
 
@@ -1072,7 +1539,6 @@ func matchISODateTime(s string, requireTime bool) int {
 	if requireTime {
 		return 0
 	}
-	// Standalone date YYYY-MM-DD or YYYY/MM/DD (must not be followed by another dash/slash+digit like a path/ID).
 	if pos < len(s) && (s[pos] == '-' || s[pos] == '/' || isAlphaNum(s[pos])) {
 		return 0
 	}
@@ -1080,7 +1546,7 @@ func matchISODateTime(s string, requireTime bool) int {
 }
 
 func matchSyslogDateTime(s string, allowYear bool) int {
-	if len(s) < 14 || !isMonth3(s) || s[3] != ' ' {
+	if len(s) < 14 || s[3] != ' ' || !isMonth3(s) {
 		return 0
 	}
 	pos := 4
@@ -1111,9 +1577,11 @@ func matchSyslogDateTime(s string, allowYear bool) int {
 	return pos
 }
 
-// matchClockTime matches Priority 4: HH:MM:SS(.fff)?.
 func matchClockTime(line string, i int) int {
-	if i > 0 && (isAlphaNum(line[i-1]) || line[i-1] == ':') {
+	if i+8 > len(line) || line[i+2] != ':' || line[i+5] != ':' {
+		return 0
+	}
+	if i > 0 && line[i-1] == ':' {
 		return 0
 	}
 	tLen := matchTimePart(line[i:])
@@ -1127,11 +1595,7 @@ func matchClockTime(line string, i int) int {
 	return tLen
 }
 
-// matchUUID matches Priority 5: 8-4-4-4-12 hex.
 func matchUUID(line string, i int) int {
-	if i > 0 && isAlphaNum(line[i-1]) {
-		return 0
-	}
 	if i+36 > len(line) {
 		return 0
 	}
@@ -1152,47 +1616,59 @@ func matchUUID(line string, i int) int {
 	return 36
 }
 
-// matchIP matches Priority 6: IPv4 / IPv6 with optional :port or /cidr.
-func matchIP(line string, i int) (int, bool) {
+func matchBracketIPv6(line string, i int) (int, bool) {
 	n := len(line)
-	// Bracketed IPv6: [addr] or [addr]:port
-	if line[i] == '[' {
-		if i > 0 && isAlphaNum(line[i-1]) {
-			return 0, false
-		}
-		closeIdx := strings.IndexByte(line[i+1:min(n, i+48)], ']')
-		if closeIdx > 0 {
-			inner := line[i+1 : i+1+closeIdx]
-			if strings.ContainsRune(inner, ':') {
-				if addr, err := netip.ParseAddr(inner); err == nil && addr.Is6() {
-					end := i + 1 + closeIdx + 1
-					if end < n && line[end] == ':' {
-						if pLen := matchPort(line[end+1:]); pLen > 0 {
-							end += 1 + pLen
-							if end == n || !isAlphaNum(line[end]) {
-								return end - i, true
-							}
-						}
-					}
-					if end == n || !isAlphaNum(line[end]) {
-						return end - i, false
-					}
-				}
+	if i > 0 && isAlphaNum(line[i-1]) {
+		return 0, false
+	}
+	closeIdx := strings.IndexByte(line[i+1:min(n, i+48)], ']')
+	if closeIdx <= 0 {
+		return 0, false
+	}
+	inner := line[i+1 : i+1+closeIdx]
+	if !strings.ContainsRune(inner, ':') {
+		return 0, false
+	}
+	addr, err := netip.ParseAddr(inner)
+	if err != nil || !addr.Is6() {
+		return 0, false
+	}
+	end := i + 1 + closeIdx + 1
+	if end < n && line[end] == ':' {
+		if pLen := matchPort(line[end+1:]); pLen > 0 {
+			end += 1 + pLen
+			if end == n || !isAlphaNum(line[end]) {
+				return end - i, true
 			}
 		}
-		return 0, false
 	}
+	if end == n || !isAlphaNum(line[end]) {
+		return end - i, false
+	}
+	return 0, false
+}
 
-	// Left boundary for bare IPv4/IPv6.
-	if i > 0 && (isAlphaNum(line[i-1]) || line[i-1] == '.') {
+func matchBareIP(line string, i int) (int, bool) {
+	if i > 0 && line[i-1] == '.' {
 		return 0, false
 	}
-	// Do not match version-like "name/1.2.3.4" where single '/' follows an identifier char.
 	if i > 0 && line[i-1] == '/' && (i >= 2 && isAlphaNum(line[i-2])) {
 		return 0, false
 	}
+	if v4Len, hasPort := matchIPv4(line, i); v4Len > 0 {
+		return v4Len, hasPort
+	}
+	return matchBareIPv6(line, i)
+}
 
-	// Special Docker/netstat IPv6 unspecified with port: ":::8080" -> "::" + ":8080"
+func matchBareIPv6(line string, i int) (int, bool) {
+	n := len(line)
+	if i > 0 && line[i-1] == '.' {
+		return 0, false
+	}
+	if i > 0 && line[i-1] == '/' && (i >= 2 && isAlphaNum(line[i-2])) {
+		return 0, false
+	}
 	if strings.HasPrefix(line[i:], ":::") {
 		if pLen := matchPort(line[i+3:]); pLen > 0 {
 			end := i + 3 + pLen
@@ -1201,20 +1677,6 @@ func matchIP(line string, i int) (int, bool) {
 			}
 		}
 	}
-
-	// Fast candidate scan (max 45 bytes for IPv6).
-	if !isHexChar(line[i]) && line[i] != ':' {
-		return 0, false
-	}
-
-	// Try IPv4 first when starting with a digit.
-	if isDigit(line[i]) {
-		if v4Len, hasPort := matchIPv4(line, i); v4Len > 0 {
-			return v4Len, hasPort
-		}
-	}
-
-	// Try bare IPv6 (must contain at least two colons).
 	maxEnd := min(n, i+46)
 	j := i
 	colons := 0
@@ -1232,7 +1694,6 @@ func matchIP(line string, i int) (int, bool) {
 	if colons < 2 {
 		return 0, false
 	}
-	// Trim trailing ':' if any (unless "::").
 	cand := line[i:j]
 	if len(cand) > 2 && cand[len(cand)-1] == ':' && cand[len(cand)-2] != ':' {
 		cand = cand[:len(cand)-1]
@@ -1280,7 +1741,6 @@ func matchIPv4(line string, i int) (int, bool) {
 	if pos < n && (line[pos] == '.' || isAlphaNum(line[pos])) {
 		return 0, false
 	}
-	// Optional :port
 	if pos < n && line[pos] == ':' {
 		if pLen := matchPort(line[pos+1:]); pLen > 0 {
 			end := pos + 1 + pLen
@@ -1289,7 +1749,6 @@ func matchIPv4(line string, i int) (int, bool) {
 			}
 		}
 	}
-	// Optional /cidr
 	if pos < n && line[pos] == '/' {
 		if cLen := matchCIDR(line[pos+1:], 32); cLen > 0 {
 			end := pos + 1 + cLen
@@ -1333,14 +1792,11 @@ func matchCIDR(s string, maxBits int) int {
 	return j
 }
 
-// matchHexToken matches Priority 7: 0x[0-9a-fA-F]+ or length >= 8 hex string with
-// at least one digit and at least one hex letter (a-f/A-F).
 func matchHexToken(line string, i int) int {
-	if i > 0 && isIdentChar(line[i-1]) {
+	if i > 0 && line[i-1] == '_' {
 		return 0
 	}
 	n := len(line)
-	// Form A: 0x... / 0X...
 	if i+2 < n && line[i] == '0' && (line[i+1] == 'x' || line[i+1] == 'X') && isHexChar(line[i+2]) {
 		j := i + 2
 		for j < n && isHexChar(line[j]) {
@@ -1351,22 +1807,18 @@ func matchHexToken(line string, i int) int {
 		}
 		return j - i
 	}
-	// Form B: length >= 8 pure hex with at least one digit and at least one hex letter.
-	if !isHexChar(line[i]) {
-		return 0
-	}
 	j := i
 	hasDigit := false
-	hasHexLetter := false
+	hasHex := false
 	for j < n && isHexChar(line[j]) {
 		if isDigit(line[j]) {
 			hasDigit = true
 		} else {
-			hasHexLetter = true
+			hasHex = true
 		}
 		j++
 	}
-	if j-i < 8 || !hasDigit || !hasHexLetter {
+	if j-i < 8 || !hasDigit || !hasHex {
 		return 0
 	}
 	if j < n && isIdentChar(line[j]) {
@@ -1375,15 +1827,26 @@ func matchHexToken(line string, i int) int {
 	return j - i
 }
 
-// matchSemanticCode matches Priority 9: HTTP status codes, status=/exit_code=/Exited (N)/signal N.
+var semanticKeywords = [...]string{
+	"http_status",
+	"status_code",
+	"exit_status",
+	"exit_code",
+	"exit code",
+	"exitcode",
+	"status",
+	"signal",
+	"errno",
+	"code",
+}
+
 func matchSemanticCode(line string, i int) int {
-	if i > 0 && isIdentChar(line[i-1]) {
+	if i > 0 && line[i-1] == '_' {
 		return 0
 	}
 	s := line[i:]
 	n := len(s)
 
-	// 9a. HTTP/1.x <code>, HTTP/2 <code>, HTTP/2.0 <code>, HTTP/3 <code>, HTTP <code>
 	if hasPrefixFold(s, "HTTP") && n >= 8 {
 		pos := 4
 		if pos < n && s[pos] == '/' {
@@ -1418,7 +1881,6 @@ func matchSemanticCode(line string, i int) int {
 		}
 	}
 
-	// 9b. Exited (137) / Exited(0)
 	if hasPrefixFold(s, "exited") && n >= 9 {
 		pos := 6
 		if pos < n && s[pos] == ' ' {
@@ -1436,20 +1898,7 @@ func matchSemanticCode(line string, i int) int {
 		}
 	}
 
-	// 9c. Semantic keywords followed by =, :, or space and an integer code.
-	keywords := [...]string{
-		"http_status",
-		"status_code",
-		"exit_status",
-		"exit_code",
-		"exit code",
-		"exitcode",
-		"status",
-		"signal",
-		"errno",
-		"code",
-	}
-	for _, kw := range keywords {
+	for _, kw := range semanticKeywords {
 		if !hasPrefixFold(s, kw) {
 			continue
 		}
@@ -1475,7 +1924,6 @@ func matchSemanticCode(line string, i int) int {
 		if pos == dStart {
 			continue
 		}
-		// Must not be part of a decimal, duration, size, percentage, or identifier.
 		if pos < n && (isAlphaNum(s[pos]) || s[pos] == '_' || s[pos] == '%' || (s[pos] == '.' && pos+1 < n && isDigit(s[pos+1]))) {
 			continue
 		}
@@ -1485,46 +1933,45 @@ func matchSemanticCode(line string, i int) int {
 	return 0
 }
 
-// matchVersion matches Priority 8:
-//   - [vV]?\d+\.\d+\.\d+(?:[-+][A-Za-z0-9._~+-]+)?
-//   - name/\d+\.\d+(?:\.\d+)?(?:[-+][A-Za-z0-9._~+-]+)?
-func matchVersion(line string, i int) int {
-	if i > 0 && isIdentChar(line[i-1]) {
+func matchDigitVersion(line string, i int) int {
+	if i > 0 && line[i-1] == '_' {
+		return 0
+	}
+	s := line[i:]
+	if vLen := matchDottedVersion(s, 3); vLen > 0 {
+		if vLen == len(s) || !isIdentChar(s[vLen]) {
+			return vLen
+		}
+	}
+	return 0
+}
+
+func matchAlphaVersion(line string, i int) int {
+	if i > 0 && line[i-1] == '_' {
 		return 0
 	}
 	s := line[i:]
 	n := len(s)
-
-	// Form A: [vV]?\d+\.\d+\.\d+(?:[-+][A-Za-z0-9._~+-]+)?
-	if s[0] == 'v' || s[0] == 'V' || isDigit(s[0]) {
-		pos := 0
-		if s[0] == 'v' || s[0] == 'V' {
-			pos = 1
-		}
-		if vLen := matchDottedVersion(s[pos:], 3); vLen > 0 {
-			end := pos + vLen
+	if (s[0] == 'v' || s[0] == 'V') && n >= 6 && isDigit(s[1]) {
+		if vLen := matchDottedVersion(s[1:], 3); vLen > 0 {
+			end := 1 + vLen
 			if end == n || !isIdentChar(s[end]) {
 				return end
 			}
 		}
 	}
-
-	// Form B: name/\d+\.\d+(?:\.\d+)?
-	if isAlpha(s[0]) {
-		pos := 1
-		for pos < n && (isAlphaNum(s[pos]) || s[pos] == '_' || s[pos] == '-' || s[pos] == '.') {
-			pos++
-		}
-		if pos < n && s[pos] == '/' {
-			if vLen := matchDottedVersion(s[pos+1:], 2); vLen > 0 {
-				end := pos + 1 + vLen
-				if end == n || !isIdentChar(s[end]) {
-					return end
-				}
+	pos := 1
+	for pos < n && (isAlphaNum(s[pos]) || s[pos] == '_' || s[pos] == '-' || s[pos] == '.') {
+		pos++
+	}
+	if pos < n && s[pos] == '/' && pos+1 < n && isDigit(s[pos+1]) {
+		if vLen := matchDottedVersion(s[pos+1:], 2); vLen > 0 {
+			end := pos + 1 + vLen
+			if end == n || !isIdentChar(s[end]) {
+				return end
 			}
 		}
 	}
-
 	return 0
 }
 
@@ -1550,7 +1997,6 @@ func matchDottedVersion(s string, minParts int) int {
 	if parts < minParts {
 		return 0
 	}
-	// Optional prerelease/build suffix: -alpha.1+build.2
 	if pos < n && (s[pos] == '-' || s[pos] == '+') && pos+1 < n && isAlphaNum(s[pos+1]) {
 		pos++
 		for pos < n && (isAlphaNum(s[pos]) || s[pos] == '.' || s[pos] == '_' || s[pos] == '-' || s[pos] == '+' || s[pos] == '~') {
@@ -1560,25 +2006,27 @@ func matchDottedVersion(s string, minParts int) int {
 	return pos
 }
 
-// matchPID matches Priority 10: pid=123, PID: 123, Main PID: 123, [123]:, ├─123, └─123.
-func matchPID(line string, i int) (prefixLen int, totalLen int, suffix string) {
+func matchBracketPID(line string, i int) (int, int, string) {
 	s := line[i:]
 	n := len(s)
-
-	// 10a. Syslog bracket PID: [12345]:
-	if s[0] == '[' && n >= 4 {
-		pos := 1
-		for pos < n && isDigit(s[pos]) && pos <= 8 {
-			pos++
-		}
-		if pos > 1 && pos+1 < n && s[pos] == ']' && s[pos+1] == ':' {
-			return 1, pos + 2, "]:"
-		}
+	if n < 4 || !isDigit(s[1]) {
+		return 0, 0, ""
 	}
+	pos := 1
+	for pos < n && isDigit(s[pos]) && pos <= 8 {
+		pos++
+	}
+	if pos > 1 && pos+1 < n && s[pos] == ']' && s[pos+1] == ':' {
+		return 1, pos + 2, "]:"
+	}
+	return 0, 0, ""
+}
 
-	// 10b. systemd CGroup tree PID: "├─12345 " or "└─12345 " (UTF-8 box drawing prefix, 6 bytes)
+func matchCGroupPID(line string, i int) (int, int, string) {
+	s := line[i:]
+	n := len(s)
 	if strings.HasPrefix(s, "├─") || strings.HasPrefix(s, "└─") {
-		pLen := len("├─") // 6 bytes for both ├─ and └─
+		pLen := len("├─")
 		pos := pLen
 		for pos < n && isDigit(s[pos]) && pos-pLen < 8 {
 			pos++
@@ -1587,13 +2035,18 @@ func matchPID(line string, i int) (prefixLen int, totalLen int, suffix string) {
 			return pLen, pos, ""
 		}
 	}
+	return 0, 0, ""
+}
 
-	// 10c. Explicit keyword PID: Main PID: 123, PID: 123, pid=123, ppid=123
-	if i > 0 && isIdentChar(line[i-1]) {
+var pidKeywords = [...]string{"main pid", "ppid", "tgid", "pid"}
+
+func matchKeywordPID(line string, i int) (int, int, string) {
+	if i > 0 && line[i-1] == '_' {
 		return 0, 0, ""
 	}
-	prefixes := [...]string{"main pid", "ppid", "tgid", "pid"}
-	for _, kw := range prefixes {
+	s := line[i:]
+	n := len(s)
+	for _, kw := range pidKeywords {
 		if !hasPrefixFold(s, kw) {
 			continue
 		}
@@ -1621,18 +2074,11 @@ func matchPID(line string, i int) (prefixLen int, totalLen int, suffix string) {
 		}
 		return dStart, pos, ""
 	}
-
 	return 0, 0, ""
 }
 
-// matchDuration matches Priority 11 durations (including compound forms like
-// "12m34s", "3h20m", "2h 30min", "42 days", "5 hours", "3 min") and returns
-// total finite milliseconds.
-func matchDuration(line string, i int) (int, float64, bool) {
-	if i > 0 && (isIdentChar(line[i-1]) || line[i-1] == '.') {
-		return 0, 0, false
-	}
-	if !isDigit(line[i]) {
+func matchDuration(line string, i int, parseVal bool) (int, float64, bool) {
+	if i > 0 && (line[i-1] == '_' || line[i-1] == '.') {
 		return 0, 0, false
 	}
 
@@ -1640,20 +2086,21 @@ func matchDuration(line string, i int) (int, float64, bool) {
 	totalMS := 0.0
 	parts := 0
 	for pos < len(line) {
-		atomLen, ms, ok := matchDurationAtom(line, pos, parts > 0)
+		atomLen, ms, ok := matchDurationAtom(line, pos, parts > 0, parseVal)
 		if !ok {
 			break
 		}
-		totalMS += ms
+		if parseVal {
+			totalMS += ms
+		}
 		pos += atomLen
 		parts++
 
-		// Allow adjacent compact part (e.g. 12m34s, 3h20m) or single-space separated part (e.g. 2h 30min, 1 day 4h).
 		if pos < len(line) && isDigit(line[pos]) {
 			continue
 		}
 		if pos+1 < len(line) && line[pos] == ' ' && isDigit(line[pos+1]) {
-			if nextLen, _, nextOK := matchDurationAtom(line, pos+1, true); nextOK && nextLen > 0 {
+			if nextLen, _, nextOK := matchDurationAtom(line, pos+1, true, false); nextOK && nextLen > 0 {
 				pos++
 				continue
 			}
@@ -1666,7 +2113,7 @@ func matchDuration(line string, i int) (int, float64, bool) {
 	return pos - i, totalMS, true
 }
 
-func matchDurationAtom(line string, i int, inCompound bool) (int, float64, bool) {
+func matchDurationAtom(line string, i int, inCompound bool, parseVal bool) (int, float64, bool) {
 	n := len(line)
 	pos := i
 	for pos < n && isDigit(line[pos]) {
@@ -1683,7 +2130,6 @@ func matchDurationAtom(line string, i int, inCompound bool) (int, float64, bool)
 	}
 	numStr := line[i:pos]
 
-	// Optional single space before word duration units (e.g. "42 days", "3 min").
 	spaced := false
 	uStart := pos
 	if uStart < n && line[uStart] == ' ' {
@@ -1695,11 +2141,13 @@ func matchDurationAtom(line string, i int, inCompound bool) (int, float64, bool)
 	}
 
 	uEnd := uStart
-	// Handle UTF-8 micro sign µ (\xc2\xb5) or Greek mu μ (\xce\xbc) followed by 's'.
 	if !spaced && (strings.HasPrefix(line[uStart:], "µs") || strings.HasPrefix(line[uStart:], "μs")) {
 		uEnd = uStart + len("µs")
 		if uEnd < n && isIdentChar(line[uEnd]) {
 			return 0, 0, false
+		}
+		if !parseVal {
+			return uEnd - i, 0, true
 		}
 		val, err := strconv.ParseFloat(numStr, 64)
 		if err != nil || !isFiniteFloat(val) {
@@ -1711,11 +2159,7 @@ func matchDurationAtom(line string, i int, inCompound bool) (int, float64, bool)
 	for uEnd < n && isAlpha(line[uEnd]) {
 		uEnd++
 	}
-	if uEnd == uStart {
-		return 0, 0, false
-	}
-	// If compact compound like "12m34s", line[uEnd] may be a digit (the next duration atom!).
-	if uEnd < n && line[uEnd] == '_' {
+	if uEnd == uStart || (uEnd < n && line[uEnd] == '_') {
 		return 0, 0, false
 	}
 	unit := line[uStart:uEnd]
@@ -1723,17 +2167,18 @@ func matchDurationAtom(line string, i int, inCompound bool) (int, float64, bool)
 	if !ok {
 		return 0, 0, false
 	}
-	// If followed by digit, only valid for compact units (not spaced words like "5 hours3").
 	if uEnd < n && isDigit(line[uEnd]) {
 		if spaced {
 			return 0, 0, false
 		}
-		// Verify the rest starts another valid duration atom.
-		if _, _, nextOK := matchDurationAtom(line, uEnd, true); !nextOK {
+		if _, _, nextOK := matchDurationAtom(line, uEnd, true, false); !nextOK {
 			return 0, 0, false
 		}
 	}
 
+	if !parseVal {
+		return uEnd - i, 0, true
+	}
 	val, err := strconv.ParseFloat(numStr, 64)
 	if err != nil || !isFiniteFloat(val) {
 		return uEnd - i, math.NaN(), true
@@ -1768,7 +2213,6 @@ func durationUnitMS(unit string, spaced bool, inCompound bool) (float64, bool) {
 		}
 		return 0, false
 	}
-	// Spaced word units (case-insensitive).
 	switch strings.ToLower(unit) {
 	case "ns", "nanosecond", "nanoseconds":
 		return 1e-6, true
@@ -1794,17 +2238,13 @@ func durationUnitMS(unit string, spaced bool, inCompound bool) (float64, bool) {
 	return 0, false
 }
 
-// matchPercentage matches Priority 12: 42%, 99.2%.
-func matchPercentage(line string, i int) (int, float64, bool) {
-	if i > 0 && (isIdentChar(line[i-1]) || line[i-1] == '.') {
+func matchPercentage(line string, i int, parseVal bool) (int, float64, bool) {
+	if i > 0 && (line[i-1] == '_' || line[i-1] == '.') {
 		return 0, 0, false
 	}
 	pos := i
 	n := len(line)
 	if pos < n && line[pos] == '-' {
-		if i > 0 && isIdentChar(line[i-1]) {
-			return 0, 0, false
-		}
 		if i == 0 || isNegativeSignLeftContext(line[i-1]) {
 			pos++
 		} else {
@@ -1831,6 +2271,9 @@ func matchPercentage(line string, i int) (int, float64, bool) {
 	if end < n && isAlphaNum(line[end]) {
 		return 0, 0, false
 	}
+	if !parseVal {
+		return end - i, 0, true
+	}
 	val, err := strconv.ParseFloat(line[i:pos], 64)
 	if err != nil || !isFiniteFloat(val) {
 		return end - i, math.NaN(), true
@@ -1838,18 +2281,17 @@ func matchPercentage(line string, i int) (int, float64, bool) {
 	return end - i, val, true
 }
 
-// matchSize matches Priority 13: 128K, 4.2G, 512MiB, 1024KB, 2.5T, 4096B (1024-base bytes).
-func matchSize(line string, i int) (int, float64, bool) {
-	if i > 0 && (isIdentChar(line[i-1]) || line[i-1] == '.') {
-		return 0, 0, false
-	}
-	if !isDigit(line[i]) {
+func matchSize(line string, i int, parseVal bool) (int, float64, bool) {
+	if i > 0 && (line[i-1] == '_' || line[i-1] == '.') {
 		return 0, 0, false
 	}
 	n := len(line)
 	pos := i
 	for pos < n && isDigit(line[pos]) {
 		pos++
+	}
+	if pos == i {
+		return 0, 0, false
 	}
 	if pos < n && line[pos] == '.' && pos+1 < n && isDigit(line[pos+1]) {
 		pos++
@@ -1877,6 +2319,9 @@ func matchSize(line string, i int) (int, float64, bool) {
 	if !ok {
 		return 0, 0, false
 	}
+	if !parseVal {
+		return uEnd - i, 0, true
+	}
 	val, err := strconv.ParseFloat(numStr, 64)
 	if err != nil || !isFiniteFloat(val) {
 		return uEnd - i, math.NaN(), true
@@ -1894,7 +2339,6 @@ func sizeUnitBytes(unit string, spaced bool) (float64, bool) {
 		eiB = piB * 1024.0
 	)
 	if !spaced {
-		// Single-letter units must be uppercase to avoid colliding with "5m" (minutes) or "2g".
 		switch unit {
 		case "B":
 			return 1, true
@@ -1935,15 +2379,13 @@ func isNegativeSignLeftContext(prev byte) bool {
 	return prev == ' ' || prev == '=' || prev == ':' || prev == ',' || prev == '(' || prev == '[' || prev == '{'
 }
 
-// matchStandaloneNumber matches Priority 14 standalone integers/floats (including scientific notation).
-func matchStandaloneNumber(line string, i int) (length int, val float64, isInt bool, finite bool, ok bool) {
+func matchStandaloneNumber(line string, i int, parseVal bool) (length int, val float64, isInt bool, finite bool, ok bool) {
 	n := len(line)
 	if i > 0 {
 		prev := line[i-1]
-		if isIdentChar(prev) || prev == '.' {
+		if prev == '_' || prev == '.' {
 			return 0, 0, false, false, false
 		}
-		// Prevent breaking hyphenated tokens like utf-8, sha-256, x86-64.
 		if prev == '-' && i >= 2 && isIdentChar(line[i-2]) {
 			return 0, 0, false, false, false
 		}
@@ -1958,8 +2400,6 @@ func matchStandaloneNumber(line string, i int) (length int, val float64, isInt b
 		if pos >= n || !isDigit(line[pos]) {
 			return 0, 0, false, false, false
 		}
-	} else if !isDigit(line[pos]) {
-		return 0, 0, false, false, false
 	}
 
 	for pos < n && isDigit(line[pos]) {
@@ -1990,6 +2430,10 @@ func matchStandaloneNumber(line string, i int) (length int, val float64, isInt b
 
 	if pos < n && isIdentChar(line[pos]) {
 		return 0, 0, false, false, false
+	}
+
+	if !parseVal {
+		return pos - i, 0, false, false, true
 	}
 
 	raw := line[i:pos]
