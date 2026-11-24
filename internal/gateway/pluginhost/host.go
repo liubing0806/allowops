@@ -2,9 +2,11 @@ package pluginhost
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/http"
 	"regexp"
 	"slices"
 	"strings"
@@ -36,6 +38,19 @@ type instance struct {
 type instanceHost struct {
 	id   string
 	deps Deps
+}
+
+func (instanceHost) HTTPClient() *http.Client { return &http.Client{Transport: denyHTTP{}} }
+func (instanceHost) Credential(string) ([]byte, error) {
+	return nil, errors.New("plugin credential: unavailable")
+}
+func (instanceHost) Cache() plugin.Cache { return nil }
+func (instanceHost) Now() time.Time      { return time.Now().UTC() }
+
+type denyHTTP struct{}
+
+func (denyHTTP) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("plugin egress: denied")
 }
 
 func (h instanceHost) InstanceID() string                                   { return h.id }
