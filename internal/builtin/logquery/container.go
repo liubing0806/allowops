@@ -3,12 +3,12 @@ package logquery
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -333,8 +333,10 @@ func globRoot(ctx context.Context, base, inner, pattern string, display func(str
 			result.skippedNotRegular++
 			continue
 		}
-		stat := info.Sys().(*syscall.Stat_t)
-		key := [2]uint64{uint64(stat.Dev), stat.Ino}
+		key, ok := fileIdentity(info)
+		if !ok {
+			return fmt.Errorf("%s: unsupported file metadata", display(rel))
+		}
 		if seen[key] {
 			continue
 		}

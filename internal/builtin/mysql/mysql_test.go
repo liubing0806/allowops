@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/liubing0806/allowops/internal/builtin"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 func TestConfig(t *testing.T) {
@@ -161,13 +162,16 @@ func TestReadRowsByteLimit(t *testing.T) {
 	big := strings.Repeat("x", 30000)
 	bigRows := [][]driver.Value{{big}, {big}, {big}}
 	bigLine := big + "\n"
-	upper := func(s string) string { return strings.ToUpper(s) + "!!" }
+	policy, err := redact.New(&redact.Config{Builtin: []string{}, Custom: []redact.Rule{{Name: "secret", Regex: "value|abc"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
-		name  string
-		rows  [][]driver.Value
-		limit int64
-		mask  func(string) string
-		want  Result
+		name   string
+		rows   [][]driver.Value
+		limit  int64
+		policy *redact.Redactor
+		want   Result
 	}{
 		{"default limit truncates and drops the partial row", bigRows, builtin.DefaultMySQLMaxResponseBytes, nil,
 			Result{Output: "value\n" + bigLine + bigLine, Rows: 2, Truncated: true}},
@@ -179,8 +183,8 @@ func TestReadRowsByteLimit(t *testing.T) {
 			Result{Output: "value\nabc\n", Rows: 1, Truncated: true}},
 		{"escaped size counts", [][]driver.Value{{"\t\t\t\t"}}, 14, nil,
 			Result{Output: "value\n", Truncated: true}},
-		{"redacted size counts", [][]driver.Value{{"abc"}}, 11, upper,
-			Result{Output: "VALUE!!\n", Truncated: true}},
+		{"redacted size counts", [][]driver.Value{{"abc"}}, 25, policy,
+			Result{Output: "[REDACTED:secret]\n", Truncated: true}},
 		{"header alone over the limit", [][]driver.Value{{"a"}}, 3, nil,
 			Result{Output: "value\n", Truncated: true}},
 		{"no rows never truncates", nil, 3, nil,
@@ -194,7 +198,7 @@ func TestReadRowsByteLimit(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer rows.Close()
-			got, err := readRowsRedacted(rows, DefaultMaxRows, tc.limit, tc.mask)
+			got, err := readRowsRedacted(rows, DefaultMaxRows, tc.limit, tc.policy)
 			if err != nil {
 				t.Fatal(err)
 			}

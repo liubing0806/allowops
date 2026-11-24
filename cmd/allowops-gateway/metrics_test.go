@@ -32,7 +32,7 @@ func TestMetricsAddressConfiguration(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		cfg, err := decodeConfiguration(f)
+		cfg, err := decodeConfig(f)
 		f.Close()
 		if err != nil || cfg.MetricsAddress != address {
 			t.Fatalf("decode %q: address=%q error=%v", doc, cfg.MetricsAddress, err)

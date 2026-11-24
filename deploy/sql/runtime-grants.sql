@@ -72,7 +72,7 @@ BEGIN
     -- and only its attached partitions, regardless of their names.
     FOR relation IN
         SELECT unnest(ARRAY[
-            'public.gateway_instances', 'public.join_tokens', 'public.hosts',
+            'public.gateway_instances', 'public.gateway_update_check', 'public.join_tokens', 'public.hosts',
             'public.catalog_versions', 'public.gateway_messages',
             'public.console_users', 'public.roles', 'public.role_mapping_state',
             'public.role_mappings', 'public.service_accounts', 'public.service_account_tokens',

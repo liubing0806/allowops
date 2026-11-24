@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -96,8 +95,10 @@ func resolveHostFiles(ctx context.Context, source Source, roots []string) (resol
 				result.skippedNotRegular++
 				continue
 			}
-			stat := info.Sys().(*syscall.Stat_t)
-			key := [2]uint64{uint64(stat.Dev), stat.Ino}
+			key, ok := fileIdentity(info)
+			if !ok {
+				return result, fmt.Errorf("%s: unsupported file metadata", name)
+			}
 			if seen[key] {
 				continue
 			}
@@ -128,7 +129,7 @@ func (f *logFile) open() (*os.File, error) {
 		return nil, err
 	}
 	defer root.Close()
-	file, err := root.OpenFile(f.rel, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	file, err := root.OpenFile(f.rel, os.O_RDONLY|openNonBlock, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -137,8 +138,8 @@ func (f *logFile) open() (*os.File, error) {
 		file.Close()
 		return nil, err
 	}
-	stat := info.Sys().(*syscall.Stat_t)
-	if !info.Mode().IsRegular() || uint64(stat.Dev) != f.dev || stat.Ino != f.ino {
+	key, ok := fileIdentity(info)
+	if !info.Mode().IsRegular() || !ok || key[0] != f.dev || key[1] != f.ino {
 		file.Close()
 		return nil, fmt.Errorf("%s changed during the request", f.name)
 	}

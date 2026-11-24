@@ -1,6 +1,6 @@
 # P7 审计存储与运维接口
 
-数据库迁移由维护账号执行 `allowops-gateway migrate`。维护账号拥有应用表，并需要创建表、函数和角色的权限。迁移 00002 创建 `allowops_audit_writer`，迁移 00008 创建 `allowops_job_writer`。两者均为 NOLOGIN 角色。数据库管理员在迁移后将这两个角色授予网关登录角色。以下 SQL 使用 `allowops` 数据库、`public` schema 和 `your_gateway_login` 登录角色作为示例。
+数据库迁移由维护账号执行 `allowops-gateway migrate`。维护账号拥有应用表，并需要创建表、函数和角色的权限。迁移 00002 创建 `allowops_audit_writer`，迁移 00010 创建 `allowops_job_writer`。两者均为 NOLOGIN 角色。数据库管理员在迁移后将这两个角色授予网关登录角色。以下 SQL 使用 `allowops` 数据库、`public` schema 和 `your_gateway_login` 登录角色作为示例。
 
 ```sql
 GRANT CONNECT ON DATABASE allowops TO your_gateway_login;
@@ -10,7 +10,7 @@ GRANT allowops_audit_writer, allowops_job_writer TO your_gateway_login;
 GRANT SELECT ON goose_db_version, roles TO your_gateway_login;
 GRANT SELECT, INSERT ON policy_versions TO your_gateway_login;
 GRANT SELECT, UPDATE ON role_mapping_state TO your_gateway_login;
-GRANT SELECT, INSERT, UPDATE ON gateway_instances, hosts, host_catalog_reports, join_tokens,
+GRANT SELECT, INSERT, UPDATE ON gateway_instances, gateway_update_check, hosts, host_catalog_reports, join_tokens,
     catalog_versions, console_users, service_accounts, service_account_tokens
     TO your_gateway_login;
 GRANT SELECT, INSERT, UPDATE, DELETE ON gateway_messages, host_import_previews, catalog_uploads,

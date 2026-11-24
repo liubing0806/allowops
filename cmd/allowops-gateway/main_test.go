@@ -154,7 +154,7 @@ func TestCertificateTTLConfiguration(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer file.Close()
-			cfg, err := decodeConfiguration(file)
+			cfg, err := decodeConfig(file)
 			if err != nil {
 				t.Fatal(err)
 			}

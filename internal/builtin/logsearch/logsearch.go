@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/liubing0806/allowops/internal/builtin"
@@ -360,7 +359,7 @@ func (s *searchState) search(ctx context.Context, file logFile) (bool, error) {
 		return false, err
 	}
 	defer root.Close()
-	f, err := root.OpenFile(file.relative, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	f, err := root.OpenFile(file.relative, os.O_RDONLY|openNonBlock, 0)
 	if err != nil {
 		return false, err
 	}
