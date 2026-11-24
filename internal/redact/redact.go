@@ -28,9 +28,11 @@ type Config struct {
 }
 
 type compiledRule struct {
-	name  string
-	re    *regexp.Regexp
-	valid func(string) bool
+	secret       bool
+	userPassword bool
+	name         string
+	re           *regexp.Regexp
+	valid        func(string) bool
 	// token, set for a checksum rule, rejects a match that is part of a longer
 	// token or of a decimal number (see insideToken).
 	token bool
@@ -104,14 +106,15 @@ const authSchemes = `(?:basic|digest|bearer|negotiate|ntlm|aws4-hmac-sha256|oaut
 const authName = `(?:[a-z0-9]+_)*(?:proxy-)?authorization`
 
 type secretRule struct {
-	name   string
-	regex  string
-	needs  []string
-	keep   func(string) bool
-	skip   func(string) int
-	head   string
-	group  int
-	anchor string
+	userPassword bool
+	name         string
+	regex        string
+	needs        []string
+	keep         func(string) bool
+	skip         func(string) int
+	head         string
+	group        int
+	anchor       string
 }
 
 // The expressions of the NAME: value rule and the "name": value rule, up to
@@ -196,12 +199,12 @@ var secretRules = []secretRule{
 	// value is one shell word, in which quoted and unquoted parts follow each
 	// other: -u "a b":'p w'. Without a colon it is only a user name; curl asks
 	// for the password, so it stays.
-	{name: "cli_password", needs: []string{"curl"}, anchor: `(?i)\bcurl\b`, regex: `(?i)\s-(?:(?:-user|-proxy-user)(?:\s+|=)|[A-Za-z]*?[uU](?:\s*|=))(` + shellWord + `)`, keep: withoutColon, group: 1},
+	{name: "cli_password", needs: []string{"curl"}, anchor: `(?i)\bcurl\b`, regex: `(?i)\s-(?:(?:-user|-proxy-user)(?:\s+|=)|[A-Za-z]*?[uU](?:\s*|=))(` + shellWord + `)`, keep: withoutColon, group: 1, userPassword: true},
 	{name: "cli_password", needs: []string{"redis-cli", "valkey-cli"}, regex: `(?i)\b(?:redis|valkey)-cli\b[^\r\n]*?\s-a\s*("[^"\r\n]*"|'[^'\r\n]*'|\S+)`, group: 1},
 	{name: "cli_password", needs: []string{"sshpass"}, regex: `(?i)\bsshpass\b[^\r\n]*?\s-p\s+("[^"\r\n]*"|'[^'\r\n]*'|\S+)`, group: 1},
 	// The same short options as elements of a JSON argument array (docker
 	// inspect Cmd, Args, Healthcheck.Test): ["redis-cli","-a","pw"] or "-apw".
-	{name: "cli_password", needs: []string{`"curl"`, `/curl"`}, anchor: `(?i)"(?:[^"]*/)?curl"`, regex: `(?i)"-(?:-user|-proxy-user|[A-Za-z]*?[uU])(?:"\s*,\s*")?((?:[^"\\]|\\.)+)"`, keep: withoutColon, group: 1},
+	{name: "cli_password", needs: []string{`"curl"`, `/curl"`}, anchor: `(?i)"(?:[^"]*/)?curl"`, regex: `(?i)"-(?:-user|-proxy-user|[A-Za-z]*?[uU])(?:"\s*,\s*")?((?:[^"\\]|\\.)+)"`, keep: withoutColon, group: 1, userPassword: true},
 	{name: "cli_password", needs: []string{`redis-cli"`, `valkey-cli"`}, anchor: `(?i)"(?:[^"]*/)?(?:redis|valkey)-cli"`, regex: `"-a(?:"\s*,\s*")?((?:[^"\\]|\\.)+)"`, group: 1},
 	{name: "cli_password", needs: []string{`sshpass"`}, anchor: `(?i)"(?:[^"]*/)?sshpass"`, regex: `"-p(?:"\s*,\s*")?((?:[^"\\]|\\.)+)"`, group: 1},
 	// Keep the boundary out of the replacement; -p without a value stays unchanged.
@@ -267,7 +270,7 @@ func New(config *Config) (*Redactor, error) {
 	if slices.Contains(builtins, "secrets") {
 		r.secrets = true
 		for _, rule := range secretRules {
-			r.rules = append(r.rules, compiledRule{name: rule.name, re: regexp.MustCompile(rule.regex), keep: rule.keep, skip: rule.skip, head: anchorRegexp(rule.head), needs: rule.needs, group: rule.group, anchor: anchorRegexp(rule.anchor)})
+			r.rules = append(r.rules, compiledRule{secret: true, userPassword: rule.userPassword, name: rule.name, re: regexp.MustCompile(rule.regex), keep: rule.keep, skip: rule.skip, head: anchorRegexp(rule.head), needs: rule.needs, group: rule.group, anchor: anchorRegexp(rule.anchor)})
 		}
 	}
 	if slices.Contains(builtins, "pii") {
@@ -319,7 +322,7 @@ var lineValueAtStart = regexp.MustCompile(`^` + lineValue)
 // front of the value (head) and reads the value only for a match that is not
 // skipped, so the text after a skipped part is searched once, from the end of
 // that part, and the whole line is read once.
-func applyRuleWithSkip(line string, rule compiledRule) string {
+func applyRuleWithSkip(line string, rule compiledRule, replaced func(int, int)) string {
 	var out strings.Builder
 	cursor, pos := 0, 0
 	for pos < len(line) {
@@ -351,6 +354,9 @@ func applyRuleWithSkip(line string, rule compiledRule) string {
 		if rule.group > 0 {
 			start = loc[rule.group*2]
 		}
+		if replaced != nil {
+			replaced(start, valueEnd)
+		}
 		out.WriteString(line[cursor:start])
 		out.WriteString(replacement(rule.name))
 		cursor = valueEnd
@@ -363,8 +369,12 @@ func applyRuleWithSkip(line string, rule compiledRule) string {
 }
 
 func applyRule(line string, rule compiledRule) string {
+	return applyRuleTracking(line, rule, nil)
+}
+
+func applyRuleTracking(line string, rule compiledRule, replaced func(int, int)) string {
 	if rule.head != nil {
-		return applyRuleWithSkip(line, rule)
+		return applyRuleWithSkip(line, rule, replaced)
 	}
 	base := 0
 	if rule.anchor != nil {
@@ -401,6 +411,9 @@ func applyRule(line string, rule compiledRule) string {
 				continue
 			}
 		}
+		if replaced != nil {
+			replaced(start, end)
+		}
 		out.WriteString(line[cursor:start])
 		out.WriteString(replacement(rule.name))
 		cursor = end
@@ -424,6 +437,10 @@ func (r *Redactor) Line(line string) string {
 // line cannot contain a match; non-ASCII lines run every rule, because
 // case-insensitive expressions also match characters such as U+017F.
 func (r *Redactor) applyRules(line string) string {
+	return r.applyRulesTracking(line, nil)
+}
+
+func (r *Redactor) applyRulesTracking(line string, tracker *secretTracker) string {
 	lower, lowered, ascii := "", false, isASCII(line)
 	for _, rule := range r.rules {
 		if ascii && len(rule.needs) > 0 {
@@ -434,7 +451,13 @@ func (r *Redactor) applyRules(line string) string {
 				continue
 			}
 		}
-		if next := applyRule(line, rule); next != line {
+		var next string
+		if tracker != nil {
+			next = tracker.apply(line, rule)
+		} else {
+			next = applyRule(line, rule)
+		}
+		if next != line {
 			line = next
 			// A replacement only adds a marker such as [REDACTED:credential].
 			// No rule matches inside a marker, so the lower-case text of an
@@ -447,6 +470,176 @@ func (r *Redactor) applyRules(line string) string {
 		}
 	}
 	return line
+}
+
+// LineSecrets redacts a metadata field and returns the original secret values
+// removed from it. In metadata, a standalone "key:" also denotes a credential.
+func (r *Redactor) LineSecrets(line string) (string, []string) {
+	var tracker secretTracker
+	if r.secrets {
+		inside := false
+		clean := r.pemLine(line, &inside)
+		if clean != line {
+			tail := line
+			for {
+				begin := pemBegin.FindStringIndex(tail)
+				if begin == nil {
+					break
+				}
+				body := tail[begin[1]:]
+				end := pemEnd.FindStringIndex(body)
+				if end == nil {
+					tracker.add(strings.TrimSpace(body))
+					break
+				}
+				tracker.add(strings.TrimSpace(body[:end[0]]))
+				tail = body[end[1]:]
+			}
+			line = clean
+		}
+	}
+	line = r.applyRulesTracking(line, &tracker)
+	if r.secrets {
+		line = tracker.apply(line, metadataKey)
+	}
+	return line, tracker.values
+}
+
+var metadataKey = compiledRule{
+	name: "credential", secret: true,
+	re: regexp.MustCompile(`(?i)^\s*key\s*:\s*` + lineValue),
+}
+
+type replacementSpan struct {
+	start, end int
+	original   string
+}
+
+type secretTracker struct {
+	spans  []replacementSpan
+	values []string
+	seen   map[string]bool
+}
+
+func (t *secretTracker) add(value string) {
+	if value == "" {
+		return
+	}
+	if t.seen == nil {
+		t.seen = make(map[string]bool)
+	}
+	if !t.seen[value] {
+		t.values = append(t.values, value)
+		t.seen[value] = true
+	}
+}
+
+// Keep the positions of replacements so a later rule that consumes an
+// earlier replacement can extract the original value, not its marker.
+func (t *secretTracker) apply(line string, rule compiledRule) string {
+	var spans []replacementSpan
+	index, shift := 0, 0
+	copyBefore := func(end int) {
+		for index < len(t.spans) && t.spans[index].end <= end {
+			span := t.spans[index]
+			spans = append(spans, replacementSpan{span.start + shift, span.end + shift, span.original})
+			index++
+		}
+	}
+	changed := false
+	next := applyRuleTracking(line, rule, func(start, end int) {
+		changed = true
+		copyBefore(start)
+		var original strings.Builder
+		cursor := start
+		for index < len(t.spans) && t.spans[index].start < end {
+			span := t.spans[index]
+			original.WriteString(line[cursor:max(cursor, span.start)])
+			original.WriteString(span.original)
+			cursor = min(span.end, end)
+			index++
+		}
+		original.WriteString(line[cursor:end])
+		value := original.String()
+		if rule.secret {
+			extractSecret(rule, value, t.add)
+		}
+		length := len(replacement(rule.name))
+		spans = append(spans, replacementSpan{start + shift, start + shift + length, value})
+		shift += length - (end - start)
+	})
+	if changed {
+		copyBefore(len(line))
+		t.spans = spans
+	}
+	return next
+}
+
+var (
+	headerDirective = regexp.MustCompile(`(?i)^\S*(?:set_header|add_header|more_set_headers|_param)\s+\S+\s+`)
+	schemePrefix    = regexp.MustCompile(`(?i)^` + authSchemes + `\s+`)
+	setterLiteral   = regexp.MustCompile(`(?i)^set[A-Za-z0-9_]*?\(\s*(` + dqValue + `)\s*\)$`)
+	arthasValue     = regexp.MustCompile(`^@[A-Za-z0-9_$]+\[(.*)\]$`)
+)
+
+func extractSecret(rule compiledRule, matched string, add func(string)) {
+	value := strings.TrimSpace(matched)
+	switch rule.name {
+	case "bearer", "auth_header", "api_key_header":
+		if prefix := headerDirective.FindStringIndex(value); prefix != nil {
+			value = value[prefix[1]:]
+		} else if i := strings.IndexAny(value, ":="); i >= 0 {
+			value = value[i+1:]
+		}
+		value = unquoteSecret(value)
+		if rule.name != "api_key_header" {
+			value = schemePrefix.ReplaceAllString(value, "")
+		}
+	case "url_credentials":
+		if _, after, ok := strings.Cut(matched, "://"); ok {
+			value = after
+		}
+		add(value)
+		value = strings.TrimSuffix(value, "@")
+		if strings.HasPrefix(strings.ToLower(value), "jdbc:oracle:") {
+			_, value, _ = strings.Cut(value, "/")
+		} else if _, password, ok := strings.Cut(value, ":"); ok {
+			value = password
+		}
+	case "credential", "mysql_pwd", "rediscli_auth":
+		switch {
+		case setterLiteral.MatchString(value):
+			value = setterLiteral.FindStringSubmatch(value)[1]
+		case strings.HasPrefix(value, "@"):
+			_, value, _ = strings.Cut(value, "]:")
+			if wrapped := arthasValue.FindStringSubmatch(value); wrapped != nil {
+				value = wrapped[1]
+			}
+		default:
+			if i := strings.IndexAny(value, "=:,"); i >= 0 {
+				value = value[i+1:]
+			}
+		}
+	case "cli_password":
+		if rule.userPassword {
+			value = unquoteSecret(value)
+			if _, password, ok := strings.Cut(value, ":"); ok {
+				add(value)
+				value = password
+			}
+		}
+	case "mysql_password":
+		value = strings.TrimPrefix(value, "-p")
+	}
+	add(unquoteSecret(value))
+}
+
+func unquoteSecret(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') && value[0] == value[len(value)-1] {
+		return value[1 : len(value)-1]
+	}
+	return value
 }
 
 func isASCII(s string) bool {

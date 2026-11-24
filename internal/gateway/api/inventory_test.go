@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"reflect"
+	"slices"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -66,17 +67,22 @@ func TestPluginSystemHealth(t *testing.T) {
 }
 
 func TestExistingPolicyDoesNotGainInventoryAccess(t *testing.T) {
+	assertExistingPolicyDoesNotGainAccess(t, authz.ViewInventory)
+}
+
+func TestExistingPolicyDoesNotGainChangesOrKnowledgeAccess(t *testing.T) {
+	assertExistingPolicyDoesNotGainAccess(t, authz.ViewChanges, authz.ViewKnowledge)
+}
+
+func assertExistingPolicyDoesNotGainAccess(t *testing.T, newOperations ...authz.Operation) {
+	t.Helper()
 	f := newFixture(t)
 	ctx := context.Background()
 	old := defaultRules()
 	for _, r := range old.Rules {
-		var ops []string
-		for _, op := range r.Operations {
-			if op != "view_inventory" {
-				ops = append(ops, op)
-			}
-		}
-		r.Operations = ops
+		r.Operations = slices.DeleteFunc(r.Operations, func(op string) bool {
+			return slices.Contains(newOperations, authz.Operation(op))
+		})
 	}
 	raw, err := protojson.Marshal(old)
 	if err != nil {
@@ -89,18 +95,27 @@ func TestExistingPolicyDoesNotGainInventoryAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx = reqctx.With(ctx, &requestState{identity: &Identity{Subject: authz.Subject{ID: "viewer", Roles: []string{"viewer"}}}, transportChecked: true})
-	if _, err := restarted.Require(ctx, authz.ViewInventory, authz.Action{}, authz.Host{}); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("existing viewer inventory: %v", err)
+	defer restarted.Close()
+	requestFor := func(role string) context.Context {
+		subject := &Identity{Subject: authz.Subject{ID: role, Roles: []string{role}}}
+		return reqctx.With(ctx, &requestState{identity: subject, transportChecked: true})
 	}
-	_, rules, err := restarted.PolicySnapshot(ctx)
+	for _, role := range []string{"admin", "operator", "viewer"} {
+		request := requestFor(role)
+		for _, op := range newOperations {
+			if _, err := restarted.Require(request, op, authz.Action{}, authz.Host{}); connect.CodeOf(err) != connect.CodePermissionDenied {
+				t.Errorf("existing role %s received access to %s: %v", role, op, err)
+			}
+		}
+	}
+	_, rules, err := restarted.PolicySnapshot(requestFor("viewer"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, r := range rules {
-		for _, op := range r.Operations {
-			if op == authz.ViewInventory {
-				t.Fatal("existing policy modified")
+		for _, op := range newOperations {
+			if slices.Contains(r.Operations, op) {
+				t.Errorf("existing policy gained %s", op)
 			}
 		}
 	}

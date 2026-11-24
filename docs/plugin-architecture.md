@@ -1,8 +1,8 @@
 # allowops 插件架构
 
-状态：方向已确认（2026-11-03），尚未实施。决定见 `architecture-decisions.md` 第 22 节（PL1~PL10）。图示见 [plugin-architecture.html](plugin-architecture.html)（浏览器打开；截图 [plugin-architecture.png](plugin-architecture.png)）。
+状态：阶段 0~3（排障前序上下文闭环：底座与契约测试、动态 Inventory、Changes、Knowledge/MCP Resources）已实现（2026-11-24），阶段 4（Trigger）与阶段 5（进程外插件/`allowops build`）待定。决定见 `architecture-decisions.md` 第 22 节（PL1~PL10）。图示见 [plugin-architecture.html](plugin-architecture.html)（浏览器打开；截图 [plugin-architecture.png](plugin-architecture.png)）。
 
-阶段 0、1 的实现设计见 [plugin-stage01-design.md](plugin-stage01-design.md)。该文第 10 节列出实现与本文的差异，包括本文第 2.2 节的一处推断更正、第 5、6、7 节的简化和第 7.2 节审计描述的修正；两者不一致时以实现设计为准。
+阶段 0、1 的实现设计见 [plugin-stage01-design.md](plugin-stage01-design.md)。阶段 A~D（出站安全底座与契约测试、动态 Inventory 与多源合并、Changes 与 `changes_list`、Knowledge 与 `runbooks_*`/MCP Resources）的实现设计见 [plugin-stage0203-design.md](plugin-stage0203-design.md)，实施计划见 [plugin-stage0203-plan.md](plugin-stage0203-plan.md)。实现细节与本文不一致时以阶段实现设计为准。
 
 本文说明三件事：
 
@@ -440,14 +440,14 @@ type WebhookSource interface {
 
 ## 12. 实施阶段
 
-| 阶段 | 内容 | 完成条件 |
-| --- | --- | --- |
-| 0 | 主机端 builtin 改为注册表；`agent.go` 的能力列表从注册表生成 | 现有测试通过；新增测试检查能力列表与注册表一致 |
-| 1 | `plugin/` 包、`pluginhost`、配置解析、健康状态；Inventory 扩展点；`inventory.static`、`inventory.host_labels`；`entities_search` 和 `view_inventory` | 契约测试通过；第 11 节的 MCP 端到端测试通过 |
-| 2 | Changes 扩展点；`changes.allowops`；`changes_list` 和 `view_changes` | `changes_list` 返回按时间合并的目录和策略变更 |
-| 3 | Knowledge 扩展点；`knowledge.git_markdown`；`runbooks_search`、`runbooks_read` | Git 仓库中的 Markdown 可以检索和读取 |
-| 4 | Trigger 扩展点 | 依赖 PL9 编排层边界的决定 |
-| 5 | 进程外插件适配器；`allowops build` | 按需要开始 |
+| 阶段 | 内容 | 完成条件 | 状态 |
+| --- | --- | --- | --- |
+| 0 | 主机端 builtin 改为注册表；`agent.go` 的能力列表从注册表生成 | 现有测试通过；新增测试检查能力列表与注册表一致 | 已完成 |
+| 1 | `plugin/` 包、`pluginhost`、配置解析、健康状态；Inventory 扩展点；`inventory.static`、`inventory.host_labels`；`entities_search` 和 `view_inventory` | 契约测试通过；第 11 节的 MCP 端到端测试通过 | 已完成 |
+| 2（阶段 A~C） | `plugin.Host` 出站安全/凭据/缓存与 `plugin/plugintest`；动态 Inventory（`inventory.k8s`、`inventory.prometheus_targets`、`inventory.cmdb_http`）与多源合并/冲突报告；Changes 扩展点（`changes.allowops`、`changes.k8s_rollout`、`changes.http`）；`changes_list` 和 `view_changes` | 契约测试、SSRF/凭据单测与端到端测试通过；`changes_list` 返回按时间合并的变更 | 已完成 |
+| 3（阶段 D） | Knowledge 扩展点；`knowledge.git_markdown`（本地 `dir` 与远程 `archive_url` 双模式）；`runbooks_search`、`runbooks_read`、MCP Resources 与 `view_knowledge` | Markdown 排查手册可检索、分页读取与经 MCP Resources 访问 | 已完成 |
+| 4 | Trigger 扩展点 | 依赖 PL9 编排层边界的决定 | 待定 |
+| 5 | 进程外插件适配器；`allowops build` | 按需要开始 | 待定 |
 
 ## 13. 以后的功能对应哪类插件
 

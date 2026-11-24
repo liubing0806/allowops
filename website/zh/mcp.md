@@ -33,9 +33,15 @@ Claude Code 会展开该文件中的环境变量引用。不要把 token 写入�
 | 工具 | 输入 |
 |---|---|
 | `hosts_search` | 可选 `selector` 或 `hostname`（二者互斥），以及 `next_cursor`。两者都不提供时，列出所有可见主机。 |
+| `entities_search` | 存在可用 Inventory 插件时列出；可选 `kind`、`name`、`sources`、`limit`（1–100，默认 20）。需要 `view_inventory`。 |
+| `changes_list` | 存在可用 Changes 插件时列出；可选 `services`、`from`、`to`（RFC3339，窗口最长 7 天）、`sources`、`limit`（1–100，默认 20）。需要 `view_changes`。 |
+| `runbooks_search` | 存在可用 Knowledge 插件时列出；可选 `query`、`tags`、`sources`、`limit`（1–100，默认 20）。需要 `view_knowledge`。 |
+| `runbooks_read` | 存在可用 Knowledge 插件时列出；必填 `source`、`id`；可选 `section`、`offset`、`max_bytes`、`revision`。需要 `view_knowledge`。 |
 | `jobs_get` | 必填 `job_id`；可选 `host`、`wait_seconds`、`response_format`、`next_cursor`、`stream`、`offset`、`step_index`。 |
 | `jobs_list` | 可选 `next_cursor`；返回当前身份的最近 job。 |
 | `jobs_cancel` | 必填 `job_id`；停止后续批次，并请求终止正在运行的 task 进程组。 |
+
+`entities_search`、`changes_list`、`runbooks_search` 与 `runbooks_read` 是由网关插件驱动的只读排障上下文工具，均在调用前后写入审计、使用 `secrets` 规则脱敏、标记 `output_trust: untrusted` 并受 32 KiB 预算约束。`entities_search` 先逐源按 `view_hosts` 过滤主机，再跨来源合并同名实体并报告属性与选择器 `conflicts`。存在可用 Knowledge 插件时，网关同步通过 MCP Resources（`allowops://runbooks/{source}/{+id}`）提供 `resources/list`、`resources/templates/list` 和 `resources/read`，沿用相同的 `view_knowledge` 鉴权、审计、脱敏与 32 KiB 预算约束。以上四个工具名均为保留名称，不能用作签名目录中的动作名。
 
 `hosts_search` 返回主机名、在线状态、标签、总数和标签分布。请检查 `labels_truncated` 和 `label_counts_truncated`，必要时缩小选择器范围。继续分页时，只传入服务器返回的不透明 `next_cursor`。
 
