@@ -16,7 +16,7 @@ docker build --platform linux/amd64 -f deploy/docker/Dockerfile \
 ./deploy/docker/verify.sh allowops-gateway:0.2.0 0.2.0
 helm lint deploy/helm/allowops
 helm template allowops deploy/helm/allowops > /tmp/allowops.yaml
-python3 deploy/helm/verify.py /tmp/allowops.yaml  # local PyYAML dependency
+python3 deploy/helm/verify.py  # renders and checks default and production values, requires PyYAML
 kubeconform -strict -summary -kubernetes-version 1.32.0 /tmp/allowops.yaml
 helm package deploy/helm/allowops --destination /tmp
 ```
@@ -35,14 +35,19 @@ go-licenses; these do not replace inspection of non-Go dependencies.
 Provision these Secrets in the target namespace before installation:
 
 * `allowops-credentials`: `ca.crt`, `ca.key` (PKCS8 host identity CA),
-  `tls.crt` (server certificate and full chain), `tls.key`,
-  `catalog.pub.pem` (PKIX Ed25519 public key).
+  `tls.crt` (server certificate and full chain), `tls.key`, and at least one
+  PKIX Ed25519 public key named `catalog*.pub.pem` (typically `catalog.pub.pem`).
 * `allowops-audit-cursor`: `audit-cursor-key`, exactly 32 raw random bytes,
   shared across API and export instances and retained across restarts.
 * `allowops-output`: `aws-credentials`, an AWS shared credentials file.
 * `allowops-database`: `url`, the runtime PostgreSQL connection string.
 * `allowops-migration-database`: `url`, a separate PostgreSQL maintenance
   connection string. It must exist before `pre-install` runs.
+
+For a private registry, set `imagePullSecrets` to a list such as
+`[{name: allowops-registry}]`. The gateway, exporter, and migration Job
+use the list. Provision the registry Secret before installing the chart so
+the migration hook can pull its image.
 
 The chart can create the credentials and runtime database Secrets using
 `credentials.create` / `database.create` and the corresponding data values.
@@ -107,6 +112,76 @@ and the Mozilla CA bundle notice (MPL-2.0).
 Secret changes supplied outside Helm require restarting the workloads,
 because credentials are copied at pod startup. Chart-owned ConfigMap and
 Secret changes update the pod template checksum.
+
+To rotate a catalog signing key, add the new public key to
+`credentials.existingSecret` under a distinct name such as
+`catalog-2026.pub.pem`. Keep the old key during the transition. The init
+container copies all `catalog*.pub.pem` files as regular files with mode
+0600. Roll out the gateway and exporter (if enabled) after updating the Secret.
+Distribute the new key to hosts and verify dual-signed publication and host
+load reports before removing the old key. Roll out the workloads again to
+remove the old key from gateway trust. Any matching filename can be the
+remaining key. See the [catalog publishing guide](../../../website/publishing.md#rotate-catalog-signing-keys).
+
+## Identity providers and runtime settings
+
+`extraEnv` and `envFrom` use Kubernetes container environment entries and
+sources. Use Secret references for OpenID Connect (OIDC) client secrets and
+Lightweight Directory Access Protocol (LDAP) bind passwords. Use
+`extraVolumes` and `extraVolumeMounts` to mount a private certificate
+authority (CA) bundle, then reference its path with `gateway.providers[].ca_file`.
+These settings apply to both the gateway and exporter.
+
+~~~yaml
+extraEnv:
+  - name: OIDC_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: allowops-oidc
+        key: client-secret
+envFrom:
+  - secretRef:
+      name: allowops-ldap  # Contains the LDAP_BIND_PASSWORD key.
+extraVolumes:
+  - name: provider-ca
+    secret:
+      secretName: allowops-provider-ca  # Contains the ca.crt key.
+extraVolumeMounts:
+  - name: provider-ca
+    mountPath: /etc/allowops-provider-ca
+    readOnly: true
+gateway:
+  certificateTTL: "12h"
+  jobs:
+    wait_seconds: 15
+    max_wait_seconds: 60
+    batch_size: 10
+    max_failures: 2
+  providers:
+    - id: workforce-oidc
+      display_name: Workforce OIDC
+      kind: oidc
+      issuer_url: https://sso.example.com
+      client_id: allowops
+      client_secret_env: OIDC_CLIENT_SECRET
+      ca_file: /etc/allowops-provider-ca/ca.crt
+    - id: workforce-ldap
+      display_name: Workforce LDAP
+      kind: ldap
+      url: ldaps://ldap.example.com
+      user_base_dn: ou=users,dc=example,dc=com
+      group_base_dn: ou=groups,dc=example,dc=com
+      bind_dn: cn=allowops,ou=services,dc=example,dc=com
+      bind_password_env: LDAP_BIND_PASSWORD
+      ca_file: /etc/allowops-provider-ca/ca.crt
+~~~
+
+`gateway.certificateTTL` controls the host identity certificate lifetime for
+issuance and renewal. Use a positive Go duration such as `12h` or `1h30m`.
+An empty value uses the gateway default of `24h`. Set any of the four
+`gateway.jobs` fields to override the corresponding gateway defaults
+(`30`, `120`, `20` and `5`, respectively). Keep `wait_seconds` at or below
+`max_wait_seconds`.
 
 ## Shutdown and audit export
 

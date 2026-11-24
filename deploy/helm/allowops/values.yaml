@@ -3,12 +3,23 @@ image:
   repository: allowops-gateway
   tag: "0.2.0"
   pullPolicy: IfNotPresent
+imagePullSecrets: []
+# Kubernetes container environment entries and sources for gateway and exporter.
+extraEnv: []
+envFrom: []
+# Kubernetes volumes and container mounts for gateway and exporter.
+extraVolumes: []
+extraVolumeMounts: []
 service:
   type: LoadBalancer
   annotations: {}
 # ALPN and TLS terminate in the gateway. Only use an L4 TCP load balancer.
 gateway:
   shutdownGraceSeconds: 10
+  # Empty uses the gateway's default host certificate lifetime.
+  certificateTTL: ""
+  # Optional: wait_seconds, max_wait_seconds, batch_size, max_failures.
+  jobs: {}
   management:
     ca_pin: ""
     # upstream defaults to identity.origin; use the public TLS endpoint.
@@ -23,7 +34,7 @@ gateway:
   #     key: bind-password
   providerSecretEnv: []
 credentials:
-  # Keys: ca.crt, ca.key (PKCS8), tls.crt (full chain), tls.key, catalog.pub.pem.
+  # Keys: ca.crt, ca.key (PKCS8), tls.crt (full chain), tls.key, and at least one catalog*.pub.pem.
   existingSecret: allowops-credentials
   create: false
   data:

@@ -20,6 +20,13 @@ output:
   endpoint: {{ .Values.output.endpoint | quote }}
 gateway:
   shutdown_grace: {{ printf "%ds" (int .Values.gateway.shutdownGraceSeconds) | quote }}
+  {{- with .Values.gateway.certificateTTL }}
+  certificate_ttl: {{ . | quote }}
+  {{- end }}
+{{- with .Values.gateway.jobs }}
+jobs:
+{{- toYaml . | nindent 2 }}
+{{- end }}
 management:
 {{ toYaml .Values.gateway.management | indent 2 }}
 identity:
@@ -30,6 +37,10 @@ providers:
 
 {{- define "allowops.pod" -}}
 automountServiceAccountToken: false
+{{- with .Values.imagePullSecrets }}
+imagePullSecrets:
+{{- toYaml . | nindent 2 }}
+{{- end }}
 nodeSelector:
   kubernetes.io/arch: amd64
   kubernetes.io/os: linux
@@ -51,9 +62,14 @@ initContainers:
         cp /secret/ca.crt /secret/ca.key /secret/tls.crt /secret/tls.key /run/allowops/credentials/
         cp /audit-secret/audit-cursor-key /run/allowops/credentials/audit-cursor-key
         cp /output-secret/aws-credentials /run/allowops/credentials/aws-credentials
-        cp /secret/catalog.pub.pem /run/allowops/credentials/catalog-keys/
+        rm -f /run/allowops/credentials/catalog-keys/catalog*.pub.pem
+        cp /secret/catalog*.pub.pem /run/allowops/credentials/catalog-keys/
         chmod 0700 /run/allowops/credentials /run/allowops/credentials/catalog-keys
-        chmod 0600 /run/allowops/credentials/audit-cursor-key /run/allowops/credentials/aws-credentials /run/allowops/credentials/ca.crt /run/allowops/credentials/ca.key /run/allowops/credentials/tls.crt /run/allowops/credentials/tls.key /run/allowops/credentials/catalog-keys/catalog.pub.pem
+        chmod 0600 \
+          /run/allowops/credentials/audit-cursor-key /run/allowops/credentials/aws-credentials \
+          /run/allowops/credentials/ca.crt /run/allowops/credentials/ca.key \
+          /run/allowops/credentials/tls.crt /run/allowops/credentials/tls.key \
+          /run/allowops/credentials/catalog-keys/catalog*.pub.pem
     securityContext:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: true
@@ -93,6 +109,13 @@ containers:
             name: {{ .secretName | quote }}
             key: {{ .key | quote }}
       {{- end }}
+      {{- with .Values.extraEnv }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+    {{- with .Values.envFrom }}
+    envFrom:
+    {{- toYaml . | nindent 6 }}
+    {{- end }}
     ports:
       - name: tls
         containerPort: 8443
@@ -136,6 +159,9 @@ containers:
       - name: audit
         mountPath: /var/lib/allowops/audit
       {{- end }}
+      {{- with .Values.extraVolumeMounts }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
 volumes:
   - name: config
     configMap:
@@ -161,4 +187,7 @@ volumes:
   - name: credentials
     emptyDir:
       medium: Memory
+  {{- with .Values.extraVolumes }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
 {{- end -}}

@@ -9,6 +9,30 @@
         "tag": {"type": "string", "minLength": 1}
       }
     },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {"name": {"type": "string", "minLength": 1}}
+      }
+    },
+    "extraEnv": {
+      "type": "array",
+      "items": {"type": "object", "required": ["name"]}
+    },
+    "envFrom": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "extraVolumes": {
+      "type": "array",
+      "items": {"type": "object", "required": ["name"]}
+    },
+    "extraVolumeMounts": {
+      "type": "array",
+      "items": {"type": "object", "required": ["name", "mountPath"]}
+    },
     "replicaCount": {"type": "integer", "minimum": 2},
     "gateway": {
       "type": "object",
@@ -29,6 +53,17 @@
               "secretName": {"type": "string", "minLength": 1},
               "key": {"type": "string", "minLength": 1}
             }
+          }
+        },
+        "certificateTTL": {"type": "string"},
+        "jobs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "wait_seconds": {"type": "integer", "minimum": 0, "maximum": 120},
+            "max_wait_seconds": {"type": "integer", "minimum": 1, "maximum": 120},
+            "batch_size": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "max_failures": {"type": "integer", "minimum": 0, "maximum": 4294967295}
           }
         }
       }
