@@ -479,6 +479,7 @@ func clusterTier0(tasks []TaskInput, idxs []int, grouping GroupingMode, detailed
 		} else {
 			acc.group.Hosts = selectGroupHosts(acc.allHosts, detailed, "", "")
 		}
+		capGroupPreviewBudget(&acc.group)
 		groups = append(groups, acc.group)
 	}
 	return groups
@@ -695,6 +696,7 @@ func clusterPass2(tasks []TaskInput, idxs []int, grouping GroupingMode, detailed
 		if acc.rawNormErr != acc.group.Stderr {
 			acc.group.TemplateStderr = acc.rawNormErr
 		}
+		capGroupPreviewBudget(&acc.group)
 
 		switch {
 		case acc.hasStderr:
@@ -731,6 +733,41 @@ func applyRepresentativeSample(g *Group, rep *TaskInput) {
 	g.Stdout = outStr
 	g.Stderr = errStr
 	if isTaskTruncated(rep, outStr, errStr) {
+		g.Truncated = true
+	}
+}
+
+// capGroupPreviewBudget enforces the shared MaxPreviewBytesPerStream (4 KiB)
+// ceiling across Stdout, Stderr, TemplateStdout, and TemplateStderr (design 5.3 / M1).
+// When the combined size exceeds the ceiling, raw sample and normalized template
+// split the budget fairly (up to half each, reusing slack from the shorter side).
+func capGroupPreviewBudget(g *Group) {
+	rawLen := len(g.Stdout) + len(g.Stderr)
+	tmplLen := len(g.TemplateStdout) + len(g.TemplateStderr)
+	if rawLen+tmplLen <= MaxPreviewBytesPerStream {
+		return
+	}
+	half := MaxPreviewBytesPerStream / 2
+	rawBudget := min(rawLen, half)
+	tmplBudget := min(tmplLen, half)
+	if rem := MaxPreviewBytesPerStream - rawBudget - tmplBudget; rem > 0 {
+		if rawLen > rawBudget {
+			add := min(rem, rawLen-rawBudget)
+			rawBudget += add
+			rem -= add
+		}
+		if rem > 0 && tmplLen > tmplBudget {
+			tmplBudget += min(rem, tmplLen-tmplBudget)
+		}
+	}
+	if rawLen > rawBudget {
+		g.Stdout = truncateUTF8Bytes(g.Stdout, rawBudget)
+		g.Stderr = truncateUTF8Bytes(g.Stderr, max(0, rawBudget-len(g.Stdout)))
+		g.Truncated = true
+	}
+	if tmplLen > tmplBudget {
+		g.TemplateStdout = truncateUTF8Bytes(g.TemplateStdout, tmplBudget)
+		g.TemplateStderr = truncateUTF8Bytes(g.TemplateStderr, max(0, tmplBudget-len(g.TemplateStdout)))
 		g.Truncated = true
 	}
 }

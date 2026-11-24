@@ -73,14 +73,19 @@ type PatternChange struct {
 // hosts in normalized diff mode. All float64 values are strictly finite;
 // MaxDeltaPct is nil whenever the max-delta host's base value is zero.
 type MetricDrift struct {
-	Label       string
-	Unit        string
-	BaseP50     float64
-	TargetP50   float64
-	MaxDelta    float64
-	MaxDeltaPct *float64
-	MaxHost     string
-	HostCount   uint64
+	Label          string
+	Unit           string
+	BaseP50        float64
+	TargetP50      float64
+	BaseMax        float64
+	TargetMax      float64
+	MaxDelta       float64
+	MaxDeltaBase   float64
+	MaxDeltaTarget float64
+	MaxDeltaPct    *float64
+	MaxHost        string
+	AffectedHosts  uint64
+	HostCount      uint64
 
 	score float64
 }
@@ -89,6 +94,7 @@ type MetricDrift struct {
 type DiffResult struct {
 	Grouping                GroupingMode
 	ActionDefinitionChanged bool
+	PreviewTruncated        bool
 	AddedHosts              []string
 	RemovedHosts            []string
 	ReplacedHosts           []string
@@ -292,6 +298,9 @@ func Diff(baseTasks, targetTasks []TaskInput, opts DiffOptions) DiffResult {
 		// Pattern signature & normalization.
 		baseInfo := buildDiffTaskInfo(p.base, effectiveGrouping, jointOutMode, jointErrMode, maskIPs, &baseOutScratch, &baseErrScratch)
 		targetInfo := buildDiffTaskInfo(p.target, effectiveGrouping, jointOutMode, jointErrMode, maskIPs, &targetOutScratch, &targetErrScratch)
+		if baseInfo.truncated || targetInfo.truncated {
+			res.PreviewTruncated = true
+		}
 
 		// Collect metric drifts for hosts that succeeded in both base and target (normalized mode).
 		if effectiveGrouping == GroupingNormalized && isCleanSucceededTask(p.base) && isCleanSucceededTask(p.target) {
@@ -456,6 +465,7 @@ func Diff(baseTasks, targetTasks []TaskInput, opts DiffOptions) DiffResult {
 			targets := make([]float64, len(bkt.pairs))
 			var best *driftPair
 			bestAbs := -1.0
+			var affected uint64
 			for i := range bkt.pairs {
 				pr := &bkt.pairs[i]
 				bases[i] = pr.base
@@ -463,6 +473,7 @@ func Diff(baseTasks, targetTasks []TaskInput, opts DiffOptions) DiffResult {
 				if !isSignificantDrift(bkt.unit, pr.base, pr.target, pr.delta) {
 					continue
 				}
+				affected++
 				ad := math.Abs(pr.delta)
 				if best == nil || ad > bestAbs || (ad == bestAbs && pr.host < best.host) {
 					best = pr
@@ -476,7 +487,9 @@ func Diff(baseTasks, targetTasks []TaskInput, opts DiffOptions) DiffResult {
 			slices.Sort(targets)
 			baseP50 := medianFloat64(bases)
 			targetP50 := medianFloat64(targets)
-			if !isFiniteFloat(baseP50) || !isFiniteFloat(targetP50) || !isFiniteFloat(best.delta) {
+			baseMax := bases[len(bases)-1]
+			targetMax := targets[len(targets)-1]
+			if !isFiniteFloat(baseP50) || !isFiniteFloat(targetP50) || !isFiniteFloat(baseMax) || !isFiniteFloat(targetMax) || !isFiniteFloat(best.delta) || !isFiniteFloat(best.base) || !isFiniteFloat(best.target) {
 				continue
 			}
 
@@ -501,15 +514,20 @@ func Diff(baseTasks, targetTasks []TaskInput, opts DiffOptions) DiffResult {
 			}
 
 			drifts = append(drifts, MetricDrift{
-				Label:       bkt.label,
-				Unit:        bkt.unit,
-				BaseP50:     baseP50,
-				TargetP50:   targetP50,
-				MaxDelta:    best.delta,
-				MaxDeltaPct: maxDeltaPct,
-				MaxHost:     best.host,
-				HostCount:   uint64(len(bkt.pairs)),
-				score:       score,
+				Label:          bkt.label,
+				Unit:           bkt.unit,
+				BaseP50:        baseP50,
+				TargetP50:      targetP50,
+				BaseMax:        baseMax,
+				TargetMax:      targetMax,
+				MaxDelta:       best.delta,
+				MaxDeltaBase:   best.base,
+				MaxDeltaTarget: best.target,
+				MaxDeltaPct:    maxDeltaPct,
+				MaxHost:        best.host,
+				AffectedHosts:  affected,
+				HostCount:      uint64(len(bkt.pairs)),
+				score:          score,
 			})
 		}
 
