@@ -6,6 +6,7 @@ Changes on `main` since v0.2.0. They are not in a release yet.
 
 ### Upgrade notes
 
+- Building from source needs Go 1.27.4 (GO-2026-6859).
 - `exact` mode job summaries now default to deterministic Anomaly-First ranking
   (`failure` → `anomaly` → `normal`) instead of task insertion order, and
   terminal tasks without output hashes (such as `skipped`, `cancelled`, or
@@ -53,6 +54,32 @@ Changes on `main` since v0.2.0. They are not in a release yet.
     with bounded line diffs, and significant numeric metric drifts under a
     strict 32 KiB response budget with per-host `view_jobs` and `view_output`
     authorization and dual-job audit attribution.
+- Composite `steps` actions now support controlled output extraction
+  (`steps[].extract`), whole-element step variable references
+  (`{steps.<step_name>.<var>}`), and declarative conditional branching
+  (`steps[].when`):
+  - Extractors support single-capture-group Go RE2 (`regex`, `match: first |
+    exactly_one`), strict `$`-rooted `json_path` (rejecting duplicate keys and
+    nesting past depth 32), and `tsv` (`line`, `column`, `tab | whitespace`)
+    with bounded scan (`max_bytes`, default `64KB`, max `1MB`). Extraction runs
+    after redaction and before caller output filters or budget truncation,
+    rejects redaction-modified lines or JSON documents, and re-redacts decoded
+    JSON values.
+  - Every extracted value must satisfy an explicit `as` type (`int` with
+    required `min`/`max` and `min >= 0` in `exec`, non-dash `enum`, anchored
+    `string` with `regex` + `max_len`, `path` with `allowed_roots` and pre-exec
+    `PATH_NOT_TRUSTED` check, or `bool`). `{steps.*}` is statically restricted
+    to ordinary arguments of the final command and forbidden with
+    `allow_interpreter: true`.
+  - `when` evaluates a bounded YAML AST (max depth 4, max 32 nodes, forbidden on
+    step 0) using Kleene three-valued logic so missing values fail closed.
+    Skipped steps report explicit `CONDITION_FALSE` or `STOPPED` reasons.
+  - Agents report `step_extract` and `step_when` in `features`. Upgrade both
+    `allowops-agent` and `allowops-exec` before publishing catalogs that use
+    these fields; older binaries reject unknown fields with `CATALOG_REJECTED`
+    or `REQUEST_REJECTED`.
+  - Added three read-only example actions: `disk_pressure_diagnose`,
+    `top_process_diagnose`, and `docker_container_diagnose`.
 - Investigation context plugin loop (stages A–D, see
   [docs/plugin-stage0203-design.md](docs/plugin-stage0203-design.md)):
   - **Plugin host security foundation & `plugin/plugintest`**: instance-scoped

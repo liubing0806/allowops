@@ -18,11 +18,16 @@ different limits. There is no hidden unredacted output to retrieve later.
 
 ## Sequential steps and fallback paths
 
-`steps` runs a list of named, fixed `exec` arrays sequentially. `on_error` is
-`continue` or `stop`. One action timeout and output budget cover all steps;
-the final exit code is the first failed step's code, or zero. Skipped steps
-remain visible. `exec_fallbacks` supplies alternative absolute executable paths
-when the primary executable does not exist; it is not a retry for command failure.
+`steps` runs a list of named, fixed `exec` arrays sequentially in declaration
+order (a linear DAG with no loops or backward jumps). `on_error` is `continue`
+or `stop`. One action timeout and output budget cover all steps; the final exit
+code is the first failed step's code, or zero when all steps succeed or are
+conditionally skipped. Skipped steps remain visible with a `skip_reason` of
+`CONDITION_FALSE` (the step's `when` condition did not evaluate to true) or
+`STOPPED` (stopped by an earlier failure under `on_error: stop`, timeout, or
+cancellation). `exec_fallbacks` supplies alternative absolute executable paths
+when the primary executable does not exist; it is not a retry for command
+failure.
 
 ```yaml
 name: host_snapshot
@@ -41,6 +46,81 @@ filters: [head, count]
 redact:
   builtin: [secrets]
 ```
+
+### Controlled step dataflow and branching
+
+Steps may declare `extract` to capture strongly typed values from an earlier
+step's redacted stdout, reference them in later steps with whole-element
+`{steps.<step_name>.<var>}` placeholders, and gate later steps with a
+declarative `when` AST:
+
+- **Extractors (`steps[].extract`)**: each variable chooses one of `regex`
+  (single-capture-group Go RE2, `match: first | exactly_one`), `json_path`
+  (strict `$`-rooted field/index path, duplicate keys rejected, max nesting 32),
+  or `tsv` (`line`, `column`, `delimiter: tab | whitespace`), bounded by
+  `max_bytes` (default `64KB`, max `1MB`). Extraction runs **after redaction**
+  and **before caller output filters and budget truncation**. Lines or JSON
+  documents modified by redaction are rejected (`EXTRACT_FAILED`), decoded JSON
+  values are re-checked against redaction rules, and incomplete output
+  (`max_scan`, pipe drain delay, or `max_bytes` overflow) fails closed.
+- **Type gate (`as`)**: extracted values must satisfy an explicit `as` type:
+  `int` (required `min` and `max`; `min >= 0` when passed to `exec`), `enum`
+  (no leading `-` values), `string` (required full-string-anchored `regex` and
+  `max_len` 1..1024), `path` (`allowed_roots`, resolved with `EvalSymlinks` and
+  checked with `PATH_NOT_TRUSTED` immediately before the consuming step runs),
+  or `bool`. Type or option-prefix violations fail with `EXTRACT_TYPE_INVALID`
+  even when `optional: true`; errors never echo extracted values.
+- **Safe placement**: `{steps.*}` is allowed only in ordinary arguments of the
+  final command. It is statically rejected in `exec[0]`, all wrapper options and
+  operands (`env`, `timeout`, `nice`, `ionice`, `stdbuf`, `xargs`, `nsenter`,
+  `chroot`), `docker`/`kubectl` global options, subcommands, connection flags
+  and `exec` targets, and any `allow_interpreter: true` action. Optional argv
+  groups omit a missing step variable only when the producing step succeeded
+  cleanly and declared `optional: true`; otherwise the step fails with
+  `EXTRACT_MISSING`.
+- **Conditional branching (`steps[].when`)**: forbidden on step 0. Supports
+  bounded static combinators (`all`, `any`, `not`; max depth 4, max 32 nodes)
+  over prior step facts (`prev.exit_code`, `prev.skipped`,
+  `steps.<name>.exit_code`, `steps.<name>.skipped`, `steps.<name>.<var>`) and
+  typed operators (`exists`, `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`).
+  Evaluates with Kleene three-valued logic (`missing` yields `unknown`, and
+  `not unknown` stays `unknown`); a step executes only when the root evaluates
+  to `true`. `when` is a workflow optimization and not an authorization
+  boundary: every step must be safe even if executed unconditionally.
+
+```yaml
+name: disk_pressure_diagnose
+description: Read filesystem usage and list top-level directory sizes when usage reaches 80 percent.
+risk: read
+params:
+  path:
+    type: path
+    description: Existing directory within the allowed roots to diagnose.
+    allowed_roots: [/var/log, /data]
+    default: /var/log
+timeout: 20s
+max_output: 64KB
+on_error: stop
+steps:
+  - name: check_usage
+    exec: [/usr/bin/df, -P, --, '{path}']
+    extract:
+      use_pct:
+        regex: '^\S+\s+[0-9]+\s+[0-9]+\s+[0-9]+\s+([0-9]{1,3})%\s+'
+        match: exactly_one
+        as: {type: int, min: 0, max: 100}
+  - name: top_dirs
+    when: {ref: steps.check_usage.use_pct, gte: 80}
+    exec: [/usr/bin/du, -x, -h, --max-depth=1, --, '{path}']
+filters: []
+max_scan: 256MB
+redact:
+  builtin: [secrets]
+```
+
+Hosts running an older `allowops-agent` or `allowops-exec` reject catalogs that
+use `extract` or `when`; see
+[fields that hosts must understand](publishing.md#fields-that-hosts-must-understand).
 
 ## Signed scripts and interpreter exceptions
 

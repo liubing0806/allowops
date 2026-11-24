@@ -129,7 +129,7 @@ func (a *Agent) hello() *v1.AgentHello {
 	for key, value := range a.config.ReportedLabels {
 		labels[key] = value
 	}
-	return &v1.AgentHello{AgentVersion: a.options.Version, Capabilities: &v1.AgentCapabilities{CatalogSchemaVersions: []uint32{1}, ParameterTypes: []string{"enum", "int", "string", "duration", "path", "url", "bool", "string_array"}, ExecutionModes: []string{"exec", "steps", "script", "builtin"}, Builtins: builtins, OutputFilters: []string{"match", "exclude", "tail", "head", "count"}, Features: []string{"allow_interpreter", "exec_fallbacks", "max_targets"}}, ReportedLabels: labels, LoadedCatalogs: a.catalogs.refs(), MaxConcurrentTasks: uint32(a.config.Limits.ConcurrentTasks)}
+	return &v1.AgentHello{AgentVersion: a.options.Version, Capabilities: &v1.AgentCapabilities{CatalogSchemaVersions: []uint32{1}, ParameterTypes: []string{"enum", "int", "string", "duration", "path", "url", "bool", "string_array"}, ExecutionModes: []string{"exec", "steps", "script", "builtin"}, Builtins: builtins, OutputFilters: []string{"match", "exclude", "tail", "head", "count"}, Features: []string{"allow_interpreter", "exec_fallbacks", "max_targets", "step_extract", "step_when"}}, ReportedLabels: labels, LoadedCatalogs: a.catalogs.refs(), MaxConcurrentTasks: uint32(a.config.Limits.ConcurrentTasks)}
 }
 
 // arthasRecoveryTimeout bounds the recovery at start.

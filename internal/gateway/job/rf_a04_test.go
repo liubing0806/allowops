@@ -22,7 +22,10 @@ func TestRFA04CompositeCompletion(t *testing.T) {
 	s.Audit = audit.New(s.Store.Pool, audit.Config{})
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
-	a := catalog.Action{Name: "action", MaxOutput: 1024, OnError: "continue", Steps: []catalog.Step{{Name: "first", Exec: []any{"/usr/bin/true"}}, {Name: "second", Exec: []any{"/usr/bin/true"}}}}
+	a := catalog.Action{Name: "action", MaxOutput: 1024, OnError: "continue", Steps: []catalog.Step{
+		{Name: "first", Exec: []any{"/usr/bin/true"}},
+		{Name: "second", Exec: []any{"/usr/bin/true"}, When: &catalog.StepCondition{Ref: "prev.exit_code", Eq: &catalog.ConditionValue{Value: int64(1)}}},
+	}}
 	definition, err := json.Marshal(a)
 	if err != nil {
 		t.Fatal(err)
@@ -54,6 +57,7 @@ func TestRFA04CompositeCompletion(t *testing.T) {
 		{"negative_duration", true, []v1.TaskStatus{success, success}, success, proto.Int32(0), "", durationpb.New(-time.Second), false},
 		{"invalid_duration", true, []v1.TaskStatus{success, success}, success, proto.Int32(0), "", &durationpb.Duration{Nanos: 1000000000}, false},
 		{"all_success", true, []v1.TaskStatus{success, success}, success, proto.Int32(0), "", durationpb.New(time.Millisecond), true},
+		{"success_with_conditional_skip", true, []v1.TaskStatus{success, v1.TaskStatus_TASK_STATUS_SKIPPED}, success, proto.Int32(0), "", durationpb.New(time.Millisecond), true},
 		{"failure", true, []v1.TaskStatus{failed, success}, failed, proto.Int32(1), "EXECUTION_FAILED", durationpb.New(time.Millisecond), true},
 		{"timeout_after_failure", true, []v1.TaskStatus{failed, timeout}, timeout, proto.Int32(1), "TIMEOUT", durationpb.New(time.Millisecond), true},
 		{"cancel_after_failure", true, []v1.TaskStatus{failed, cancelled}, cancelled, proto.Int32(1), "CANCELLED", durationpb.New(time.Millisecond), true},
@@ -82,7 +86,11 @@ func TestRFA04CompositeCompletion(t *testing.T) {
 			}
 			for i, status := range tc.steps {
 				r := &v1.ExecutionResult{Status: status, Duration: durationpb.New(time.Millisecond)}
-				if status != v1.TaskStatus_TASK_STATUS_SKIPPED {
+				if status == v1.TaskStatus_TASK_STATUS_SKIPPED {
+					if tc.steps[0] == success {
+						r.Reason = "CONDITION_FALSE"
+					}
+				} else {
 					code := int32(0)
 					if status != success {
 						code = 1

@@ -53,9 +53,13 @@ for ordinary commands. Set `run_as` to the reviewed execution identity when need
 
 Use exactly one of `exec`, `steps`, `script` or `builtin`.
 `exec[0]` is an absolute executable path. Do not put sudo in an action; use
-`run_as`. Only an argv element equal to `{parameter_name}` is substituted.
-Everything else is literal text. An optional group such as
-`["--since", "{since}"]` is omitted in full if its parameter is absent.
+`run_as`. Only an argv element equal to `{parameter_name}` (or, in `steps`,
+`{steps.<step_name>.<var>}` referencing an earlier step's `extract` variable)
+is substituted. Everything else is literal text. An optional group such as
+`["--since", "{since}"]` is omitted in full if its parameter is absent. For
+`{steps.*}` variables, an optional group is omitted only when the producing step
+succeeded cleanly and the extractor declared `optional: true`; see
+[controlled step dataflow and branching](execution.md#controlled-step-dataflow-and-branching).
 
 ## Parameter types
 

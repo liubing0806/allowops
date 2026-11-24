@@ -1,0 +1,27 @@
+name: top_process_diagnose
+description: Read processes sorted by resident memory and inspect the largest process and its threads at 512 MiB or above.
+risk: read
+params: {}
+timeout: 15s
+max_output: 64KB
+on_error: continue
+steps:
+  - name: find_top_process
+    exec: [/usr/bin/ps, -eo, 'pid,rss,comm', --no-headers, --sort=-rss]
+    extract:
+      pid:
+        tsv: {line: 1, column: 1, delimiter: whitespace}
+        as: {type: int, min: 1, max: 4194304}
+      rss_kb:
+        tsv: {line: 1, column: 2, delimiter: whitespace}
+        as: {type: int, min: 0, max: 1073741824}
+  - name: process_detail
+    when: {ref: steps.find_top_process.rss_kb, gte: 524288}
+    exec: [/usr/bin/ps, -ww, -o, 'pid,ppid,user,stat,rss,vsz,etime,comm', -p, '{steps.find_top_process.pid}']
+  - name: process_threads
+    when: {ref: steps.find_top_process.rss_kb, gte: 524288}
+    exec: [/usr/bin/ps, -L, -o, 'pid,tid,pcpu,stat,comm', -p, '{steps.find_top_process.pid}']
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]
