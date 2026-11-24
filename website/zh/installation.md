@@ -4,7 +4,7 @@
 
 ## 本地 Compose 演示 {#local-compose-demonstration}
 
-前置条件：Linux amd64 上的 Docker Compose（使用本机 Unix socket）、Go 1.27.3、OpenSSL、Git，以及安装了 PyYAML 的 Python 3。在源码检出目录中执行：
+前置条件：Linux amd64 上的 Docker Compose（使用本机 Unix socket）、Go 1.27.4、OpenSSL、Git，以及安装了 PyYAML 的 Python 3。在源码检出目录中执行：
 
 ```sh
 cd deploy/compose

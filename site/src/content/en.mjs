@@ -106,7 +106,7 @@ export default {
     lede: 'The Compose demo includes the gateway, PostgreSQL, SeaweedFS, an LDAPS directory and two hosts. The script generates credentials locally, publishes the example catalog and runs a read-only <code>disk_usage</code> job on both hosts.',
     copy: 'Copy',
     copied: 'Copied',
-    note: 'Requires Linux amd64, Docker Compose, Go 1.27.3, OpenSSL, Git and Python 3 with PyYAML. Use the Helm chart for Kubernetes and .deb or .rpm packages for hosts; see <a href="/docs/installation">installation</a>.',
+    note: 'Requires Linux amd64, Docker Compose, Go 1.27.4, OpenSSL, Git and Python 3 with PyYAML. Use the Helm chart for Kubernetes and .deb or .rpm packages for hosts; see <a href="/docs/installation">installation</a>.',
     term: [
       '<span class="c"># Define and publish a catalog</span>',
       'allowops catalog validate ./catalog',
