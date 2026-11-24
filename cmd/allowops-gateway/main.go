@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -71,12 +72,39 @@ type configuration struct {
 	Output     output.Config        `yaml:"output"`
 	// Opt-in: the gateway makes no outbound request unless enabled.
 	UpdateCheck updatecheck.Config `yaml:"update_check"`
+	MCP         mcpConfig          `yaml:"mcp"`
 }
 
-// decodeConfig applies the defaults, rejects unknown keys and validates
-// update_check when it is enabled.
+// mcpConfig selects how MCP tools/list exposes catalog actions. Fields are
+// omitted when empty, so a marshalled configuration decodes to the defaults.
+type mcpConfig struct {
+	// Mode is flat (default), progressive or auto.
+	Mode string `yaml:"mode,omitempty"`
+	// AutoThreshold is the auto mode action count; omitted means 40.
+	AutoThreshold *int `yaml:"auto_threshold,omitempty"`
+}
+
+// validate applies the auto_threshold default and checks both values. An
+// explicit auto_threshold is checked in every mode, so that switching to auto
+// later cannot start with an invalid value.
+func (c *mcpConfig) validate() error {
+	if c.Mode != "flat" && c.Mode != "progressive" && c.Mode != "auto" {
+		return errors.New("mcp.mode allowed: flat, progressive, auto")
+	}
+	if c.AutoThreshold == nil {
+		threshold := 40
+		c.AutoThreshold = &threshold
+	}
+	if *c.AutoThreshold < 1 || *c.AutoThreshold > 1000 {
+		return errors.New("mcp.auto_threshold allowed: integer in [1,1000]")
+	}
+	return nil
+}
+
+// decodeConfig applies the defaults, rejects unknown keys, validates
+// update_check when it is enabled, and validates mcp.
 func decodeConfig(r io.Reader) (configuration, error) {
-	cfg := configuration{Address: ":443", Gateway: hostconn.DefaultConfig(), Identity: api.Config{Origin: "https://localhost"}, Jobs: job.DefaultConfig(), UpdateCheck: updatecheck.DefaultConfig()}
+	cfg := configuration{Address: ":443", Gateway: hostconn.DefaultConfig(), Identity: api.Config{Origin: "https://localhost"}, Jobs: job.DefaultConfig(), UpdateCheck: updatecheck.DefaultConfig(), MCP: mcpConfig{Mode: "flat"}}
 	if version != "dev" {
 		cfg.Gateway.Version = version
 	}
@@ -89,6 +117,9 @@ func decodeConfig(r io.Reader) (configuration, error) {
 		if err := cfg.UpdateCheck.Validate(); err != nil {
 			return cfg, fmt.Errorf("invalid gateway config: %w", err)
 		}
+	}
+	if err := cfg.MCP.validate(); err != nil {
+		return cfg, fmt.Errorf("invalid gateway config: %w", err)
 	}
 	return cfg, nil
 }
@@ -315,7 +346,13 @@ func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service
 		listener.Close()
 		return nil, err
 	}
-	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcp.Config{Jobs: cfg.Jobs, Inventory: inventoryHost})
+	mcpConfig := mcp.Config{Jobs: cfg.Jobs, Inventory: inventoryHost, Mode: cfg.MCP.Mode}
+	// A configuration built without decodeConfig leaves the threshold unset;
+	// zero selects the MCP default.
+	if cfg.MCP.AutoThreshold != nil {
+		mcpConfig.AutoThreshold = *cfg.MCP.AutoThreshold
+	}
+	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcpConfig)
 	if err != nil {
 		agent.Close()
 		listener.Close()

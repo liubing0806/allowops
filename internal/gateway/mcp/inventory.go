@@ -3,10 +3,12 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
 )
@@ -22,14 +24,32 @@ type inventoryEntity struct {
 	Source    string            `json:"source"`
 }
 
+// recommendedAction is a visible action whose entity_kinds include the kind
+// of a returned entity. It is a display precheck; calls are still authorized.
+type recommendedAction struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Risk        string `json:"risk"`
+	Toolset     string `json:"toolset,omitempty"`
+}
+
 type inventoryResult struct {
-	Entities     []inventoryEntity        `json:"entities"`
+	Entities []inventoryEntity `json:"entities"`
+	// RecommendedActions maps entity kinds to at most recommendationsPerKind
+	// actions; RecommendedActionsTruncated reports omitted recommendations.
+	RecommendedActions          map[string][]recommendedAction `json:"recommended_actions,omitempty"`
+	RecommendedActionsTruncated bool                           `json:"recommended_actions_truncated,omitempty"`
+	// Truncated reports omitted entities only.
 	Truncated    bool                     `json:"truncated"`
 	SourceErrors []pluginhost.SourceError `json:"source_errors"`
 	OutputTrust  string                   `json:"output_trust"`
 }
 
-func (s *Service) searchEntities(ctx context.Context, raw json.RawMessage) (*ToolResult, error) {
+const recommendationsPerKind = 10
+
+// searchEntities searches inventory entities. actions are the visible
+// actions of the request scope from which recommended_actions are chosen.
+func (s *Service) searchEntities(ctx context.Context, raw json.RawMessage, actions map[string]catalog.Action) (*ToolResult, error) {
 	args, err := fixedArguments(raw, "kind", "name", "sources", "limit")
 	if err != nil {
 		return nil, err
@@ -92,11 +112,12 @@ func (s *Service) searchEntities(ctx context.Context, raw json.RawMessage) (*Too
 		return nil, err
 	}
 	if size <= resultByteLimit {
-		return result, nil
+		return recommendActions(out, result, actions)
 	}
 	out.Truncated = true
 	low, high := 0, len(out.Entities)
 	var best *ToolResult
+	kept := 0
 	for low <= high {
 		middle := low + (high-low)/2
 		candidate := out
@@ -106,11 +127,86 @@ func (s *Service) searchEntities(ctx context.Context, raw json.RawMessage) (*Too
 			return nil, err
 		}
 		if size <= resultByteLimit {
-			best = result
+			best, kept = result, middle
 			low = middle + 1
 		} else {
 			high = middle - 1
 		}
 	}
-	return best, nil
+	if best == nil {
+		return nil, nil
+	}
+	out.Entities = out.Entities[:kept]
+	return recommendActions(out, best, actions)
+}
+
+// recommendActions adds recommended_actions for the kinds of the entities in
+// out, which is already within budget as result. Kinds are added in name
+// order as whole groups while the result stays within budget; omitted groups
+// and kinds with more than recommendationsPerKind matches set
+// recommended_actions_truncated. Entities and truncated are not changed.
+func recommendActions(out inventoryResult, result *ToolResult, actions map[string]catalog.Action) (*ToolResult, error) {
+	var kinds []string
+	for _, e := range out.Entities {
+		kinds = append(kinds, e.Kind)
+	}
+	slices.Sort(kinds)
+	groups := map[string][]recommendedAction{}
+	truncated := false
+	for _, kind := range slices.Compact(kinds) {
+		var matches []catalog.Action
+		for _, a := range actions {
+			if slices.Contains(a.EntityKinds, kind) {
+				matches = append(matches, a)
+			}
+		}
+		if len(matches) == 0 {
+			continue
+		}
+		sortActions(matches)
+		if len(matches) > recommendationsPerKind {
+			matches = matches[:recommendationsPerKind]
+			truncated = true
+		}
+		group := make([]recommendedAction, len(matches))
+		for i, a := range matches {
+			group[i] = recommendedAction{Name: a.Name, Description: a.Description, Risk: a.Risk, Toolset: a.Toolset}
+		}
+		groups[kind] = group
+	}
+	if len(groups) == 0 {
+		return result, nil
+	}
+	added := map[string][]recommendedAction{}
+	for _, kind := range slices.Sorted(maps.Keys(groups)) {
+		// Measure with the truncation marker set, so that clearing it later
+		// cannot exceed the budget.
+		candidate := out
+		candidate.RecommendedActions = maps.Clone(added)
+		candidate.RecommendedActions[kind] = groups[kind]
+		candidate.RecommendedActionsTruncated = true
+		_, size, err := toolResult(candidate)
+		if err != nil {
+			return nil, err
+		}
+		if size <= resultByteLimit {
+			added[kind] = groups[kind]
+		} else {
+			truncated = true
+		}
+	}
+	if len(added) > 0 {
+		out.RecommendedActions = added
+	}
+	out.RecommendedActionsTruncated = truncated
+	final, size, err := toolResult(out)
+	if err != nil {
+		return nil, err
+	}
+	if size > resultByteLimit {
+		// Only the truncation marker of an empty recommendation set can
+		// exceed the budget; return the entities alone.
+		return result, nil
+	}
+	return final, nil
 }

@@ -176,7 +176,7 @@ func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, scope *se
 	case "hosts_search":
 		return s.searchHosts(ctx, r.Params.Arguments)
 	case "entities_search":
-		return s.searchEntities(ctx, r.Params.Arguments)
+		return s.searchEntities(ctx, r.Params.Arguments, scope.visible)
 	case "actions_search":
 		return s.searchActions(ctx, r.Params.Arguments, scope)
 	}

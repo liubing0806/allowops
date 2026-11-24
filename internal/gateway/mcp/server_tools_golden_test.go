@@ -8,11 +8,24 @@ import (
 )
 
 // TestServerToolsGolden pins the initialize result and tools/list output that
-// serverFor builds for an admin and a viewer identity.
+// serverFor builds in the default flat mode for an admin and a viewer identity.
 func TestServerToolsGolden(t *testing.T) {
 	f := newTransportFixture(t)
+	checkToolsGolden(t, f, map[string]string{"admin": f.admin, "viewer": f.viewer}, "testdata/server_tools_golden.json")
+}
+
+// TestServerToolsProgressiveGolden pins progressive tools/list output: admin
+// sees read, write and dangerous actions, readonly only read actions, and
+// viewer none.
+func TestServerToolsProgressiveGolden(t *testing.T) {
+	f := newProgressiveFixture(t, func(c *Config) { c.Mode = modeProgressive })
+	checkToolsGolden(t, f.transportFixture, map[string]string{"admin": f.admin, "readonly": f.reader, "viewer": f.viewer}, "testdata/server_tools_progressive_golden.json")
+}
+
+func checkToolsGolden(t *testing.T, f *transportFixture, tokens map[string]string, path string) {
+	t.Helper()
 	out := map[string]any{}
-	for name, token := range map[string]string{"admin": f.admin, "viewer": f.viewer} {
+	for name, token := range tokens {
 		c, _ := f.client(t, token, nil)
 		list, err := c.ListTools(context.Background(), nil)
 		if err != nil {
@@ -26,7 +39,6 @@ func TestServerToolsGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	got = append(got, '\n')
-	path := "testdata/server_tools_golden.json"
 	if os.Getenv("UPDATE_GOLDEN") != "" {
 		if err := os.WriteFile(path, got, 0o644); err != nil {
 			t.Fatal(err)
