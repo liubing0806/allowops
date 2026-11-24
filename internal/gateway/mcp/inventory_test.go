@@ -3,9 +3,12 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -17,9 +20,11 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/job"
 	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/plugin/inventory"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/encoding/protojson"
+	"gopkg.in/yaml.v3"
 )
 
 type inventoryStub struct {
@@ -45,6 +50,8 @@ type inventoryIdentity struct {
 	denied          bool
 	visibilityError error
 	required        bool
+	auditError      error
+	auditEvents     []reqctx.AuditEvent
 }
 
 func (i *inventoryIdentity) Require(ctx context.Context, op authz.Operation, a authz.Action, h authz.Host) (authz.Result, error) {
@@ -59,6 +66,14 @@ func (i *inventoryIdentity) Require(ctx context.Context, op authz.Operation, a a
 }
 func (i *inventoryIdentity) VisibleHostnames(context.Context, []string) (map[string]bool, error) {
 	return i.visible, i.visibilityError
+}
+
+func (i *inventoryIdentity) AppendResultAudit(_ context.Context, event reqctx.AuditEvent) error {
+	if !i.required {
+		panic("audit before authorization")
+	}
+	i.auditEvents = append(i.auditEvents, event)
+	return i.auditError
 }
 
 func TestInventoryToolSchema(t *testing.T) {
@@ -98,7 +113,7 @@ func TestInventoryArgumentErrorsAndPermission(t *testing.T) {
 			id := &inventoryIdentity{}
 			s := &Service{identity: id, config: Config{Inventory: source}}
 			_, err := s.searchEntities(context.Background(), json.RawMessage(input), nil)
-			if connect.CodeOf(err) != connect.CodeInvalidArgument || id.required || source.called {
+			if connect.CodeOf(err) != connect.CodeInvalidArgument || id.required || source.called || len(id.auditEvents) != 0 {
 				t.Fatalf("error=%v required=%v called=%v", err, id.required, source.called)
 			}
 			if strings.Contains(input, "sources") && !strings.Contains(err.Error(), "static") {
@@ -110,8 +125,22 @@ func TestInventoryArgumentErrorsAndPermission(t *testing.T) {
 	id := &inventoryIdentity{denied: true}
 	s := &Service{identity: id, config: Config{Inventory: source}}
 	_, err := s.execute(context.Background(), &sdk.CallToolRequest{Params: &sdk.CallToolParamsRaw{Name: "entities_search", Arguments: json.RawMessage(`{}`)}}, &serverScope{tools: map[string]bool{"entities_search": true}}, &callState{})
-	if connect.CodeOf(err) != connect.CodePermissionDenied || source.called {
+	if connect.CodeOf(err) != connect.CodePermissionDenied || source.called || len(id.auditEvents) != 0 {
 		t.Fatalf("error=%v called=%v", err, source.called)
+	}
+}
+
+func TestInventoryAuthorizationAuditFailureSkipsSearch(t *testing.T) {
+	source := &inventoryStub{sources: []string{"static"}}
+	id := &inventoryIdentity{auditError: errors.New("audit backend details")}
+	s := &Service{identity: id, config: Config{Inventory: source}}
+	result, err := s.searchEntities(t.Context(), nil, nil)
+	if result != nil || connect.CodeOf(err) != connect.CodeUnavailable || strings.Contains(err.Error(), "audit backend details") || source.called {
+		t.Fatalf("result=%v error=%v called=%v", result, err, source.called)
+	}
+	want := []reqctx.AuditEvent{{Operation: "mcp/entities_search", Phase: "authorized", Outcome: "allow"}}
+	if !reflect.DeepEqual(id.auditEvents, want) {
+		t.Fatalf("events=%+v, want=%+v", id.auditEvents, want)
 	}
 }
 
@@ -122,12 +151,12 @@ func TestInventoryVisibilityBeforeLimitAndHostCount(t *testing.T) {
 		{Entity: inventory.Entity{Kind: "service", Name: "c-configured", Selector: "service=configured"}, Source: "static"},
 	}}
 	s := &Service{identity: &inventoryIdentity{visible: map[string]bool{"public": true}}, config: Config{Inventory: source}}
-	result, err := s.searchEntities(context.Background(), json.RawMessage(`{"kind":"service","name":"test","sources":["static"],"limit":1}`), nil)
+	result, err := s.searchEntities(context.Background(), json.RawMessage(`{"kind":"service","name":"i","sources":["static"],"limit":1}`), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	out := result.StructuredContent.(inventoryResult)
-	if len(out.Entities) != 1 || out.Entities[0].Name != "b-visible" || !out.Truncated || out.Entities[0].HostCount != 1 || !reflect.DeepEqual(out.Entities[0].Hosts, []string{"public"}) || source.query != (pluginhost.Query{Kind: "service", Name: "test"}) || !reflect.DeepEqual(source.selected, []string{"static"}) {
+	if len(out.Entities) != 1 || out.Entities[0].Name != "b-visible" || !out.Truncated || out.Entities[0].HostCount != 1 || !reflect.DeepEqual(out.Entities[0].Hosts, []string{"public"}) || source.query != (pluginhost.Query{Kind: "service", Name: "i"}) || !reflect.DeepEqual(source.selected, []string{"static"}) {
 		t.Fatalf("output=%+v source=%+v", out, source)
 	}
 	result, err = s.searchEntities(context.Background(), json.RawMessage(`{}`), nil)
@@ -170,6 +199,174 @@ func TestInventoryVisibilityBeforeLimitAndHostCount(t *testing.T) {
 	}
 }
 
+func TestInventoryMergesVisibleSources(t *testing.T) {
+	source := &inventoryStub{sources: []string{"a", "b", "hidden"}, entities: []pluginhost.Result{
+		{Source: "b", Entity: inventory.Entity{
+			Kind: "service", Name: "api", Hosts: []string{"two", "one"}, Attrs: map[string]string{"team": "platform", "env": "prod"},
+			Selector: "env=prod", DependsOn: []string{"db/b", "db/a"},
+		}},
+		{Source: "a", Entity: inventory.Entity{
+			Kind: "service", Name: "api", Hosts: []string{"one", "private"}, Attrs: map[string]string{"team": "platform", "env": "test"},
+			Selector: "env=test", DependsOn: []string{"db/a"},
+		}},
+		{Source: "hidden", Entity: inventory.Entity{
+			Kind: "service", Name: "api", Hosts: []string{"private"}, Attrs: map[string]string{"secret": "hidden-attribute"},
+			Selector: "env=hidden", DependsOn: []string{"db/hidden"},
+		}},
+	}}
+	id := &inventoryIdentity{visible: map[string]bool{"one": true, "two": true}}
+	s := &Service{identity: id, config: Config{Inventory: source}}
+	result, err := s.searchEntities(t.Context(), json.RawMessage(`{"name":"API"}`), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := result.StructuredContent.(inventoryResult)
+	want := []inventoryEntity{{
+		Kind: "service", Name: "api", Sources: []string{"a", "b"}, Hosts: []string{"one", "two"}, HostCount: 2,
+		Attrs: map[string]string{"team": "platform"}, DependsOn: []string{"db/a", "db/b"},
+		Conflicts:         map[string]map[string]string{"env": {"a": "test", "b": "prod"}},
+		SelectorConflicts: map[string]string{"a": "env=test", "b": "env=prod"},
+	}}
+	if !reflect.DeepEqual(out.Entities, want) || strings.Contains(result.Content[0].Text, `"source":`) {
+		t.Fatalf("entities=%+v text=%s", out.Entities, result.Content[0].Text)
+	}
+}
+
+func TestInventoryPropagatesNameRedactionOnlyAcrossVisibleSources(t *testing.T) {
+	const secret = "opaque-name"
+	files := []struct{ id, contents string }{
+		{"a", `entities:
+  - kind: service
+    name: opaque-name
+    attrs: {password: opaque-name}
+    hosts: [host-a]`},
+		{"b", `entities:
+  - kind: service
+    name: opaque-name
+    attrs: {memo: tag-opaque-name}
+    hosts: [host-b]
+    selector: app=opaque-name
+    depends_on: [database/opaque-name]`},
+	}
+	var configs []pluginhost.Config
+	for _, file := range files {
+		path := filepath.Join(t.TempDir(), file.id+".yaml")
+		if err := os.WriteFile(path, []byte(file.contents), 0600); err != nil {
+			t.Fatal(err)
+		}
+		var config yaml.Node
+		if err := config.Encode(map[string]string{"file": path}); err != nil {
+			t.Fatal(err)
+		}
+		configs = append(configs, pluginhost.Config{ID: file.id, Module: "inventory.static", Config: config, Required: true})
+	}
+	host, err := pluginhost.New(t.Context(), configs, pluginhost.Deps{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer host.Close(t.Context())
+	id := &inventoryIdentity{visible: map[string]bool{"host-a": true, "host-b": true}}
+	s := &Service{identity: id, config: Config{Inventory: host}}
+	search := func(args string) (*ToolResult, []inventoryEntity) {
+		t.Helper()
+		result, err := s.searchEntities(t.Context(), json.RawMessage(args), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result, result.StructuredContent.(inventoryResult).Entities
+	}
+	result, rows := search(`{"name":"[redacted"}`)
+	if len(rows) != 2 || strings.Contains(string(mustJSON(t, result)), secret) ||
+		rows[0].Source != "a" || !reflect.DeepEqual(rows[0].Sources, []string{"a"}) ||
+		rows[1].Source != "b" || !reflect.DeepEqual(rows[1].Sources, []string{"b"}) || rows[1].Selector != "" {
+		t.Fatalf("both visible: %+v", rows)
+	}
+	if _, rows := search(`{"name":"OPAQUE"}`); len(rows) != 0 {
+		t.Fatalf("name filter matched a redacted value: %+v", rows)
+	}
+	assertB := func(rows []inventoryEntity) {
+		t.Helper()
+		if len(rows) != 1 || rows[0].Name != secret || rows[0].Source != "b" || !reflect.DeepEqual(rows[0].Sources, []string{"b"}) ||
+			rows[0].Attrs["memo"] != "tag-"+secret || rows[0].Selector != "app="+secret ||
+			!reflect.DeepEqual(rows[0].DependsOn, []string{"database/" + secret}) {
+			t.Fatalf("only B visible: %+v", rows)
+		}
+	}
+	_, rows = search(`{"sources":["b"],"name":"OPAQUE"}`)
+	assertB(rows)
+	delete(id.visible, "host-a")
+	_, rows = search(`{"name":"OPAQUE"}`)
+	assertB(rows)
+}
+
+func TestInventoryDegradesConflictsBeforeAttributes(t *testing.T) {
+	const oversized = resultByteLimit
+	for _, clipAttributes := range []bool{false, true} {
+		t.Run(fmt.Sprint(clipAttributes), func(t *testing.T) {
+			note := "keep"
+			if clipAttributes {
+				note = strings.Repeat("<", oversized)
+			}
+			source := &inventoryStub{sources: []string{"a", "b"}, entities: []pluginhost.Result{
+				{Source: "a", Entity: inventory.Entity{Kind: "service", Name: "api", Hosts: []string{"host-a"},
+					Attrs: map[string]string{"env": strings.Repeat("a", oversized), "note": note}, Selector: "env=a", DependsOn: []string{"db/a"}}},
+				{Source: "b", Entity: inventory.Entity{Kind: "service", Name: "api", Hosts: []string{"host-b"},
+					Attrs: map[string]string{"env": "b"}, Selector: "env=b", DependsOn: []string{"db/b"}}},
+			}}
+			id := &inventoryIdentity{visible: map[string]bool{"host-a": true, "host-b": true}}
+			s := &Service{identity: id, config: Config{Inventory: source}}
+			result, err := s.searchEntities(t.Context(), nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			size := len(mustJSON(t, result))
+			out := result.StructuredContent.(inventoryResult)
+			if size > resultByteLimit || !out.Truncated || len(out.Entities) != 1 {
+				t.Fatalf("size=%d entities=%d truncated=%t", size, len(out.Entities), out.Truncated)
+			}
+			row := out.Entities[0]
+			if row.Kind != "service" || row.Name != "api" || !reflect.DeepEqual(row.Sources, []string{"a", "b"}) ||
+				!reflect.DeepEqual(row.Hosts, []string{"host-a", "host-b"}) || row.HostCount != 2 ||
+				!row.ConflictsTruncated || len(row.Conflicts) != 0 || len(row.SelectorConflicts) != 0 || row.AttrsTruncated != clipAttributes {
+				t.Fatalf("unexpected first row (size=%d)", size)
+			}
+			if clipAttributes {
+				if len(row.Attrs) != 0 || len(row.DependsOn) != 0 {
+					t.Fatal("attributes or dependencies exceeded the budget")
+				}
+			} else if row.Attrs["note"] != "keep" || !reflect.DeepEqual(row.DependsOn, []string{"db/a", "db/b"}) {
+				t.Fatal("attributes or dependencies were removed while they still fit")
+			}
+		})
+	}
+}
+
+func TestInventoryOversizedHostPreviewRetainsHostCount(t *testing.T) {
+	var hosts []string
+	id := &inventoryIdentity{visible: map[string]bool{}}
+	for n := range 20 {
+		host := fmt.Sprintf("%02d%s", n, strings.Repeat("<", 251))
+		hosts = append(hosts, host)
+		id.visible[host] = true
+	}
+	source := &inventoryStub{sources: []string{"a"}, entities: []pluginhost.Result{
+		{Source: "a", Entity: inventory.Entity{Kind: "service", Name: "api", Hosts: hosts}},
+	}}
+	s := &Service{identity: id, config: Config{Inventory: source}}
+	result, err := s.searchEntities(t.Context(), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := result.StructuredContent.(inventoryResult)
+	if len(mustJSON(t, result)) > resultByteLimit || !out.Truncated || len(out.Entities) != 1 {
+		t.Fatalf("entities=%d truncated=%t", len(out.Entities), out.Truncated)
+	}
+	row := out.Entities[0]
+	if row.HostCount != len(hosts) || len(row.Hosts) == 0 || len(row.Hosts) >= len(hosts) || !reflect.DeepEqual(row.Hosts, hosts[:len(row.Hosts)]) {
+		t.Fatalf("host_count=%d preview=%d", row.HostCount, len(row.Hosts))
+	}
+}
+
 func TestInventoryCompleteResultByteLimit(t *testing.T) {
 	source := &inventoryStub{sources: []string{"static"}}
 	for n := range 32 {
@@ -198,14 +395,15 @@ func TestInventoryCompleteResultByteLimit(t *testing.T) {
 	}
 	// Quote-heavy attributes make the embedded text copy substantially larger.
 	for n := range 100 {
-		source.entities = append(source.entities, pluginhost.Result{Entity: inventory.Entity{Kind: "service", Name: fmt.Sprint(n), Attrs: map[string]string{"data": strings.Repeat(`"<`, 150)}}, Source: "static"})
+		source.entities = append(source.entities, pluginhost.Result{Entity: inventory.Entity{Kind: "service", Name: fmt.Sprintf("%03d", n), Attrs: map[string]string{"data": strings.Repeat(`"<`, 150)}}, Source: "static"})
 	}
 	out = check()
 	if len(out.Entities) == 0 || len(out.Entities) >= 100 || !out.Truncated {
 		t.Fatal(out)
 	}
 	oneMore := out
-	oneMore.Entities = append(oneMore.Entities, inventoryEntity{Kind: "service", Name: fmt.Sprint(len(out.Entities)), Attrs: source.entities[len(out.Entities)].Attrs, Source: "static"})
+	next := source.entities[len(out.Entities)]
+	oneMore.Entities = append(oneMore.Entities, inventoryEntity{Kind: next.Kind, Name: next.Name, Attrs: next.Attrs, Source: "static", Sources: []string{"static"}})
 	_, size, _ := toolResult(oneMore)
 	if size <= resultByteLimit {
 		t.Fatalf("binary search left room for another entity: size=%d", size)
@@ -213,7 +411,7 @@ func TestInventoryCompleteResultByteLimit(t *testing.T) {
 	source.entities = source.entities[:1]
 	source.entities[0].Attrs["data"] = strings.Repeat("x", resultByteLimit)
 	out = check()
-	if len(out.Entities) != 0 || !out.Truncated {
+	if len(out.Entities) != 1 || !out.Truncated || out.Entities[0].Name != "000" || !out.Entities[0].AttrsTruncated {
 		t.Fatal(out)
 	}
 }
@@ -286,9 +484,11 @@ func TestInventorySDKVisibilityAuditAndExistingPolicy(t *testing.T) {
 		t.Fatal(result)
 	}
 	events := f.audit.snapshot()
+	authorized := events[len(events)-2]
 	event := events[len(events)-1]
-	if event.Operation != "mcp/entities_search" || event.Outcome != "allow" {
-		t.Fatal(event)
+	if authorized.Operation != "mcp/entities_search" || authorized.Phase != "authorized" || authorized.Outcome != "allow" ||
+		event.Operation != "mcp/entities_search" || event.Phase != "result" || event.Outcome != "allow" {
+		t.Fatalf("authorized=%+v result=%+v", authorized, event)
 	}
 	var raw []byte
 	if err := f.db.Pool.QueryRow(context.Background(), `SELECT rules FROM policy_versions WHERE version=1`).Scan(&raw); err != nil {

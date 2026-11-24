@@ -31,7 +31,7 @@ labels. Unlabeled hosts reject execution.
 
 ## Quick start
 
-Use a Linux amd64 checkout with Docker Compose, Go 1.27.3, OpenSSL, Git and
+Use a Linux amd64 checkout with Docker Compose, Go 1.27.4, OpenSSL, Git and
 Python 3 with PyYAML. Docker must use a local Unix socket.
 
 ```sh

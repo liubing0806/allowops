@@ -54,11 +54,14 @@ returns `unsupported` on that host until the agent is upgraded; the host stays
 connected and later versions that it understands load normally.
 
 An agent reports the optional action fields it understands in `features` when
-it connects. `max_targets` and `action_metadata` (`toolset`, `tags` and
-`entity_kinds`) are among them. Before publishing a catalog that uses
-a new field, upgrade the gateway, agents (including `allowops-exec`) and CLI,
-and confirm that `features` of the target hosts contains it. The gateway does
-not check this when it accepts a publication.
+it connects. `max_targets`, `step_extract` (`steps[].extract`), `step_when`
+(`steps[].when`) and `action_metadata` (`toolset`, `tags` and `entity_kinds`)
+are among them. Before publishing a catalog that uses a new field, upgrade
+the gateway, both `allowops-agent` and `allowops-exec` on target hosts, and
+the CLI, and confirm that `features` contains it (an unupgraded `allowops-exec`
+rejects `run_as` actions from a catalog with unknown fields as
+`REQUEST_REJECTED`). The gateway does not check this when it accepts a
+publication.
 
 ## CI boundary
 

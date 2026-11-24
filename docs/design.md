@@ -49,7 +49,7 @@ allowops 是给 AI agent 使用的运维网关：agent 通过 MCP 调用运维�
 
 | 部分 | 选型 |
 |---|---|
-| 后端、主机端、CLI | Go（go.mod 1.27.3）；YAML `gopkg.in/yaml.v3`；CLI `cobra` |
+| 后端、主机端、CLI | Go（go.mod 1.27.4）；YAML `gopkg.in/yaml.v3`；CLI `cobra` |
 | 主机与网关 | gRPC 双向流 + mTLS；Protobuf + buf；connect-go |
 | MCP | 官方 `github.com/modelcontextprotocol/go-sdk`，Streamable HTTP，无状态模式 |
 | 控制台 API | Connect（protobuf），生成 TypeScript 客户端 |
@@ -127,7 +127,7 @@ redact:                                # 可选，覆盖全局脱敏规则
 9. 主机上不存在 exec[0]、exec[0] 是 `#!` 脚本且未声明 `allow_interpreter`、或用到主机端不支持的功能时，该 action 在该主机标记 `unsupported`。
 10. 执行方式四选一：`exec`、`steps`、`script`、`builtin`（见下文“扩展执行能力”）。
 11. `max_targets`：可选，1 到 2147483647 的整数，省略表示不限制。`catalog validate` 拒绝 0、负数、非整数、非数字和超出范围的值，也拒绝空值。该字段计入 action 摘要，受签名保护。限制由网关执行，MCP 和 CLI 调用不能放宽或收紧；主机端不使用该值。
-12. 兼容性：主机端用严格 JSON 解析目录包。不认识 `max_targets` 或分类元数据字段（`toolset`、`tags`、`entity_kinds`）的旧版主机端拒绝整个目录包（`CATALOG_REJECTED`）：该目录版本的全部 action 在该主机上返回 `unsupported`（`CATALOG_UNAVAILABLE`），主机进程、连接和已加载的旧版本不受影响，之后不含该字段的版本可以正常加载。支持这些字段的主机端在 hello 的 `features` 中分别报告 `max_targets` 和 `action_metadata`。发布使用新字段的目录前，先升级网关、主机端（`allowops-agent` 与 `allowops-exec`）和 CLI，并确认目标主机的 `features` 包含对应特性。网关目前不根据 `features` 阻止发布。
+12. 兼容性：主机端用严格 JSON 解析目录包。不认识 `max_targets`、`steps[].extract`、`steps[].when` 或分类元数据字段（`toolset`、`tags`、`entity_kinds`）的旧版主机端拒绝整个目录包（`CATALOG_REJECTED`）：该目录版本的全部 action 在该主机上返回 `unsupported`（`CATALOG_UNAVAILABLE`），主机进程、连接和已加载的旧版本不受影响，之后不含新字段的版本可以正常加载。支持这些字段的主机端在 hello 的 `features` 中分别报告 `max_targets`、`step_extract`、`step_when` 和 `action_metadata`。发布使用新字段的目录前，先同步升级网关、目标主机的 `allowops-agent` 与 `allowops-exec` 和 CLI，并确认目标主机的 `features` 含对应字段。网关目前不根据 `features` 阻止发布。
 13. 分类元数据与新保留名：`toolset`、`tags`、`entity_kinds` 均为可选字段，计入 action 摘要并受 DSSE 签名保护，省略时不改变旧目录摘要。`actions_search`、`actions_invoke_read`、`actions_invoke_write`、`actions_invoke_dangerous` 在编写和发布路径为保留动作名，读取路径保持兼容以防破坏已存储的历史目录。
 
 ### 扩展执行能力
@@ -137,7 +137,7 @@ redact:                                # 可选，覆盖全局脱敏规则
 | 能力 | 写法 | 说明 |
 |---|---|---|
 | 输出过滤 | `filters: [match, exclude, tail, head, count]` | agent 可传过滤参数；`tail`、`head`、`count` 互斥；主机端按“stdout → 脱敏 → 过滤 → 截断”逐行处理；扫描上限 `max_scan` 默认 256MB |
-| 组合 action | `steps: [{name, exec}]`、`on_error: continue\|stop` | 多条固定命令顺序执行，结果分段 |
+| 组合 action | `steps: [{name, exec, when?, extract?}]`、`on_error: continue\|stop` | 多条固定命令按声明顺序执行（线性 DAG，非图灵完备），结果分段；支持脱敏后/过滤前流式提取（单捕获组 RE2、`json_path`、`tsv` + 强类型 `as` 校验）、整元素 `{steps.<step>.<var>}` 传递（仅限最终命令普通参数，禁用于 `allow_interpreter` 与包装/执行环境位）以及 Kleene 三值逻辑条件分支 `when`（跳过原因区分 `CONDITION_FALSE` / `STOPPED`），设计见 `step-dataflow-design.md` |
 | 候选路径 | `exec_fallbacks: [...]` | exec[0] 不存在时依次尝试，均须为绝对路径 |
 | 签名脚本 | `script: {file, interpreter}`、`args` | 脚本随目录签名，摘要计入 action 摘要；写入私有临时目录执行后删除；Python 加 `-I`；只在主机上执行 |
 | 日志检索 | `builtin: log_search` | Go 实现，支持 `.gz`、路径通配（限 allowed_roots）、固定串或正则、排除、上下文、最大匹配数 |
@@ -222,7 +222,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 |---|---|
 | 主体 | 服务账号、控制台用户（角色、团队、负责人） |
 | 资源 | 主机（授权标签）、action（risk、名称） |
-| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和标签、创建 join token、管理用户角色、发布目录、查看资源清单（`view_inventory`）、查看 job、查看输出、查看审计 |
+| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和标签、创建 join token、管理用户角色、发布目录、查看资源清单（`view_inventory`）、查看变更记录（`view_changes`）、查看排查知识（`view_knowledge`）、查看 job、查看输出、查看审计 |
 | 环境 | 请求时间、来源 IP |
 
 - 判定结果 `allow`、`deny`；deny 优先；未匹配任何规则时 deny。MVP 不做审批。
@@ -246,7 +246,10 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 | 工具 | 作用 |
 |---|---|
 | `hosts_search` | 按标签选择器或主机名查询主机：主机、标签、在线状态、总数、标签分布 |
-| `entities_search` | 存在可用 Inventory 实例时列出；按类型、名称和来源查询实体，需 `view_inventory` 权限；按返回实体类型附带去重的 `recommended_actions` 提示 |
+| `entities_search` | 存在可用 Inventory 实例时列出；按类型、名称和来源查询实体、合并多源并报告属性/选择器冲突，需 `view_inventory` 权限；按返回实体类型附带去重的 `recommended_actions` 提示 |
+| `changes_list` | 存在可用 Changes 实例时列出；按服务和最多 7 天时间窗口倒序合并变更时间线，需 `view_changes` 权限 |
+| `runbooks_search` | 存在可用 Knowledge 实例时列出；按关键词、标签和来源检索排查手册元数据，需 `view_knowledge` 权限 |
+| `runbooks_read` | 存在可用 Knowledge 实例时列出；按来源、文档 ID、章节或 UTF-8 字节偏移分页读取排查手册正文，需 `view_knowledge` 权限 |
 | `<action>` | `flat` 模式下每个受支持的可见 action 一个工具，只列出该身份可能被允许的 action |
 | `actions_search` | `progressive` 模式下存在受支持的可见 action 时列出；按关键词、`names`、`toolset`、`tag`、`risk`、`entity_kind`、`hostname` 检索当前身份可见的 action，支持 `include_schema` 展开完整输入 schema 与分页 |
 | `actions_invoke_read` / `actions_invoke_write` / `actions_invoke_dangerous` | `progressive` 模式下按当前身份可见动作实际存在的风险等级分别列出；调用指定 action，服务端按最新已验签目录强校验 `action.risk` 与工具风险等级一致，复用完整的参数校验、`expected_count`、`max_targets`、逐主机 OPA ABAC 与审计管线 |
@@ -257,7 +260,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 - MCP 暴露模式与请求头裁剪（设计见 [mcp-progressive-disclosure-design.md](mcp-progressive-disclosure-design.md)）：
   - 网关配置 `mcp.mode` 支持 `flat`（默认，保持存量工具名兼容）、`progressive` 和 `auto`（可见受支持动作数超过 `mcp.auto_threshold`（默认 40，范围 1~1000）时切换为 `progressive`）。
   - 客户端可通过请求头 `X-Allowops-Toolsets`（最多 16 个逗号分隔的 toolset 名）按需裁剪上下文工具面，或通过 `X-Allowops-MCP-Mode`（`flat` | `progressive`）选择展示模式；两者均为视图裁剪提示，不是授权边界。URL 仍拒绝一切 query 参数。
-- `entities_search` 先按主机可见性过滤，再按 `limit`（默认 20，范围 1~100）和完整结果的 32KB 上限截断（`truncated` 仅表示实体被截断）。在剩余 32KB 预算内，按保留实体的 `kind` 字典序附带每类最多 10 条策略预检可见的 `recommended_actions`，放不下或超限时单独标记 `recommended_actions_truncated`。返回内容标记为不可信数据；返回的 selector 和推荐动作仍逐台检查权限。
+- `entities_search`、`changes_list`、`runbooks_search`、`runbooks_read` 均在调用前后写入审计，结果经 `secrets` 规则脱敏、受 32KB 上限裁剪并标记 `output_trust: untrusted`。存在可用 Knowledge 实例时，网关同时通过 MCP Resources（`allowops://runbooks/{source}/{+id}`）提供 `resources/list`、`resources/templates/list` 和 `resources/read`，同样受 `view_knowledge` 鉴权、脱敏与 32KB 预算约束。`entities_search` 先逐源按主机可见性过滤再合并多源实体，并按 `limit`（默认 20，范围 1~100）和 32KB 上限截断（`truncated` 仅表示实体被截断）；在剩余 32KB 预算内，按保留实体的 `kind` 字典序附带每类最多 10 条策略预检可见的 `recommended_actions`（放不下或超限时单独标记 `recommended_actions_truncated`）。返回的 selector 和推荐动作作为 action 目标时仍逐台检查权限。
 - action 工具公共参数：`targets`（`hosts` 或 `selector`）、`expected_count`、`reason`、`wait_seconds`、`batch_size`、`max_failures`、`response_format`。
 - 用 `selector` 时必须带 `expected_count`，与实际数量不符时拒绝并返回实际数量。
 - action 设置了 `max_targets` 时，目标数（`selector` 为解析后的主机数）超过该值则拒绝整个 job：返回 `isError: true`、原因 `MAX_TARGETS_EXCEEDED`、实际数量和上限；不创建 job，不下发 task。工具描述和 `targets` 的 schema 写明上限。

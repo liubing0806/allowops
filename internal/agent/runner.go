@@ -16,6 +16,7 @@ import (
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/execd"
 	"github.com/liubing0806/allowops/internal/executor"
+	"github.com/liubing0806/allowops/internal/params"
 )
 
 // Runner is the integration boundary for the extended execution features
@@ -160,7 +161,12 @@ func helperReason(reason string) error {
 		return context.Canceled
 	case "TIMEOUT":
 		return context.DeadlineExceeded
+	case "PATH_NOT_TRUSTED":
+		return params.ErrPathNotTrusted
 	default:
+		if executor.KnownReason(reason) {
+			return executor.NewReasonError(reason, "")
+		}
 		if builtin.KnownReason(reason) {
 			return builtin.NewError(reason, "")
 		}

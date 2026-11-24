@@ -1,10 +1,12 @@
-ARG GO_IMAGE=golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5
+ARG GO_IMAGE=golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea
 FROM ${GO_IMAGE} AS source
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
+COPY plugin ./plugin
+COPY extensions ./extensions
 COPY gen ./gen
 COPY deploy/packaging/notices.sh ./deploy/packaging/notices.sh
 COPY LICENSE ./LICENSE

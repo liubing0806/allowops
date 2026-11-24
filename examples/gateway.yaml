@@ -33,7 +33,7 @@ management:
 #   mode: auto
 #   auto_threshold: 40
 
-# Optional inventory sources. At most 32 instances; changes require a restart.
+# Optional context plugins (inventory, changes, knowledge). At most 32 instances; changes require a restart.
 # plugins:
 #   - id: inv-static
 #     module: inventory.static
@@ -46,5 +46,52 @@ management:
 #     config:
 #       label: service  # Use reported.service for agent-reported labels.
 #       kind: service
+#   - id: inv-k8s
+#     module: inventory.k8s
+#     egress:
+#       - https://k8s-api.internal:6443
+#     allow_private_egress: true
+#     ca_file: /etc/allowops/k8s-ca.crt
+#     credentials:
+#       k8s_token: /var/run/secrets/kubernetes.io/serviceaccount/token
+#     allow_projected_credentials: true
+#     max_concurrency: 4
+#     timeout: 5s
+#     config:
+#       api_server: https://k8s-api.internal:6443
+#       credential_ref: k8s_token
+#       namespaces: [prod, staging]
+#   - id: inv-prom
+#     module: inventory.prometheus_targets
+#     egress:
+#       - https://prometheus.internal:9090
+#     allow_private_egress: true
+#     config:
+#       address: https://prometheus.internal:9090
+#       name_label: job
+#       host_label: instance
+#   - id: chg-allowops
+#     module: changes.allowops
+#     config:
+#       include_catalog: true
+#       include_policy: true
+#   - id: chg-k8s
+#     module: changes.k8s_rollout
+#     egress:
+#       - https://k8s-api.internal:6443
+#     allow_private_egress: true
+#     ca_file: /etc/allowops/k8s-ca.crt
+#     credentials:
+#       k8s_token: /var/run/secrets/kubernetes.io/serviceaccount/token
+#     allow_projected_credentials: true
+#     config:
+#       api_server: https://k8s-api.internal:6443
+#       credential_ref: k8s_token
+#       namespaces: [prod]
+#   - id: kb-runbooks
+#     module: knowledge.git_markdown
+#     config:
+#       dir: /var/lib/allowops/runbooks
+#       refresh_ttl: 1m
 # An optional plugin that fails provisioning appears as UNAVAILABLE in system
 # dependencies and makes overall system status DEGRADED. Readiness is unchanged.

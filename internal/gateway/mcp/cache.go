@@ -351,11 +351,17 @@ func (s *Service) buildServer(view *identityView, versions string, request reque
 		}
 	}
 	scope.mode = s.effectiveMode(request.mode, len(scope.visible))
-	var sources []string
+	var invSources, changeSources, knowledgeSources []string
 	if s.config.Inventory != nil {
-		sources = s.config.Inventory.InventorySources()
+		invSources = s.config.Inventory.InventorySources()
 	}
-	definitions := fixedTools(s.config.Jobs, sources...)
+	if s.config.Changes != nil {
+		changeSources = s.config.Changes.ChangesSources()
+	}
+	if s.config.Knowledge != nil {
+		knowledgeSources = s.config.Knowledge.KnowledgeSources()
+	}
+	definitions := fixedPluginTools(s.config.Jobs, invSources, changeSources, knowledgeSources)
 	if len(scope.visible) > 0 {
 		if scope.mode == modeFlat {
 			names := slices.Collect(maps.Keys(scope.visible))
@@ -381,7 +387,7 @@ func (s *Service) buildServer(view *identityView, versions string, request reque
 	for _, definition := range definitions {
 		scope.tools[definition.Name] = true
 	}
-	return s.newServer(definitions, scope), scope.mode
+	return s.newServer(definitions, scope, len(knowledgeSources) > 0), scope.mode
 }
 
 // effectiveMode applies the X-Allowops-MCP-Mode header, then the gateway mode.
@@ -398,16 +404,31 @@ func (s *Service) effectiveMode(header string, supported int) string {
 	return s.config.Mode
 }
 
-func (s *Service) newServer(definitions []ToolDefinition, scope *serverScope) *sdk.Server {
-	server := sdk.NewServer(&sdk.Implementation{Name: "allowops", Version: "1"}, &sdk.ServerOptions{Instructions: toolInstructions, PageSize: s.identity.PageSize(), Capabilities: &sdk.ServerCapabilities{Tools: &sdk.ToolCapabilities{}}, SetCacheable: func(_ context.Context, _ sdk.Request, c *sdk.Cacheable) { c.TTLMs = 0; c.CacheScope = "private" }})
+func (s *Service) newServer(definitions []ToolDefinition, scope *serverScope, hasKnowledge bool) *sdk.Server {
+	caps := &sdk.ServerCapabilities{Tools: &sdk.ToolCapabilities{}}
+	if hasKnowledge {
+		caps.Resources = &sdk.ResourceCapabilities{}
+	}
+	server := sdk.NewServer(&sdk.Implementation{Name: "allowops", Version: "1"}, &sdk.ServerOptions{Instructions: toolInstructions, PageSize: s.identity.PageSize(), Capabilities: caps, SetCacheable: func(_ context.Context, _ sdk.Request, c *sdk.Cacheable) { c.TTLMs = 0; c.CacheScope = "private" }})
 	for _, definition := range definitions {
 		tool := &sdk.Tool{Name: definition.Name, Description: definition.Description, InputSchema: definition.InputSchema, Annotations: &sdk.ToolAnnotations{ReadOnlyHint: definition.Annotations.ReadOnlyHint, DestructiveHint: definition.Annotations.DestructiveHint, IdempotentHint: definition.Annotations.IdempotentHint}}
 		server.AddTool(tool, func(ctx context.Context, r *sdk.CallToolRequest) (*sdk.CallToolResult, error) {
 			return s.call(ctx, r, scope)
 		})
 	}
+	if hasKnowledge {
+		server.AddResourceTemplate(&sdk.ResourceTemplate{
+			URITemplate: runbookResourceTemplateURI,
+			Name:        "allowops-runbooks",
+			Description: "Read-only team runbooks (untrusted data).",
+			MIMEType:    "text/markdown",
+		}, s.readRunbookResource)
+	}
 	server.AddReceivingMiddleware(func(next sdk.MethodHandler) sdk.MethodHandler {
 		return func(ctx context.Context, method string, r sdk.Request) (sdk.Result, error) {
+			if hasKnowledge && (method == "resources/list" || method == "resources/templates/list" || method == "resources/read") {
+				return s.handleKnowledgeResourceMethod(ctx, method, r, next)
+			}
 			if method != "tools/call" {
 				return next(ctx, method, r)
 			}

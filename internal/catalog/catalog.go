@@ -37,8 +37,10 @@ type Config struct {
 }
 
 type Step struct {
-	Name string `json:"name" yaml:"name"`
-	Exec []any  `json:"exec" yaml:"exec"`
+	Name    string                   `json:"name" yaml:"name"`
+	Exec    []any                    `json:"exec" yaml:"exec"`
+	When    *StepCondition           `json:"when,omitempty" yaml:"when,omitempty"`
+	Extract map[string]StepExtractor `json:"extract,omitempty" yaml:"extract,omitempty"`
 }
 
 type Script struct {
@@ -291,7 +293,7 @@ var actionName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 // readReservedActionNames are the gateway's fixed MCP tools. Every path,
 // including reading signed packages, rejects actions with these names.
-var readReservedActionNames = []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "entities_search"}
+var readReservedActionNames = []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "entities_search", "changes_list", "runbooks_search", "runbooks_read"}
 
 // progressiveReservedActionNames are the progressive disclosure meta-tools.
 // Only authoring and publication reject them, so packages signed or published
@@ -538,16 +540,35 @@ func validateSteps(a Action, defs map[string]params.Definition) error {
 		return fmt.Errorf("steps must not be empty")
 	}
 	seen := map[string]bool{}
-	for _, step := range a.Steps {
+	stepDefs := make(map[string]params.Definition, len(defs))
+	maps.Copy(stepDefs, defs)
+	extractorCount := 0
+	for index, step := range a.Steps {
 		if !actionName.MatchString(step.Name) || seen[step.Name] {
 			return fmt.Errorf("invalid or duplicate step name %q", step.Name)
 		}
 		seen[step.Name] = true
-		if err := validateExec(step.Exec, defs, a.AllowInterpreter); err != nil {
+		if err := ValidateStepCondition(step.When, a.Steps[:index]); err != nil {
 			return fmt.Errorf("step %s: %w", step.Name, err)
 		}
+		if err := validateExec(step.Exec, stepDefs, a.AllowInterpreter); err != nil {
+			return fmt.Errorf("step %s: %w", step.Name, err)
+		}
+		if err := ValidateStepExtract(step.Extract, extractorCount); err != nil {
+			return fmt.Errorf("step %s: %w", step.Name, err)
+		}
+		extractorCount += len(step.Extract)
+		addStepDefinitions(stepDefs, step)
 	}
 	return nil
+}
+
+func addStepDefinitions(defs map[string]params.Definition, step Step) {
+	for name, extractor := range step.Extract {
+		def := extractor.As.AsParamDefinition(name)
+		def.Optional = extractor.Optional
+		defs["steps."+step.Name+"."+name] = def
+	}
 }
 
 // validateLimits checks timeout, output, batch and target limits, run_as and redaction.
@@ -590,6 +611,14 @@ func actionWarnings(a Action) []string {
 	}
 	if a.AllowInterpreter {
 		warnings = append(warnings, fmt.Sprintf("action %s: allow_interpreter permits arbitrary interpreter/script execution", a.Name))
+	}
+	if a.Risk != "read" {
+		for _, step := range a.Steps {
+			if step.When != nil || len(step.Extract) > 0 {
+				warnings = append(warnings, fmt.Sprintf("action %s: step extract/when uses untrusted host output; every step of a non-read action must be safe if executed unconditionally", a.Name))
+				break
+			}
+		}
 	}
 	return warnings
 }

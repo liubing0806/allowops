@@ -52,8 +52,21 @@ type Inventory interface {
 	SearchInventory(context.Context, pluginhost.Query, []string) ([]pluginhost.Result, []pluginhost.SourceError)
 }
 
+type Changes interface {
+	ChangesSources() []string
+	ListChanges(context.Context, pluginhost.ChangesQuery, []string) ([]pluginhost.ChangeResult, bool, []pluginhost.SourceError)
+}
+
+type Knowledge interface {
+	KnowledgeSources() []string
+	SearchKnowledge(context.Context, pluginhost.KnowledgeQuery, []string) ([]pluginhost.KnowledgeDocResult, string, []pluginhost.SourceError)
+	ReadKnowledge(context.Context, string, string) (pluginhost.KnowledgeReadResult, error)
+}
+
 type Config struct {
 	Inventory        Inventory
+	Changes          Changes
+	Knowledge        Knowledge
 	CacheEntries     int
 	ProgressInterval time.Duration
 	// Jobs is the gateway job configuration. Tool schemas and argument checks use

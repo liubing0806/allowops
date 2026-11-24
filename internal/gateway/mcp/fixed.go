@@ -11,7 +11,7 @@ var actionName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 // fixedReservedToolNames are read-reserved catalog names and can never be
 // catalog actions.
-var fixedReservedToolNames = []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "entities_search"}
+var fixedReservedToolNames = []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "entities_search", "changes_list", "runbooks_search", "runbooks_read"}
 
 // progressiveMetaToolNames are authoring/publish-reserved tool names; older
 // signed catalogs may still contain actions with these names.
@@ -57,6 +57,17 @@ func fixedTools(cfg job.Config, sources ...string) []ToolDefinition {
 	}
 	for i := range tools {
 		tools[i].Description += toolInstructions
+	}
+	return tools
+}
+
+func fixedPluginTools(cfg job.Config, inventorySources, changeSources, knowledgeSources []string) []ToolDefinition {
+	tools := fixedTools(cfg, inventorySources...)
+	if len(changeSources) > 0 {
+		tools = append(tools, changesTool(changeSources))
+	}
+	if len(knowledgeSources) > 0 {
+		tools = append(tools, runbooksSearchTool(knowledgeSources), runbooksReadTool(knowledgeSources))
 	}
 	return tools
 }

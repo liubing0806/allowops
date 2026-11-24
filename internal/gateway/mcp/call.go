@@ -178,6 +178,12 @@ func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, scope *se
 		return s.searchHosts(ctx, r.Params.Arguments)
 	case "entities_search":
 		return s.searchEntities(ctx, r.Params.Arguments, scope.visible)
+	case "changes_list":
+		return s.listChanges(ctx, r.Params.Arguments)
+	case "runbooks_search":
+		return s.searchRunbooks(ctx, r.Params.Arguments)
+	case "runbooks_read":
+		return s.readRunbook(ctx, r.Params.Arguments)
 	case "actions_search":
 		if scope.metaTools[name] {
 			return s.searchActions(ctx, r.Params.Arguments, scope)

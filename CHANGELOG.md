@@ -6,6 +6,7 @@ Changes on `main` since v0.2.0. They are not in a release yet.
 
 ### Upgrade notes
 
+- Building from source needs Go 1.27.4 (GO-2026-6859).
 - **Catalog metadata (`toolset`, `tags`, `entity_kinds`)**: `allowops-agent`
   and `allowops-exec` parse signed catalogs strictly and reject packages
   containing unknown fields (`CATALOG_REJECTED`). Upgrade in order before
@@ -16,14 +17,33 @@ Changes on `main` since v0.2.0. They are not in a release yet.
      their reported `features` include `action_metadata`.
   3. Upgrade the `allowops` CLI used in CI pipelines.
   4. Sign and publish the updated catalog.
-- **New reserved action names**: `actions_search`, `actions_invoke_read`,
-  `actions_invoke_write`, and `actions_invoke_dangerous` are now reserved on
-  catalog authoring (`allowops catalog validate` / `build`) and publication
-  (`PublishCatalog`). Reading previously stored historical catalogs remains
-  compatible. Before upgrading and publishing new catalog versions, inspect
-  your current catalog's action names on the web console Catalog page (or via
+- **New authoring/publish reserved action names**: `actions_search`,
+  `actions_invoke_read`, `actions_invoke_write`, and
+  `actions_invoke_dangerous` are now reserved on catalog authoring
+  (`allowops catalog validate` / `build`) and publication (`PublishCatalog`).
+  Reading previously stored historical catalogs remains compatible. Before
+  upgrading and publishing new catalog versions, inspect your current
+  catalog's action names on the web console Catalog page (or via
   `CatalogService.ListActions`) and rename any action that uses one of these
   four names.
+- **Reserved MCP tool names (`changes_list`, `runbooks_search`, `runbooks_read`)**:
+  before upgrading gateway binaries, rename, re-sign, and publish any active
+  catalog action using these names; otherwise catalog verification rejects the
+  catalog and `/mcp` returns HTTP 503.
+- **New authorization operations (`view_changes`, `view_knowledge`)**: defaults
+  grant both to `admin`, `operator`, and `viewer` only on first initialization.
+  Existing database policies are preserved on upgrade. Follow the rolling
+  upgrade order: (1) migrate any conflicting catalog action names, (2) upgrade
+  all `allowops-gateway` instances first, (3) export the policy with
+  `allowops policy get > rules.yaml`, add `view_changes` / `view_knowledge` to
+  the appropriate roles, run `allowops policy test -f rules.yaml`, and apply
+  with `allowops policy apply`. Before rolling back to an older gateway binary,
+  remove `view_changes` and `view_knowledge` from the active policy first.
+- **Experimental `plugin.Host` API change (PL2)**: `plugin.Host` adds
+  `HTTPClient()`, `Credential(ref)`, `Cache()`, and `Now()`, and adds optional
+  `Validator`, `Cleaner`, and `ControlPlaneChangeReader` interfaces. Custom
+  out-of-tree plugins and test doubles implementing `plugin.Host` must be
+  updated to match.
 
 ### New
 
@@ -31,7 +51,7 @@ Changes on `main` since v0.2.0. They are not in a release yet.
   - Signed catalog actions now support optional `toolset`, `tags`, and
     `entity_kinds` metadata fields (included in the action digest and DSSE
     signature). Omitting them keeps existing catalog digests unchanged. All
-    133 actions in `examples/catalog/actions/` are annotated across 16
+    136 actions in `examples/catalog/actions/` are annotated across 16
     toolsets, and the web console displays these fields in the Catalog action
     detail panel.
   - `gateway.yaml` adds an optional `mcp` section with `mode` (`flat` default,
@@ -54,6 +74,62 @@ Changes on `main` since v0.2.0. They are not in a release yet.
     are shared across identities, the per-identity LRU holds one slot per
     identity, and header-narrowed servers are built per request without
     evicting cached identities.
+- Composite `steps` actions now support controlled output extraction
+  (`steps[].extract`), whole-element step variable references
+  (`{steps.<step_name>.<var>}`), and declarative conditional branching
+  (`steps[].when`):
+  - Extractors support single-capture-group Go RE2 (`regex`, `match: first |
+    exactly_one`), strict `$`-rooted `json_path` (rejecting duplicate keys and
+    nesting past depth 32), and `tsv` (`line`, `column`, `tab | whitespace`)
+    with bounded scan (`max_bytes`, default `64KB`, max `1MB`). Extraction runs
+    after redaction and before caller output filters or budget truncation,
+    rejects redaction-modified lines or JSON documents, and re-redacts decoded
+    JSON values.
+  - Every extracted value must satisfy an explicit `as` type (`int` with
+    required `min`/`max` and `min >= 0` in `exec`, non-dash `enum`, anchored
+    `string` with `regex` + `max_len`, `path` with `allowed_roots` and pre-exec
+    `PATH_NOT_TRUSTED` check, or `bool`). `{steps.*}` is statically restricted
+    to ordinary arguments of the final command and forbidden with
+    `allow_interpreter: true`.
+  - `when` evaluates a bounded YAML AST (max depth 4, max 32 nodes, forbidden on
+    step 0) using Kleene three-valued logic so missing values fail closed.
+    Skipped steps report explicit `CONDITION_FALSE` or `STOPPED` reasons.
+  - Agents report `step_extract` and `step_when` in `features`. Upgrade both
+    `allowops-agent` and `allowops-exec` before publishing catalogs that use
+    these fields; older binaries reject unknown fields with `CATALOG_REJECTED`
+    or `REQUEST_REJECTED`.
+  - Added three read-only example actions: `disk_pressure_diagnose`,
+    `top_process_diagnose`, and `docker_container_diagnose`.
+- Investigation context plugin loop (stages A–D, see
+  [docs/plugin-stage0203-design.md](docs/plugin-stage0203-design.md)):
+  - **Plugin host security foundation & `plugin/plugintest`**: instance-scoped
+    `egress` allowlist with single-resolution pinned-IP dialing, IPv4/IPv6 IMDS
+    and NAT64/tunnel prefix blocking, cross-origin redirect decision table,
+    strict private `ca_file` pinning, startup-pinned `dirFD` credential reader
+    (supporting both `O_NOFOLLOW` regular files and Linux `openat2(RESOLVE_IN_ROOT)`
+    Kubernetes projected volume rotation for UID 65532), bounded instance LRU
+    TTL cache, per-instance `max_concurrency` semaphore, reference-counted
+    graceful shutdown (`Close`), redacting logger, and `plugin/plugintest`
+    contract suite with AST network-bypass guardrails.
+  - **Dynamic Inventory & multi-source merging**: adds `inventory.k8s`,
+    `inventory.prometheus_targets`, and `inventory.cmdb_http`. `entities_search`
+    now audits before and after plugin calls, filters visible hosts per source
+    first, propagates cross-source secrets within visible groups, merges
+    matching entities across sources with `sources`, `conflicts`, and
+    `selector_conflicts`, and degrades oversized entities cleanly under 32 KiB.
+  - **Changes extension point (`plugin/changes`)**: adds `changes.allowops`
+    (read-only catalog publication and policy version history via isolated
+    `ControlPlaneChangeReader`), `changes.k8s_rollout`, `changes.http`, fixed
+    MCP tool `changes_list` (max 7-day window, cross-field redaction,
+    pre/post audit, 32 KiB budget), and `view_changes` operation.
+  - **Knowledge extension point (`plugin/knowledge`) & MCP Resources**: adds
+    `knowledge.git_markdown` (local `dir` mode via `openat(O_NOFOLLOW|O_NONBLOCK)`
+    and `scratch`-compatible `archive_url` `.tar.gz` in-memory mode with full
+    decompression stream limits), fixed MCP tools `runbooks_search` and
+    `runbooks_read` (full-document `Redactor.Stream` PEM redaction, snapshot
+    `revision`, unique section slicing, lossless UTF-8 paging), MCP Resources
+    (`resources/list`, `resources/templates/list`, `resources/read` for
+    `allowops://runbooks/{source}/{+id}`), and `view_knowledge` operation.
 - The web console is redesigned (#27). The design handoff and prototypes are
   in [docs/console-redesign/](docs/console-redesign/README.md). The change is
   frontend only: no API, schema, or policy change, and no upgrade step.

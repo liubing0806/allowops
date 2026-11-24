@@ -1,0 +1,45 @@
+name: docker_container_diagnose
+description: Read container state and recent logs when the container is stopped, has been killed for lack of memory, or has restarted.
+risk: read
+toolset: docker
+tags: [container, logs, diagnose]
+entity_kinds: [docker_container]
+run_as: root
+params:
+  container:
+    type: string
+    description: Docker container name without option prefixes.
+    regex: ^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$
+    max_len: 64
+timeout: 15s
+max_output: 64KB
+on_error: stop
+steps:
+  - name: inspect
+    exec: [/usr/bin/docker, inspect, --type, container, --format,
+      '[{"Id":{{json .Id}},"State":{"Status":{{json .State.Status}},"OOMKilled":{{json .State.OOMKilled}}},"RestartCount":{{json .RestartCount}}}]',
+      '{container}']
+    extract:
+      status:
+        json_path: '$[0].State.Status'
+        as: {type: enum, values: [created, running, paused, restarting, removing, exited, dead]}
+      oom_killed:
+        json_path: '$[0].State.OOMKilled'
+        as: {type: bool}
+      restart_count:
+        json_path: '$[0].RestartCount'
+        as: {type: int, min: 0, max: 1000000}
+      container_id:
+        json_path: '$[0].Id'
+        as: {type: string, regex: '[0-9a-f]{12,64}', max_len: 64}
+  - name: recent_logs
+    when:
+      any:
+        - {ref: steps.inspect.status, ne: running}
+        - {ref: steps.inspect.oom_killed, eq: true}
+        - {ref: steps.inspect.restart_count, gt: 0}
+    exec: [/usr/bin/docker, logs, --tail, '100', --timestamps, '{steps.inspect.container_id}']
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets, pii]

@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -77,6 +78,7 @@ func TestOnMessageRejections(t *testing.T) {
 	}
 	const one = `{"max_output":1024,"steps":[{"name":"a"}]}`
 	const two = `{"max_output":1024,"steps":[{"name":"a"},{"name":"b"}]}`
+	const conditional = `{"max_output":1024,"on_error":"stop","steps":[{"name":"a"},{"name":"b","when":{"ref":"prev.exit_code","eq":1}},{"name":"c"}]}`
 	const plain = `{"max_output":1024}`
 	ev := func(m any) hostconn.Event {
 		return hostconn.Event{HostID: "fast", ConnectionID: "connection", Message: onMessageReq(m)}
@@ -87,10 +89,20 @@ func TestOnMessageRejections(t *testing.T) {
 	step := func(i uint32, name string, r *v1.ExecutionResult) *v1.StepCompleted {
 		return &v1.StepCompleted{JobId: "job", TaskId: "fast", StepIndex: i, StepName: name, Result: r}
 	}
+	skipped := func(reason string) *v1.ExecutionResult {
+		return &v1.ExecutionResult{Status: v1.TaskStatus_TASK_STATUS_SKIPPED, Reason: reason, Duration: durationpb.New(0)}
+	}
 	chunk := func(stream v1.OutputStream, data string, offset uint64, eof bool) *v1.TaskOutputChunk {
 		return &v1.TaskOutputChunk{JobId: "job", TaskId: "fast", Stream: stream, Data: []byte(data), Offset: offset, Eof: eof}
 	}
 	stdout := v1.OutputStream_OUTPUT_STREAM_STDOUT
+	emptyHash := sha256.Sum256(nil)
+	firstSucceeded := []hostconn.Event{
+		ev(&v1.TaskOutputChunk{JobId: "job", TaskId: "fast", StepIndex: proto.Uint32(0), Stream: stdout, Eof: true}),
+		ev(&v1.TaskOutputChunk{JobId: "job", TaskId: "fast", StepIndex: proto.Uint32(0), Stream: v1.OutputStream_OUTPUT_STREAM_STDERR, Eof: true}),
+		ev(step(0, "a", &v1.ExecutionResult{Status: v1.TaskStatus_TASK_STATUS_SUCCEEDED, ExitCode: proto.Int32(0), Duration: durationpb.New(0),
+			Stdout: &v1.OutputMetadata{Sha256: emptyHash[:]}, Stderr: &v1.OutputMetadata{Sha256: emptyHash[:]}})),
+	}
 	start := &v1.TaskStarted{JobId: "job", TaskId: "fast"}
 	cases := []struct {
 		name       string
@@ -133,6 +145,12 @@ func TestOnMessageRejections(t *testing.T) {
 		{name: "step result", definition: one, state: 2, event: ev(step(0, "a", &v1.ExecutionResult{Status: v1.TaskStatus_TASK_STATUS_FAILED, ExitCode: proto.Int32(0), Duration: durationpb.New(0)})), want: "INVALID_FAILURE_EXIT"},
 		{name: "skipped step without failure", definition: two, state: 2, event: ev(step(0, "a", &v1.ExecutionResult{Status: v1.TaskStatus_TASK_STATUS_SKIPPED, Duration: durationpb.New(0)})), want: "INVALID_SKIPPED_STEP"},
 		{name: "skipped step after failure", definition: two, state: 2, prefix: []hostconn.Event{ev(step(0, "a", failed(1)))}, event: ev(step(1, "b", &v1.ExecutionResult{Status: v1.TaskStatus_TASK_STATUS_SKIPPED, Duration: durationpb.New(0)}))},
+		{name: "condition false without when", definition: two, state: 2, prefix: []hostconn.Event{ev(step(0, "a", failed(1)))}, event: ev(step(1, "b", skipped("CONDITION_FALSE"))), want: "INVALID_SKIPPED_STEP"},
+		{name: "unknown skip reason", definition: two, state: 2, prefix: []hostconn.Event{ev(step(0, "a", failed(1)))}, event: ev(step(1, "b", skipped("UNKNOWN_SKIP"))), want: "INVALID_SKIPPED_STEP"},
+		{name: "condition false with when", definition: conditional, state: 2, prefix: firstSucceeded, event: ev(step(1, "b", skipped("CONDITION_FALSE")))},
+		{name: "stopped after conditional skip", definition: conditional, state: 2,
+			prefix: append(firstSucceeded[:len(firstSucceeded):len(firstSucceeded)], ev(step(1, "b", skipped("CONDITION_FALSE")))),
+			event:  ev(step(2, "c", skipped("STOPPED"))), want: "INVALID_SKIPPED_STEP"},
 		{name: "step insert failure", definition: one, state: 2, failTable: "task_steps", event: ev(step(0, "a", failed(1))), want: "*"},
 		{name: "step", definition: one, state: 2, event: ev(step(0, "a", failed(1)))},
 		{name: "completion without result", definition: plain, state: 2, event: ev(&v1.TaskCompleted{JobId: "job", TaskId: "fast"}), want: "MISSING_TASK_RESULT"},

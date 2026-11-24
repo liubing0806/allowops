@@ -488,13 +488,25 @@ func ResolvePath(path string, roots []string) (string, error) {
 }
 
 var placeholder = regexp.MustCompile(`^\{([a-z][a-z0-9_]{0,63})\}$`)
+var stepPlaceholder = regexp.MustCompile(`^\{steps\.([a-z][a-z0-9_]{0,63})\.([a-z][a-z0-9_]{0,63})\}$`)
+
+// StepPlaceholder recognizes a whole argv element referencing a step variable.
+func StepPlaceholder(s string) (stepName, varName string, ok bool) {
+	m := stepPlaceholder.FindStringSubmatch(s)
+	if m == nil {
+		return "", "", false
+	}
+	return m[1], m[2], true
+}
 
 func Placeholder(s string) (string, bool) {
-	m := placeholder.FindStringSubmatch(s)
-	if m == nil {
-		return "", false
+	if m := placeholder.FindStringSubmatch(s); m != nil {
+		return m[1], true
 	}
-	return m[1], true
+	if stepPlaceholder.MatchString(s) {
+		return s[1 : len(s)-1], true
+	}
+	return "", false
 }
 
 // ValidateTemplate allows strings and one level of optional string lists.

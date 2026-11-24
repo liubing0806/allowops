@@ -375,7 +375,7 @@ type inventoryResult struct {
 
 ### 8.1 约定 Entity Kinds 与示例目录 133 个动作映射
 
-严格对齐仓库现有 [examples/topology.yaml](../examples/topology.yaml)（`service`、`database`、`cache`）与 [plugins/inventory/hostlabels/hostlabels.go](../plugins/inventory/hostlabels/hostlabels.go)（默认 `service`，可配置任意合法 `kind`），避免把泛化 kind 贴满几十个动作导致推荐噪音：
+严格对齐仓库现有 [examples/topology.yaml](../examples/topology.yaml)（`service`、`database`、`cache`）与 [extensions/inventory/hostlabels/hostlabels.go](../extensions/inventory/hostlabels/hostlabels.go)（默认 `service`，可配置任意合法 `kind`），避免把泛化 kind 贴满几十个动作导致推荐噪音：
 
 - **通用高信号 Kind**（与 `examples/topology.yaml` 开箱即用）：
   - `service`：精选 **8 个**核心通用服务排障入口（`systemd_service_status`、`log_sources`、`log_search`、`log_stats`、`log_patterns`、`journal_view_log`、`http_get_local`、`app_config_view`），确保 `entities_search(kind="service")` 推荐结果全部在 10 条上限内、零噪音、高信号！

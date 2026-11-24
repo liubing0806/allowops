@@ -106,7 +106,7 @@ export default {
     lede: 'Compose 演示包含网关、PostgreSQL、SeaweedFS、LDAPS 目录和两台主机。脚本在本地生成凭据，发布示例目录，并在两台主机上运行只读的 <code>disk_usage</code>。',
     copy: '复制',
     copied: '已复制',
-    note: '需要 Linux amd64、Docker Compose、Go 1.27.3、OpenSSL、Git 和带 PyYAML 的 Python 3。Kubernetes 用 Helm chart，主机安装 .deb 或 .rpm，见<a href="/docs/zh/installation">安装文档</a>。',
+    note: '需要 Linux amd64、Docker Compose、Go 1.27.4、OpenSSL、Git 和带 PyYAML 的 Python 3。Kubernetes 用 Helm chart，主机安装 .deb 或 .rpm，见<a href="/docs/zh/installation">安装文档</a>。',
     term: [
       '<span class="c"># 定义并发布目录</span>',
       'allowops catalog validate ./catalog',

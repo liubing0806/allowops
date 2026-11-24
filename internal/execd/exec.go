@@ -165,6 +165,8 @@ func ExecutionReason(err error) string {
 		return "TIMEOUT"
 	case errors.Is(err, params.ErrPathNotTrusted):
 		return "PATH_NOT_TRUSTED"
+	case executor.ReasonOf(err) != "":
+		return executor.ReasonOf(err)
 	case builtin.ReasonOf(err) != "":
 		return builtin.ReasonOf(err)
 	default:

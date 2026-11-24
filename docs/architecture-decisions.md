@@ -89,7 +89,7 @@
 |---|---|---|
 | 主体 | agent 服务账号、控制台用户 | 角色、团队、负责人 |
 | 资源 | 主机、action | 主机授权标签；action 的 risk、分类 |
-| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和授权标签、创建 join token、管理用户角色、发布目录、查看资源清单（`view_inventory`）、查看 job、查看输出（`view_output`）、查看审计 | — |
+| 操作 | 执行 action；控制台操作：修改策略、管理服务账号和 token、管理主机和授权标签、创建 join token、管理用户角色、发布目录、查看资源清单（`view_inventory`）、查看变更记录（`view_changes`）、查看排查知识（`view_knowledge`）、查看 job、查看输出（`view_output`）、查看审计 | — |
 | 环境 | 请求上下文 | 请求时间、来源 IP |
 
 - 判定结果：`allow`、`deny`。deny 优先于 allow。未匹配任何规则时 deny。
@@ -503,10 +503,10 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 
 | 角色 | 默认权限 |
 |---|---|
-| admin | 全部：策略、服务账号、主机、join token、用户角色、资源清单（`view_inventory`） |
-| operator | 管理主机（授权标签、删除）、创建 join token、查看 job 和资源清单（`view_inventory`） |
+| admin | 全部：策略、服务账号、主机、join token、用户角色、资源清单（`view_inventory`）、变更记录（`view_changes`）、排查知识（`view_knowledge`） |
+| operator | 管理主机（授权标签、删除）、创建 join token、查看 job、资源清单（`view_inventory`）、变更记录（`view_changes`）和排查知识（`view_knowledge`） |
 | auditor | 查看审计、job 和命令输出 |
-| viewer | 查看主机、目录、job 摘要和资源清单（`view_inventory`），不能查看命令输出 |
+| viewer | 查看主机、目录、job 摘要、资源清单（`view_inventory`）、变更记录（`view_changes`）和排查知识（`view_knowledge`），不能查看命令输出 |
 | publisher | 只能发布目录（供 CI 使用） |
 
 - 防锁死：保存策略前检查，保存后若没有任何主体能修改策略则拒绝保存。
@@ -973,3 +973,16 @@ params:
 | PL8 | 进程外插件 | 以后再做。扩展点接口只用 `context.Context` 和可序列化类型，以便加 gRPC 适配器时接口不变 |
 | PL9 | 编排层边界 | 待定：触发事件之后由谁启动排查、排查会话保存在哪里。Trigger 扩展点在此之前只定义接口 |
 | PL10 | 是否用 TypeScript 重写 | 不重写。主机端需要 `CGO_ENABLED=0` 和 CentOS 7（glibc 2.17）支持，Node.js 18 起官方二进制要求 glibc 2.28；root 辅助程序加载 JS 运行时会扩大攻击面。Caddy 风格的插件在 Go 中即可实现 |
+
+## 23. 组合动作步骤受控数据传递与条件分支（SD1~SD6）
+
+2026-11-24 确认，设计见 `step-dataflow-design.md`，计划见 `step-dataflow-plan.md`。目标：在不引入 Shell 或图灵完备脚本的前提下，让单次签名 `steps` 动作完成“先探测、提取强类型字段、再按条件针对性抓取深度现场”的排障闭环。
+
+| 编号 | 问题 | 决定 |
+|---|---|---|
+| SD1 | 目录 schema 版本与旧版主机兼容 | 保持 `schema_version: 1`；在 `Step` 新增可选字段 `extract`、`when`（`omitempty`），未使用的动作摘要逐字节不变。旧版 `allowops-agent`/`allowops-exec` 通过 `strictJSON`（`DisallowUnknownFields`）整包拒绝含新字段的目录包，绝不静默忽略；新版 agent 在 `features` 中上报 `step_extract`、`step_when`，发布前需同步升级主机的 agent 与 execd |
+| SD2 | Phase 1 `steps` 是否混用 `builtin` | 不混用，Phase 1 `steps` 保持仅支持固定 `exec` 数组。`allowops-exec` 仅执行一次不可逆 `dropIdentity`，单进程内完整运行多步提取与分支，守住 T6/T7 边界 |
+| SD3 | 脱敏、提取与过滤的执行顺序 | 固定为“raw stdout → `max_scan` → `Redactor.StreamTracked`（行级脱敏与污染标记）→ `extractSink`（`max_bytes ≤ 1MB`）→ 调用方 `filters` → 共享 `max_output` 预算”。被脱敏规则修改过的行/JSON 文档直接 `EXTRACT_FAILED`；JSON 解码后对值及路径各字段段 `key=value` 二次脱敏复检；提取值禁止包含 `[REDACTED:`，且永不写入事件流、审计或错误消息 |
+| SD4 | 防御不可信 stdout 注入（T10） | 提取器（单捕获组 RE2 + `match: first\|exactly_one`、受限 `json_path`、同记录 `tsv`）强制绑定强类型 `as`（`int` 必填 `min`/`max` 且用于 `exec` 时 `min >= 0`；`enum` 禁止 `-` 开头；`string` 必填 `regex` 强制整串锚定 `^(?:...)$` 与 `max_len ≤ 1024`；`path` 经 `ResolvePath` 并在下游步骤执行前做 `CheckPathTrusted`）。`{steps.*}` 仅允许出现在最终命令普通参数位置，静态禁止进入 `exec[0]`、所有包装命令选项/操作数、`docker`/`kubectl` 全局与 `exec` 目标位置，以及 `allow_interpreter: true` 动作；渲染后再次 `CheckCommand` 并统一拒绝前导 `-` |
+| SD5 | 条件分支语义与跳过可见性 | `when` 采用零依赖结构化 YAML AST（最大深度 4、最大 32 节点、Step 0 禁止 `when`），使用 Kleene 强三值逻辑（缺失为 `unknown`，`not unknown = unknown`，仅 `true` 执行），保证 fail-closed。可选参数组仅在产生步干净成功且 `optional: true` 未命中时省略，否则 `EXTRACT_MISSING`。跳过步骤携带固定原因码 `CONDITION_FALSE` / `STOPPED`，网关按原因分别校验，全成功/跳过步骤聚合退出码为 0 |
+| SD6 | 授权边界与风险提示 | `when` 依赖主机输出，不是授权或安全边界；非 `read` 动作使用 `extract`/`when` 时 `catalog validate` 产出评审警告，评审时须保证每步即使无条件执行也安全 |

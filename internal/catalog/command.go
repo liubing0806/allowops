@@ -3,6 +3,7 @@ package catalog
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/liubing0806/allowops/internal/params"
@@ -150,7 +151,7 @@ func skipOptions(args []string, opts optionSet, tty bool) ([]string, error) {
 	return args, nil
 }
 
-func containerCommand(name string, args []string) ([]string, error) {
+func containerSubcommand(name string, args []string) ([]string, error) {
 	globals := optionSet{values: "--config --context --host -H -c", flags: "--debug -D --tls --tlsverify"}
 	if name == "kubectl" {
 		globals = optionSet{values: "--context --namespace -n --kubeconfig --server -s --cluster --user --token --certificate-authority --request-timeout", flags: "--insecure-skip-tls-verify --warnings-as-errors"}
@@ -164,6 +165,14 @@ func containerCommand(name string, args []string) ([]string, error) {
 	}
 	if _, dynamic := params.Placeholder(args[0]); dynamic {
 		return nil, fmt.Errorf("fixed subcommand required")
+	}
+	return args, nil
+}
+
+func containerCommand(name string, args []string) ([]string, error) {
+	args, err := containerSubcommand(name, args)
+	if err != nil {
+		return nil, err
 	}
 	if args[0] != "exec" {
 		return nil, nil
@@ -310,6 +319,75 @@ func xargsReplacement(args []string, opts optionSet) (string, error) {
 	return replacement, nil
 }
 
+func isStepPlaceholder(word string) bool {
+	_, _, ok := params.StepPlaceholder(word)
+	return ok
+}
+
+// checkStepPlaceholders confines step output to the final command's arguments.
+func checkStepPlaceholders(argv []string) error {
+	if !slices.ContainsFunc(argv, isStepPlaceholder) {
+		return nil
+	}
+	if isStepPlaceholder(argv[0]) {
+		return fmt.Errorf("step placeholder forbidden as a command")
+	}
+	name := strings.ToLower(filepath.Base(argv[0]))
+	nested, err := nestedCommand(name, argv[1:])
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	if nested != nil {
+		end := len(argv) - len(nested)
+		// The default xargs command is synthesized, so its one word consumes
+		// no argv element. If the last word is literally echo it is already safe.
+		if name == "xargs" && len(nested) == 1 && nested[0] == "echo" && argv[end] != "echo" {
+			end = len(argv)
+		}
+		if slices.ContainsFunc(argv[:end], isStepPlaceholder) {
+			return fmt.Errorf("%s: step placeholder forbidden in execution options or operands", name)
+		}
+		return checkStepPlaceholders(nested)
+	}
+	if name == "docker" || name == "kubectl" {
+		subcommand, err := containerSubcommand(name, argv[1:])
+		if err != nil {
+			return err
+		}
+		if slices.ContainsFunc(argv[:len(argv)-len(subcommand)+1], isStepPlaceholder) {
+			return fmt.Errorf("%s: step placeholder forbidden in global options or subcommand", name)
+		}
+		verb := subcommand[0]
+		rest := subcommand[1:]
+		if name == "docker" && verb == "container" {
+			if len(rest) == 0 || isStepPlaceholder(rest[0]) {
+				return fmt.Errorf("%s: step placeholder forbidden in subcommand", name)
+			}
+			verb = rest[0]
+			rest = rest[1:]
+		}
+		allowedSubcommands := "inspect logs top stats port diff ps"
+		safePrecedingOptions := "--tail --since --until --filter -f --timestamps --details --no-stream --no-trunc --all -a --quiet -q --size --"
+		if name == "kubectl" {
+			allowedSubcommands = "get describe logs top events"
+			safePrecedingOptions = "--tail --since --since-time --limit-bytes --container -c --selector -l --field-selector --timestamps --previous -p --all-containers --ignore-not-found --show-labels --no-headers --"
+		}
+		if !containsOption(allowedSubcommands, verb) {
+			return fmt.Errorf("%s: step placeholder forbidden with subcommand %s", name, verb)
+		}
+		for i, word := range rest {
+			if !isStepPlaceholder(word) || i == 0 {
+				continue
+			}
+			prev := rest[i-1]
+			if strings.HasPrefix(prev, "-") && !containsOption(safePrecedingOptions, prev) {
+				return fmt.Errorf("%s: step placeholder forbidden as the value of %s", name, prev)
+			}
+		}
+	}
+	return nil
+}
+
 func validateExec(template []any, defs map[string]params.Definition, allow bool) error {
 	if err := params.ValidateTemplate(template, defs); err != nil {
 		return err
@@ -331,6 +409,23 @@ func validateExec(template []any, defs map[string]params.Definition, allow bool)
 		return err
 	}
 	for _, argv := range variants {
+		if slices.ContainsFunc(argv, isStepPlaceholder) {
+			if allow {
+				return fmt.Errorf("step placeholders forbidden with allow_interpreter")
+			}
+			if err := checkStepPlaceholders(argv); err != nil {
+				return err
+			}
+			for _, word := range argv {
+				if !isStepPlaceholder(word) {
+					continue
+				}
+				def := defs[word[1:len(word)-1]]
+				if def.Type == params.Int && (def.Min == nil || *def.Min < 0) {
+					return fmt.Errorf("integer step placeholder %s in exec requires min >= 0", word)
+				}
+			}
+		}
 		if err := CheckCommand(argv, allow); err != nil {
 			return err
 		}
