@@ -78,14 +78,14 @@ type instanceHost struct {
 	now   func() time.Time
 }
 
-func (h instanceHost) InstanceID() string       { return h.inst.id }
-func (h instanceHost) Logger() *slog.Logger     { return h.inst.logger }
+func (h instanceHost) InstanceID() string   { return h.inst.id }
+func (h instanceHost) Logger() *slog.Logger { return h.inst.logger }
 func (h instanceHost) HTTPClient() *http.Client {
 	c := *h.inst.client
 	return &c
 }
-func (h instanceHost) Cache() plugin.Cache      { return h.cache }
-func (h instanceHost) Now() time.Time           { return h.now().UTC() }
+func (h instanceHost) Cache() plugin.Cache { return h.cache }
+func (h instanceHost) Now() time.Time      { return h.now().UTC() }
 
 func (h instanceHost) Credential(ref string) ([]byte, error) {
 	return h.inst.credentials.read(ref)
