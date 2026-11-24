@@ -10,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -303,9 +304,12 @@ func (s *stepExtractSink) jsonValue(e stepExtractor) (any, error) {
 	if _, modified := s.redactor.LineTracked(text); modified {
 		return nil, ErrExtractFailed
 	}
-	if key := segments[len(segments)-1].Field; key != "" {
-		_, assignmentModified := s.redactor.LineTracked(key + "=" + text)
-		_, jsonModified := s.redactor.LineTracked(`"` + key + `":"` + text + `"`)
+	for _, segment := range segments {
+		if segment.Field == "" {
+			continue
+		}
+		_, assignmentModified := s.redactor.LineTracked(segment.Field + "=" + text)
+		_, jsonModified := s.redactor.LineTracked(strconv.Quote(segment.Field) + ":" + strconv.Quote(text))
 		if assignmentModified || jsonModified {
 			return nil, ErrExtractFailed
 		}
