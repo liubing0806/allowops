@@ -1,6 +1,9 @@
 name: disk_pressure_diagnose
 description: Read filesystem usage and list top-level directory sizes when usage reaches 80 percent.
 risk: read
+toolset: system
+tags: [disk, filesystem, diagnose]
+entity_kinds: [host]
 params:
   path:
     type: path

@@ -1,6 +1,9 @@
 name: k8s_top_nodes
 description: Read node resource metrics.
 risk: read
+toolset: k8s
+tags: [node, metrics, cpu, memory]
+entity_kinds: [k8s_cluster]
 run_as: root
 params: {}
 exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, top, nodes]

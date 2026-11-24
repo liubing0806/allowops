@@ -1,6 +1,9 @@
 name: starrocks_cluster_status
 description: "Show StarRocks frontend, backend and compute node status with fixed SHOW statements. Use op cluster (component selects the node type) or op running for the queries that are executing now; the account needs SYSTEM OPERATE and the statements are fixed."
 risk: read
+toolset: starrocks
+tags: [cluster, nodes, queries]
+entity_kinds: [starrocks, database]
 run_as: root
 timeout: 15s
 builtin: starrocks_diag

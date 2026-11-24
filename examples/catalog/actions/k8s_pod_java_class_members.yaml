@@ -1,6 +1,9 @@
 name: k8s_pod_java_class_members
 description: List declared members of one Java class with javap -p inside an allowed pod.
 risk: read
+toolset: k8s
+tags: [pod, bytecode, class]
+entity_kinds: [k8s_pod, jvm]
 run_as: root
 params:
   namespace:

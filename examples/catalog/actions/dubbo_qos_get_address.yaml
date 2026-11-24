@@ -2,6 +2,9 @@
 name: dubbo_qos_get_address
 description: Show the available provider addresses of one Dubbo service through the local QoS HTTP endpoint (GET /getAddress/{service}); credentials are redacted.
 risk: read
+toolset: dubbo
+tags: [qos, providers, endpoints]
+entity_kinds: [dubbo, jvm]
 params: {}
 builtin: http_get
 builtin_config:

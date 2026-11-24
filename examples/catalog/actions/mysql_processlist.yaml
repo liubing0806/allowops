@@ -1,6 +1,9 @@
 name: mysql_processlist
 description: List MySQL connections and running statements with SHOW PROCESSLIST.
 risk: read
+toolset: mysql
+tags: [sql, connections, queries]
+entity_kinds: [mysql, database]
 run_as: root
 params:
   database:

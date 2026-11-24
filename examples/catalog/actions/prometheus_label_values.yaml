@@ -2,6 +2,9 @@
 name: prometheus_label_values
 description: List the values of one label, or the metric names with label=__name__, in the configured Prometheus.
 risk: read
+toolset: prometheus
+tags: [metrics, labels, discovery]
+entity_kinds: [prometheus]
 run_as: root
 params: {}
 builtin: prometheus_query

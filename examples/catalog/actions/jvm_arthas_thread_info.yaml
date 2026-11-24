@@ -5,6 +5,9 @@
 name: jvm_arthas_thread_info
 description: Show the state and stack of one thread of an allowlisted JVM through the Arthas agent.
 risk: write
+toolset: jvm_arthas
+tags: [arthas, threads, stack_trace]
+entity_kinds: [jvm]
 run_as: root
 idempotent: false
 params: {}

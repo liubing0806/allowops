@@ -1,6 +1,9 @@
 name: log_sources
 description: List the named log sources on the host with file counts, sizes and covered time range. Call this first, then log_search with a source name and time range.
 risk: read
+toolset: logs
+tags: [logs, sources, time_range]
+entity_kinds: [host, service]
 run_as: root
 timeout: 30s
 builtin: log_query

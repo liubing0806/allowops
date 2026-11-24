@@ -1,6 +1,9 @@
 name: starrocks_profile_list
 description: "List the query profiles that the StarRocks frontend still holds (op profile_list; limit bounds the rows). Profiles exist only for queries that ran with enable_profile or exceeded big_query_profile_threshold."
 risk: read
+toolset: starrocks
+tags: [query_profile, history]
+entity_kinds: [starrocks]
 run_as: root
 timeout: 15s
 builtin: starrocks_diag

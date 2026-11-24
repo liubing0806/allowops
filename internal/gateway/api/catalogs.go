@@ -214,6 +214,9 @@ func (s *Service) PublishCatalog(ctx context.Context, req *connect.Request[v1.Pu
 	if err != nil {
 		return nil, failure(connect.CodeInvalidArgument, "catalog signature, schema or validity rejected")
 	}
+	if err = catalog.ValidateForPublish(p); err != nil {
+		return nil, failure(connect.CodeInvalidArgument, "catalog rejected for publication: "+err.Error())
+	}
 	names := []string{}
 	for name := range p.Actions {
 		names = append(names, name)

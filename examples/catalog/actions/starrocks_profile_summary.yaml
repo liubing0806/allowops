@@ -1,6 +1,9 @@
 name: starrocks_profile_summary
 description: "Summarize the profile of one StarRocks query (op profile_summary with query_id): slowest operators, skew and rule findings as JSON. op profile_analyze returns the built-in ANALYZE PROFILE text instead. profile_run is not enabled."
 risk: read
+toolset: starrocks
+tags: [query_profile, operators, skew]
+entity_kinds: [starrocks]
 run_as: root
 timeout: 15s
 builtin: starrocks_diag

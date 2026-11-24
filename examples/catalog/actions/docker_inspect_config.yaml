@@ -1,6 +1,9 @@
 name: docker_inspect_config
 description: Read image, creation time, restart count, network mode, mounts, extra hosts and environment variable names of one container.
 risk: read
+toolset: docker
+tags: [container, config, mounts, network]
+entity_kinds: [docker_container]
 run_as: root
 params:
   container:

@@ -1,6 +1,9 @@
 name: nginx_access_stats
 description: Aggregate bounded nginx access logs without returning raw entries.
 risk: read
+toolset: nginx
+tags: [logs, access_log, aggregation]
+entity_kinds: [nginx]
 run_as: root
 params:
   path:

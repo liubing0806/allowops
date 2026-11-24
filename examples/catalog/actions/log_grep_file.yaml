@@ -1,6 +1,9 @@
 name: log_grep_file
 description: Search one allowed log file with a bounded match count.
 risk: read
+toolset: logs
+tags: [logs, search, regex]
+entity_kinds: [host]
 run_as: root
 params:
   path:

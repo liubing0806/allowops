@@ -1,6 +1,9 @@
 name: k8s_rollout_status
 description: Read the rollout status of an allowed deployment with a bounded wait.
 risk: read
+toolset: k8s
+tags: [deployment, rollout, status]
+entity_kinds: [k8s_cluster]
 run_as: root
 params:
   namespace:

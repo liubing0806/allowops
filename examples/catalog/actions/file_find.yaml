@@ -1,6 +1,9 @@
 name: file_find
 description: Find regular files by name pattern under an allowed root with a bounded depth.
 risk: read
+toolset: files
+tags: [files, search]
+entity_kinds: [host]
 run_as: root
 params:
   root:

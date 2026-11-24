@@ -30,6 +30,9 @@ redact:
 name: systemd_service_status
 description: Read the status of an allowed systemd service.
 risk: read
+toolset: system
+tags: [systemd, service, status]
+entity_kinds: [host, service]
 params:
   service:
     type: enum
@@ -45,9 +48,19 @@ redact:
 ```
 
 Names match `^[a-z][a-z0-9_]{0,63}$`. Action names are globally unique across
-current catalogs and cannot use the fixed MCP tool names. Descriptions are
+current catalogs and cannot use the fixed or progressive MCP tool names
+(`hosts_search`, `jobs_get`, `jobs_list`, `jobs_cancel`, `entities_search`,
+`actions_search`, `actions_invoke_read`, `actions_invoke_write`,
+`actions_invoke_dangerous`). Descriptions are
 required. Risk is `read`, `write` or `dangerous`; it is a policy attribute, not
-a proof that the operation has no side effects. Optional `idempotent` supplies
+a proof that the operation has no side effects. Optional `toolset`, `tags` and
+`entity_kinds` classify actions for MCP progressive disclosure, toolset scoping
+and `entities_search` recommendations. Values match `^[a-z][a-z0-9_]{0,31}$`,
+with at most 16 unique strings in `tags` and `entity_kinds`; they are included
+in the signed action digest. Hosts running an agent that predates these fields
+cannot load a catalog that uses them; see
+[fields that hosts must understand](publishing.md#fields-that-hosts-must-understand).
+Optional `idempotent` supplies
 the MCP idempotency annotation. Omitted `run_as` uses the low-privilege account
 for ordinary commands. Set `run_as` to the reviewed execution identity when needed.
 

@@ -1,6 +1,9 @@
 name: mysql_variables
 description: Read MySQL server variables, optionally narrowed by a LIKE pattern.
 risk: read
+toolset: mysql
+tags: [config, variables]
+entity_kinds: [mysql]
 run_as: root
 params:
   database:

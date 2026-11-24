@@ -4,6 +4,9 @@
 name: jvm_perfdata
 description: Read heap, GC, class and thread figures of an allowlisted JVM from its hsperfdata, without attaching to it.
 risk: read
+toolset: jvm
+tags: [gc, heap, threads, metrics]
+entity_kinds: [jvm]
 run_as: root
 params: {}
 builtin: jvm_perfdata

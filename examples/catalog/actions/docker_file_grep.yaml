@@ -1,6 +1,9 @@
 name: docker_file_grep
 description: Search one file inside an allowed container with a bounded match count.
 risk: read
+toolset: docker
+tags: [container, files, search]
+entity_kinds: [docker_container]
 run_as: root
 params:
   container:

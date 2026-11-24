@@ -1,6 +1,9 @@
 name: k8s_configmap_view
 description: Read the data of one ConfigMap with secret values redacted; narrow the output with the match filter.
 risk: read
+toolset: k8s
+tags: [config, configmap, redaction]
+entity_kinds: [k8s_cluster]
 run_as: root
 params:
   namespace:

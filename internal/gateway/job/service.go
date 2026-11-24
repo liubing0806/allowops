@@ -193,6 +193,21 @@ func (s *Service) operation(ctx context.Context, op string, write bool, fn func(
 	return result, err
 }
 
+type expectedRiskKey struct{}
+
+// WithExpectedRisk constrains RunJob to execute only when the verified signed
+// action loaded for scheduling has this exact risk level. Used by MCP
+// risk-split invocation tools to prevent a concurrent catalog publish from
+// escalating risk between precheck and execution.
+func WithExpectedRisk(ctx context.Context, risk string) context.Context {
+	return context.WithValue(ctx, expectedRiskKey{}, risk)
+}
+
+func expectedRiskFromContext(ctx context.Context) string {
+	risk, _ := ctx.Value(expectedRiskKey{}).(string)
+	return risk
+}
+
 func (s *Service) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobResponse, error) {
 	m, err := s.operation(ctx, "run_job", true, func(ctx context.Context) (proto.Message, error) {
 		if r == nil {
@@ -216,6 +231,9 @@ func (s *Service) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobRe
 		p, a, digest, err := s.action(ctx, r.Action)
 		if err != nil {
 			return nil, err
+		}
+		if expected := expectedRiskFromContext(ctx); expected != "" && a.Risk != expected {
+			return nil, detailError(connect.CodeFailedPrecondition, &v1.ErrorDetail{Reason: "ACTION_RISK_MISMATCH"})
 		}
 		batch, failures, err := prepare(a, r, s.Config)
 		if err != nil {

@@ -145,6 +145,9 @@ export interface ActionSummary {
 }
 // This is the catalog schema inside GetAction.definitionJson, not a protobuf message.
 export interface ActionDefinition {
+  toolset?: string
+  tags?: string[]
+  entity_kinds?: string[]
   params?: Record<
     string,
     {

@@ -1,6 +1,9 @@
 name: process_top
 description: Read processes sorted by CPU consumption.
 risk: read
+toolset: system
+tags: [process, cpu]
+entity_kinds: [host]
 params: {}
 exec: [/usr/bin/ps, -eo, 'pid,user,%cpu,%mem,etime,comm', --sort=-%cpu]
 timeout: 10s

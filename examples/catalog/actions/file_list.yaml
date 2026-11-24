@@ -1,6 +1,9 @@
 name: file_list
 description: List the immediate contents of an allowed directory.
 risk: read
+toolset: files
+tags: [files, directory]
+entity_kinds: [host]
 run_as: root
 params:
   path:

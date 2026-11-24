@@ -1,6 +1,9 @@
 name: app_config_view
 description: Read the first lines of one application properties file with secret values redacted; narrow the output with the match filter.
 risk: read
+toolset: files
+tags: [config, redaction]
+entity_kinds: [host, service]
 run_as: root
 params:
   path:

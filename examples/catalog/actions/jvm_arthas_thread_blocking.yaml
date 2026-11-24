@@ -5,6 +5,9 @@
 name: jvm_arthas_thread_blocking
 description: Find the thread that blocks others in an allowlisted JVM through the Arthas agent.
 risk: write
+toolset: jvm_arthas
+tags: [arthas, threads, locks]
+entity_kinds: [jvm]
 run_as: root
 idempotent: false
 params: {}

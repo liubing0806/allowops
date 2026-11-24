@@ -3,7 +3,9 @@ package hostconn
 import (
 	"crypto"
 	"crypto/ed25519"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -22,6 +24,23 @@ type CA struct {
 	certificate *x509.Certificate
 	key         crypto.Signer
 	PEM         []byte
+}
+
+// DeriveKey derives a domain-separated 32-byte symmetric key from the Host CA
+// private key so gateway replicas sharing the same CA can authenticate
+// stateless tokens (such as MCP pagination cursors) without sharing or
+// exposing the raw private key directly.
+func (c *CA) DeriveKey(domain string) ([]byte, error) {
+	if c == nil || c.key == nil {
+		return nil, errors.New("host CA key unavailable")
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(c.key)
+	if err != nil {
+		return nil, err
+	}
+	mac := hmac.New(sha256.New, der)
+	mac.Write([]byte(domain))
+	return mac.Sum(nil), nil
 }
 
 type IssuedCertificate struct {

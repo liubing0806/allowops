@@ -74,7 +74,7 @@ message AgentCapabilities {
   repeated string builtins = 4;
   // match,exclude,tail,head,count.
   repeated string output_filters = 5;
-  // Additional signed-catalog features, e.g. exec_fallbacks, allow_interpreter and max_targets.
+  // Additional signed-catalog features, e.g. exec_fallbacks, allow_interpreter, max_targets and action_metadata.
   repeated string features = 6;
 }
 

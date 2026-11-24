@@ -69,6 +69,21 @@ describe('catalog page', () => {
       vi.unstubAllGlobals()
     }
   })
+  it('shows action metadata in the detail panel', async () => {
+    await openCatalog()
+    fireEvent.click(await screen.findByRole('button', { name: 'journal_view_log' }))
+    const panel = within(
+      await screen.findByRole('complementary', { name: 'journal_view_log' }),
+    )
+    expect(await panel.findByText('工具集', { selector: 'dt' })).toBeInTheDocument()
+    expect(panel.getByText('logs', { selector: 'dd' })).toBeInTheDocument()
+    expect(panel.getByText('标签', { selector: 'dt' })).toBeInTheDocument()
+    expect(
+      panel.getByText('logs, journal, systemd', { selector: 'dd' }),
+    ).toBeInTheDocument()
+    expect(panel.getByText('实体类型', { selector: 'dt' })).toBeInTheDocument()
+    expect(panel.getByText('host, service', { selector: 'dd' })).toBeInTheDocument()
+  })
   it('closes the action panel on Escape and keeps the list usable', async () => {
     await openCatalog()
     const name = await screen.findByRole('button', { name: 'journal_view_log' })

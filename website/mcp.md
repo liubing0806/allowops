@@ -38,6 +38,51 @@ the JSON above is specifically Claude Code configuration. Confirm HTTP transport
 and headers in your client's documentation. The isolated Compose network
 does not expose a desktop-reachable endpoint.
 
+## Exposure modes and toolset scoping
+
+By default (`mcp.mode: flat` in `gateway.yaml`), every visible signed action is
+listed directly as its own MCP tool so existing client allowlists continue to
+work without changes. For large catalogs (100+ actions), set `mcp.mode` to
+`progressive` or `auto`:
+
+```yaml
+mcp:
+  mode: auto          # flat (default) | progressive | auto
+  auto_threshold: 40  # switch to progressive above this count in auto mode (1-1000)
+```
+
+Clients can also narrow their view per connection using HTTP headers (URL query
+parameters are never accepted on `/mcp`):
+
+- `X-Allowops-Toolsets`: comma-separated list of up to 16 `toolset` names (each
+  matching `^[a-z][a-z0-9_]{0,31}$`), for example `X-Allowops-Toolsets: jvm,k8s`.
+  Only visible actions annotated with one of those toolsets are exposed.
+- `X-Allowops-MCP-Mode`: `flat` or `progressive`, overriding the gateway default
+  for that client.
+
+These headers only shape the client's tool list and context window; they are not
+an authorization boundary. Policy still evaluates every action and target host.
+Malformed or duplicate headers return HTTP `400` and record a `mcp/request`
+denial in the audit chain.
+
+In `progressive` mode (when the scoped identity has at least one supported
+visible action), `tools/list` exposes discovery and risk-split invocation
+meta-tools instead of listing every action:
+
+- `actions_search`: filter visible actions by `query` words, exact `names`,
+  `toolset`, `tag`, `risk`, `entity_kind` or `hostname`, ordered `read`, `write`,
+  `dangerous` then by `name`, with `next_cursor` pagination and a 32 KiB result
+  budget. Pass `include_schema: true` to fetch the signed `input_schema` and
+  effective limits. The first page includes matched counts per `toolset`. When
+  `hostname` is supplied, the gateway runs a single-host ABAC precheck; missing,
+  hidden or unlabeled hosts return an empty action list.
+- `actions_invoke_read`, `actions_invoke_write`, `actions_invoke_dangerous`:
+  listed only for the risk levels actually present in the caller's visible
+  actions. Separate tools let clients keep distinct approval rules per risk
+  level (`readOnlyHint: true` on `actions_invoke_read`; `destructiveHint: true`
+  on `actions_invoke_dangerous`). Each call re-verifies the signed action and
+  refuses execution if the action's current `risk` does not match the tool.
+
 ## Fixed tools
 
 Inputs below use snake_case. Unknown inputs are rejected.
@@ -45,7 +90,7 @@ Inputs below use snake_case. Unknown inputs are rejected.
 | Tool | Inputs |
 |---|---|
 | `hosts_search` | Optional `selector` or `hostname` (mutually exclusive), `next_cursor`. With neither, list all visible hosts. |
-| `entities_search` | Listed when at least one inventory plugin is ready. Optional `kind`, `name`, `sources`, `limit` (1–100, default 20). Requires `view_inventory`. |
+| `entities_search` | Listed when at least one inventory plugin is ready. Optional `kind`, `name`, `sources`, `limit` (1–100, default 20). Requires `view_inventory`. Also returns per-kind `recommended_actions` (up to 10 visible actions per returned entity kind; `recommended_actions_truncated` marks omitted hints) without changing `truncated`. |
 | `changes_list` | Listed when at least one changes plugin is ready. Optional `services`, `from`, `to` (RFC3339, max 7-day window), `sources`, `limit` (1–100, default 20). Requires `view_changes`. |
 | `runbooks_search` | Listed when at least one knowledge plugin is ready. Optional `query`, `tags`, `sources`, `limit` (1–100, default 20). Requires `view_knowledge`. |
 | `runbooks_read` | Listed when at least one knowledge plugin is ready. Required `source`, `id`; optional `section`, `offset`, `max_bytes`, `revision`. Requires `view_knowledge`. |

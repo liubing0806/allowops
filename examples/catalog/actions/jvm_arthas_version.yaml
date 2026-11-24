@@ -5,6 +5,9 @@
 name: jvm_arthas_version
 description: Show the version of the Arthas agent attached to an allowlisted JVM.
 risk: write
+toolset: jvm_arthas
+tags: [arthas, version]
+entity_kinds: [jvm]
 run_as: root
 idempotent: false
 params: {}

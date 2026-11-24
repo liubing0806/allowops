@@ -2,6 +2,9 @@
 name: prometheus_query
 description: Run a read-only PromQL instant query against the configured Prometheus.
 risk: read
+toolset: prometheus
+tags: [metrics, promql, instant_query]
+entity_kinds: [prometheus]
 run_as: root
 params: {}
 builtin: prometheus_query

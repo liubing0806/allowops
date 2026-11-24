@@ -1,6 +1,9 @@
 name: mysql_query_readonly
 description: Run one bounded read-only SQL statement with app as the default database.
 risk: read
+toolset: mysql
+tags: [sql, query, read_only]
+entity_kinds: [mysql, database]
 run_as: root
 params:
   database:

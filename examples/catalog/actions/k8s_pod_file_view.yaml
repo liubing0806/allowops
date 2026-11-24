@@ -1,6 +1,9 @@
 name: k8s_pod_file_view
 description: Read a line-bounded file prefix inside one pod container.
 risk: read
+toolset: k8s
+tags: [pod, files, redaction]
+entity_kinds: [k8s_pod]
 run_as: root
 params:
   namespace:

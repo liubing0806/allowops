@@ -5,6 +5,9 @@
 name: jvm_arthas_thread_top
 description: Show the busiest threads of an allowlisted JVM with their stacks through the Arthas agent.
 risk: write
+toolset: jvm_arthas
+tags: [arthas, threads, cpu, stack_trace]
+entity_kinds: [jvm]
 run_as: root
 idempotent: false
 params: {}

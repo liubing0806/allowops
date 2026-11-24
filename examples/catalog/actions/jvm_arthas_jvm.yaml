@@ -5,6 +5,9 @@
 name: jvm_arthas_jvm
 description: Show the runtime, class loading, thread, memory and GC information of an allowlisted JVM through the Arthas agent.
 risk: write
+toolset: jvm_arthas
+tags: [arthas, runtime, threads, memory, gc]
+entity_kinds: [jvm]
 run_as: root
 idempotent: false
 params: {}

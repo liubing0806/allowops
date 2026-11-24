@@ -22,9 +22,14 @@ type Service struct {
 
 // Publish accepts a completed upload. Verification precedes a single atomic
 // publication transaction. Raw envelope bytes are never reconstructed.
+// Authoring checks apply here and not in Verify, which also reads packages
+// that were published before those checks existed.
 func (s *Service) Publish(ctx context.Context, raw []byte) (*catalog.Package, error) {
 	p, err := s.Verify(raw)
 	if err != nil {
+		return nil, err
+	}
+	if err := catalog.ValidateForPublish(p); err != nil {
 		return nil, err
 	}
 	names := slices.Sorted(slices.Values(actionNames(p)))

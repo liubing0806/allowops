@@ -112,7 +112,7 @@ func TestInventoryArgumentErrorsAndPermission(t *testing.T) {
 			source := &inventoryStub{sources: []string{"static"}}
 			id := &inventoryIdentity{}
 			s := &Service{identity: id, config: Config{Inventory: source}}
-			_, err := s.searchEntities(context.Background(), json.RawMessage(input))
+			_, err := s.searchEntities(context.Background(), json.RawMessage(input), nil)
 			if connect.CodeOf(err) != connect.CodeInvalidArgument || id.required || source.called || len(id.auditEvents) != 0 {
 				t.Fatalf("error=%v required=%v called=%v", err, id.required, source.called)
 			}
@@ -124,7 +124,7 @@ func TestInventoryArgumentErrorsAndPermission(t *testing.T) {
 	source := &inventoryStub{sources: []string{"static"}}
 	id := &inventoryIdentity{denied: true}
 	s := &Service{identity: id, config: Config{Inventory: source}}
-	_, err := s.execute(context.Background(), &sdk.CallToolRequest{Params: &sdk.CallToolParamsRaw{Name: "entities_search", Arguments: json.RawMessage(`{}`)}}, map[string]bool{"entities_search": true}, &callState{})
+	_, err := s.execute(context.Background(), &sdk.CallToolRequest{Params: &sdk.CallToolParamsRaw{Name: "entities_search", Arguments: json.RawMessage(`{}`)}}, &serverScope{tools: map[string]bool{"entities_search": true}}, &callState{})
 	if connect.CodeOf(err) != connect.CodePermissionDenied || source.called || len(id.auditEvents) != 0 {
 		t.Fatalf("error=%v called=%v", err, source.called)
 	}
@@ -134,7 +134,7 @@ func TestInventoryAuthorizationAuditFailureSkipsSearch(t *testing.T) {
 	source := &inventoryStub{sources: []string{"static"}}
 	id := &inventoryIdentity{auditError: errors.New("audit backend details")}
 	s := &Service{identity: id, config: Config{Inventory: source}}
-	result, err := s.searchEntities(t.Context(), nil)
+	result, err := s.searchEntities(t.Context(), nil, nil)
 	if result != nil || connect.CodeOf(err) != connect.CodeUnavailable || strings.Contains(err.Error(), "audit backend details") || source.called {
 		t.Fatalf("result=%v error=%v called=%v", result, err, source.called)
 	}
@@ -151,7 +151,7 @@ func TestInventoryVisibilityBeforeLimitAndHostCount(t *testing.T) {
 		{Entity: inventory.Entity{Kind: "service", Name: "c-configured", Selector: "service=configured"}, Source: "static"},
 	}}
 	s := &Service{identity: &inventoryIdentity{visible: map[string]bool{"public": true}}, config: Config{Inventory: source}}
-	result, err := s.searchEntities(context.Background(), json.RawMessage(`{"kind":"service","name":"i","sources":["static"],"limit":1}`))
+	result, err := s.searchEntities(context.Background(), json.RawMessage(`{"kind":"service","name":"i","sources":["static"],"limit":1}`), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestInventoryVisibilityBeforeLimitAndHostCount(t *testing.T) {
 	if len(out.Entities) != 1 || out.Entities[0].Name != "b-visible" || !out.Truncated || out.Entities[0].HostCount != 1 || !reflect.DeepEqual(out.Entities[0].Hosts, []string{"public"}) || source.query != (pluginhost.Query{Kind: "service", Name: "i"}) || !reflect.DeepEqual(source.selected, []string{"static"}) {
 		t.Fatalf("output=%+v source=%+v", out, source)
 	}
-	result, err = s.searchEntities(context.Background(), json.RawMessage(`{}`))
+	result, err = s.searchEntities(context.Background(), json.RawMessage(`{}`), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestInventoryVisibilityBeforeLimitAndHostCount(t *testing.T) {
 		t.Fatal(source.entities)
 	}
 	source.entities = source.entities[:1]
-	result, err = s.searchEntities(context.Background(), nil)
+	result, err = s.searchEntities(context.Background(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestInventoryVisibilityBeforeLimitAndHostCount(t *testing.T) {
 	}
 	source.entities = []pluginhost.Result{{Entity: inventory.Entity{Kind: "service", Name: "many", Hosts: hosts}, Source: "static"}}
 	s.identity = &inventoryIdentity{visible: visible}
-	result, err = s.searchEntities(context.Background(), nil)
+	result, err = s.searchEntities(context.Background(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestInventoryMergesVisibleSources(t *testing.T) {
 	}}
 	id := &inventoryIdentity{visible: map[string]bool{"one": true, "two": true}}
 	s := &Service{identity: id, config: Config{Inventory: source}}
-	result, err := s.searchEntities(t.Context(), json.RawMessage(`{"name":"API"}`))
+	result, err := s.searchEntities(t.Context(), json.RawMessage(`{"name":"API"}`), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestInventoryPropagatesNameRedactionOnlyAcrossVisibleSources(t *testing.T) 
 	s := &Service{identity: id, config: Config{Inventory: host}}
 	search := func(args string) (*ToolResult, []inventoryEntity) {
 		t.Helper()
-		result, err := s.searchEntities(t.Context(), json.RawMessage(args))
+		result, err := s.searchEntities(t.Context(), json.RawMessage(args), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -315,7 +315,7 @@ func TestInventoryDegradesConflictsBeforeAttributes(t *testing.T) {
 			}}
 			id := &inventoryIdentity{visible: map[string]bool{"host-a": true, "host-b": true}}
 			s := &Service{identity: id, config: Config{Inventory: source}}
-			result, err := s.searchEntities(t.Context(), nil)
+			result, err := s.searchEntities(t.Context(), nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -353,7 +353,7 @@ func TestInventoryOversizedHostPreviewRetainsHostCount(t *testing.T) {
 		{Source: "a", Entity: inventory.Entity{Kind: "service", Name: "api", Hosts: hosts}},
 	}}
 	s := &Service{identity: id, config: Config{Inventory: source}}
-	result, err := s.searchEntities(t.Context(), nil)
+	result, err := s.searchEntities(t.Context(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +375,7 @@ func TestInventoryCompleteResultByteLimit(t *testing.T) {
 	s := &Service{identity: &inventoryIdentity{}, config: Config{Inventory: source}}
 	check := func() inventoryResult {
 		t.Helper()
-		result, err := s.searchEntities(context.Background(), json.RawMessage(`{"limit":100}`))
+		result, err := s.searchEntities(context.Background(), json.RawMessage(`{"limit":100}`), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -429,7 +429,7 @@ func TestInventoryEmptyAndSourceFailures(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			source := &inventoryStub{sources: []string{"ok"}, entities: tc.entities, errors: tc.errors}
 			s := &Service{identity: &inventoryIdentity{}, config: Config{Inventory: source}}
-			result, err := s.searchEntities(context.Background(), nil)
+			result, err := s.searchEntities(context.Background(), nil, nil)
 			if err != nil || result.IsError {
 				t.Fatalf("result=%v error=%v", result, err)
 			}

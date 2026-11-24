@@ -1,6 +1,9 @@
 name: redis_log_view
 description: Read the last lines of a Redis log file.
 risk: read
+toolset: redis
+tags: [logs, tail]
+entity_kinds: [redis, cache]
 run_as: root
 params:
   path:

@@ -2,6 +2,9 @@
 name: dremio_jobs_recent
 description: List recent Dremio jobs from the job list (state, user, start time, duration, rows scanned, shortened statement). Filter by time window, state, minimum duration and user; slowest first when a minimum duration is given.
 risk: read
+toolset: dremio
+tags: [jobs, slow_query, history]
+entity_kinds: [dremio, database]
 run_as: root
 params: {}
 builtin: dremio_diag

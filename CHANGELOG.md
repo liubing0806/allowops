@@ -7,6 +7,25 @@ Changes on `main` since v0.2.0. They are not in a release yet.
 ### Upgrade notes
 
 - Building from source needs Go 1.27.4 (GO-2026-6859).
+- **Catalog metadata (`toolset`, `tags`, `entity_kinds`)**: `allowops-agent`
+  and `allowops-exec` parse signed catalogs strictly and reject packages
+  containing unknown fields (`CATALOG_REJECTED`). Upgrade in order before
+  publishing catalogs that use these fields:
+  1. Upgrade `allowops-gateway` (defaults to `mcp.mode: flat`, preserving
+     existing tool names).
+  2. Upgrade `allowops-agent` and `allowops-exec` on target hosts and verify
+     their reported `features` include `action_metadata`.
+  3. Upgrade the `allowops` CLI used in CI pipelines.
+  4. Sign and publish the updated catalog.
+- **New authoring/publish reserved action names**: `actions_search`,
+  `actions_invoke_read`, `actions_invoke_write`, and
+  `actions_invoke_dangerous` are now reserved on catalog authoring
+  (`allowops catalog validate` / `build`) and publication (`PublishCatalog`).
+  Reading previously stored historical catalogs remains compatible. Before
+  upgrading and publishing new catalog versions, inspect your current
+  catalog's action names on the web console Catalog page (or via
+  `CatalogService.ListActions`) and rename any action that uses one of these
+  four names.
 - `exact` mode job summaries now default to deterministic Anomaly-First ranking
   (`failure` → `anomaly` → `normal`) instead of task insertion order, and
   terminal tasks without output hashes (such as `skipped`, `cancelled`, or
@@ -33,6 +52,33 @@ Changes on `main` since v0.2.0. They are not in a release yet.
 
 ### New
 
+- MCP progressive disclosure and catalog action metadata for large catalogs:
+  - Signed catalog actions now support optional `toolset`, `tags`, and
+    `entity_kinds` metadata fields (included in the action digest and DSSE
+    signature). Omitting them keeps existing catalog digests unchanged. All
+    136 actions in `examples/catalog/actions/` are annotated across 16
+    toolsets, and the web console displays these fields in the Catalog action
+    detail panel.
+  - `gateway.yaml` adds an optional `mcp` section with `mode` (`flat` default,
+    `progressive`, or `auto`) and `auto_threshold` (default `40`, range
+    `1..1000`). Clients can also scope their view with `X-Allowops-Toolsets`
+    (up to 16 toolsets) and `X-Allowops-MCP-Mode` (`flat` or `progressive`)
+    headers; `/mcp` continues to reject URL query parameters.
+  - In `progressive` mode, `tools/list` exposes `actions_search` (keyword,
+    exact `names`, `toolset`, `tag`, `risk`, `entity_kind`, and single-host
+    `hostname` ABAC precheck with optional `include_schema` and 32 KiB paged
+    results) and risk-split invocation tools (`actions_invoke_read`,
+    `actions_invoke_write`, `actions_invoke_dangerous`) only for the risk
+    levels visible to the caller. Each call verifies the action's current
+    signed risk and runs through the same parameter, `expected_count`,
+    `max_targets`, per-host ABAC, and audit pipeline as flat tools.
+  - `entities_search` now includes per-kind `recommended_actions` (up to 10
+    visible actions per returned entity kind, packed within the remaining
+    32 KiB budget with a separate `recommended_actions_truncated` marker).
+  - MCP caching uses a two-tier design: verified catalogs and projected policy
+    are shared across identities, the per-identity LRU holds one slot per
+    identity, and header-narrowed servers are built per request without
+    evicting cached identities.
 - Fleet output normalized clustering, Anomaly-First ranking, and cross-job
   baseline comparison:
   - Action tools, `jobs_get`, `allowops run`, and `allowops jobs get` accept

@@ -1,6 +1,9 @@
 name: dremio_query_readonly
 description: Run one bounded read-only Dremio statement (SELECT, SHOW, DESCRIBE or EXPLAIN); name objects by their complete path. Dremio itself has no permission boundary, so the data sources behind it must use read-only accounts.
 risk: read
+toolset: dremio
+tags: [sql, query, read_only]
+entity_kinds: [dremio, database]
 run_as: root
 params:
   sql:

@@ -2,6 +2,9 @@
 name: prometheus_series
 description: List the series that match selectors in the configured Prometheus.
 risk: read
+toolset: prometheus
+tags: [metrics, time_series, selectors]
+entity_kinds: [prometheus]
 run_as: root
 params: {}
 builtin: prometheus_query

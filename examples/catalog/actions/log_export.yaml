@@ -1,6 +1,9 @@
 name: log_export
 description: Export the records of a named log source within a time range, oldest first, one record per line as "<time> <text>" with newlines in a record written as \n. The last line starts with "# " and gives matched and, when records are left, next_cursor; pass it with unchanged parameters for the next page. Read the output with jobs_get encoding=text or save it with allowops jobs output.
 risk: read
+toolset: logs
+tags: [logs, export, time_range]
+entity_kinds: [host]
 run_as: root
 timeout: 60s
 builtin: log_query

@@ -1,6 +1,9 @@
 name: file_view
 description: Read a line-bounded file prefix with a bounded output size.
 risk: read
+toolset: files
+tags: [files, redaction]
+entity_kinds: [host]
 run_as: root
 params:
   path:

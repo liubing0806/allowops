@@ -1,6 +1,9 @@
 name: mysql_show
 description: Run one fixed SHOW TABLES or SHOW STATUS statement against an allowed database; at most 500 rows are returned, so read status variables with a LIKE pattern.
 risk: read
+toolset: mysql
+tags: [sql, tables, status]
+entity_kinds: [mysql]
 run_as: root
 params:
   database:

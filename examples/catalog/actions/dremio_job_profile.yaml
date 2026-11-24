@@ -2,6 +2,9 @@
 name: dremio_job_profile
 description: Summarize the profile of one Dremio job as JSON - planning time, time per state, the slowest operators, peak memory, skew between instances, the SQL pushed down to data sources, reflection use and the rules that matched (DR-*) with cause and advice.
 risk: read
+toolset: dremio
+tags: [query_profile, operators, memory, pushdown]
+entity_kinds: [dremio]
 run_as: root
 params: {}
 builtin: dremio_diag

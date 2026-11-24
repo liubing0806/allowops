@@ -3,6 +3,9 @@
 name: redis_config_get
 description: Read allowed non-sensitive Redis configuration parameters by exact name with CONFIG GET. Several names in one call need Redis 7.0 or later; older servers accept one name per call. Before Redis 5.0 the replica setting is named slave-read-only (replica-read-only returns an empty array there).
 risk: read
+toolset: redis
+tags: [config, parameters]
+entity_kinds: [redis, cache]
 run_as: root
 params:
   args:

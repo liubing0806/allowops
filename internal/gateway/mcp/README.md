@@ -2,7 +2,9 @@
 
 使用官方 `github.com/modelcontextprotocol/go-sdk v1.8.0` 的 Streamable HTTP Stateless handler，挂在 P4 的 `/mcp` 和 MCP ALPN 路由。所有请求由 P5B 重新验证 Authorization: Bearer，支持服务账号和 CLI 会话；cookie、查询参数凭据和 MCP 会话头不参与认证。
 
-工具列表按完整身份属性（含内部 actor ID、Kind、roles、teams、owner、email）、所有有效目录版本与摘要、策略版本缓存。缓存无 TTL；默认最多 128 项，LRU 淘汰，可由 `Config.CacheEntries` 调整。目录或策略版本改变时替换旧缓存；认证吊销和角色变化在使用缓存前检查。预判仅用于展示，忽略主机、时间和来源 IP；deny 只有在这三类条件均不存在时才用于隐藏 action，身份条件继续保留。调用仍由 P6 做完整 ABAC。
+工具列表采用两层无抖动缓存：Tier 1 按目录版本与策略版本组合经 singleflight 在锁外共享已验签动作与投影策略引擎；Tier 2 按完整身份属性（含内部 actor ID、Kind、roles、teams、owner、email）与版本组合在 LRU 中缓存未过滤视图与默认 server（每身份恒占 1 槽，默认最多 128 项，无 TTL，可由 `Config.CacheEntries` 调整）。目录或策略版本改变时替换旧缓存；认证吊销和角色变化在使用缓存前检查。客户端通过 `X-Allowops-Toolsets` 或 `X-Allowops-MCP-Mode` 裁剪视图时，仅在当前身份可见集上纯内存过滤并现场构造 `*sdk.Server`，不写入 LRU。预判仅用于展示，忽略主机、时间和来源 IP；deny 只有在这三类条件均不存在时才用于隐藏 action，身份条件继续保留。调用仍由 P6 做完整 ABAC。
+
+渐进式按需发现（A71）：`Config.Mode` 支持 `flat`（默认）、`progressive`、`auto`（默认阈值 `Config.AutoThreshold = 40`，范围 1~1000）。在 `progressive` 模式下，当作用域内存在受支持的可见动作时，注册 `actions_search` 及按实际可见风险等级拆分的 `actions_invoke_read`、`actions_invoke_write`、`actions_invoke_dangerous`；每次调用经 `currentAction` 验签后强制核对 `action.Risk` 与工具风险等级一致，并复用与平铺模式完全相同的 `runAction` 管线。`actions_search` 支持关键词、`names`、`toolset`、`tag`、`risk`、`entity_kind`、`hostname`（单主机 ABAC 预检，不存在/不可见/无标签主机统一返回空集）、`include_schema`、游标分页与 32 KiB 预算。`entities_search` 在实体截断后于剩余 32 KiB 预算内按保留实体 `kind` 附带 `recommended_actions` 与独立截断标记 `recommended_actions_truncated`。
 
 G50：请求带 `_meta.progressToken` 时，每 10 秒发送对应的 `notifications/progress`，progress 为持续等待的秒数；没有 token 时每 10 秒写入 `: keepalive` SSE 注释。SDK 未导出注释写入接口，使用串行 ResponseWriter 包装；工具处理开始后提交 SDK 已设置的 SSE 响应头，保证等待期间注释能及时发出。`Config.ProgressInterval` 可在测试中缩短。无 `tools/list_changed` 能力，更新在下次 `tools/list` 生效。
 

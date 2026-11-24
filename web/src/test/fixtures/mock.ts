@@ -880,7 +880,12 @@ export const mockApi: ConsoleApi = {
       definitionJson: toBase64(
         JSON.stringify(
           action === 'journal_view_log'
-            ? definition
+            ? {
+                ...definition,
+                toolset: 'logs',
+                tags: ['logs', 'journal', 'systemd'],
+                entity_kinds: ['host', 'service'],
+              }
             : {
                 ...definition,
                 params: { service: definition.params.service },

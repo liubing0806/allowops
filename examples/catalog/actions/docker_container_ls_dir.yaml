@@ -1,6 +1,9 @@
 name: docker_container_ls_dir
 description: List one fixed directory inside an allowed container.
 risk: read
+toolset: docker
+tags: [container, files, directory]
+entity_kinds: [docker_container]
 run_as: root
 params:
   container:

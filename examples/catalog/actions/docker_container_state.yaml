@@ -1,6 +1,9 @@
 name: docker_container_state
 description: Read only the state section of one Docker container.
 risk: read
+toolset: docker
+tags: [container, status]
+entity_kinds: [docker_container]
 run_as: root
 params:
   container:

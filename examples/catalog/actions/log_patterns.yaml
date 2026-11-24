@@ -1,6 +1,9 @@
 name: log_patterns
 description: Group the records of a named log source within a time range (default the last hour) into templates, with numbers, hex strings, UUIDs, IP addresses and timestamps replaced by <_>. Uses the first line of each record. Returns the top templates by count with first and last time and one redacted sample. Use it to find unknown errors when there is no keyword; then search a template's fixed text with log_search.
 risk: read
+toolset: logs
+tags: [logs, patterns, aggregation]
+entity_kinds: [host, service]
 run_as: root
 timeout: 30s
 builtin: log_query

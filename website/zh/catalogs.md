@@ -28,6 +28,9 @@ redact:
 name: systemd_service_status
 description: Read the status of an allowed systemd service.
 risk: read
+toolset: system
+tags: [systemd, service, status]
+entity_kinds: [host, service]
 params:
   service:
     type: enum
@@ -42,7 +45,7 @@ redact:
   builtin: [secrets]
 ```
 
-名称必须匹配 `^[a-z][a-z0-9_]{0,63}$`。动作名称在当前所有目录中必须全局唯一，且不能使用固定 MCP 工具的名称。描述为必填项。风险取值为 `read`、`write` 或 `dangerous`。风险是策略属性，不能证明操作没有副作用。可选的 `idempotent` 提供 MCP 幂等注解。普通命令省略 `run_as` 时，使用低权限账号执行。需要时，把 `run_as` 设置为经过评审的执行身份。
+名称必须匹配 `^[a-z][a-z0-9_]{0,63}$`。动作名称在当前所有目录中必须全局唯一，且不能使用固定或渐进式 MCP 工具的名称（`hosts_search`、`jobs_get`、`jobs_list`、`jobs_cancel`、`entities_search`、`actions_search`、`actions_invoke_read`、`actions_invoke_write`、`actions_invoke_dangerous`）。描述为必填项。风险取值为 `read`、`write` 或 `dangerous`。风险是策略属性，不能证明操作没有副作用。可选的 `toolset`、`tags` 和 `entity_kinds` 用于 MCP 按需发现、按工具集裁剪以及 `entities_search` 关联动作推荐；取值匹配 `^[a-z][a-z0-9_]{0,31}$`，`tags` 与 `entity_kinds` 各自最多 16 个不重复字符串，均计入已签名动作摘要。运行早于这些字段的 agent 的主机无法加载含这些字段的目录，见[主机必须认识的字段](publishing.md#fields-that-hosts-must-understand)。可选的 `idempotent` 提供 MCP 幂等注解。普通命令省略 `run_as` 时，使用低权限账号执行。需要时，把 `run_as` 设置为经过评审的执行身份。
 
 `exec`、`steps`、`script` 和 `builtin` 必须且只能使用一个。`exec[0]` 是可执行文件的绝对路径。不要在动作中使用 sudo，请使用 `run_as`。只有与 `{parameter_name}`（或在 `steps` 中与引用更早步骤提取变量的 `{steps.<step_name>.<var>}`）完全相等的 argv 元素会被替换。其他内容都按字面文本处理。`["--since", "{since}"]` 这样的可选组，在其参数缺失时整组省略；引用 `{steps.*}` 的可选组仅在产生步干净成功且提取器声明 `optional: true` 时省略，见[受控步骤数据传递与条件分支](execution.md#controlled-step-dataflow-and-branching)。
 

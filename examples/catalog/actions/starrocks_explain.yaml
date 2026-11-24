@@ -1,6 +1,9 @@
 name: starrocks_explain
 description: Show the query plan of one read-only StarRocks statement with EXPLAIN; the statement is not executed and EXPLAIN ANALYZE is not allowed.
 risk: read
+toolset: starrocks
+tags: [sql, query_plan]
+entity_kinds: [starrocks]
 run_as: root
 params:
   database:

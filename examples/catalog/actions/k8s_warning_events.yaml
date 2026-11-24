@@ -1,6 +1,9 @@
 name: k8s_warning_events
 description: List warning events in an allowed namespace.
 risk: read
+toolset: k8s
+tags: [events, warnings, namespace]
+entity_kinds: [k8s_cluster]
 run_as: root
 params:
   namespace:

@@ -1,6 +1,9 @@
 name: mysql_slow_log
 description: Read the last lines of a MySQL or MariaDB slow query log with SQL literals redacted.
 risk: read
+toolset: mysql
+tags: [logs, slow_query, sql, redaction]
+entity_kinds: [mysql, database]
 run_as: root
 params:
   path:

@@ -1,6 +1,9 @@
 name: k8s_pod_status
 description: Read one pod phase, node name, and per-container image ID and restart count.
 risk: read
+toolset: k8s
+tags: [pod, status, restarts]
+entity_kinds: [k8s_pod]
 run_as: root
 params:
   namespace:

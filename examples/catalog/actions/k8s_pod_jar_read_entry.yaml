@@ -1,6 +1,9 @@
 name: k8s_pod_jar_read_entry
 description: Read one application configuration entry from a jar inside an allowed pod without writing files.
 risk: read
+toolset: k8s
+tags: [pod, jar, config]
+entity_kinds: [k8s_pod, jvm]
 run_as: root
 params:
   namespace:

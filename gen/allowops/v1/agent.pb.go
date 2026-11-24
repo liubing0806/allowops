@@ -602,7 +602,7 @@ type AgentCapabilities struct {
 	Builtins []string `protobuf:"bytes,4,rep,name=builtins,proto3" json:"builtins,omitempty"`
 	// match,exclude,tail,head,count.
 	OutputFilters []string `protobuf:"bytes,5,rep,name=output_filters,json=outputFilters,proto3" json:"output_filters,omitempty"`
-	// Additional signed-catalog features, e.g. exec_fallbacks, allow_interpreter and max_targets.
+	// Additional signed-catalog features, e.g. exec_fallbacks, allow_interpreter, max_targets and action_metadata.
 	Features      []string `protobuf:"bytes,6,rep,name=features,proto3" json:"features,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

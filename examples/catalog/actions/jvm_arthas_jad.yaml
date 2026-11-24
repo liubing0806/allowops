@@ -10,6 +10,9 @@
 name: jvm_arthas_jad
 description: Decompile a loaded class, or one method of it, of an allowlisted JVM to Java source through the Arthas agent. The JVM writes the class file to the Arthas log directory of its user, where it stays. A call usually takes about 10 seconds.
 risk: write
+toolset: jvm_arthas
+tags: [arthas, bytecode, decompile]
+entity_kinds: [jvm]
 run_as: root
 idempotent: false
 params: {}

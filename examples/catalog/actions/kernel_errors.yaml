@@ -1,6 +1,9 @@
 name: kernel_errors
 description: Read kernel warning and error messages.
 risk: read
+toolset: system
+tags: [kernel, logs, errors]
+entity_kinds: [host]
 run_as: root
 params: {}
 exec: [/usr/bin/dmesg, -T, '--level=err,warn']

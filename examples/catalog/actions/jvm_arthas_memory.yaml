@@ -5,6 +5,9 @@
 name: jvm_arthas_memory
 description: Show the heap, non-heap and buffer pool figures of an allowlisted JVM through the Arthas agent.
 risk: write
+toolset: jvm_arthas
+tags: [arthas, memory, heap, buffer_pool]
+entity_kinds: [jvm]
 run_as: root
 idempotent: false
 params: {}

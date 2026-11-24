@@ -1,6 +1,9 @@
 name: agent_upgrade
 description: Install one allowops-agent version from the configured package repository and restart the agent.
 risk: dangerous
+toolset: agent
+tags: [upgrade, packages, restart]
+entity_kinds: [host]
 run_as: root
 params:
   version:

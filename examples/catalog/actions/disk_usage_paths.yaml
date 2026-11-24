@@ -1,6 +1,9 @@
 name: disk_usage_paths
 description: Read filesystem capacity for an allowed path.
 risk: read
+toolset: system
+tags: [disk, filesystem, capacity]
+entity_kinds: [host]
 params:
   path:
     type: path

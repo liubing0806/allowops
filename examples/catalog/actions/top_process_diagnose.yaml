@@ -1,6 +1,9 @@
 name: top_process_diagnose
 description: Read processes sorted by resident memory and inspect the largest process and its threads at 512 MiB or above.
 risk: read
+toolset: system
+tags: [process, memory, diagnose]
+entity_kinds: [host]
 params: {}
 timeout: 15s
 max_output: 64KB

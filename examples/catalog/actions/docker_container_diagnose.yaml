@@ -1,6 +1,9 @@
 name: docker_container_diagnose
 description: Read container state and recent logs when the container is stopped, has been killed for lack of memory, or has restarted.
 risk: read
+toolset: docker
+tags: [container, logs, diagnose]
+entity_kinds: [docker_container]
 run_as: root
 params:
   container:

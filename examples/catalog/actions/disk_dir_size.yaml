@@ -1,6 +1,9 @@
 name: disk_dir_size
 description: Read the total size of one allowed directory.
 risk: read
+toolset: system
+tags: [disk, directory, size]
+entity_kinds: [host]
 run_as: root
 params:
   path:

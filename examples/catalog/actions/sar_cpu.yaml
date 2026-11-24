@@ -1,6 +1,9 @@
 name: sar_cpu
 description: Read historical sysstat samples within one daily time range.
 risk: read
+toolset: system
+tags: [cpu, sysstat, history]
+entity_kinds: [host]
 run_as: root
 params:
   file:

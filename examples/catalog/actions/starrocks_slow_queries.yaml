@@ -1,6 +1,9 @@
 name: starrocks_slow_queries
 description: "List the slowest recent StarRocks queries from the audit table (op slow_queries; since_minutes, min_duration_ms, state and limit narrow the result). The audit table is the AuditLoader table unless builtin_config.audit_table names another one."
 risk: read
+toolset: starrocks
+tags: [sql, slow_query, audit_log]
+entity_kinds: [starrocks, database]
 run_as: root
 timeout: 15s
 builtin: starrocks_diag

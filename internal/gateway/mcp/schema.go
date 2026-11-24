@@ -92,13 +92,10 @@ func actionTool(a catalog.Action, cfg job.Config) (*ToolDefinition, error) {
 		limit = " This action accepts " + text + " per job; a job with more targets is rejected."
 	}
 	props := map[string]any{
-		"params": schema,
-		"targets": map[string]any{"type": "object", "description": "Select explicit hostnames or a label selector; exactly one selection is required." + limit, "properties": map[string]any{
-			"hosts":    map[string]any{"type": "array", "description": "Globally unique hostnames.", "items": map[string]any{"type": "string", "minLength": 1}, "minItems": 1, "uniqueItems": true},
-			"selector": map[string]any{"type": "string", "description": "Comma-separated key=value conjunctions (A10).", "minLength": 1},
-		}, "additionalProperties": false, "oneOf": []any{map[string]any{"required": []string{"hosts"}}, map[string]any{"required": []string{"selector"}}}},
-		"expected_count":  map[string]any{"type": "integer", "description": "Required with selector. Refuse execution when the actual host count differs.", "minimum": 0, "maximum": uint64(^uint64(0))},
-		"reason":          map[string]any{"type": "string", "description": "Required explanation for the operation; must contain non-whitespace text.", "minLength": 1},
+		"params":          schema,
+		"targets":         targetsSchema(limit),
+		"expected_count":  expectedCountSchema(),
+		"reason":          reasonSchema(),
 		"wait_seconds":    waitSchema(cfg),
 		"batch_size":      map[string]any{"type": "integer", "description": "Hosts per batch; may only lower the action's effective limit.", "minimum": 1, "maximum": batch, "default": batch},
 		"max_failures":    map[string]any{"type": "integer", "description": "Stop after failures exceed this limit; may only lower the action's effective limit.", "minimum": 0, "maximum": failures, "default": failures},
@@ -106,16 +103,11 @@ func actionTool(a catalog.Action, cfg job.Config) (*ToolDefinition, error) {
 		"grouping":        groupingSchema("exact"),
 	}
 	for _, name := range a.Filters {
-		switch name {
-		case "match", "exclude":
-			props[name] = map[string]any{"type": "string", "description": "RE2 pattern applied separately to each step's stdout; at most 200 characters.", "maxLength": 200}
-		case "tail", "head":
-			props[name] = map[string]any{"type": "integer", "description": "Number of stdout lines per step; mutually exclusive with tail, head and count.", "minimum": 1, "maximum": uint64(^uint32(0))}
-		case "count":
-			props[name] = map[string]any{"type": "boolean", "description": "Count stdout matches per step; mutually exclusive with tail and head, including when false."}
-		default:
-			return nil, fmt.Errorf("unsupported filter; allowed: match, exclude, tail, head, count")
+		filter, err := filterSchema(name)
+		if err != nil {
+			return nil, err
 		}
+		props[name] = filter
 	}
 	// The Anthropic API rejects root-level combinators, so the cross-field rules
 	// (expected_count with selector; tail/head/count exclusive) stay in the
@@ -156,6 +148,33 @@ func batchLimits(a catalog.Action, cfg job.Config) (uint32, uint32, error) {
 		failures = min(failures, uint32(*a.MaxFailures))
 	}
 	return batch, failures, nil
+}
+
+func targetsSchema(limit string) map[string]any {
+	return map[string]any{"type": "object", "description": "Select explicit hostnames or a label selector; exactly one selection is required." + limit, "properties": map[string]any{
+		"hosts":    map[string]any{"type": "array", "description": "Globally unique hostnames.", "items": map[string]any{"type": "string", "minLength": 1}, "minItems": 1, "uniqueItems": true},
+		"selector": map[string]any{"type": "string", "description": "Comma-separated key=value conjunctions (A10).", "minLength": 1},
+	}, "additionalProperties": false, "oneOf": []any{map[string]any{"required": []string{"hosts"}}, map[string]any{"required": []string{"selector"}}}}
+}
+
+func expectedCountSchema() map[string]any {
+	return map[string]any{"type": "integer", "description": "Required with selector. Refuse execution when the actual host count differs.", "minimum": 0, "maximum": uint64(^uint64(0))}
+}
+
+func reasonSchema() map[string]any {
+	return map[string]any{"type": "string", "description": "Required explanation for the operation; must contain non-whitespace text.", "minLength": 1}
+}
+
+func filterSchema(name string) (map[string]any, error) {
+	switch name {
+	case "match", "exclude":
+		return map[string]any{"type": "string", "description": "RE2 pattern applied separately to each step's stdout; at most 200 characters.", "maxLength": 200}, nil
+	case "tail", "head":
+		return map[string]any{"type": "integer", "description": "Number of stdout lines per step; mutually exclusive with tail, head and count.", "minimum": 1, "maximum": uint64(^uint32(0))}, nil
+	case "count":
+		return map[string]any{"type": "boolean", "description": "Count stdout matches per step; mutually exclusive with tail and head, including when false."}, nil
+	}
+	return nil, fmt.Errorf("unsupported filter; allowed: match, exclude, tail, head, count")
 }
 
 func waitSchema(cfg job.Config) map[string]any {

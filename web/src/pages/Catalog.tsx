@@ -680,6 +680,30 @@ function ActionPanel({
             </pre>
           </PanelSection>
           <dl className="grid grid-cols-[90px_minmax(0,1fr)] gap-x-2.5 gap-y-2 text-xs">
+            {definition.toolset && (
+              <>
+                <dt className="text-muted-foreground">{t('catalog.toolset')}</dt>
+                <dd className="min-w-0 font-mono break-words">
+                  {definition.toolset}
+                </dd>
+              </>
+            )}
+            {!!definition.tags?.length && (
+              <>
+                <dt className="text-muted-foreground">{t('catalog.tags')}</dt>
+                <dd className="min-w-0 font-mono break-words">
+                  {definition.tags.join(', ')}
+                </dd>
+              </>
+            )}
+            {!!definition.entity_kinds?.length && (
+              <>
+                <dt className="text-muted-foreground">{t('catalog.entityKinds')}</dt>
+                <dd className="min-w-0 font-mono break-words">
+                  {definition.entity_kinds.join(', ')}
+                </dd>
+              </>
+            )}
             <dt className="text-muted-foreground">{t('catalog.runAs')}</dt>
             <dd className="min-w-0 font-mono break-words">
               {definition.run_as ?? 'allowops'}

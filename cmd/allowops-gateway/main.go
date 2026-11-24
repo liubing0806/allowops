@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -76,12 +77,74 @@ type configuration struct {
 	Output     output.Config         `yaml:"output"`
 	// Opt-in: the gateway makes no outbound request unless enabled.
 	UpdateCheck updatecheck.Config `yaml:"update_check"`
+	MCP         mcpConfig          `yaml:"mcp"`
 }
 
-// decodeConfig applies the defaults, rejects unknown keys and validates
-// update_check when it is enabled.
+// mcpConfig selects how MCP tools/list exposes catalog actions. Raw YAML nodes
+// are populated natively by yaml.v3 (retaining KnownFields, merge keys, aliases
+// and duplicate-key checks) so validate can reject explicit null or float values.
+type mcpConfig struct {
+	// Mode is flat (default), progressive or auto.
+	Mode string `yaml:"-"`
+	// AutoThreshold is the auto mode action count; omitted means 40.
+	AutoThreshold    int       `yaml:"-"`
+	RawMode          yaml.Node `yaml:"mode"`
+	RawAutoThreshold yaml.Node `yaml:"auto_threshold"`
+}
+
+func (c mcpConfig) MarshalYAML() (any, error) {
+	return struct {
+		Mode          string `yaml:"mode,omitempty"`
+		AutoThreshold int    `yaml:"auto_threshold,omitempty"`
+	}{Mode: c.Mode, AutoThreshold: c.AutoThreshold}, nil
+}
+
+func resolveYAMLNode(node *yaml.Node) *yaml.Node {
+	for node != nil && node.Kind == yaml.AliasNode {
+		node = node.Alias
+	}
+	return node
+}
+
+// validate applies defaults for omitted fields and checks both values. An
+// explicit auto_threshold (including zero, null or float) is checked in every
+// mode, so that switching to auto later cannot start with an invalid value.
+func (c *mcpConfig) validate() error {
+	if c.RawMode.Kind != 0 {
+		v := resolveYAMLNode(&c.RawMode)
+		if v == nil || v.Kind != yaml.ScalarNode || v.Tag != "!!str" {
+			return errors.New("mcp.mode allowed: flat, progressive, auto")
+		}
+		c.Mode = v.Value
+	} else if c.Mode == "" {
+		c.Mode = "flat"
+	}
+	if c.Mode != "flat" && c.Mode != "progressive" && c.Mode != "auto" {
+		return errors.New("mcp.mode allowed: flat, progressive, auto")
+	}
+	if c.RawAutoThreshold.Kind != 0 {
+		v := resolveYAMLNode(&c.RawAutoThreshold)
+		if v == nil || v.Kind != yaml.ScalarNode || v.Tag != "!!int" {
+			return errors.New("mcp.auto_threshold allowed: integer in [1,1000]")
+		}
+		var parsed int
+		if err := v.Decode(&parsed); err != nil {
+			return errors.New("mcp.auto_threshold allowed: integer in [1,1000]")
+		}
+		c.AutoThreshold = parsed
+	} else if c.AutoThreshold == 0 {
+		c.AutoThreshold = 40
+	}
+	if c.AutoThreshold < 1 || c.AutoThreshold > 1000 {
+		return errors.New("mcp.auto_threshold allowed: integer in [1,1000]")
+	}
+	return nil
+}
+
+// decodeConfig applies the defaults, rejects unknown keys, validates
+// update_check when it is enabled, and validates mcp.
 func decodeConfig(r io.Reader) (configuration, error) {
-	cfg := configuration{Address: ":443", Gateway: hostconn.DefaultConfig(), Identity: api.Config{Origin: "https://localhost"}, Jobs: job.DefaultConfig(), UpdateCheck: updatecheck.DefaultConfig()}
+	cfg := configuration{Address: ":443", Gateway: hostconn.DefaultConfig(), Identity: api.Config{Origin: "https://localhost"}, Jobs: job.DefaultConfig(), UpdateCheck: updatecheck.DefaultConfig(), MCP: mcpConfig{Mode: "flat"}}
 	if version != "dev" {
 		cfg.Gateway.Version = version
 	}
@@ -94,6 +157,9 @@ func decodeConfig(r io.Reader) (configuration, error) {
 		if err := cfg.UpdateCheck.Validate(); err != nil {
 			return cfg, fmt.Errorf("invalid gateway config: %w", err)
 		}
+	}
+	if err := cfg.MCP.validate(); err != nil {
+		return cfg, fmt.Errorf("invalid gateway config: %w", err)
 	}
 	return cfg, nil
 }
@@ -221,7 +287,7 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 	if err != nil {
 		return err
 	}
-	srv, err := newGatewayServer(&cfg, db, identity, agent, listener, certificate, trusted, auditStore, objects, jobs, pluginHost)
+	srv, err := newGatewayServer(&cfg, db, identity, ca, agent, listener, certificate, trusted, auditStore, objects, jobs, pluginHost)
 	if err != nil {
 		return err
 	}
@@ -388,7 +454,7 @@ func controlPlaneChangesReader(db *store.Store) func(context.Context, time.Time,
 
 // newGatewayServer configures management and MCP and assembles the server.
 // On failure it closes the agent and the listener.
-func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service, agent *hostconn.Service, listener net.Listener, certificate tls.Certificate, trusted map[string]ed25519.PublicKey, auditStore *audit.Store, objects *output.S3, jobs *job.Service, pluginHost *pluginhost.Host) (*server.Server, error) {
+func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service, ca *hostconn.CA, agent *hostconn.Service, listener net.Listener, certificate tls.Certificate, trusted map[string]ed25519.PublicKey, auditStore *audit.Store, objects *output.S3, jobs *job.Service, pluginHost *pluginhost.Host) (*server.Server, error) {
 	catalogs := &catalogsvc.Service{Store: db, Trusted: trusted, MaxEnvelopeBytes: cfg.Gateway.EnvelopeBytes, MaxActionBytes: cfg.Gateway.ActionBytes, MaxReferenceBytes: cfg.Gateway.MessageBytes - cfg.Gateway.ChunkBytes - 1024}
 	if cfg.Management.CAPin == "" {
 		cfg.Management.CAPin = api.TLSCAPin(certificate.Certificate)
@@ -401,7 +467,14 @@ func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service
 		listener.Close()
 		return nil, err
 	}
-	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcp.Config{Jobs: cfg.Jobs, Inventory: pluginHost, Changes: pluginHost, Knowledge: pluginHost})
+	cursorKey, err := ca.DeriveKey("allowops-mcp-actions-cursor-v1")
+	if err != nil {
+		agent.Close()
+		listener.Close()
+		return nil, err
+	}
+	mcpConfig := mcp.Config{Jobs: cfg.Jobs, Inventory: pluginHost, Changes: pluginHost, Knowledge: pluginHost, Mode: cfg.MCP.Mode, AutoThreshold: cfg.MCP.AutoThreshold, CursorKey: cursorKey}
+	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcpConfig)
 	if err != nil {
 		agent.Close()
 		listener.Close()

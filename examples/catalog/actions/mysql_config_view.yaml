@@ -1,6 +1,9 @@
 name: mysql_config_view
 description: Read a line-bounded prefix of a MySQL or MariaDB option file with secrets redacted.
 risk: read
+toolset: mysql
+tags: [config, files, redaction]
+entity_kinds: [mysql]
 run_as: root
 params:
   path:

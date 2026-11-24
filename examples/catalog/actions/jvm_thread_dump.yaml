@@ -1,6 +1,9 @@
 name: jvm_thread_dump
 description: Read one JVM thread dump from an allowed container process.
 risk: read
+toolset: jvm
+tags: [threads, stack_trace, container]
+entity_kinds: [jvm]
 run_as: root
 params:
   container:
