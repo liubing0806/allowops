@@ -63,12 +63,12 @@ type configuration struct {
 		MaxFileBytes    int64  `yaml:"max_file_bytes"`
 		CursorKeyFile   string `yaml:"cursor_key_file"`
 	} `yaml:"audit"`
-	Management api.ManagementConfig `yaml:"management"`
-	Identity   api.Config           `yaml:"identity"`
-	Providers  []api.ProviderConfig `yaml:"providers"`
-	Plugins    []pluginhost.Config  `yaml:"plugins"`
-	Jobs       job.Config           `yaml:"jobs"`
-	Output     output.Config        `yaml:"output"`
+	Management api.ManagementConfig  `yaml:"management"`
+	Identity   api.Config            `yaml:"identity"`
+	Providers  []api.ProviderConfig  `yaml:"providers"`
+	Plugins    pluginhost.ConfigList `yaml:"plugins"`
+	Jobs       job.Config            `yaml:"jobs"`
+	Output     output.Config         `yaml:"output"`
 	// Opt-in: the gateway makes no outbound request unless enabled.
 	UpdateCheck updatecheck.Config `yaml:"update_check"`
 }
