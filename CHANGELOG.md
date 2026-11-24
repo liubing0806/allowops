@@ -4,8 +4,40 @@
 
 Changes on `main` since v0.2.0. They are not in a release yet.
 
+### Upgrade notes
+
+- `exact` mode job summaries now default to deterministic Anomaly-First ranking
+  (`failure` → `anomaly` → `normal`) instead of task insertion order, and
+  terminal tasks without output hashes (such as `skipped`, `cancelled`, or
+  dispatch-failure tasks) are included as Tier 0 failure groups rather than
+  omitted.
+- Rename any private catalog action named `jobs_diff`, then sign and publish
+  the updated catalog. `jobs_diff` is now a reserved fixed MCP tool name and
+  catalog validation rejects it.
+
 ### New
 
+- Fleet output normalized clustering, Anomaly-First ranking, and cross-job
+  baseline comparison:
+  - Action tools, `jobs_get`, `allowops run`, and `allowops jobs get` accept
+    `grouping` (`exact` by default, or `normalized`). Normalized mode clusters
+    volatile output noise (timestamps, PIDs, IP addresses, hostnames, and
+    numbers) into shared templates while preserving version numbers and semantic
+    status/exit codes, and computes per-cluster numeric distributions
+    (`min`/`p50`/`p95`/`max` and MAD outlier hosts).
+  - Job summaries expose severity (`failure`/`anomaly`/`normal`),
+    `anomaly_reason`, template metadata, `variances`, and strict
+    host-conservation counters (`total_groups`, `omitted_groups`,
+    `omitted_hosts`, `folded_normal_hosts`, `unfinished_hosts_count`), using
+    linear `O(G)` 32 KiB budget trimming.
+  - Added read-only MCP tool `jobs_diff`, `JobService.DiffJobs` RPC, and
+    `allowops jobs diff <base-job-id> <target-job-id>` CLI subcommand
+    (defaulting to `grouping=normalized`). Aligns two finished, non-denied jobs
+    of the same action by immutable `host_id`, reporting added/removed/replaced
+    hosts, degradation-first status transitions, anomaly-first pattern changes
+    with bounded line diffs, and significant numeric metric drifts under a
+    strict 32 KiB response budget with per-host `view_jobs` and `view_output`
+    authorization and dual-job audit attribution.
 - The web console is redesigned (#27). The design handoff and prototypes are
   in [docs/console-redesign/](docs/console-redesign/README.md). The change is
   frontend only: no API, schema, or policy change, and no upgrade step.
