@@ -222,10 +222,10 @@ func printJobDiff(c *cobra.Command, resp *v1.DiffJobsResponse) error {
 				pc.HostCount, strings.Join(pc.Hosts, ","), tag,
 			)
 			for _, line := range pc.RemovedLines {
-				fmt.Fprintf(out, "    - %s\n", line)
+				fmt.Fprintf(out, "    - %q\n", line)
 			}
 			for _, line := range pc.AddedLines {
-				fmt.Fprintf(out, "    + %s\n", line)
+				fmt.Fprintf(out, "    + %q\n", line)
 			}
 			if !pc.DiffComputed && (pc.BasePreview != "" || pc.TargetPreview != "") {
 				fmt.Fprintf(out, "    base:   %q\n", pc.BasePreview)

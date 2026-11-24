@@ -25,6 +25,11 @@ type metricSample struct {
 	value float64
 }
 
+type slotBucketKey struct {
+	label string
+	unit  string
+}
+
 type slotBucket struct {
 	label   string
 	unit    string
@@ -32,13 +37,13 @@ type slotBucket struct {
 }
 
 type clusterMetrics struct {
-	byLabel map[string]*slotBucket
-	order   []string
+	byKey map[slotBucketKey]*slotBucket
+	order []slotBucketKey
 }
 
 func newClusterMetrics() *clusterMetrics {
 	return &clusterMetrics{
-		byLabel: make(map[string]*slotBucket, 8),
+		byKey: make(map[slotBucketKey]*slotBucket, 8),
 	}
 }
 
@@ -50,7 +55,8 @@ func (m *clusterMetrics) addHostSlots(hostname string, slots []MetricSlot) {
 		if sl.Label == "" || !isFiniteFloat(sl.Value) {
 			continue
 		}
-		b, ok := m.byLabel[sl.Label]
+		key := slotBucketKey{label: sl.Label, unit: sl.Unit}
+		b, ok := m.byKey[key]
 		if !ok {
 			if len(m.order) >= MaxSlotsPerCluster {
 				continue
@@ -59,8 +65,8 @@ func (m *clusterMetrics) addHostSlots(hostname string, slots []MetricSlot) {
 				label: sl.Label,
 				unit:  sl.Unit,
 			}
-			m.byLabel[sl.Label] = b
-			m.order = append(m.order, sl.Label)
+			m.byKey[key] = b
+			m.order = append(m.order, key)
 		}
 		if len(b.samples) < MaxSamplesPerSlot {
 			b.samples = append(b.samples, metricSample{
@@ -87,8 +93,8 @@ func (m *clusterMetrics) summarize() ([]MetricVariance, string, string) {
 	}
 
 	var candidates []computedVariance
-	for _, lbl := range m.order {
-		b := m.byLabel[lbl]
+	for _, key := range m.order {
+		b := m.byKey[key]
 		if len(b.samples) < 2 {
 			continue
 		}
@@ -117,7 +123,10 @@ func (m *clusterMetrics) summarize() ([]MetricVariance, string, string) {
 			}
 			return 1
 		}
-		return strings.Compare(a.variance.Label, b.variance.Label)
+		if c := strings.Compare(a.variance.Label, b.variance.Label); c != 0 {
+			return c
+		}
+		return strings.Compare(a.variance.Unit, b.variance.Unit)
 	})
 
 	if len(candidates) > MaxReportedVariances {

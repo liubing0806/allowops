@@ -202,3 +202,56 @@ func TestDiffMetricDriftZeroBaseNilPctAndFiniteInvariant(t *testing.T) {
 		t.Fatalf("unexpected heap_mb drift: %+v", heap)
 	}
 }
+
+func TestDiffMetricDriftRequiresCompatibleUnits(t *testing.T) {
+	// h1 changes usage from "%" to "bytes" -> incompatible units must NOT produce a drift.
+	// h2 keeps "%" (10% -> 40%) and h3 keeps "bytes" (10MB -> 40MB) -> separate unit buckets.
+	base := []TaskInput{
+		makeSucceededTask("h1", "app-01", "usage=10%", ""),
+		makeSucceededTask("h2", "app-02", "usage=10%", ""),
+		makeSucceededTask("h3", "app-03", "usage=10MB", ""),
+	}
+	target := []TaskInput{
+		makeSucceededTask("h1", "app-01", "usage=100MB", ""),
+		makeSucceededTask("h2", "app-02", "usage=40%", ""),
+		makeSucceededTask("h3", "app-03", "usage=40MB", ""),
+	}
+
+	res := Diff(base, target, DefaultDiffOptions())
+	if len(res.MetricDrifts) != 2 {
+		t.Fatalf("expected 2 separate unit-keyed drifts (%% and bytes), got %d: %+v", len(res.MetricDrifts), res.MetricDrifts)
+	}
+
+	byUnit := make(map[string]MetricDrift)
+	for _, d := range res.MetricDrifts {
+		if d.Label != "usage" {
+			t.Fatalf("unexpected label %q", d.Label)
+		}
+		if d.MaxHost == "app-01" {
+			t.Fatalf("incompatible unit change on app-01 must not contribute to drift: %+v", d)
+		}
+		if d.HostCount != 1 {
+			t.Fatalf("expected isolated single-host bucket for unit %q, got %+v", d.Unit, d)
+		}
+		byUnit[d.Unit] = d
+	}
+	pctDrift, ok := byUnit["%"]
+	if !ok || pctDrift.MaxHost != "app-02" || pctDrift.MaxDelta != 30 {
+		t.Fatalf("unexpected %% drift: %+v", pctDrift)
+	}
+	bytesDrift, ok := byUnit["bytes"]
+	if !ok || bytesDrift.MaxHost != "app-03" || bytesDrift.BaseP50 != 10*1024*1024 || bytesDrift.TargetP50 != 40*1024*1024 {
+		t.Fatalf("unexpected bytes drift: %+v", bytesDrift)
+	}
+}
+
+func TestDiffNDJSONLineLimitPropagatesPreviewTruncated(t *testing.T) {
+	prefix := strings.Repeat(`{"ok":1}`+"\n", MaxLinesPerPreview)
+	base := []TaskInput{makeSucceededTask("h1", "app-01", prefix+`{"tail":1}`+"\n", "")}
+	target := []TaskInput{makeSucceededTask("h1", "app-01", prefix+`{"tail":2}`+"\n", "")}
+
+	res := Diff(base, target, DefaultDiffOptions())
+	if !res.PreviewTruncated {
+		t.Fatalf("expected PreviewTruncated=true when >%d NDJSON lines are truncated", MaxLinesPerPreview)
+	}
+}

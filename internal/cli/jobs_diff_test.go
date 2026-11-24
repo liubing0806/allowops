@@ -122,8 +122,8 @@ func (g *diffCaptureGateway) DiffJobs(_ context.Context, r *connect.Request[v1.D
 				TargetSeverity: v1.GroupSeverity_GROUP_SEVERITY_FAILURE,
 				HostCount:      1,
 				Hosts:          []string{"web-03"},
-				RemovedLines:   []string{"status=ok"},
-				AddedLines:     []string{"status=error"},
+				RemovedLines:   []string{"status=ok", "\x1b[31mold\x00"},
+				AddedLines:     []string{"status=error", "\x1b[2Jbad\u009b2J"},
 				DiffComputed:   true,
 			}},
 			MetricDrifts: []*v1.MetricDrift{
@@ -273,12 +273,15 @@ func TestJobsDiffCommandValidationTableAndJSON(t *testing.T) {
 		"action definition digest changed",
 		"HOST SET CHANGES", "web-04", "web-00", "web-02",
 		"STATUS TRANSITIONS", "succeeded(exit=0)", "failed(exit=1)", "EXECUTION_FAILED",
-		"PATTERN CHANGES", "- status=ok", "+ status=error", "1 additional pattern changes omitted",
+		"PATTERN CHANGES", `- "status=ok"`, `+ "status=error"`, `- "\x1b[31mold\x00"`, `+ "\x1b[2Jbad\u009b2J"`, "1 additional pattern changes omitted",
 		"METRIC DRIFTS", "latency", "10ms", "50ms", "+40ms (+400.0%)", "errors",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("table output missing %q:\n%s", want, text)
 		}
+	}
+	if strings.ContainsAny(text, "\x1b\x00") || strings.Contains(text, "\u009b") {
+		t.Fatalf("table output leaked raw terminal control sequences:\n%q", text)
 	}
 
 	// Explicit --grouping=exact --only-changed=false --json (protojson UseProtoNames).

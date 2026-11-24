@@ -49,10 +49,13 @@ func isBoundedNDJSON(s string) bool {
 	return valid && nonEmpty > 0
 }
 
-func forEachPreviewLine(s string, fn func(line string) bool) {
+func forEachPreviewLine(s string, fn func(line string) bool) bool {
 	lineIdx := 0
 	pos := 0
-	for pos <= len(s) && lineIdx < MaxLinesPerPreview {
+	for pos <= len(s) {
+		if lineIdx >= MaxLinesPerPreview {
+			return true
+		}
 		nl := strings.IndexByte(s[pos:], '\n')
 		var rawLine string
 		var hasNL bool
@@ -66,12 +69,13 @@ func forEachPreviewLine(s string, fn func(line string) bool) {
 		}
 		lineIdx++
 		if !fn(rawLine) {
-			return
+			return false
 		}
 		if hasNL && pos == len(s) {
 			break
 		}
 	}
+	return false
 }
 
 func normalizeSingleJSON(s string, hm hostMatcher, maskIPs bool, streamPrefix string) (string, []MetricSlot, bool) {
@@ -93,10 +97,10 @@ type ndjsonLineEntry struct {
 	slots    []MetricSlot
 }
 
-func normalizeNDJSON(s string, hm hostMatcher, maskIPs bool, streamPrefix string) (string, []MetricSlot, bool) {
+func normalizeNDJSON(s string, hm hostMatcher, maskIPs bool, streamPrefix string) (string, []MetricSlot, bool, bool) {
 	var entries []ndjsonLineEntry
 	valid := true
-	forEachPreviewLine(s, func(rawLine string) bool {
+	lineTrunc := forEachPreviewLine(s, func(rawLine string) bool {
 		trimmed := strings.TrimSpace(rawLine)
 		if trimmed == "" {
 			return true
@@ -114,7 +118,7 @@ func normalizeNDJSON(s string, hm hostMatcher, maskIPs bool, streamPrefix string
 		return true
 	})
 	if !valid || len(entries) == 0 {
-		return "", nil, false
+		return "", nil, false, false
 	}
 
 	// Sort normalized line templates lexicographically to eliminate ordering
@@ -174,7 +178,7 @@ func normalizeNDJSON(s string, hm hostMatcher, maskIPs bool, streamPrefix string
 		i = j
 	}
 
-	return out.String(), slots, true
+	return out.String(), slots, lineTrunc, true
 }
 
 type jsonKind uint8

@@ -176,13 +176,13 @@ func NormalizePreview(raw []byte, opts NormalizeOptions) NormalizeResult {
 		mode = PreviewModeText
 	case PreviewModeNDJSON:
 		prepared := preparePreviewText(capped, wasTruncated)
-		if tmpl, slots, ok := normalizeNDJSON(prepared, hm, opts.MaskIPs, opts.StreamPrefix); ok {
+		if tmpl, slots, lineTrunc, ok := normalizeNDJSON(prepared, hm, opts.MaskIPs, opts.StreamPrefix); ok {
 			return NormalizeResult{
 				Template:  tmpl,
 				Hash:      sha256.Sum256([]byte(tmpl)),
 				Mode:      PreviewModeNDJSON,
 				Slots:     slots,
-				Truncated: wasTruncated,
+				Truncated: wasTruncated || lineTrunc,
 			}
 		}
 		mode = PreviewModeText

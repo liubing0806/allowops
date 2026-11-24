@@ -249,13 +249,17 @@ func Diff(baseTasks, targetTasks []TaskInput, opts DiffOptions) DiffResult {
 		target float64
 		delta  float64
 	}
+	type driftBucketKey struct {
+		label string
+		unit  string
+	}
 	type driftMetricBucket struct {
 		label string
 		unit  string
 		pairs []driftPair
 	}
-	driftMap := make(map[string]*driftMetricBucket)
-	var driftOrder []string
+	driftMap := make(map[driftBucketKey]*driftMetricBucket)
+	var driftOrder []driftBucketKey
 
 	for _, p := range common {
 		hostname := p.target.Hostname
@@ -310,28 +314,28 @@ func Diff(baseTasks, targetTasks []TaskInput, opts DiffOptions) DiffResult {
 				}
 				for _, tsl := range targetInfo.slots {
 					bsl, ok := baseSlotMap[tsl.Label]
-					if !ok {
+					if !ok || bsl.Unit != tsl.Unit {
 						continue
 					}
 					delta := tsl.Value - bsl.Value
 					if !isFiniteFloat(bsl.Value) || !isFiniteFloat(tsl.Value) || !isFiniteFloat(delta) {
 						continue
 					}
-					bkt := driftMap[tsl.Label]
+					key := driftBucketKey{
+						label: SanitizeLabel(tsl.Label),
+						unit:  SanitizeLabel(tsl.Unit),
+					}
+					bkt := driftMap[key]
 					if bkt == nil {
 						if len(driftOrder) >= MaxSlotsPerCluster*2 {
 							continue
 						}
-						unit := tsl.Unit
-						if unit == "" {
-							unit = bsl.Unit
-						}
 						bkt = &driftMetricBucket{
-							label: SanitizeLabel(tsl.Label),
-							unit:  SanitizeLabel(unit),
+							label: key.label,
+							unit:  key.unit,
 						}
-						driftMap[tsl.Label] = bkt
-						driftOrder = append(driftOrder, tsl.Label)
+						driftMap[key] = bkt
+						driftOrder = append(driftOrder, key)
 					}
 					if len(bkt.pairs) < MaxSamplesPerSlot {
 						bkt.pairs = append(bkt.pairs, driftPair{
@@ -545,7 +549,10 @@ func Diff(baseTasks, targetTasks []TaskInput, opts DiffOptions) DiffResult {
 				}
 				return 1
 			}
-			return strings.Compare(a.Label, b.Label)
+			if c := strings.Compare(a.Label, b.Label); c != 0 {
+				return c
+			}
+			return strings.Compare(a.Unit, b.Unit)
 		})
 		if len(drifts) > MaxMetricDrifts {
 			drifts = drifts[:MaxMetricDrifts]

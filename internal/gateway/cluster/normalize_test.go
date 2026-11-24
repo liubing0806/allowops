@@ -290,3 +290,27 @@ func assertCleanLabel(t *testing.T, s string) {
 		}
 	}
 }
+
+func TestNormalizeNDJSONLineLimitTruncation(t *testing.T) {
+	line := `{"k":1}` + "\n"
+	exact128 := strings.Repeat(line, MaxLinesPerPreview)
+	res128 := NormalizePreview([]byte(exact128), DefaultNormalizeOptions("h1"))
+	if res128.Mode != PreviewModeNDJSON {
+		t.Fatalf("expected ndjson mode for 128 lines, got %q", res128.Mode)
+	}
+	if res128.Truncated {
+		t.Fatalf("128-line NDJSON preview must not report Truncated")
+	}
+
+	over129 := exact128 + `{"k":2,"extra":"tail"}` + "\n"
+	if len(over129) >= MaxPreviewBytesPerStream {
+		t.Fatalf("test fixture must stay below 4 KiB, got %d bytes", len(over129))
+	}
+	res129 := NormalizePreview([]byte(over129), DefaultNormalizeOptions("h1"))
+	if res129.Mode != PreviewModeNDJSON {
+		t.Fatalf("expected ndjson mode for 129 lines, got %q", res129.Mode)
+	}
+	if !res129.Truncated {
+		t.Fatalf("129-line NDJSON preview must propagate line-limit Truncated=true")
+	}
+}
