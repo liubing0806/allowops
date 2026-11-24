@@ -14,6 +14,8 @@ const (
 	PublishCatalog        Operation = "publish_catalog"
 	ViewHosts             Operation = "view_hosts"
 	ViewInventory         Operation = "view_inventory"
+	ViewChanges           Operation = "view_changes"
+	ViewKnowledge         Operation = "view_knowledge"
 	ViewCatalog           Operation = "view_catalog"
 	ViewJobs              Operation = "view_jobs"
 	ViewOutput            Operation = "view_output"
