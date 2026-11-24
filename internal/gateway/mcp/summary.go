@@ -247,23 +247,27 @@ func isFiniteFloat(v float64) bool {
 	return !math.IsNaN(v) && !math.IsInf(v, 0)
 }
 
+func isFiniteVariance(mv *v1.MetricVariance) bool {
+	return mv != nil && isFiniteFloat(mv.Min) && isFiniteFloat(mv.P50) && isFiniteFloat(mv.P95) && isFiniteFloat(mv.Max)
+}
+
 func sanitizeSummaryForJSON(summary *v1.JobSummary) *v1.JobSummary {
-	hasNonFinite := false
+	needsFilter := false
 	for _, g := range summary.Groups {
 		if g == nil {
 			continue
 		}
 		for _, mv := range g.Variances {
-			if mv != nil && (!isFiniteFloat(mv.Min) || !isFiniteFloat(mv.P50) || !isFiniteFloat(mv.P95) || !isFiniteFloat(mv.Max)) {
-				hasNonFinite = true
+			if !isFiniteVariance(mv) {
+				needsFilter = true
 				break
 			}
 		}
-		if hasNonFinite {
+		if needsFilter {
 			break
 		}
 	}
-	if !hasNonFinite {
+	if !needsFilter {
 		return summary
 	}
 	cloned := proto.Clone(summary).(*v1.JobSummary)
@@ -273,7 +277,7 @@ func sanitizeSummaryForJSON(summary *v1.JobSummary) *v1.JobSummary {
 		}
 		kept := make([]*v1.MetricVariance, 0, len(g.Variances))
 		for _, mv := range g.Variances {
-			if mv == nil || !isFiniteFloat(mv.Min) || !isFiniteFloat(mv.P50) || !isFiniteFloat(mv.P95) || !isFiniteFloat(mv.Max) {
+			if !isFiniteVariance(mv) {
 				continue
 			}
 			kept = append(kept, mv)
@@ -348,12 +352,9 @@ func (p *summaryPage) groupPreview(source *v1.OutputGroup, previewLimit int, inc
 		g["template_stderr"] = tmplStderr
 	}
 	if includeVariances && len(source.Variances) > 0 {
-		variances := make([]mcpMetricVariance, 0, len(source.Variances))
-		for _, mv := range source.Variances {
-			if mv == nil || !isFiniteFloat(mv.Min) || !isFiniteFloat(mv.P50) || !isFiniteFloat(mv.P95) || !isFiniteFloat(mv.Max) {
-				continue
-			}
-			variances = append(variances, mcpMetricVariance{
+		variances := make([]mcpMetricVariance, len(source.Variances))
+		for i, mv := range source.Variances {
+			variances[i] = mcpMetricVariance{
 				Label:        mv.Label,
 				Unit:         mv.Unit,
 				Min:          mv.Min,
@@ -363,11 +364,9 @@ func (p *summaryPage) groupPreview(source *v1.OutputGroup, previewLimit int, inc
 				MinHost:      mv.MinHost,
 				MaxHost:      mv.MaxHost,
 				OutlierHosts: slices.Clone(mv.OutlierHosts),
-			})
+			}
 		}
-		if len(variances) > 0 {
-			g["variances"] = variances
-		}
+		g["variances"] = variances
 	}
 	if p.format == "detailed" {
 		g["hosts"] = []string{}

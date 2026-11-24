@@ -577,8 +577,6 @@ func clusterPass2(tasks []TaskInput, idxs []int, grouping GroupingMode, detailed
 
 	hasher := sha256.New()
 	var zeroSep = [1]byte{0}
-	var outScratch normalizeScratch
-	var errScratch normalizeScratch
 
 	for _, idx := range idxs {
 		t := &tasks[idx]
@@ -590,7 +588,7 @@ func clusterPass2(tasks []TaskInput, idxs []int, grouping GroupingMode, detailed
 			Mode:      outMode,
 			Truncated: t.StdoutSize > uint64(len(t.Stdout)) || len(t.Stdout) > MaxPreviewBytesPerStream,
 		}
-		normOut := normalizePreviewWithScratch(t.Stdout, outOpts, &outScratch, false)
+		normOut := NormalizePreview(t.Stdout, outOpts)
 		var normErr NormalizeResult
 		if len(t.Stderr) > 0 {
 			errOpts := NormalizeOptions{
@@ -600,7 +598,7 @@ func clusterPass2(tasks []TaskInput, idxs []int, grouping GroupingMode, detailed
 				Truncated:    t.StderrSize > uint64(len(t.Stderr)) || len(t.Stderr) > MaxPreviewBytesPerStream,
 				StreamPrefix: "stderr.",
 			}
-			normErr = normalizePreviewWithScratch(t.Stderr, errOpts, &errScratch, false)
+			normErr = NormalizePreview(t.Stderr, errOpts)
 		}
 
 		hasher.Reset()

@@ -258,6 +258,30 @@ func jsonStringEncodedSize(s string) int {
 	return n
 }
 
+func shrinkOutputGroup(g *v1.OutputGroup) bool {
+	switch {
+	case len(g.Hosts) > 2:
+		g.Hosts = g.Hosts[:2]
+	case len(g.Variances) > 0:
+		g.Variances = g.Variances[:len(g.Variances)-1]
+	case g.TemplateStderr != "":
+		g.TemplateStderr = ""
+		g.Truncated = true
+	case g.TemplateStdout != "":
+		g.TemplateStdout = ""
+		g.Truncated = true
+	case g.Stderr != "":
+		g.Stderr = ""
+		g.Truncated = true
+	case g.Stdout != "":
+		g.Stdout = ""
+		g.Truncated = true
+	default:
+		return false
+	}
+	return true
+}
+
 func recomputeFoldedNormalHosts(result *v1.JobSummary, omittedNormalHosts uint64) {
 	folded := omittedNormalHosts
 	for _, g := range result.Groups {
@@ -334,37 +358,16 @@ func trimSummaryResponse(j *v1.Job, result *v1.JobSummary, limit int) error {
 		// Boundary group: try deterministic step-down reductions before omitting.
 		truncated = true
 		fitted := false
-		for !fitted {
-			switch {
-			case len(g.Hosts) > 2:
-				g.Hosts = g.Hosts[:2]
-			case len(g.Variances) > 0:
-				g.Variances = g.Variances[:len(g.Variances)-1]
-			case g.TemplateStderr != "":
-				g.TemplateStderr = ""
-				g.Truncated = true
-			case g.TemplateStdout != "":
-				g.TemplateStdout = ""
-				g.Truncated = true
-			case g.Stderr != "":
-				g.Stderr = ""
-				g.Truncated = true
-			case g.Stdout != "":
-				g.Stdout = ""
-				g.Truncated = true
-			default:
-				goto boundaryDone
-			}
+		for shrinkOutputGroup(g) {
 			gSize, err = encodedMessageSize(g)
 			if err != nil {
 				return err
 			}
 			if used+gSize+4 <= limit {
 				fitted = true
+				break
 			}
 		}
-
-	boundaryDone:
 		if fitted {
 			keptGroups = append(keptGroups, g)
 			used += gSize + 4
@@ -419,24 +422,7 @@ func trimSummaryResponse(j *v1.Job, result *v1.JobSummary, limit int) error {
 		}
 		if n := len(result.Groups); n > 0 {
 			g := result.Groups[n-1]
-			switch {
-			case len(g.Hosts) > 2:
-				g.Hosts = g.Hosts[:2]
-			case len(g.Variances) > 0:
-				g.Variances = g.Variances[:len(g.Variances)-1]
-			case g.TemplateStderr != "":
-				g.TemplateStderr = ""
-				g.Truncated = true
-			case g.TemplateStdout != "":
-				g.TemplateStdout = ""
-				g.Truncated = true
-			case g.Stderr != "":
-				g.Stderr = ""
-				g.Truncated = true
-			case g.Stdout != "":
-				g.Stdout = ""
-				g.Truncated = true
-			default:
+			if !shrinkOutputGroup(g) {
 				result.Groups = result.Groups[:n-1]
 				result.OmittedGroups++
 				result.OmittedHosts += g.HostCount

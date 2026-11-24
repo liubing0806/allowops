@@ -256,6 +256,40 @@ func clusterDiffToProto(res cluster.DiffResult) *v1.JobDiff {
 	}
 }
 
+func shrinkStatusTransition(st *v1.StatusTransition) bool {
+	switch {
+	case len(st.Hosts) > 2:
+		st.Hosts = st.Hosts[:2]
+	case len(st.Hosts) > 0:
+		st.Hosts = nil
+	default:
+		return false
+	}
+	return true
+}
+
+func shrinkPatternChange(pc *v1.PatternChange) bool {
+	switch {
+	case len(pc.Hosts) > 2:
+		pc.Hosts = pc.Hosts[:2]
+	case len(pc.AddedLines) > 0:
+		pc.AddedLines = pc.AddedLines[:len(pc.AddedLines)-1]
+	case len(pc.RemovedLines) > 0:
+		pc.RemovedLines = pc.RemovedLines[:len(pc.RemovedLines)-1]
+	case pc.TargetPreview != "":
+		pc.TargetPreview = ""
+		pc.TargetTruncated = true
+	case pc.BasePreview != "":
+		pc.BasePreview = ""
+		pc.BaseTruncated = true
+	case len(pc.Hosts) > 0:
+		pc.Hosts = nil
+	default:
+		return false
+	}
+	return true
+}
+
 // trimDiffResponse enforces ResponseBytes (32 KiB) on the full DiffJobsResponse
 // (both protojson and binary protobuf) in linear O(N) time.
 //
@@ -334,24 +368,16 @@ func trimDiffResponse(resp *v1.DiffJobsResponse, limit int) error {
 		truncated = true
 		budgetFull = true
 		fitted := false
-		for !fitted {
-			switch {
-			case len(st.Hosts) > 2:
-				st.Hosts = st.Hosts[:2]
-			case len(st.Hosts) > 0:
-				st.Hosts = nil
-			default:
-				goto transitionsDone
-			}
+		for shrinkStatusTransition(st) {
 			sz, err = encodedMessageSize(st)
 			if err != nil {
 				return err
 			}
 			if used+sz+4 <= limit {
 				fitted = true
+				break
 			}
 		}
-	transitionsDone:
 		if fitted {
 			keptTransitions = append(keptTransitions, st)
 			used += sz + 4
@@ -377,34 +403,16 @@ func trimDiffResponse(resp *v1.DiffJobsResponse, limit int) error {
 			truncated = true
 			budgetFull = true
 			fitted := false
-			for !fitted {
-				switch {
-				case len(pc.Hosts) > 2:
-					pc.Hosts = pc.Hosts[:2]
-				case len(pc.AddedLines) > 0:
-					pc.AddedLines = pc.AddedLines[:len(pc.AddedLines)-1]
-				case len(pc.RemovedLines) > 0:
-					pc.RemovedLines = pc.RemovedLines[:len(pc.RemovedLines)-1]
-				case pc.TargetPreview != "":
-					pc.TargetPreview = ""
-					pc.TargetTruncated = true
-				case pc.BasePreview != "":
-					pc.BasePreview = ""
-					pc.BaseTruncated = true
-				case len(pc.Hosts) > 0:
-					pc.Hosts = nil
-				default:
-					goto patternsDone
-				}
+			for shrinkPatternChange(pc) {
 				sz, err = encodedMessageSize(pc)
 				if err != nil {
 					return err
 				}
 				if used+sz+4 <= limit {
 					fitted = true
+					break
 				}
 			}
-		patternsDone:
 			if fitted {
 				keptPatterns = append(keptPatterns, pc)
 				used += sz + 4
@@ -503,22 +511,7 @@ func trimDiffResponse(resp *v1.DiffJobsResponse, limit int) error {
 			diff.MetricDrifts = diff.MetricDrifts[:len(diff.MetricDrifts)-1]
 		case len(diff.PatternChanges) > 0:
 			pc := diff.PatternChanges[len(diff.PatternChanges)-1]
-			switch {
-			case len(pc.Hosts) > 2:
-				pc.Hosts = pc.Hosts[:2]
-			case len(pc.AddedLines) > 0:
-				pc.AddedLines = pc.AddedLines[:len(pc.AddedLines)-1]
-			case len(pc.RemovedLines) > 0:
-				pc.RemovedLines = pc.RemovedLines[:len(pc.RemovedLines)-1]
-			case pc.TargetPreview != "":
-				pc.TargetPreview = ""
-				pc.TargetTruncated = true
-			case pc.BasePreview != "":
-				pc.BasePreview = ""
-				pc.BaseTruncated = true
-			case len(pc.Hosts) > 0:
-				pc.Hosts = nil
-			default:
+			if !shrinkPatternChange(pc) {
 				diff.PatternChanges = diff.PatternChanges[:len(diff.PatternChanges)-1]
 				if !pc.Unchanged {
 					diff.OmittedPatternChanges++
@@ -526,12 +519,7 @@ func trimDiffResponse(resp *v1.DiffJobsResponse, limit int) error {
 			}
 		case len(diff.StatusTransitions) > 0:
 			st := diff.StatusTransitions[len(diff.StatusTransitions)-1]
-			switch {
-			case len(st.Hosts) > 2:
-				st.Hosts = st.Hosts[:2]
-			case len(st.Hosts) > 0:
-				st.Hosts = nil
-			default:
+			if !shrinkStatusTransition(st) {
 				diff.StatusTransitions = diff.StatusTransitions[:len(diff.StatusTransitions)-1]
 			}
 		default:

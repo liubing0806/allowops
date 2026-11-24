@@ -257,7 +257,6 @@ func Diff(baseTasks, targetTasks []TaskInput, opts DiffOptions) DiffResult {
 	driftMap := make(map[string]*driftMetricBucket)
 	var driftOrder []string
 
-	var baseOutScratch, baseErrScratch, targetOutScratch, targetErrScratch normalizeScratch
 	for _, p := range common {
 		hostname := p.target.Hostname
 		if hostname == "" {
@@ -296,8 +295,8 @@ func Diff(baseTasks, targetTasks []TaskInput, opts DiffOptions) DiffResult {
 		}
 
 		// Pattern signature & normalization.
-		baseInfo := buildDiffTaskInfo(p.base, effectiveGrouping, jointOutMode, jointErrMode, maskIPs, &baseOutScratch, &baseErrScratch)
-		targetInfo := buildDiffTaskInfo(p.target, effectiveGrouping, jointOutMode, jointErrMode, maskIPs, &targetOutScratch, &targetErrScratch)
+		baseInfo := buildDiffTaskInfo(p.base, effectiveGrouping, jointOutMode, jointErrMode, maskIPs)
+		targetInfo := buildDiffTaskInfo(p.target, effectiveGrouping, jointOutMode, jointErrMode, maskIPs)
 		if baseInfo.truncated || targetInfo.truncated {
 			res.PreviewTruncated = true
 		}
@@ -680,7 +679,7 @@ func singleTaskSeverity(t *TaskInput) Severity {
 	return SeverityNormal
 }
 
-func buildDiffTaskInfo(t *TaskInput, grouping GroupingMode, outMode, errMode PreviewMode, maskIPs bool, outScratch, errScratch *normalizeScratch) diffTaskInfo {
+func buildDiffTaskInfo(t *TaskInput, grouping GroupingMode, outMode, errMode PreviewMode, maskIPs bool) diffTaskInfo {
 	sev := singleTaskSeverity(t)
 	hasHashes := len(t.StdoutHash) == 32 && len(t.StderrHash) == 32
 	metaPrefix := strconv.Itoa(int(t.Status)) + ":" + exitCodeKey(t.ExitCode) + ":" + t.Reason
@@ -710,21 +709,21 @@ func buildDiffTaskInfo(t *TaskInput, grouping GroupingMode, outMode, errMode Pre
 		}
 	}
 
-	normOut := normalizePreviewWithScratch(t.Stdout, NormalizeOptions{
+	normOut := NormalizePreview(t.Stdout, NormalizeOptions{
 		Hostname:  t.Hostname,
 		MaskIPs:   maskIPs,
 		Mode:      outMode,
 		Truncated: outTrunc,
-	}, outScratch, false)
+	})
 	var normErr NormalizeResult
 	if len(t.Stderr) > 0 {
-		normErr = normalizePreviewWithScratch(t.Stderr, NormalizeOptions{
+		normErr = NormalizePreview(t.Stderr, NormalizeOptions{
 			Hostname:     t.Hostname,
 			MaskIPs:      maskIPs,
 			Mode:         errMode,
 			Truncated:    errTrunc,
 			StreamPrefix: "stderr.",
-		}, errScratch, false)
+		})
 	}
 	tmplHash := combineTemplateHash(normOut.Template, normErr.Template)
 	combined := combineStreamPreview(normOut.Template, normErr.Template)
