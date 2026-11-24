@@ -18,4 +18,5 @@ type Client interface {
 	ListTaskSteps(context.Context, *v1.ListTaskStepsRequest) (*v1.ListTaskStepsResponse, error)
 	CancelJob(context.Context, *v1.CancelJobRequest) (*v1.CancelJobResponse, error)
 	GetJobOutput(context.Context, *v1.GetJobOutputRequest) (*v1.GetJobOutputResponse, error)
+	DiffJobs(context.Context, *v1.DiffJobsRequest) (*v1.DiffJobsResponse, error)
 }
