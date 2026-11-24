@@ -1,0 +1,15 @@
+name: process_find
+description: Find process identifiers by an allowed exact process name.
+risk: read
+params:
+  process:
+    type: enum
+    description: Exact process name from the signed allowlist.
+    values: [nginx, java, app]
+exec: [/usr/bin/pgrep, -l, -x, --, '{process}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]

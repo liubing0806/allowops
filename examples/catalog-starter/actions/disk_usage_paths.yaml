@@ -1,0 +1,15 @@
+name: disk_usage_paths
+description: Read filesystem capacity for an allowed path.
+risk: read
+params:
+  path:
+    type: path
+    description: Existing path within the signed allowed roots.
+    allowed_roots: [/var/log, /data]
+exec: [/usr/bin/df, -h, --, '{path}']
+timeout: 10s
+max_output: 64KB
+filters: [match, exclude, tail, head, count]
+max_scan: 256MB
+redact:
+  builtin: [secrets]
