@@ -357,10 +357,31 @@ func checkStepPlaceholders(argv []string) error {
 		if slices.ContainsFunc(argv[:len(argv)-len(subcommand)+1], isStepPlaceholder) {
 			return fmt.Errorf("%s: step placeholder forbidden in global options or subcommand", name)
 		}
-		const connectionOptions = "--server -s --kubeconfig --token --certificate-authority --context --cluster --user --host -H --config"
-		for i, word := range subcommand[1:] {
-			if isStepPlaceholder(word) && containsOption(connectionOptions, subcommand[i]) {
-				return fmt.Errorf("%s: step placeholder forbidden as the value of %s", name, subcommand[i])
+		verb := subcommand[0]
+		rest := subcommand[1:]
+		if name == "docker" && verb == "container" {
+			if len(rest) == 0 || isStepPlaceholder(rest[0]) {
+				return fmt.Errorf("%s: step placeholder forbidden in subcommand", name)
+			}
+			verb = rest[0]
+			rest = rest[1:]
+		}
+		allowedSubcommands := "inspect logs top stats port diff ps"
+		safePrecedingOptions := "--tail --since --until --filter -f --timestamps --details --no-stream --no-trunc --all -a --quiet -q --size --"
+		if name == "kubectl" {
+			allowedSubcommands = "get describe logs top events"
+			safePrecedingOptions = "--tail --since --since-time --limit-bytes --container -c --selector -l --field-selector --timestamps --previous -p --all-containers --ignore-not-found --show-labels --no-headers --"
+		}
+		if !containsOption(allowedSubcommands, verb) {
+			return fmt.Errorf("%s: step placeholder forbidden with subcommand %s", name, verb)
+		}
+		for i, word := range rest {
+			if !isStepPlaceholder(word) || i == 0 {
+				continue
+			}
+			prev := rest[i-1]
+			if strings.HasPrefix(prev, "-") && !containsOption(safePrecedingOptions, prev) {
+				return fmt.Errorf("%s: step placeholder forbidden as the value of %s", name, prev)
 			}
 		}
 	}

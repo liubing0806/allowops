@@ -159,7 +159,7 @@ func TestStepDataflowJSONRechecksQuotedKeyValue(t *testing.T) {
 
 func TestStepDataflowKleeneTruthTable(t *testing.T) {
 	states := []stepRuntimeState{
-		{name: "producer", exitCode: new(0), values: map[string]any{"value": int64(4)}},
+		{name: "producer", exitCode: new(0), cleanSuccess: true, values: map[string]any{"value": int64(4)}},
 		{name: "omitted", skipped: true},
 		{name: "consumer"},
 	}
@@ -202,6 +202,10 @@ func TestStepDataflowKleeneTruthTable(t *testing.T) {
 		{catalog.StepCondition{Ref: "steps.producer.value", In: []catalog.ConditionValue{{Value: int64(4)}}}, triTrue},
 		{catalog.StepCondition{Ref: "steps.omitted.value", Ne: &catalog.ConditionValue{Value: int64(4)}}, triUnknown},
 		{catalog.StepCondition{Ref: "steps.omitted.value", In: []catalog.ConditionValue{{Value: int64(4)}}}, triUnknown},
+		{catalog.StepCondition{Ref: "steps.omitted.value", Exists: new(false)}, triUnknown},
+		{catalog.StepCondition{Ref: "steps.omitted.value", Exists: new(true)}, triUnknown},
+		{catalog.StepCondition{Ref: "steps.producer.absent", Exists: new(false)}, triTrue},
+		{catalog.StepCondition{Ref: "steps.producer.absent", Exists: new(true)}, triFalse},
 	} {
 		if got := evalCondition(&tc.condition, 2, states); got != tc.want {
 			t.Errorf("%+v=%d, want %d", tc.condition, got, tc.want)

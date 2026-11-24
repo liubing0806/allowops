@@ -264,9 +264,9 @@ type StepExtractor struct {
 
 求值结果属于三值域 `{triFalse, triTrue, triUnknown}`，**仅当根节点求值结果为 `triTrue` 时才执行该步骤**（`triFalse` 与 `triUnknown` 均导致步骤以 `CONDITION_FALSE` 跳过）：
 
-- **存在性判断（永不返回 `triUnknown`）**：
-  - `exists: true` → 存在返回 `triTrue`，缺失返回 `triFalse`。
-  - `exists: false` → 缺失返回 `triTrue`，存在返回 `triFalse`。
+- **存在性判断**：
+  - 对 `*.skipped` 与 `*.exit_code`：`exists: true` / `exists: false` 返回确定的 `triTrue` / `triFalse`（`*.skipped` 永远存在；`*.exit_code` 在步骤正常退出时存在、跳过或启动前失败时缺失）。
+  - 对提取变量 `steps.<name>.<var>`：**仅当产生步干净成功（`cleanSuccess == true`，无失败、无跳过、无脱敏污染、无截断）时**，`exists: true` / `exists: false` 才返回确定的 `triTrue` / `triFalse`（区分 `optional: true` 干净未命中与产生步失败）；若产生步失败、被跳过或输出不完整，即使 `exists: false` 或 `not: {exists: true}` 亦返回 **`triUnknown`**，保证彻底 fail-closed。
 - **值比较（`eq`/`ne`/`gt`/`gte`/`lt`/`lte`/`in`）**：
   - 当 `ref` 缺失（如前序步骤跳过、失败或 `optional` 未命中）→ 返回 **`triUnknown`**。
   - 当 `ref` 存在 → 按比较结果返回 `triTrue` 或 `triFalse`。

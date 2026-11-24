@@ -46,9 +46,9 @@ risk: read
 params:
   path:
     type: path
-    description: Existing directory on the filesystem to diagnose.
-    allowed_roots: [/, /var/log, /data]
-    default: /
+    description: Existing directory within the allowed roots to diagnose.
+    allowed_roots: [/var/log, /data]
+    default: /var/log
 timeout: 20s
 max_output: 64KB
 on_error: stop

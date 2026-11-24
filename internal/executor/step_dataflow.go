@@ -77,15 +77,16 @@ func stepVariableError(step, variable string, err error) error {
 }
 
 type stepExtractor struct {
-	name       string
-	spec       catalog.StepExtractor
-	limit      int
-	regex      *regexp.Regexp
-	targetLine int
-	value      string
-	matched    bool
-	tainted    bool
-	duplicate  bool
+	name        string
+	spec        catalog.StepExtractor
+	limit       int
+	regex       *regexp.Regexp
+	targetLine  int
+	value       string
+	matched     bool
+	tainted     bool
+	sawModified bool
+	duplicate   bool
 }
 
 type stepExtractSink struct {
@@ -150,6 +151,12 @@ func (s *stepExtractSink) Write(line string, modified bool) error {
 		}
 		switch {
 		case e.regex != nil && !e.duplicate && (!e.matched || e.spec.Match == "exactly_one"):
+			if modified {
+				e.sawModified = true
+				if e.spec.Match == "exactly_one" {
+					e.tainted = true
+				}
+			}
 			if match := e.regex.FindStringSubmatch(text); match != nil {
 				if e.matched {
 					e.duplicate = true
@@ -214,7 +221,7 @@ func (s *stepExtractSink) extractValue(e stepExtractor, incompleteOutput bool) (
 		candidate = e.value
 	}
 	if candidate == nil {
-		if overflowed || !e.spec.Optional {
+		if overflowed || e.sawModified || !e.spec.Optional {
 			return nil, ErrExtractFailed
 		}
 		return nil, nil
@@ -416,7 +423,10 @@ func evalCondition(c *catalog.StepCondition, stepIndex int, states []stepRuntime
 		return evalConditions(c.Any, stepIndex, states, triTrue, triFalse)
 	}
 
-	value, exists := conditionRef(c.Ref, stepIndex, states)
+	value, exists, known := conditionRef(c.Ref, stepIndex, states)
+	if !known {
+		return triUnknown
+	}
 	if c.Exists != nil {
 		return truth(exists == *c.Exists)
 	}
@@ -457,7 +467,7 @@ func evalConditions(children []catalog.StepCondition, stepIndex int, states []st
 	return result
 }
 
-func conditionRef(ref string, stepIndex int, states []stepRuntimeState) (any, bool) {
+func conditionRef(ref string, stepIndex int, states []stepRuntimeState) (value any, exists, known bool) {
 	index := stepIndex - 1
 	field, previous := strings.CutPrefix(ref, "prev.")
 	if !previous {
@@ -466,20 +476,23 @@ func conditionRef(ref string, stepIndex int, states []stepRuntimeState) (any, bo
 		field = variable
 	}
 	if index < 0 {
-		return nil, false
+		return nil, false, false
 	}
 	state := states[index]
 	switch field {
 	case "skipped":
-		return state.skipped, true
+		return state.skipped, true, true
 	case "exit_code":
 		if state.exitCode != nil {
-			return int64(*state.exitCode), true
+			return int64(*state.exitCode), true, true
 		}
-		return nil, false
+		return nil, false, true
 	default:
-		value, present := state.values[field]
-		return value, present
+		if !state.cleanSuccess {
+			return nil, false, false
+		}
+		v, present := state.values[field]
+		return v, present, true
 	}
 }
 

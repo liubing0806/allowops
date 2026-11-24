@@ -68,7 +68,7 @@ def main():
 
         disk_action = local_catalog / 'actions' / 'disk_pressure_diagnose.yaml'
         action = disk_action.read_text(encoding='utf-8')
-        original = '    allowed_roots: [/, /var/log, /data]\n    default: /'
+        original = '    allowed_roots: [/var/log, /data]\n    default: /var/log'
         if action.count(original) != 1:
             raise RuntimeError('Expected one disk_pressure_diagnose path declaration')
         disk_action.write_text(

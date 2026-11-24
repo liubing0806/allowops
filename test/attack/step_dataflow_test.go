@@ -133,8 +133,16 @@ func TestStepDataflowRejectsExecutionContextReferences(t *testing.T) {
 		{"docker context", "docker", []any{"-c", stepValueArg, "ps"}, "global options or subcommand"},
 		{"kubectl server", "kubectl", []any{"--server", stepValueArg, "get", "pods"}, "global options or subcommand"},
 		{"kubectl configuration", "kubectl", []any{"logs", "fixture-pod", "--kubeconfig", stepValueArg}, "forbidden as the value of --kubeconfig"},
+		{"kubectl bundled server flag", "kubectl", []any{"logs", "fixture-pod", "-fs", stepValueArg}, "forbidden as the value of -fs"},
+		{"kubectl impersonation", "kubectl", []any{"get", "pods", "--as", stepValueArg}, "forbidden as the value of --as"},
+		{"kubectl client key", "kubectl", []any{"get", "pods", "--client-key", stepValueArg}, "forbidden as the value of --client-key"},
+		{"kubectl password", "kubectl", []any{"get", "pods", "--password", stepValueArg}, "forbidden as the value of --password"},
+		{"kubectl post-subcommand namespace", "kubectl", []any{"get", "pods", "-n", stepValueArg}, "forbidden as the value of -n"},
 		{"docker exec target", "docker", []any{"exec", stepValueArg, "/usr/bin/ps"}, "execution options or operands"},
+		{"docker container exec target", "docker", []any{"container", "exec", stepValueArg, "/usr/bin/ps"}, "forbidden with subcommand exec"},
+		{"docker run image", "docker", []any{"run", "--rm", stepValueArg}, "forbidden with subcommand run"},
 		{"kubectl exec target", "kubectl", []any{"exec", stepValueArg, "--", "/usr/bin/ps"}, "execution options or operands"},
+		{"kubectl debug target", "kubectl", []any{"debug", stepValueArg, "--", "/usr/bin/ps"}, "forbidden with subcommand debug"},
 		{"environment operand", "env", []any{stepValueArg, "/usr/bin/id"}, "step placeholder forbidden as a command"},
 		{"timeout operand", "timeout", []any{stepValueArg, "/usr/bin/id"}, "execution options or operands"},
 		{"xargs replacement", "xargs", []any{"-I", stepValueArg, "/bin/echo"}, "fixed xargs replacement required"},
@@ -223,7 +231,7 @@ func TestStepDataflowRedactedConditionStaysUnknown(t *testing.T) {
 		want         error
 	}{
 		{"required", "-----BEGIN PRIVATE KEY-----\nstate=inactive\n", false, executor.ErrExtractFailed},
-		{"optional", "-----BEGIN PRIVATE KEY-----\nstate=inactive\n", true, nil},
+		{"optional", "-----BEGIN PRIVATE KEY-----\nstate=inactive\n", true, executor.ErrExtractFailed},
 		{"visible inactive state", "state=inactive\n", false, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -340,14 +348,113 @@ func TestStepDataflowRechecksRenderedCommand(t *testing.T) {
 	}
 }
 
+func TestStepDataflowExistsStaysUnknownOnFailedOrSkippedProducer(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		when      *catalog.StepCondition
+		producer  []any
+		skipped   bool
+		wantErr   error
+		wantRunS2 bool
+	}{
+		{
+			name:     "exists false after PEM redaction failure",
+			when:     &catalog.StepCondition{Ref: stepValueRef, Exists: new(false)},
+			producer: stepOutput("-----BEGIN PRIVATE KEY-----\nstate=inactive\n"),
+			wantErr:  executor.ErrExtractFailed,
+		},
+		{
+			name: "not exists true after PEM redaction failure",
+			when: &catalog.StepCondition{Not: &catalog.StepCondition{
+				Ref: stepValueRef, Exists: new(true),
+			}},
+			producer: stepOutput("-----BEGIN PRIVATE KEY-----\nstate=inactive\n"),
+			wantErr:  executor.ErrExtractFailed,
+		},
+		{
+			name:     "exists false after nonzero exit",
+			when:     &catalog.StepCondition{Ref: stepValueRef, Exists: new(false)},
+			producer: []any{"/usr/bin/false"},
+		},
+		{
+			name:    "exists false after skipped producer",
+			when:    &catalog.StepCondition{Ref: "steps.s2.value", Exists: new(false)},
+			skipped: true,
+		},
+		{
+			name:      "exists false after clean optional miss still runs",
+			when:      &catalog.StepCondition{Ref: stepValueRef, Exists: new(false)},
+			producer:  stepOutput("other=ok\n"),
+			wantRunS2: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			command, marker := stepCommandFixture(t, "consumer")
+			spec := stepTextExtractor("[a-z]+")
+			spec.Regex = "^state=([a-z]+)$"
+			spec.Optional = tc.wantRunS2
+			var a catalog.Action
+			consumerIdx := 1
+			if tc.skipped {
+				consumerIdx = 2
+				a = catalog.Action{
+					Name: "step_dataflow", Description: "Step dataflow skipped producer test", Risk: "read",
+					Timeout: "10s", MaxOutput: 1024, OnError: "continue",
+					Steps: []catalog.Step{
+						{Name: "s1", Exec: stepOutput("ok\n")},
+						{
+							Name:    "s2",
+							When:    &catalog.StepCondition{Ref: "prev.exit_code", Ne: &catalog.ConditionValue{Value: int64(0)}},
+							Exec:    stepOutput("state=active\n"),
+							Extract: map[string]catalog.StepExtractor{"value": spec},
+						},
+						{Name: "s3", When: tc.when, Exec: []any{command}},
+					},
+				}
+			} else {
+				a = stepDataflowAction(tc.producer, spec, command)
+				a.OnError = "continue"
+				a.Steps[1].When = tc.when
+			}
+			result, err := executor.Run(t.Context(), a, nil, nil)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("result = %+v, error = %v, want %v", result, err, tc.wantErr)
+			}
+			consumer := result.Steps[consumerIdx]
+			if tc.wantRunS2 {
+				assertStepCommandArgs(t, marker)
+				if consumer.Skipped || consumer.ExitCode == nil || *consumer.ExitCode != 0 {
+					t.Fatalf("consumer = %+v, want execution", consumer)
+				}
+				return
+			}
+			assertStepCommandAbsent(t, marker)
+			if !consumer.Skipped || consumer.SkipReason != executor.ReasonSkipConditionFalse || consumer.ExitCode != nil {
+				t.Fatalf("consumer = %+v, want CONDITION_FALSE", consumer)
+			}
+		})
+	}
+}
+
 func TestStepDataflowRejectsDuplicateRegexMatches(t *testing.T) {
-	command, marker := stepCommandFixture(t, "consumer")
-	spec := stepTextExtractor("[a-z]+")
-	spec.Regex = "^id=([a-z]+)$"
-	spec.Match = "exactly_one"
-	a := stepDataflowAction(stepOutput("id=first\nid=second\n"), spec, command, stepValueArg)
-	result, err := executor.Run(t.Context(), a, nil, nil)
-	assertProducerRejected(t, result, err, executor.ErrExtractFailed, marker)
+	t.Run("two matching lines", func(t *testing.T) {
+		command, marker := stepCommandFixture(t, "consumer")
+		spec := stepTextExtractor("[a-z]+")
+		spec.Regex = "^id=([a-z]+)$"
+		spec.Match = "exactly_one"
+		a := stepDataflowAction(stepOutput("id=first\nid=second\n"), spec, command, stepValueArg)
+		result, err := executor.Run(t.Context(), a, nil, nil)
+		assertProducerRejected(t, result, err, executor.ErrExtractFailed, marker)
+	})
+	t.Run("redacted line hides potential second match", func(t *testing.T) {
+		command, marker := stepCommandFixture(t, "consumer")
+		spec := stepTextExtractor("[a-z]+")
+		spec.Regex = "^id=([a-z]+)$"
+		spec.Match = "exactly_one"
+		a := stepDataflowAction(stepOutput("id=first\npassword=second\n"), spec, command, stepValueArg)
+		result, err := executor.Run(t.Context(), a, nil, nil)
+		assertProducerRejected(t, result, err, executor.ErrExtractFailed, marker)
+	})
 }
 
 func TestStepDataflowRejectsRedactedValues(t *testing.T) {
@@ -383,13 +490,14 @@ func TestStepDataflowConditionCannotDistinguishRedactedCredentials(t *testing.T)
 		spec.Regex = "^token=([a-z]+)$"
 		spec.Optional = true
 		a := stepDataflowAction(stepOutput("token="+credential+"\n"), spec, command)
+		a.OnError = "continue"
 		a.Steps[1].When = &catalog.StepCondition{Ref: stepValueRef, Eq: &catalog.ConditionValue{Value: "supersecret"}}
 		result, err := executor.Run(t.Context(), a, nil, nil)
 		assertStepCommandAbsent(t, marker)
-		if err != nil || result.ExitCode != 0 || len(result.Steps) != 2 ||
+		if !errors.Is(err, executor.ErrExtractFailed) || result.ExitCode != -1 || len(result.Steps) != 2 ||
 			result.Steps[0].Stdout != "[REDACTED:credential]\n" ||
 			!result.Steps[1].Skipped || result.Steps[1].SkipReason != executor.ReasonSkipConditionFalse {
-			t.Fatalf("result = %+v, error = %v, want redacted stdout and CONDITION_FALSE", result, err)
+			t.Fatalf("result = %+v, error = %v, want redacted stdout, EXTRACT_FAILED and CONDITION_FALSE", result, err)
 		}
 	}
 }
