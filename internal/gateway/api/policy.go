@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"net/netip"
 	"reflect"
 	"slices"
@@ -335,108 +337,182 @@ type testEnvironment struct {
 	Cases []*v1.PolicyTestCase `json:"cases,omitempty"`
 }
 
-// inputCollector accumulates policy evaluation inputs up to the configured limit.
-type inputCollector struct {
-	limit   int
-	inputs  []authz.Input
-	indices []uint32
+// Stored tests use encoding/json, which preserves the oneof wrapper but cannot
+// decode it into the generated HostTargets.Selection interface on its own.
+func decodeTestEnvironment(data []byte) (testEnvironment, error) {
+	var stored struct {
+		authz.Environment
+		Cases []struct {
+			v1.PolicyTestCase
+			Targets *struct {
+				Selection struct {
+					Hosts    *v1.HostNames
+					Selector *string
+				}
+			} `json:"targets"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return testEnvironment{}, err
+	}
+	result := testEnvironment{Environment: stored.Environment}
+	for i := range stored.Cases {
+		c := &stored.Cases[i]
+		if c.Targets != nil {
+			selection := c.Targets.Selection
+			c.PolicyTestCase.Targets = &v1.HostTargets{}
+			switch {
+			case selection.Hosts != nil:
+				c.PolicyTestCase.Targets.Selection = &v1.HostTargets_Hosts{Hosts: selection.Hosts}
+			case selection.Selector != nil:
+				c.PolicyTestCase.Targets.Selection = &v1.HostTargets_Selector{Selector: *selection.Selector}
+			}
+		}
+		result.Cases = append(result.Cases, &c.PolicyTestCase)
+	}
+	return result, nil
 }
 
-func (c *inputCollector) add(i authz.Input, index uint32) error {
-	if len(c.inputs) >= c.limit {
-		return failure(connect.CodeResourceExhausted, "policy evaluation limit exceeded")
+type policyInputHosts struct {
+	all             []authz.Host
+	groupIndices    []int
+	representatives []authz.Host
+}
+
+func groupPolicyHosts(hosts []authz.Host) policyInputHosts {
+	groups := policyInputHosts{all: hosts, groupIndices: make([]int, len(hosts))}
+	seen := map[string]int{}
+	for i, host := range hosts {
+		key := ""
+		// Rego only uses host.labels. The unlabeled execution check also
+		// treats nil and empty label maps alike.
+		if len(host.Labels) > 0 {
+			encoded, _ := json.Marshal(host.Labels) // String maps have sorted keys and cannot fail encoding.
+			key = string(encoded)
+		}
+		group, exists := seen[key]
+		if !exists {
+			group = len(groups.representatives)
+			seen[key] = group
+			groups.representatives = append(groups.representatives, host)
+		}
+		groups.groupIndices[i] = group
 	}
-	c.inputs = append(c.inputs, i)
-	c.indices = append(c.indices, index)
+	return groups
+}
+
+type policyInputBatch struct {
+	input     authz.Input
+	hosts     policyInputHosts
+	firstCase uint32
+	explicit  bool
+}
+
+func (b policyInputBatch) caseIndex(hostIndex int) uint32 {
+	if b.explicit {
+		return b.firstCase
+	}
+	return b.firstCase + uint32(hostIndex)
+}
+
+// inputCollector accumulates policy evaluation inputs up to the configured limit.
+type inputCollector struct {
+	limit       int
+	evaluations int
+	count       uint64 // Logical inputs, including every host in each group.
+	explicit    bool
+	batches     []policyInputBatch
+}
+
+func (c *inputCollector) add(input authz.Input, hosts policyInputHosts, index uint32) error {
+	if len(hosts.all) == 0 {
+		return nil
+	}
+	if len(hosts.representatives) > c.limit-c.evaluations {
+		err := connect.NewError(connect.CodeResourceExhausted, fmt.Errorf("policy evaluation limit exceeded after grouping hosts by authorization labels (limit %d). Use a smaller set of explicit test cases or increase identity.max_test_evaluations", c.limit))
+		detail, detailErr := connect.NewErrorDetail(&v1.ErrorDetail{Reason: "POLICY_EVALUATION_LIMIT_EXCEEDED"})
+		if detailErr == nil {
+			err.AddDetail(detail)
+		}
+		return err
+	}
+	count := c.count + uint64(len(hosts.all))
+	if !c.explicit {
+		if count > math.MaxUint32+1 {
+			return failure(connect.CodeResourceExhausted, "expanded policy trial exceeds the case index range. Use explicit test cases")
+		}
+		index = uint32(c.count)
+	}
+	c.batches = append(c.batches, policyInputBatch{input: input, hosts: hosts, firstCase: index, explicit: c.explicit})
+	c.evaluations += len(hosts.representatives)
+	c.count = count
 	return nil
 }
 
-// addNext adds an input whose case index is its position.
-func (c *inputCollector) addNext(i authz.Input) error { return c.add(i, uint32(len(c.inputs))) }
-
-func (s *Service) inputs(snap *policySnapshot, cases []*v1.PolicyTestCase, env authz.Environment) ([]authz.Input, []uint32, error) {
-	c := &inputCollector{limit: s.Config.MaxTestEvaluations, inputs: []authz.Input{}, indices: []uint32{}}
+func (s *Service) collectPolicyInputs(snap *policySnapshot, cases []*v1.PolicyTestCase, env authz.Environment) (*inputCollector, error) {
+	c := &inputCollector{limit: s.Config.MaxTestEvaluations, explicit: len(cases) > 0}
 	var err error
-	if len(cases) == 0 {
-		err = defaultInputs(c, snap, env)
+	if c.explicit {
+		err = caseInputs(c, snap, cases, env)
 	} else {
-		err = s.caseInputs(c, snap, cases, env)
+		err = defaultInputs(c, snap, env)
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return c.inputs, c.indices, nil
+	return c, nil
 }
 
 // defaultInputs covers every console operation, and execution of every action
 // on every host, for every subject.
 func defaultInputs(c *inputCollector, snap *policySnapshot, env authz.Environment) error {
-	// A job without tasks is authorised with (action, empty host).
-	jobHosts := append([]authz.Host{{}}, snap.Hosts...)
+	global := groupPolicyHosts([]authz.Host{{}})
+	hosts := groupPolicyHosts(snap.Hosts)
+	// Host listing and import preview have an empty-target check. A job
+	// without tasks is also authorised with (action, empty host).
+	hostsAndGlobal := groupPolicyHosts(append([]authz.Host{{}}, snap.Hosts...))
 	for _, sub := range snap.Subjects {
 		for _, op := range consoleOperations {
-			if err := operationInputs(c, snap, sub, op, jobHosts, env); err != nil {
+			input := authz.Input{Subject: sub.Attributes, Operation: op, Env: env}
+			targets := global
+			if op == authz.ViewHosts || op == authz.ManageHosts {
+				// Cover the stored attributes used by ListHosts, SetHostLabels and DeleteHost.
+				targets = hostsAndGlobal
+			}
+			if err := c.add(input, targets, 0); err != nil {
 				return err
 			}
-		}
-		for _, a := range snap.Actions {
-			for _, h := range snap.Hosts {
-				if err := c.addNext(authz.Input{Subject: sub.Attributes, Operation: authz.ExecuteAction, Action: a, Host: h, Env: env}); err != nil {
-					return err
+			switch op {
+			case authz.ViewCatalog, authz.ViewJobs, authz.ViewOutput:
+				targets := hostsAndGlobal
+				if op == authz.ViewCatalog {
+					targets = global
 				}
+				for _, action := range snap.Actions {
+					input.Action = action
+					if err := c.add(input, targets, 0); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		for _, action := range snap.Actions {
+			if err := c.add(authz.Input{Subject: sub.Attributes, Operation: authz.ExecuteAction, Action: action, Env: env}, hosts, 0); err != nil {
+				return err
 			}
 		}
 	}
 	return nil
 }
 
-// operationInputs adds the inputs of one console operation for one subject.
-func operationInputs(c *inputCollector, snap *policySnapshot, sub policySubject, op authz.Operation, jobHosts []authz.Host, env authz.Environment) error {
-	if err := c.addNext(authz.Input{Subject: sub.Attributes, Operation: op, Env: env}); err != nil {
-		return err
-	}
-	// Host listing and import preview also have an empty-target check.
-	// Retain it above, and cover the stored host attributes used by
-	// ListHosts, SetHostLabels and DeleteHost as well.
-	if op == authz.ViewHosts || op == authz.ManageHosts {
-		for _, h := range snap.Hosts {
-			if err := c.addNext(authz.Input{Subject: sub.Attributes, Operation: op, Host: h, Env: env}); err != nil {
-				return err
-			}
-		}
-	}
-	if op == authz.ViewCatalog || op == authz.ViewJobs || op == authz.ViewOutput {
-		for _, a := range snap.Actions {
-			input := authz.Input{Subject: sub.Attributes, Operation: op, Action: a, Env: env}
-			if op == authz.ViewCatalog {
-				if err := c.addNext(input); err != nil {
-					return err
-				}
-				continue
-			}
-			for _, h := range jobHosts {
-				input.Host = h
-				if err := c.addNext(input); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
-
-// caseInputs expands each explicit test case into one input per target host.
-func (s *Service) caseInputs(c *inputCollector, snap *policySnapshot, cases []*v1.PolicyTestCase, env authz.Environment) error {
+func caseInputs(c *inputCollector, snap *policySnapshot, cases []*v1.PolicyTestCase, env authz.Environment) error {
 	for index, tc := range cases {
 		input, hosts, err := caseInput(snap, tc, env)
 		if err != nil {
 			return err
 		}
-		for _, h := range hosts {
-			input.Host = h
-			if err := c.add(input, uint32(index)); err != nil {
-				return err
-			}
+		if err := c.add(input, groupPolicyHosts(hosts), uint32(index)); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -618,30 +694,13 @@ func (s *Service) TestPolicy(ctx context.Context, r *connect.Request[v1.TestPoli
 		return nil, dbError(err)
 	}
 	env := authz.Environment{TimeNS: time.Now().UnixNano(), SourceIP: transport(ctx).ip}
-	inputs, indices, err := s.inputs(snap, r.Msg.Cases, env)
+	inputs, err := s.collectPolicyInputs(snap, r.Msg.Cases, env)
 	if err != nil {
 		return nil, err
 	}
-	changes := []*v1.PolicyChange{}
-	var changed uint64
-	for i, input := range inputs {
-		b, beforeReason, err := evaluate(ctx, old, input)
-		if err != nil {
-			return nil, failure(connect.CodeInvalidArgument, "policy evaluation failed")
-		}
-		a, afterReason, err := evaluate(ctx, engine, input)
-		if err != nil {
-			return nil, failure(connect.CodeInvalidArgument, "policy evaluation failed")
-		}
-		different := !reflect.DeepEqual(a, b) || beforeReason != afterReason
-		if different {
-			changed++
-		}
-		// Unlabeled hosts need an explicit denial diagnostic even when both
-		// versions deny. They do not inflate the actual change count.
-		if different || beforeReason != "" || afterReason != "" {
-			changes = append(changes, &v1.PolicyChange{CaseIndex: indices[i], Host: input.Host.ID, Before: decision(b, beforeReason), After: decision(a, afterReason)})
-		}
+	changes, changed, err := comparePolicyInputs(ctx, inputs, old, engine)
+	if err != nil {
+		return nil, err
 	}
 	subjects := []authz.Subject{}
 	for _, sub := range snap.Subjects {
@@ -653,7 +712,7 @@ func (s *Service) TestPolicy(ctx context.Context, r *connect.Request[v1.TestPoli
 	if err != nil {
 		return nil, err
 	}
-	test := &v1.PolicyTest{TestId: secret("pt_"), BaseVersion: current.Version, CandidateSha256: hash(string(b)), EvaluatedCount: uint64(len(inputs)), ChangedCount: changed, RetainsPolicyAdministrator: retains, ExpiresAt: stamp(time.Now().Add(s.Config.TestTTL))}
+	test := &v1.PolicyTest{TestId: secret("pt_"), BaseVersion: current.Version, CandidateSha256: hash(string(b)), EvaluatedCount: inputs.count, ChangedCount: changed, RetainsPolicyAdministrator: retains, ExpiresAt: stamp(time.Now().Add(s.Config.TestTTL))}
 	tb, _ := encode(test)
 	cb, _ := json.Marshal(changes)
 	eb, _ := json.Marshal(testEnvironment{Environment: env, Cases: r.Msg.Cases})
@@ -665,6 +724,51 @@ func (s *Service) TestPolicy(ctx context.Context, r *connect.Request[v1.TestPoli
 		return nil, dbError(err)
 	}
 	return connect.NewResponse(&v1.TestPolicyResponse{Test: test}), nil
+}
+
+func comparePolicyInputs(ctx context.Context, inputs *inputCollector, old, next *authz.Engine) ([]*v1.PolicyChange, uint64, error) {
+	type comparedDecision struct {
+		before, after *v1.PolicyDecision
+		different     bool
+	}
+	changes := []*v1.PolicyChange{}
+	var changed uint64
+	for _, batch := range inputs.batches {
+		input := batch.input
+		decisions := make([]comparedDecision, len(batch.hosts.representatives))
+		hasChanges := false
+		for group, host := range batch.hosts.representatives {
+			input.Host = host
+			before, beforeReason, err := evaluate(ctx, old, input)
+			if err != nil {
+				return nil, 0, failure(connect.CodeInvalidArgument, "policy evaluation failed")
+			}
+			after, afterReason, err := evaluate(ctx, next, input)
+			if err != nil {
+				return nil, 0, failure(connect.CodeInvalidArgument, "policy evaluation failed")
+			}
+			different := !reflect.DeepEqual(before, after) || beforeReason != afterReason
+			// Include unlabeled-host diagnostics even if both versions deny.
+			if different || beforeReason != "" || afterReason != "" {
+				decisions[group] = comparedDecision{decision(before, beforeReason), decision(after, afterReason), different}
+				hasChanges = true
+			}
+		}
+		if !hasChanges {
+			continue
+		}
+		for i, host := range batch.hosts.all {
+			result := decisions[batch.hosts.groupIndices[i]]
+			if result.before == nil {
+				continue
+			}
+			if result.different {
+				changed++
+			}
+			changes = append(changes, &v1.PolicyChange{CaseIndex: batch.caseIndex(i), Host: host.ID, Before: result.before, After: result.after})
+		}
+	}
+	return changes, changed, nil
 }
 
 func (s *Service) GetPolicyTestChanges(ctx context.Context, r *connect.Request[v1.GetPolicyTestChangesRequest]) (*connect.Response[v1.GetPolicyTestChangesResponse], error) {
@@ -773,7 +877,8 @@ func (s *Service) verifyPolicyTest(ctx context.Context, tx pgx.Tx, testID string
 		return nil, previous, env, failure(connect.CodeAborted, "policy snapshot changed; test again")
 	}
 	env = authz.Environment{TimeNS: time.Now().UnixNano(), SourceIP: transport(ctx).ip}
-	if err := json.Unmarshal(environment, &previous); err != nil {
+	previous, err = decodeTestEnvironment(environment)
+	if err != nil {
 		return nil, previous, env, dbError(err)
 	}
 	if previous.SourceIP != env.SourceIP {
@@ -785,11 +890,11 @@ func (s *Service) verifyPolicyTest(ctx context.Context, tx pgx.Tx, testID string
 // verifyEnvironment checks that the decisions of the current and the next
 // engine do not depend on the time difference between the stored test and now.
 func (s *Service) verifyEnvironment(ctx context.Context, snap *policySnapshot, previous testEnvironment, env authz.Environment, current *v1.PolicyVersion, nextEngine *authz.Engine) error {
-	oldInputs, _, err := s.inputs(snap, previous.Cases, previous.Environment)
+	oldInputs, err := s.collectPolicyInputs(snap, previous.Cases, previous.Environment)
 	if err != nil {
 		return err
 	}
-	newInputs, _, err := s.inputs(snap, previous.Cases, env)
+	newInputs, err := s.collectPolicyInputs(snap, previous.Cases, env)
 	if err != nil {
 		return err
 	}
@@ -801,15 +906,19 @@ func (s *Service) verifyEnvironment(ctx context.Context, snap *policySnapshot, p
 	if err != nil {
 		return failure(connect.CodeUnavailable, "current policy unavailable")
 	}
-	for i, input := range oldInputs {
-		for _, engine := range []*authz.Engine{oldEngine, nextEngine} {
-			before, beforeReason, err := evaluate(ctx, engine, input)
-			if err != nil {
-				return failure(connect.CodeAborted, "policy environment changed")
-			}
-			after, afterReason, err := evaluate(ctx, engine, newInputs[i])
-			if err != nil || !reflect.DeepEqual(before, after) || beforeReason != afterReason {
-				return failure(connect.CodeAborted, "policy environment changed; test again")
+	for i, batch := range oldInputs.batches {
+		oldInput, newInput := batch.input, newInputs.batches[i].input
+		for _, host := range batch.hosts.representatives {
+			oldInput.Host, newInput.Host = host, host
+			for _, engine := range []*authz.Engine{oldEngine, nextEngine} {
+				before, beforeReason, err := evaluate(ctx, engine, oldInput)
+				if err != nil {
+					return failure(connect.CodeAborted, "policy environment changed")
+				}
+				after, afterReason, err := evaluate(ctx, engine, newInput)
+				if err != nil || !reflect.DeepEqual(before, after) || beforeReason != afterReason {
+					return failure(connect.CodeAborted, "policy environment changed; test again")
+				}
 			}
 		}
 	}

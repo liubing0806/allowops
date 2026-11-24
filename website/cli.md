@@ -119,6 +119,35 @@ allowops audit verify --file audit.jsonl --from-seq 1 --to-seq 100
 
 Policy get defaults to editable YAML; `--json` includes version metadata.
 Apply replaces the full rule set and performs simulation before save.
+
+Use `--cases <file>` on `policy test` or `policy apply` to simulate an explicit
+set of cases. The file must contain a nonempty YAML or JSON list of
+`PolicyTestCase` objects. Use the gateway user or service account ID for
+`subject_id`. Targets can use a selector or a list of hostnames. `at` (RFC 3339)
+and `source_ip` are optional overrides for the trial.
+
+```yaml
+- subject_id: usr_example
+  operation: execute_action
+  action: disk_usage
+  targets:
+    selector: env=prod
+- subject_id: usr_example
+  operation: view_jobs
+  targets:
+    hosts:
+      names: [host-a, host-b]
+```
+
+```sh
+allowops policy test -f rules.yaml --cases cases.yaml
+allowops policy apply -f rules.yaml --cases cases.yaml --reason 'update policy'
+```
+
+The evaluation limit `identity.max_test_evaluations` counts one input per set
+of authorization labels within each subject, operation and action combination
+or explicit case. Trial counts and change rows still represent individual hosts.
+
 Audit export and database verification read `ALLOWOPS_DATABASE_URL` directly;
 they do not use gateway login credentials. Local file verification does not
 need a database. Audit flags are detailed in [audit](audit.md).

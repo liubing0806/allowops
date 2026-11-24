@@ -142,8 +142,13 @@ func rpcError(err error) error {
 	if errors.As(err, &rpcErr) {
 		for _, detail := range rpcErr.Details() {
 			value, detailErr := detail.Value()
-			if d, ok := value.(*v1.ErrorDetail); detailErr == nil && ok && d.Reason == "AUDIT_RESULT_UNAVAILABLE" {
-				return errors.New("gateway result audit unavailable; operation may have committed")
+			if d, ok := value.(*v1.ErrorDetail); detailErr == nil && ok {
+				switch d.Reason {
+				case "AUDIT_RESULT_UNAVAILABLE":
+					return errors.New("gateway result audit unavailable; operation may have committed")
+				case "POLICY_EVALUATION_LIMIT_EXCEEDED":
+					return errors.New("policy evaluation limit exceeded after grouping hosts by authorization labels. Use --cases with a smaller set of test cases or increase identity.max_test_evaluations")
+				}
 			}
 		}
 	}
@@ -340,19 +345,26 @@ func outputProto(c *cobra.Command, m proto.Message) error {
 	return err
 }
 
-func readRules(path string) (*v1.PolicyRules, error) {
+func readPolicyYAML(path string, value any) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	d := yaml.NewDecoder(bytes.NewReader(b))
-	var object map[string]any
-	if err := d.Decode(&object); err != nil {
-		return nil, err
+	if err := d.Decode(value); err != nil {
+		return err
 	}
 	var extra any
 	if err := d.Decode(&extra); err != io.EOF {
-		return nil, errors.New("one YAML document required")
+		return errors.New("one YAML document required")
+	}
+	return nil
+}
+
+func readRules(path string) (*v1.PolicyRules, error) {
+	var object map[string]any
+	if err := readPolicyYAML(path, &object); err != nil {
+		return nil, err
 	}
 	if rules, ok := object["rules"].([]any); ok {
 		for _, raw := range rules {
@@ -375,6 +387,25 @@ func readRules(path string) (*v1.PolicyRules, error) {
 		return nil, errors.New("invalid structured policy rules")
 	}
 	return p, nil
+}
+
+func readPolicyCases(path string) ([]*v1.PolicyTestCase, error) {
+	var cases []map[string]any
+	if err := readPolicyYAML(path, &cases); err != nil {
+		return nil, err
+	}
+	if len(cases) == 0 {
+		return nil, errors.New("at least one policy test case required")
+	}
+	data, err := json.Marshal(map[string]any{"cases": cases})
+	if err != nil {
+		return nil, err
+	}
+	var request v1.TestPolicyRequest
+	if err := protojson.Unmarshal(data, &request); err != nil {
+		return nil, fmt.Errorf("invalid policy test cases: %w", err)
+	}
+	return request.Cases, nil
 }
 
 func NewPolicyCmd() *cobra.Command {
@@ -426,8 +457,16 @@ func NewPolicyCmd() *cobra.Command {
 	}}
 	cmd.AddCommand(get)
 	for _, verb := range []string{"apply", "test"} {
-		var path, reason string
+		var path, casesPath, reason string
 		action := &cobra.Command{Use: verb, Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
+			var cases []*v1.PolicyTestCase
+			if c.Flags().Changed("cases") {
+				var err error
+				cases, err = readPolicyCases(casesPath)
+				if err != nil {
+					return err
+				}
+			}
 			cfg, err := loadCredentials()
 			if err != nil {
 				return err
@@ -451,7 +490,7 @@ func NewPolicyCmd() *cobra.Command {
 			} else if verb == "apply" {
 				return errors.New("apply requires -f rules.yaml")
 			}
-			tested, err := p.TestPolicy(c.Context(), connect.NewRequest(&v1.TestPolicyRequest{BaseVersion: current.Msg.Policy.Version, Candidate: &v1.TestPolicyRequest_Rules{Rules: rules}}))
+			tested, err := p.TestPolicy(c.Context(), connect.NewRequest(&v1.TestPolicyRequest{BaseVersion: current.Msg.Policy.Version, Candidate: &v1.TestPolicyRequest_Rules{Rules: rules}, Cases: cases}))
 			if err != nil {
 				return rpcError(err)
 			}
@@ -484,6 +523,7 @@ func NewPolicyCmd() *cobra.Command {
 			return outputProto(c, saved.Msg.Policy)
 		}}
 		action.Flags().StringVarP(&path, "file", "f", "", "Structured rules YAML")
+		action.Flags().StringVar(&casesPath, "cases", "", "Policy test cases as a YAML or JSON list")
 		action.Flags().StringVar(&reason, "reason", "", "Audit reason for saving the policy")
 		cmd.AddCommand(action)
 	}

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -293,8 +294,9 @@ func TestDefaultPolicyTrialIncludesLiveJobAndCatalogViews(t *testing.T) {
 			t.Errorf("%s at evaluation limit code=%v; want resource_exhausted", operation, connect.CodeOf(err))
 		}
 		var limitError *connect.Error
-		if !errors.As(err, &limitError) || limitError.Message() != "policy evaluation limit exceeded" {
-			t.Errorf("%s at evaluation limit error=%v; want policy evaluation limit exceeded", operation, err)
+		if !errors.As(err, &limitError) || !strings.HasPrefix(limitError.Message(), "policy evaluation limit exceeded") ||
+			!strings.Contains(limitError.Message(), "explicit test cases") || !strings.Contains(limitError.Message(), "identity.max_test_evaluations") {
+			t.Errorf("%s at evaluation limit error=%v; want limit explanation and remediation", operation, err)
 		}
 	}
 	if connect.CodeOf(saveErr) != connect.CodeResourceExhausted {
