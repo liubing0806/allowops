@@ -28,8 +28,8 @@ func TestTaskOutputInstanceUpgradeCoversExistingPartitions(t *testing.T) {
 	if _, err := s.Pool.Exec(ctx, `INSERT INTO gateway_instances(instance_id) VALUES ('fixture');
  INSERT INTO hosts(host_id,hostname,certificate_serial,certificate_expires_at) VALUES ('host','host','serial',now()+interval '1 hour');
  INSERT INTO jobs(job_id,created_at,subject_id,origin_instance,action,action_definition,catalog_id,catalog_version,action_sha256,policy_version,reason,status,batch_size,max_failures)
- VALUES ('job',now(),'sa','fixture','action',convert_to('{}','UTF8'),'catalog',1,decode(repeat('00',32),'hex'),1,'test',3,1,0);
- CREATE TABLE tasks_old PARTITION OF tasks DEFAULT;
+ VALUES ('job','2025-01-15T00:00:00Z','sa','fixture','action',convert_to('{}','UTF8'),'catalog',1,decode(repeat('00',32),'hex'),1,'test',3,1,0);
+ CREATE TABLE tasks_old PARTITION OF tasks FOR VALUES FROM ('2025-01-01T00:00:00Z') TO ('2025-02-01T00:00:00Z');
  INSERT INTO tasks(job_id,task_id,created_at,host_id,hostname,position,status,result)
  SELECT job_id,'task',created_at,'host','host',0,3,decode('0803','hex') FROM jobs;`); err != nil {
 		t.Fatal(err)

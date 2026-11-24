@@ -11,7 +11,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
+	"io"
+	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
@@ -47,14 +49,24 @@ import (
 
 type failingStorage struct {
 	output.Storage
-	Fail atomic.Bool
+	Failure atomic.Pointer[output.S3]
 }
 
 func (s *failingStorage) Put(ctx context.Context, key string, b []byte) error {
-	if s.Fail.Load() {
-		return errors.New("fixture write failure")
+	if failure := s.Failure.Load(); failure != nil {
+		return failure.Put(ctx, key, b)
 	}
 	return s.Storage.Put(ctx, key, b)
+}
+
+const privateStorageError = "fixture-sensitive-storage-detail"
+
+type rejectingStorageClient struct{}
+
+func (rejectingStorageClient) Do(r *http.Request) (*http.Response, error) {
+	r.Body.Close()
+	body := "<Error><Code>AccessDenied</Code><Message>" + privateStorageError + "</Message></Error>"
+	return &http.Response{StatusCode: http.StatusForbidden, Body: io.NopCloser(strings.NewReader(body))}, nil
 }
 
 type gateway struct {
@@ -611,20 +623,45 @@ func TestTwoGatewaysRealAgentsAndSeaweedFS(t *testing.T) {
 		}
 	})
 	t.Run("write_failure_does_not_change_execution", func(t *testing.T) {
-		f.Storage.Fail.Store(true)
+		var captured schedulerLogBuffer
+		original := slog.Default()
+		slog.SetDefault(slog.New(slog.NewJSONHandler(&captured, nil)))
+		t.Cleanup(func() { slog.SetDefault(original) })
+
+		objects := f.Storage.Storage.(*output.S3)
+		client := s3.New(objects.Client.Options(), func(opts *s3.Options) {
+			opts.HTTPClient = rejectingStorageClient{}
+		})
+		f.Storage.Failure.Store(&output.S3{Client: client, Bucket: objects.Bucket})
+		defer f.Storage.Failure.Store(nil)
 		v := run(t, f.A, request("stable"))
 		eventually(t, func() bool {
 			var n int
 			f.DB.Pool.QueryRow(ctx, "SELECT count(*) FROM tasks WHERE job_id=$1 AND output_state='failed'", v.Job.JobId).Scan(&n)
 			return n == 3
 		})
-		f.Storage.Fail.Store(false)
+		records := schedulerRecords(t, &captured, v.Job.JobId, "output object write failed")
+		if len(records) == 0 {
+			t.Error("missing output write failure logs")
+		}
+		for _, record := range records {
+			details, _ := record["storage_error"].(map[string]any)
+			if details["http_status"] != float64(http.StatusForbidden) || details["s3_error_code"] != "AccessDenied" {
+				t.Errorf("safe output error details = %v, want HTTP 403 and AccessDenied", details)
+			}
+		}
+		if strings.Contains(captured.snapshot(), privateStorageError) {
+			t.Error("job logs include sensitive storage error data")
+		}
 		if v.Job.Status != v1.JobStatus_JOB_STATUS_SUCCEEDED {
 			t.Fatalf("storage changed job=%v", v.Job)
 		}
 		r, err := f.A.Client.GetJobOutput(ctx, connect.NewRequest(&v1.GetJobOutputRequest{JobId: v.Job.JobId, Hostname: "a-host", Stream: v1.OutputStream_OUTPUT_STREAM_STDOUT}))
 		if connect.CodeOf(err) != connect.CodeNotFound || r != nil {
 			t.Fatalf("failed store must not expose full memory output=%v error=%v", r, err)
+		}
+		if !strings.Contains(err.Error(), "OUTPUT_UNAVAILABLE") || strings.Contains(err.Error(), privateStorageError) {
+			t.Errorf("output RPC error = %v, want sanitized OUTPUT_UNAVAILABLE", err)
 		}
 		preview := get(t, f.B, v.Job.JobId)
 		if len(preview.Summary.Groups) != 1 || preview.Summary.Groups[0].Stdout != "same output" {

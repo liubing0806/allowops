@@ -109,11 +109,11 @@ func poolFixture(t *testing.T, o poolOptions) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(s.Close)
-	admin, err := s.syncUser(ctx, "test", authn.Identity{ID: "admin", Kind: "oidc", Email: "admin@example.org", Groups: []string{"ops"}})
+	admin, err := syncUser(ctx, pool, "test", authn.Identity{ID: "admin", Kind: "oidc", Email: "admin@example.org", Groups: []string{"ops"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	viewer, err := s.syncUser(ctx, "test", authn.Identity{ID: "viewer", Kind: "oidc", Groups: []string{"readers"}})
+	viewer, err := syncUser(ctx, pool, "test", authn.Identity{ID: "viewer", Kind: "oidc", Groups: []string{"readers"}})
 	if err != nil {
 		t.Fatal(err)
 	}

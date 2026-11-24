@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 func scriptDigest(content []byte) string {
@@ -17,7 +17,7 @@ func scriptDigest(content []byte) string {
 }
 
 func validateScript(s Script) error {
-	if s.File == "" || filepath.IsAbs(s.File) || strings.ContainsAny(s.File, "\x00\r\n\\") {
+	if s.File == "" || path.IsAbs(s.File) || filepath.VolumeName(s.File) != "" || strings.ContainsAny(s.File, "\x00\r\n\\") {
 		return fmt.Errorf("script.file must be a relative catalog path")
 	}
 	for _, component := range strings.Split(s.File, "/") {
@@ -25,7 +25,7 @@ func validateScript(s Script) error {
 			return fmt.Errorf("script.file traversal forbidden")
 		}
 	}
-	if !filepath.IsAbs(s.Interpreter) || !IsInterpreter(s.Interpreter) {
+	if !path.IsAbs(s.Interpreter) || !IsInterpreter(s.Interpreter) {
 		return fmt.Errorf("script.interpreter must be an absolute interpreter path")
 	}
 	if s.SHA256 != scriptDigest(s.Content) {
@@ -40,7 +40,7 @@ func loadScript(dir string, s *Script) error {
 		return err
 	}
 	defer root.Close()
-	f, err := root.OpenFile(s.File, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	f, err := openCatalogScript(root, s.File)
 	if err != nil {
 		return err
 	}

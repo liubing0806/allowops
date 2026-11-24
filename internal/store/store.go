@@ -19,7 +19,7 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-const SchemaVersion int64 = 9
+const SchemaVersion int64 = 11
 const NotificationChannel = "allowops_gateway"
 
 //go:embed migrations/*.sql
@@ -38,7 +38,26 @@ type Store struct {
 }
 
 func Open(ctx context.Context, dsn string) (*Store, error) {
-	p, err := pgxpool.New(ctx, dsn)
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("configure PostgreSQL")
+	}
+	// pgxpool removes pool options from RuntimeParams. Read the resolved
+	// connection settings to distinguish defaults from explicit options.
+	conn, err := pgconn.ParseConfig(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("configure PostgreSQL")
+	}
+	if _, configured := conn.RuntimeParams["pool_max_conns"]; !configured {
+		cfg.MaxConns = 20
+	}
+	if _, configured := conn.RuntimeParams["pool_max_conn_lifetime"]; !configured {
+		cfg.MaxConnLifetime = 30 * time.Minute
+	}
+	if _, configured := conn.RuntimeParams["pool_max_conn_idle_time"]; !configured {
+		cfg.MaxConnIdleTime = 5 * time.Minute
+	}
+	p, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("configure PostgreSQL")
 	}

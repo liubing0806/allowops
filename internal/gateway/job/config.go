@@ -26,3 +26,4 @@ func (c Config) validate() error {
 const ResponseBytes = 32 << 10
 const GroupBytes = 4 << 10
 const pollInterval = 20 * time.Millisecond
+const maxWaitPollInterval = 250 * time.Millisecond

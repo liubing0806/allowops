@@ -1,0 +1,12 @@
+# Starter production catalog: 19 non-root read-only actions using schema version 1.
+# Publish this catalog instead of examples/catalog (not alongside it), because
+# AllowOps enforces globally unique action names across simultaneously published catalogs.
+catalog_id: starter-ops
+schema_version: 1
+defaults:
+  timeout: 10s
+  max_output: 64KB
+  batch_size: 20
+  max_failures: 5
+redact:
+  builtin: [secrets]

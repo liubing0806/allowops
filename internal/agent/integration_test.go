@@ -67,6 +67,7 @@ type testGateway struct {
 	packages    map[string][]byte
 	badOffset   bool
 	renewSoon   bool
+	renewError  func(int32) error
 	// hello overrides the gateway hello. A nil response sends none; an error ends the stream.
 	hello func() (*v1.ConnectResponse, error)
 	// silent stops the gateway from answering agent heartbeats.
@@ -148,7 +149,15 @@ func (g *testGateway) Join(_ context.Context, request *connect.Request[v1.JoinRe
 }
 
 func (g *testGateway) RenewCertificate(_ context.Context, request *connect.Request[v1.RenewCertificateRequest]) (*connect.Response[v1.RenewCertificateResponse], error) {
-	g.renewals.Add(1)
+	attempt := g.renewals.Add(1)
+	g.mu.Lock()
+	renewError := g.renewError
+	g.mu.Unlock()
+	if renewError != nil {
+		if err := renewError(attempt); err != nil {
+			return nil, err
+		}
+	}
 	certificate, err := g.issue(request.Msg.CsrPem)
 	return connect.NewResponse(&v1.RenewCertificateResponse{Certificate: certificate}), err
 }
@@ -483,6 +492,45 @@ func TestJoinPinAndIdentity(t *testing.T) {
 	if g.joins.Load() != 1 {
 		t.Fatal("join repeated")
 	}
+}
+
+func TestExpiredCertificateRecovery(t *testing.T) {
+	_, _, config := startGateway(t, false)
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.Mkdir(dataDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	identity, err := Join(t.Context(), config, "test-token", "test-host", dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := Options{DataDir: dataDir, KeysDir: t.TempDir(), KeyOwner: os.Getuid()}
+	want := "CERTIFICATE_EXPIRED: delete the old host in the console, remove the local identity file " + filepath.Join(dataDir, "identity.json") + ", then run `allowops-agent join` again"
+
+	t.Run("while running", func(t *testing.T) {
+		a, err := New(config, options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		shortLived := identity
+		shortLived.ExpiresAt = time.Now().Add(100 * time.Millisecond)
+		a.identity.set(shortLived)
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+		if err := a.Run(ctx); err == nil || err.Error() != want {
+			t.Fatalf("Run() error = %v, want %q", err, want)
+		}
+	})
+	t.Run("at startup", func(t *testing.T) {
+		expired := identity
+		expired.ExpiresAt = time.Now().Add(-time.Hour)
+		if err := saveIdentity(dataDir, expired); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := New(config, options); err == nil || err.Error() != want {
+			t.Fatalf("New() error = %v, want %q", err, want)
+		}
+	})
 }
 
 func TestAgentLifecycleAndOutputs(t *testing.T) {

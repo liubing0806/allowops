@@ -88,11 +88,11 @@ func newFixture(t *testing.T, decorate ...func(*Service, http.Handler) http.Hand
 		t.Fatal(err)
 	}
 	t.Cleanup(s.Close)
-	admin, err := s.syncUser(ctx, "test", authn.Identity{ID: "admin", Kind: "oidc", Email: "admin@example.org", Groups: []string{"ops"}})
+	admin, err := syncUser(ctx, db.Pool, "test", authn.Identity{ID: "admin", Kind: "oidc", Email: "admin@example.org", Groups: []string{"ops"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	viewer, err := s.syncUser(ctx, "test", authn.Identity{ID: "viewer", Kind: "oidc", Groups: []string{"readers"}})
+	viewer, err := syncUser(ctx, db.Pool, "test", authn.Identity{ID: "viewer", Kind: "oidc", Groups: []string{"readers"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -486,9 +486,15 @@ func newOIDC(t *testing.T) *fakeOIDC {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/.well-known/openid-configuration":
-			json.NewEncoder(w).Encode(map[string]any{"issuer": p.server.URL, "jwks_uri": p.server.URL + "/keys", "authorization_endpoint": p.server.URL + "/authorize", "token_endpoint": p.server.URL + "/token", "id_token_signing_alg_values_supported": []string{"RS256"}})
+			json.NewEncoder(w).Encode(map[string]any{"issuer": p.server.URL, "jwks_uri": p.server.URL + "/keys", "authorization_endpoint": p.server.URL + "/authorize", "token_endpoint": p.server.URL + "/token", "userinfo_endpoint": p.server.URL + "/userinfo", "id_token_signing_alg_values_supported": []string{"RS256"}})
 		case "/keys":
 			json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{Key: &key.PublicKey, KeyID: "key", Use: "sig", Algorithm: "RS256"}}})
+		case "/userinfo":
+			if r.Header.Get("Authorization") != "Bearer fixture" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"sub": "oidc-user", "department_groups": []string{"readers"}})
 		case "/authorize":
 			q := r.URL.Query()
 			if q.Get("code_challenge_method") != "S256" {

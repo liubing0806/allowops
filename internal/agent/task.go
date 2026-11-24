@@ -21,6 +21,7 @@ import (
 
 func (a *Agent) execute(ctx context.Context, task *v1.TaskAssignment, chunkSize int, send func(*v1.ConnectRequest, bool) error) {
 	fail := func(status v1.TaskStatus, reason string) {
+		//allowops:ignore-error session sender owns stream error reporting and teardown
 		_ = send(completed(task, &v1.ExecutionResult{Status: status, Reason: reason}), false)
 	}
 	for _, message := range []proto.Message{task, task.GetCatalog(), task.GetParams(), task.GetFilters()} {
@@ -130,6 +131,7 @@ func (a *Agent) execute(ctx context.Context, task *v1.TaskAssignment, chunkSize 
 	}
 	message := completed(task, output)
 	message.GetTaskCompleted().CompletedSteps = uint32(len(result.Steps))
+	//allowops:ignore-error session sender owns stream error reporting and teardown
 	_ = send(message, true)
 }
 

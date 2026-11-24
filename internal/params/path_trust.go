@@ -4,10 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 // ErrPathNotTrusted is the fixed rejection code for a path that someone other
@@ -17,18 +15,6 @@ var ErrPathNotTrusted = errors.New("PATH_NOT_TRUSTED")
 type entryOwner struct {
 	mode fs.FileMode
 	uid  uint32
-}
-
-func lstatOwner(path string) (entryOwner, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return entryOwner{}, err
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return entryOwner{}, errors.New("no ownership information")
-	}
-	return entryOwner{mode: info.Mode(), uid: stat.Uid}, nil
 }
 
 // CheckPathTrusted closes the gap between ResolvePath and the moment the target

@@ -7,6 +7,7 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/liubing0806/allowops/internal/builtin/dremio"
 	"github.com/liubing0806/allowops/internal/params"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 type dremioHandler struct{}
@@ -60,13 +61,13 @@ func (h dremioHandler) Run(ctx context.Context, input, values map[string]any) (B
 	return h.RunRedacted(ctx, input, values, nil)
 }
 
-func (dremioHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+func (dremioHandler) RunRedacted(ctx context.Context, input, values map[string]any, policy *redact.Redactor) (BuiltinResult, error) {
 	cfg, err := dremioConfig(input)
 	if err != nil {
 		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
 	}
 	sql, _ := values["sql"].(string)
-	r, err := dremio.RunRedacted(ctx, cfg, dremio.Params{SQL: sql}, mask)
+	r, err := dremio.RunRedacted(ctx, cfg, dremio.Params{SQL: sql}, valueMask(policy))
 	if err != nil {
 		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
 	}

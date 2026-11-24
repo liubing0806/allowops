@@ -1,0 +1,13 @@
+replicaCount: 3
+podDisruptionBudget:
+  minAvailable: 2
+gateway:
+  shutdownGraceSeconds: 20
+  management:
+    ca_pin: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+service:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: external
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+output:
+  endpoint: https://s3.example.com

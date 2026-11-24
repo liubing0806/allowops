@@ -41,7 +41,12 @@ providers:
     client_id: allowops
     client_secret_env: ALLOWOPS_OIDC_CLIENT_SECRET
     # ca_file: /etc/allowops/provider-ca.pem
+    # scopes: [openid, profile, email]
+    # groups_claim: department_groups
+    # fetch_userinfo: true
 ```
+
+OIDC 省略 `scopes` 时请求 `openid profile email groups`。提供方不支持 `groups` scope 时，可在 `scopes` 中列出其支持的 scope。网关会补上 `openid`。`groups_claim` 默认为 `groups`，取指定的顶级字符串数组 claim。开启 `fetch_userinfo` 后，网关先验证 ID Token，再通过 HTTPS 获取 UserInfo，并核对两者的 `sub`。UserInfo 可补充 ID Token 缺失的组和已验证邮箱。该选项默认为 `false`。
 
 LDAP 提供方使用 `kind: ldap`，配置 `url`、`start_tls`、`user_base_dn`、`group_base_dn`、可选的属性名、`bind_dn` 和 `bind_password_env`。只允许 LDAPS 或 StartTLS。可选 `rate_limit.attempts/window` 沿用 P5A 限流。提供方密码和 client secret 从进程环境读取，不写入登录方法响应、错误详情或审计事件。
 
@@ -56,6 +61,8 @@ A20 已确定控制台默认时长为 7 天。`identity.console_ttl` 可覆盖�
 OIDC 回调固定为 `<identity.origin>/auth/oidc/callback`。BeginOidcLogin 返回网关 start URL。浏览器访问 start 时原子绑定 HttpOnly、Secure、SameSite=Strict 的事务 Cookie，再跳转提供方。回调把 code/state 放入同源完成页的 fragment。完成页清除 fragment，再同源 POST CompleteOidcLogin，使 Strict Cookie 可参与浏览器绑定检查。已登录或已吊销的旧会话 Cookie 不阻止重新登录；公共登录入口仍校验 Origin、state、nonce 和事务 Cookie。
 
 提供方授权码由网关兑换，网关也使用 S256 PKCE。CLI 的回环 URI 只允许回环 IP、明确端口和 `/callback` 路径。回环只收到一次性 code/state。ExchangeCliSession 检查 CLI 自己的 verifier，在事务内原子消费 code 并签发 CLI 会话。无效 nonce、state、浏览器绑定、过期 code、重复消费和错误 PKCE 均拒绝。
+
+`UserService.SetUserDisabled` 需要 `manage_user_roles` 权限及目标用户当前的 `expected_revision`。禁用会撤销目标用户的所有 Console、CLI 会话并清除尚未兑换的 CLI 登录码。禁用期间，网关拒绝为该用户签发会话。启用后，用户可重新登录。网关拒绝禁用最后一名拥有有效 `admin` 角色的用户。`AuthService.RevokeUserSessions` 可在保留用户启用状态的情况下执行同样的会话撤销。`user_id` 为空时操作当前用户。跨用户操作要求 `admin` 角色和 `manage_user_roles` 权限。
 
 ```sh
 allowops login --gateway https://gateway.example.invalid --provider company

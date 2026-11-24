@@ -66,3 +66,9 @@ func lockPolicyInputs(ctx context.Context, q querier) error {
 	_, err := q.Exec(ctx, "LOCK TABLE console_users,service_accounts,role_mapping_state,role_mappings,hosts,catalog_versions IN SHARE MODE")
 	return err
 }
+
+// Serialize status changes and hold user roles and groups stable during the last-admin check.
+func lockConsoleUserWrites(ctx context.Context, q querier) error {
+	_, err := q.Exec(ctx, "LOCK TABLE console_users IN SHARE ROW EXCLUSIVE MODE")
+	return err
+}

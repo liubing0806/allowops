@@ -1,0 +1,30 @@
+{{- if .Values.partitions.enabled }}
+{{- $name := include "allowops.name" . }}
+{{- if gt (len $name) 41 }}
+{{- $name = printf "%s-%s" (trunc 32 $name | trimSuffix "-") (sha256sum $name | trunc 8) }}
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}-partitions
+  labels:
+{{ include "allowops.labels" . | indent 4 }}
+    app.kubernetes.io/component: partitions
+spec:
+  schedule: {{ .Values.partitions.schedule | quote }}
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: {{ .Values.partitions.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+{{ include "allowops.labels" . | indent 12 }}
+            app.kubernetes.io/component: partitions
+        spec:
+{{ include "allowops.maintenancePod" (dict "Values" .Values "name" "ensure-partitions" "args" (list "ensure-partitions" "--months" (toString .Values.partitions.months))) | indent 10 }}
+{{- end }}

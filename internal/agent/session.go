@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"io"
 	"math/rand/v2"
 	"sync"
 	"time"
@@ -44,12 +45,20 @@ type runningTask struct {
 // Deferred cleanup runs in this order on every return: task cancellation and
 // close timer, heartbeat deadline timer, ticker, the disconnected status write,
 // then cancel, stream close and waiting for every worker.
-func (a *Agent) session(parent context.Context, client allowopsv1connect.AgentServiceClient) (time.Duration, error) {
+func (a *Agent) session(parent context.Context, client allowopsv1connect.AgentServiceClient, connected func()) (time.Duration, error) {
 	ctx, cancel := context.WithCancel(parent)
 	stream := client.Connect(ctx)
 	var workers sync.WaitGroup
-	defer func() { cancel(); _ = stream.CloseRequest(); _ = stream.CloseResponse(); workers.Wait() }()
-	if err := stream.Send(&v1.ConnectRequest{Message: &v1.ConnectRequest_Hello{Hello: a.hello()}}); err != nil {
+	defer func() {
+		cancel()
+		//allowops:ignore-error best-effort request stream close during session teardown
+		_ = stream.CloseRequest()
+		//allowops:ignore-error best-effort response stream close during session teardown
+		_ = stream.CloseResponse()
+		workers.Wait()
+	}()
+	// Connect reports remote and transport errors through Receive when Send returns EOF.
+	if err := stream.Send(&v1.ConnectRequest{Message: &v1.ConnectRequest_Hello{Hello: a.hello()}}); err != nil && !errors.Is(err, io.EOF) {
 		return 0, err
 	}
 	incoming := startReceiver(ctx, stream, &workers)
@@ -65,6 +74,7 @@ func (a *Agent) session(parent context.Context, client allowopsv1connect.AgentSe
 		return 0, err
 	}
 	defer a.writeStatus("", true)
+	connected()
 	s := a.newSessionLoop(ctx, cancel, stream, &workers, incoming, hello.Limits, interval, timeout)
 	s.startSender()
 	s.startCatalogWorkers(hello.ConnectionId)
@@ -290,7 +300,12 @@ func (s *sessionLoop) run() (time.Duration, error) {
 		}
 		select {
 		case <-s.ctx.Done():
-			return 0, s.ctx.Err()
+			select {
+			case err := <-s.sendErr:
+				return 0, err
+			default:
+				return 0, s.ctx.Err()
+			}
 		case err := <-s.sendErr:
 			return 0, err
 		case <-s.heartbeatDeadline.C:

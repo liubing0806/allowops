@@ -28,9 +28,16 @@ func TestCAControlsIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	issued, err := ca.Issue("host-123", pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der}), time.Hour)
+	csr := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: der})
+	issued, err := ca.Issue("host-123", csr, DefaultConfig().CertificateTTL)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if renewalWindow := issued.ExpiresAt.Sub(issued.RenewAfter); renewalWindow != 56*time.Hour {
+		t.Fatalf("default certificate renewal window = %s, want 56h", renewalWindow)
+	}
+	if _, err := ca.Issue("host-123", csr, time.Until(ca.certificate.NotAfter)+time.Hour); err == nil {
+		t.Fatal("issued a certificate that outlives the CA")
 	}
 	block, _ := pem.Decode(issued.PEM)
 	cert, err := x509.ParseCertificate(block.Bytes)

@@ -14,7 +14,11 @@ coverage.*
 .vscode/
 .DS_Store
 
-# Local StarRocks/Dremio test environment credentials
+# Local StarRocks/Dremio test environment credentials and local state
 /test/starrocks-dremio/.state/
 /test/starrocks-dremio/images.env
 /test/starrocks-dremio/samples/
+*.local.env
+
+# Local worktrees
+.claude/worktrees/

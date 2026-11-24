@@ -77,13 +77,15 @@ func New(config Config, options Options) (*Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+	//allowops:ignore-error config.validate already validated config.Upstream
 	upstream, _ := upstreamURL(config.Upstream)
+	//allowops:ignore-error LoadIdentity already validated stored identity upstream
 	joinedUpstream, _ := upstreamURL(value.Upstream)
 	if upstream != joinedUpstream || config.CAPin != value.CAPin {
 		return nil, errors.New("IDENTITY_CONFIG_MISMATCH")
 	}
 	if !value.ExpiresAt.After(time.Now()) {
-		return nil, errors.New("CERTIFICATE_EXPIRED")
+		return nil, expiredCertificateError(options.DataDir)
 	}
 	if len(value.ClientCA) == 0 {
 		return nil, errors.New("INVALID_IDENTITY")
@@ -95,6 +97,10 @@ func New(config Config, options Options) (*Agent, error) {
 	catalogs := &catalogs{loaded: map[string]*catalog.Package{}, cache: cache, limits: config.Limits}
 	catalogs.restore()
 	return &Agent{config: config, options: options, identity: &identityStore{value: value}, catalogs: catalogs}, nil
+}
+
+func expiredCertificateError(dataDir string) error {
+	return fmt.Errorf("CERTIFICATE_EXPIRED: delete the old host in the console, remove the local identity file %s, then run `allowops-agent join` again", filepath.Join(dataDir, "identity.json"))
 }
 
 func sleep(ctx context.Context, delay time.Duration) error {
@@ -186,19 +192,23 @@ func (a *Agent) Run(parent context.Context) error {
 	renewErr := make(chan error, 1)
 	go func() {
 		defer close(renewDone)
-		var attempt uint
+		var retry retryLog
+		var renewFailure error
 		for ctx.Err() == nil {
 			value := a.identity.get()
 			delay := max(time.Second, time.Until(value.RenewAfter))
-			if attempt > 0 {
-				delay = a.backoff(attempt - 1)
+			if renewFailure != nil {
+				delay = a.backoff(retry.failures)
 			}
 			delay = min(delay, max(0, time.Until(value.ExpiresAt)))
+			if renewFailure != nil {
+				retry.failed("agent certificate renewal failed", renewFailure, delay)
+			}
 			if err := a.options.Sleep(ctx, delay); err != nil {
 				return
 			}
 			if !a.identity.get().ExpiresAt.After(time.Now()) {
-				renewErr <- errors.New("CERTIFICATE_EXPIRED")
+				renewErr <- expiredCertificateError(a.options.DataDir)
 				cancel()
 				return
 			}
@@ -209,19 +219,20 @@ func (a *Agent) Run(parent context.Context) error {
 				renewTransport.CloseIdleConnections()
 			}
 			rpcCancel()
+			renewFailure = err
 			if err != nil {
-				attempt++
 				continue
 			}
-			attempt = 0
+			retry.recovered("agent certificate renewal recovered")
 			transport.CloseIdleConnections()
 		}
 	}()
 	defer func() { cancel(); <-renewDone }()
 	var rejection string
+	var retry retryLog
 	for attempt := uint(0); ctx.Err() == nil; attempt++ {
 		started := time.Now()
-		delay, err := a.session(ctx, client)
+		delay, err := a.session(ctx, client, func() { retry.recovered("agent reconnected") })
 		transport.CloseIdleConnections()
 		if ctx.Err() != nil {
 			break
@@ -238,6 +249,11 @@ func (a *Agent) Run(parent context.Context) error {
 		}
 		if delay == 0 {
 			delay = a.backoff(attempt)
+		}
+		if err != nil {
+			retry.failed("agent connection ended", err, delay)
+		} else {
+			slog.Info("agent reconnect requested", "reason", "GATEWAY_RECONNECT", "retry_delay", delay, "consecutive_failures", 0)
 		}
 		if err := a.options.Sleep(ctx, delay); err != nil {
 			break

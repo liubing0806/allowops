@@ -170,6 +170,8 @@ func TestBuiltinMySQLExecutorRootHelper(t *testing.T) {
 		t.Fatalf("filtered output: %+v %v", r, err)
 	}
 	assertMySQLOriginalStrings(t, a)
+	a.MaxOutput = 4096
+	assertMySQLRedactionAcrossCells(t, a)
 	a.MaxOutput = 1024
 	a.BuiltinConfig["max_rows"] = 1
 	input["sql"] = "SELECT 1 AS id UNION ALL SELECT 2"

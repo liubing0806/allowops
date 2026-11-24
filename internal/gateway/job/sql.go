@@ -29,7 +29,7 @@ import (
 //     prepends a "-- name:" comment that would change that text (the task event
 //     read, matched by events_retry_test.go, and the task completion write,
 //     matched by rf_a06_test.go, fx6_regression_test.go and rr_a04_commit_test.go);
-//   - the dynamic ListJobs filter and the partition DDL have no fixed shape;
+//   - the dynamic ListJobs filter has no fixed shape;
 //   - the host disconnect statement is a CTE whose final SELECT sqlc reports
 //     as ambiguous on host_id.
 //
@@ -81,16 +81,6 @@ func scanJob(row pgx.Row) (*v1.Job, error) {
 
 func selectJob(ctx context.Context, d db.DBTX, id string) (*v1.Job, error) {
 	return scanJob(d.QueryRow(ctx, "SELECT "+jobColumns+" FROM jobs WHERE job_id=$1", id))
-}
-
-// partition serializes partition creation and creates the month's tasks partition.
-func partition(ctx context.Context, tx pgx.Tx, at time.Time) error {
-	if err := db.New(tx).LockJobPartitionCreation(ctx); err != nil {
-		return err
-	}
-	month := time.Date(at.UTC().Year(), at.UTC().Month(), 1, 0, 0, 0, 0, time.UTC)
-	_, err := tx.Exec(ctx, fmt.Sprintf("CREATE TABLE IF NOT EXISTS tasks_%s PARTITION OF tasks FOR VALUES FROM ('%s') TO ('%s')", month.Format("200601"), month.Format(time.RFC3339), month.AddDate(0, 1, 0).Format(time.RFC3339)))
-	return err
 }
 
 func readCancelRequested(ctx context.Context, d db.DBTX, id string) (bool, error) {

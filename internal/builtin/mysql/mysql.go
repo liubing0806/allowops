@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"path/filepath"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -20,6 +20,7 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/liubing0806/allowops/internal/builtin/credfile"
 	"github.com/liubing0806/allowops/internal/builtin/tsv"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 const (
@@ -58,7 +59,7 @@ type Result struct {
 }
 
 func (c Config) Validate() error {
-	if !filepath.IsAbs(c.Credential) {
+	if !path.IsAbs(c.Credential) {
 		return errors.New("credential must be an absolute file path")
 	}
 	if c.MaxRows < 0 || c.MaxRows > DefaultMaxRows {
@@ -95,7 +96,7 @@ func parseAddress(address string) (string, string, error) {
 		}
 		return "tcp", u.Host, nil
 	case "unix":
-		if u.Host != "" || !filepath.IsAbs(u.Path) || u.Path == "/" || strings.ContainsRune(u.Path, 0) {
+		if u.Host != "" || !path.IsAbs(u.Path) || u.Path == "/" || strings.ContainsRune(u.Path, 0) {
 			return "", "", invalid
 		}
 		return "unix", u.Path, nil
@@ -122,7 +123,7 @@ func Run(ctx context.Context, cfg Config, p Params) (result Result, err error) {
 }
 
 // RunRedacted applies the caller's policy to original columns and cells before TSV encoding.
-func RunRedacted(ctx context.Context, cfg Config, p Params, mask func(string) string) (result Result, err error) {
+func RunRedacted(ctx context.Context, cfg Config, p Params, policy *redact.Redactor) (result Result, err error) {
 	if err := cfg.Validate(); err != nil {
 		return result, err
 	}
@@ -153,7 +154,7 @@ func RunRedacted(ctx context.Context, cfg Config, p Params, mask func(string) st
 	if err != nil {
 		return result, err
 	}
-	return runQueryRedacted(ctx, cfg, p, cred, mask)
+	return runQueryRedacted(ctx, cfg, p, cred, policy)
 }
 
 // runQuery receives validated parameters and normalized limits from Run.
@@ -161,7 +162,7 @@ func runQuery(ctx context.Context, cfg Config, p Params, cred credential) (resul
 	return runQueryRedacted(ctx, cfg, p, cred, nil)
 }
 
-func runQueryRedacted(ctx context.Context, cfg Config, p Params, cred credential, mask func(string) string) (result Result, err error) {
+func runQueryRedacted(ctx context.Context, cfg Config, p Params, cred credential, policy *redact.Redactor) (result Result, err error) {
 	dc := driver.NewConfig()
 	dc.User, dc.Passwd, dc.DBName = cred.Username, cred.Password, p.Database
 	dc.Net, dc.Addr, _ = parseAddress(cfg.Address)
@@ -197,7 +198,7 @@ func runQueryRedacted(ctx context.Context, cfg Config, p Params, cred credential
 		return result, queryError(ctx, "query", err)
 	}
 	defer rows.Close()
-	result, err = readRowsRedacted(rows, cfg.MaxRows, cfg.MaxResponseBytes, mask)
+	result, err = readRowsRedacted(rows, cfg.MaxRows, cfg.MaxResponseBytes, policy)
 	if err != nil {
 		return Result{}, queryError(ctx, "read result", err)
 	}
@@ -242,9 +243,12 @@ func readRows(rows *sql.Rows, maxRows int) (Result, error) {
 	return readRowsRedacted(rows, maxRows, builtin.DefaultMySQLMaxResponseBytes, nil)
 }
 
-func readRowsRedacted(rows *sql.Rows, maxRows int, maxBytes int64, mask func(string) string) (Result, error) {
-	if mask == nil {
-		mask = func(s string) string { return s }
+func readRowsRedacted(rows *sql.Rows, maxRows int, maxBytes int64, policy *redact.Redactor) (Result, error) {
+	maskValue := func(value string) string { return value }
+	maskJoined := maskValue
+	if policy != nil {
+		maskValue = policy.ValueMask()
+		maskJoined = policy.Line
 	}
 	columns, err := rows.Columns()
 	if err != nil {
@@ -252,7 +256,7 @@ func readRowsRedacted(rows *sql.Rows, maxRows int, maxBytes int64, mask func(str
 	}
 	var out strings.Builder
 	for i, column := range columns {
-		columns[i] = mask(column)
+		columns[i] = maskValue(column)
 	}
 	tsv.WriteRow(&out, columns)
 	result := Result{}
@@ -271,7 +275,7 @@ func readRowsRedacted(rows *sql.Rows, maxRows int, maxBytes int64, mask func(str
 			return Result{}, err
 		}
 		line.Reset()
-		for i, field := range tsv.MaskRow(values, mask) {
+		for i, field := range tsv.MaskRowWith(values, maskValue, maskJoined) {
 			if i > 0 {
 				line.WriteByte('\t')
 			}

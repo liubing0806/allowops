@@ -5,6 +5,24 @@ helper from the same verified release. Verify release checksums and signatures
 against a separately trusted release key before installation. Review the
 software bill of materials and third-party notices supplied with the release.
 
+## CLI
+
+Download the archive for your platform from the release, verify its checksum,
+and extract `allowops` (`allowops.exe` on Windows) to a directory on your `PATH`.
+Run `allowops --version` to check the installation.
+
+| Platform | Archive filename suffix |
+|---|---|
+| Linux amd64 | `_linux_amd64.tar.gz` |
+| Linux arm64 | `_linux_arm64.tar.gz` |
+| macOS Intel | `_darwin_amd64.tar.gz` |
+| macOS Apple silicon | `_darwin_arm64.tar.gz` |
+| Windows amd64 | `_windows_amd64.zip` |
+
+The Linux amd64 archive includes the CLI, gateway, agent and helper. The other
+archives contain the CLI. Each archive includes `LICENSE` and `THIRD_PARTY_NOTICES`.
+`allowops catalog try` requires Linux for local action execution.
+
 ## Local Compose demonstration
 
 Prerequisites are Docker Compose using a local Unix socket, Go 1.27.3, OpenSSL,
@@ -71,6 +89,15 @@ Use the chart in `deploy/helm/allowops`. Provide PostgreSQL and S3-compatible
 object storage independently. The chart uses a Layer 4 TCP Service on port 443.
 TLS and Application-Layer Protocol Negotiation (ALPN) must reach the gateway
 unchanged. An HTTP Ingress that terminates TLS cannot serve the host protocol.
+
+To preserve the client source IP, use a Layer 4 load balancer that preserves
+the source address on the TCP connection and keep `service.externalTrafficPolicy`
+set to `Local`, the chart default for `LoadBalancer` and `NodePort` Services.
+Direct external traffic to nodes with ready gateway pods. If you switch to
+`Cluster`, Kubernetes can replace the client source IP with a node IP. The
+gateway uses that address for audit `source_ip` and `source_cidrs` authorization
+rules. Lightweight Directory Access Protocol (LDAP) login attempts for the same
+username from different clients can then share a rate-limit counter.
 
 Provision gateway TLS certificates including the full CA chain, the separate
 host CA, catalog public keys, runtime database credentials and a separate

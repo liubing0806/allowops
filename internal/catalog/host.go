@@ -3,14 +3,18 @@ package catalog
 import (
 	"errors"
 	"fmt"
-	"github.com/liubing0806/allowops/internal/params"
 	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
+
+	"github.com/liubing0806/allowops/internal/params"
 )
+
+// ExecutionPATH is the initial PATH used by the executor and its wrappers.
+const ExecutionPATH = "/usr/sbin:/usr/bin:/sbin:/bin"
 
 // RequiresExec is derived from signed action fields, never from caller input.
 func (a Action) RequiresExec() bool {
@@ -28,6 +32,10 @@ type HostSupport struct {
 // ResolveExecutable selects fallbacks only on absence. Existing unsafe files,
 // permissions failures and interpreters never cause selection of a later path.
 func ResolveExecutable(template []any, fallbacks []string, allow bool) (string, error) {
+	return resolveExecutable(template, fallbacks, allow, false)
+}
+
+func resolveExecutable(template []any, fallbacks []string, allow, deferLookup bool) (string, error) {
 	candidates := append([]string{template[0].(string)}, fallbacks...)
 	for _, program := range candidates {
 		real, err := filepath.EvalSymlinks(program)
@@ -48,7 +56,7 @@ func ResolveExecutable(template []any, fallbacks []string, allow bool) (string, 
 		if err := validateExec(resolved, defs, allow); err != nil {
 			return "", err
 		}
-		if err := inspectLocalTemplate(resolved, allow); err != nil {
+		if err := inspectLocalTemplate(resolved, allow, deferLookup); err != nil {
 			return "", err
 		}
 		return program, nil
@@ -56,7 +64,7 @@ func ResolveExecutable(template []any, fallbacks []string, allow bool) (string, 
 	return "", fmt.Errorf("exec[0] unavailable: no candidate exists")
 }
 
-func inspectLocalTemplate(template []any, allow bool) error {
+func inspectLocalTemplate(template []any, allow, deferLookup bool) error {
 	variants, err := commandVariants(template)
 	if err != nil {
 		return err
@@ -66,49 +74,81 @@ func inspectLocalTemplate(template []any, allow bool) error {
 		return err
 	}
 	for _, argv := range variants {
-		if err := inspectLocalCommand(argv, cwd, "/usr/sbin:/usr/bin:/sbin:/bin", allow, false); err != nil {
+		if _, err := inspectLocalCommand(argv, cwd, ExecutionPATH, allow, false, deferLookup); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+// PinExecutionCommand checks rendered arguments and replaces local PATH-based
+// wrapper targets with their checked absolute paths. It runs as the executor's
+// identity, after any run_as change.
+func PinExecutionCommand(argv []string, allow bool) ([]string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	argv, err = inspectLocalCommand(argv, cwd, ExecutionPATH, allow, false, false)
+	if err != nil {
+		return nil, err
+	}
+	if err := CheckCommand(argv, allow); err != nil {
+		return nil, err
+	}
+	return argv, nil
+}
+
 // Local wrappers inherit the executor's fixed PATH, with signed env changes.
 // Targets in another root/mount namespace retain CheckCommand's name checks.
-func inspectLocalCommand(argv []string, cwd, searchPath string, allow, wrapped bool) error {
+func inspectLocalCommand(argv []string, cwd, searchPath string, allow, wrapped, deferLookup bool) ([]string, error) {
+	if strings.ContainsAny(argv[0], "{}") {
+		return nil, fmt.Errorf("fixed local executable required")
+	}
+	searchesPATH := !strings.ContainsRune(argv[0], '/')
+	if searchesPATH && deferLookup {
+		return argv, nil
+	}
 	program, err := localExecutable(argv[0], cwd, searchPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	real, err := filepath.EvalSymlinks(program)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := inspectExecutable(program, real, allow, wrapped); err != nil {
-		return err
+		return nil, err
+	}
+	if searchesPATH {
+		argv[0] = program
 	}
 	// busybox also provides ordinary commands; CheckCommand checks it by name.
 	if base := filepath.Base(real); !allow && base != "busybox" && runsCommands(append([]string{real}, argv[1:]...)) {
-		return fmt.Errorf("exec[0] resolves to %s, which runs commands from its arguments; allow_interpreter required", base)
+		return nil, fmt.Errorf("exec[0] resolves to %s, which runs commands from its arguments; allow_interpreter required", base)
 	}
 	name := strings.ToLower(filepath.Base(real))
 	switch name {
 	case "env", "timeout", "nice", "ionice", "stdbuf", "xargs", "nsenter", "chroot":
 	default:
-		return nil
+		return argv, nil
 	}
 	nested, err := nestedCommand(name, argv[1:])
 	if err != nil {
-		return err
+		return nil, err
 	}
-	prefix := argv[1 : len(argv)-len(nested)]
+	nestedStart := len(argv) - len(nested)
+	prefix := argv[1:nestedStart]
+	if name == "xargs" && nested == nil {
+		nested = []string{"echo"}
+	}
 	if name == "nsenter" {
 		local, changesContext, err := nsenterLocalFilesystem(prefix, cwd)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !local {
-			return nil
+			return argv, nil
 		}
 		if changesContext {
 			// -w/-W/-e keep the filesystem, so an absolute target is the file
@@ -119,10 +159,10 @@ func inspectLocalCommand(argv []string, cwd, searchPath string, allow, wrapped b
 	if name == "chroot" {
 		local, err := chrootLocalRoot(prefix[len(prefix)-1], cwd)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !local {
-			return nil
+			return argv, nil
 		}
 		if !slices.Contains(prefix[:len(prefix)-1], "--skip-chdir") {
 			cwd = "/"
@@ -131,10 +171,25 @@ func inspectLocalCommand(argv []string, cwd, searchPath string, allow, wrapped b
 	if name == "env" {
 		cwd, searchPath, err = envExecutionContext(prefix, cwd, searchPath)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return inspectLocalCommand(nested, cwd, searchPath, allow, true)
+	resolved, err := inspectLocalCommand(nested, cwd, searchPath, allow, true, deferLookup)
+	if err != nil {
+		return nil, err
+	}
+	if name == "env" && strings.Contains(resolved[0], "=") {
+		return nil, fmt.Errorf("env executable path would be parsed as an assignment")
+	}
+	argv = append(argv[:nestedStart], resolved...)
+	if name == "xargs" {
+		// The selected path may contain the replacement string even if
+		// the original command name did not.
+		if _, err := nestedCommand(name, argv[1:]); err != nil {
+			return nil, err
+		}
+	}
+	return argv, nil
 }
 
 // nsenterLocalFilesystem reports whether nsenter keeps the local mount
@@ -243,9 +298,6 @@ func chrootLocalRoot(root, cwd string) (bool, error) {
 const unknownContext = "\x00unknown"
 
 func localExecutable(name, cwd, searchPath string) (string, error) {
-	if strings.ContainsAny(name, "{}") {
-		return "", fmt.Errorf("fixed local executable required")
-	}
 	if strings.ContainsRune(name, '/') {
 		if !filepath.IsAbs(name) {
 			if cwd == unknownContext {
@@ -267,10 +319,16 @@ func localExecutable(name, cwd, searchPath string) (string, error) {
 		}
 		path := dir + "/" + name
 		info, err := os.Stat(path)
-		if err == nil && !info.IsDir() && info.Mode().Perm()&0111 != 0 {
+		if err == nil && !info.Mode().IsRegular() {
+			continue
+		}
+		if err == nil {
+			err = checkExecutableAccess(path)
+		}
+		if err == nil {
 			return path, nil
 		}
-		if err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, os.ErrPermission) {
+		if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, os.ErrPermission) && !errors.Is(err, syscall.ENOTDIR) {
 			return "", err
 		}
 	}
@@ -371,7 +429,7 @@ func inspectExecutable(program, real string, allow, wrapped bool) error {
 	if IsInterpreter(real) && !allow {
 		return fmt.Errorf("exec[0] resolves to an interpreter")
 	}
-	f, err := os.OpenFile(program, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	f, err := os.OpenFile(program, os.O_RDONLY|openNonBlock, 0)
 	if err != nil {
 		return err
 	}
@@ -397,15 +455,26 @@ func inspectExecutable(program, real string, allow, wrapped bool) error {
 	return nil
 }
 
+// CheckHost reports support before switching identities. For privileged
+// actions the helper checks local PATH targets after the switch.
 func CheckHost(a Action) HostSupport {
+	return checkHost(a, a.RequiresExec())
+}
+
+// CheckExecutionHost checks support under the identity that runs the command.
+func CheckExecutionHost(a Action) HostSupport {
+	return checkHost(a, false)
+}
+
+func checkHost(a Action, deferLookup bool) HostSupport {
 	warnings, err := ValidateAction(a)
 	if err == nil {
 		switch {
 		case a.Exec != nil:
-			_, err = ResolveExecutable(a.Exec, a.ExecFallbacks, a.AllowInterpreter)
+			_, err = resolveExecutable(a.Exec, a.ExecFallbacks, a.AllowInterpreter, deferLookup)
 		case a.Steps != nil:
 			for _, step := range a.Steps {
-				if _, err = ResolveExecutable(step.Exec, nil, a.AllowInterpreter); err != nil {
+				if _, err = resolveExecutable(step.Exec, nil, a.AllowInterpreter, deferLookup); err != nil {
 					break
 				}
 			}

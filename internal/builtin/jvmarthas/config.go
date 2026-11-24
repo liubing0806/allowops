@@ -48,6 +48,20 @@ const (
 	DefaultHTTPPortMax = 18662
 )
 
+// Params are the caller's inputs.
+type Params struct {
+	Target string
+	// Request holds the arguments of the command. Its Kind is ignored: the configuration fixes the command.
+	Request arthas.Request
+}
+
+// Result is the handler output.
+type Result struct {
+	Stdout   string
+	Stderr   string
+	ExitCode int
+}
+
 // Config is trusted catalog configuration. Zero values select the defaults
 // above, or switch an optional check off; Validate rejects values that are
 // looser than a default.

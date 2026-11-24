@@ -927,7 +927,7 @@ params:
 | A11 | 策略与多目录 | 策略按结构化规则保存，`base_version` 乐观并发；多个目录的 action 名全局唯一，发布冲突时拒绝 |
 | A12 | 用户角色与 CLI 会话 | 组映射可在控制台修改并存数据库；手工角色与映射角色取并集；用户可列出、吊销自己的 CLI 会话，admin 可吊销任何人的 |
 | A13 | 组合 action 输出 | `max_output` 为所有步骤 stdout+stderr 的总预算；最终退出码取首个失败步骤的退出码，否则 0；过滤分别作用于每个步骤的 stdout |
-| A14 | 默认时长 | 主机证书 24 小时、单次 join token 24 小时、CSV 预览 10 分钟、目录上传暂存 1 小时；均可配置 |
+| A14 | 默认时长 | 主机证书 7 天、单次 join token 24 小时、CSV 预览 10 分钟、目录上传暂存 1 小时；均可配置 |
 | A15 | 内置处理器默认上限 | 超时 10 秒；log_search 50 个文件、扫描 256MiB、1000 条匹配、上下文最多 20 行；Redis SCAN COUNT 上限 1000；http_get 响应 64KiB；目录可用 `builtin_config` 收紧 |
 | A16 | 内置处理器退出码 | log_search 无匹配、http_get 非 2xx 返回 0（状态码单独给出）；执行错误返回 1；资源上限截断返回 0 并标 `truncated` |
 | A17 | 过滤参数组合 | `tail`、`head`、`count` 互斥，同时传入返回参数错误；`match`、`exclude` 可与其中之一组合；`max_scan` 按每个步骤 stdout 原始字节计 |

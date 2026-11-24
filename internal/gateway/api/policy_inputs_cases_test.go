@@ -9,6 +9,25 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// Flatten batches in case order to assert the original logical input matrix.
+func (s *Service) inputs(snap *policySnapshot, cases []*v1.PolicyTestCase, env authz.Environment) ([]authz.Input, []uint32, error) {
+	collected, err := s.collectPolicyInputs(snap, cases, env)
+	if err != nil {
+		return nil, nil, err
+	}
+	var inputs []authz.Input
+	var indices []uint32
+	for _, batch := range collected.batches {
+		for i, host := range batch.hosts.all {
+			input := batch.input
+			input.Host = host
+			inputs = append(inputs, input)
+			indices = append(indices, batch.caseIndex(i))
+		}
+	}
+	return inputs, indices, nil
+}
+
 func policyInputsFixture() (*Service, *policySnapshot, authz.Environment) {
 	s := &Service{Config: Config{MaxTestEvaluations: 10}}
 	snap := &policySnapshot{

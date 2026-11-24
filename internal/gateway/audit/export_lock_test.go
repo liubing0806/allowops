@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,7 +38,6 @@ func TestExporterUnlocksBeforeReturning(t *testing.T) {
 		cancel   bool
 	}{
 		{name: "batch_failure"},
-		{name: "instance_failure", instance: true},
 		{name: "instance_cancelled", instance: true, cancel: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -75,6 +78,49 @@ func TestExporterUnlocksBeforeReturning(t *testing.T) {
 			}
 		})
 	}
+	t.Run("instance_retries_and_releases_failed_session_locks", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		pool := delayedTerminationPool(t, dsn)
+		logs := captureAuditLogs(t)
+		storage := FileStorage{Directory: t.TempDir(), MaxBytes: 1 << 20}
+		const locks = " FROM pg_locks WHERE locktype='advisory' AND classid=0 AND granted AND database=(SELECT oid FROM pg_database WHERE datname=current_database())"
+		const privatePath = "/fixture-private-audit-directory"
+		var oldOwner, oldBatch int32
+		x := &Exporter{Store: New(pool, Config{}), Cursor: "instance-retry", Storage: storageFunc(func(ctx context.Context, events []Event) error {
+			if oldOwner == 0 {
+				if err := probe.QueryRow(ctx, "SELECT max(pid) FILTER (WHERE objid=418009),max(pid) FILTER (WHERE objid=418008)"+locks).Scan(&oldOwner, &oldBatch); err != nil {
+					return err
+				}
+				return &os.PathError{Op: "write", Path: privatePath, Err: os.ErrPermission}
+			}
+			var count int
+			if err := probe.QueryRow(ctx, "SELECT count(*)"+locks+" AND pid IN ($1,$2) AND objid IN (418008,418009)", oldOwner, oldBatch).Scan(&count); err != nil {
+				return err
+			}
+			if count != 0 {
+				t.Errorf("failed session backends still hold %d export locks on retry", count)
+				return fmt.Errorf("failed export session still holds locks")
+			}
+			return storage.Commit(ctx, events)
+		})}
+		done, stop := startAuditTestWorker(t, ctx, func(ctx context.Context) error { return x.Run(ctx, time.Hour) })
+		waitForAuditProgress(t, ctx, done, "the export cursor to advance after the storage error", func() bool {
+			var ready bool
+			if err := probe.QueryRow(ctx, "SELECT EXISTS(SELECT FROM audit_export_cursors WHERE name=$1 AND next_seq=2)", x.Cursor).Scan(&ready); err != nil {
+				t.Fatal(err)
+			}
+			return ready
+		})
+		stopAuditTestWorker(t, stop, done)
+		files, err := filepath.Glob(filepath.Join(storage.Directory, "*.jsonl"))
+		if err != nil || len(files) != 1 {
+			t.Fatalf("retried export files=%v err=%v; want one file", files, err)
+		}
+		if got := logs.String(); !strings.Contains(got, "level=ERROR") || !strings.Contains(got, "error_type=*fs.PathError") || strings.Contains(got, privatePath) {
+			t.Fatalf("export failure logs=%q, want error type without path", got)
+		}
+	})
 }
 
 // delayedTerminationConn holds only the final PostgreSQL Terminate message and

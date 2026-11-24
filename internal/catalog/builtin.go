@@ -12,6 +12,7 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/liubing0806/allowops/internal/builtin/mysql"
 	"github.com/liubing0806/allowops/internal/params"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 // BuiltinResult contains raw host-local output. The executor owns redaction,
@@ -36,7 +37,7 @@ type BuiltinHandler interface {
 // executor-selected policy to its original strings. Final filters and output
 // budgets remain in the executor. Run remains the raw internal handler API.
 type RedactingBuiltinHandler interface {
-	RunRedacted(context.Context, map[string]any, map[string]any, func(string) string) (BuiltinResult, error)
+	RunRedacted(context.Context, map[string]any, map[string]any, *redact.Redactor) (BuiltinResult, error)
 }
 
 // ActionBuiltinValidator checks rules that depend on action fields outside
@@ -143,12 +144,12 @@ func (mysqlHandler) Run(ctx context.Context, config map[string]any, values map[s
 	return (mysqlHandler{}).RunRedacted(ctx, config, values, nil)
 }
 
-func (mysqlHandler) RunRedacted(ctx context.Context, config map[string]any, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+func (mysqlHandler) RunRedacted(ctx context.Context, config map[string]any, values map[string]any, policy *redact.Redactor) (BuiltinResult, error) {
 	c, err := MySQLConfig(config)
 	if err != nil {
 		return BuiltinResult{ExitCode: 1}, err
 	}
-	r, err := mysql.RunRedacted(ctx, c, mysql.Params{Database: values["database"].(string), SQL: values["sql"].(string)}, mask)
+	r, err := mysql.RunRedacted(ctx, c, mysql.Params{Database: values["database"].(string), SQL: values["sql"].(string)}, policy)
 	// Execution errors use exit code 1; handler defaults remain unchanged (decisions A16).
 	if err != nil {
 		return BuiltinResult{ExitCode: 1}, err

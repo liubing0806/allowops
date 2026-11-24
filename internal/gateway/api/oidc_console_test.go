@@ -2,8 +2,12 @@ package api
 
 import (
 	"context"
+	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +15,7 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"golang.org/x/oauth2"
+	"gopkg.in/yaml.v3"
 )
 
 func TestOIDCConsoleReloginAndHTTPCallback(t *testing.T) {
@@ -21,6 +26,9 @@ func TestOIDCConsoleReloginAndHTTPCallback(t *testing.T) {
 	// Strict cookies need not be sent on the cross-site provider callback. The
 	// callback must deliver a same-origin fragment completion, never a session.
 	dest, cookie := f.begin(t, v1.LoginClient_LOGIN_CLIENT_CONSOLE, "")
+	if got := dest.Query().Get("scope"); got != "openid profile email groups" {
+		t.Fatalf("default OIDC scope=%q", got)
+	}
 	providerBrowser := *p.server.Client()
 	providerBrowser.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	authorized, err := providerBrowser.Get(dest.String())
@@ -80,6 +88,49 @@ func TestOIDCConsoleReloginAndHTTPCallback(t *testing.T) {
 	req.Header().Set("Cookie", cookie.Name+"="+cookie.Value+"; __Host-allowops-session="+old)
 	if _, err := f.auth("").CompleteOidcLogin(ctx, req); err != nil {
 		t.Fatalf("revoked console cookie prevented OIDC login: %v", err)
+	}
+}
+
+func TestConfigureEnterpriseOIDC(t *testing.T) {
+	f := newFixture(t)
+	p := newOIDC(t)
+	ctx := context.Background()
+	ca := filepath.Join(t.TempDir(), "idp.pem")
+	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: p.server.Certificate().Raw}), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var configs []ProviderConfig
+	err := yaml.Unmarshal(fmt.Appendf(nil, `- id: test
+  kind: oidc
+  issuer_url: %s
+  client_id: allowops
+  ca_file: %s
+  scopes: [profile, email]
+  groups_claim: department_groups
+  fetch_userinfo: true
+`, p.server.URL, ca), &configs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.service.ConfigureProviders(ctx, configs); err != nil {
+		t.Fatal(err)
+	}
+	dest, cookie := f.begin(t, v1.LoginClient_LOGIN_CLIENT_CONSOLE, "")
+	if got := dest.Query().Get("scope"); got != "openid profile email" {
+		t.Fatalf("configured OIDC scope=%q", got)
+	}
+	resp, err := f.complete(t, p, dest, cookie, dest.Query().Get("state"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := (&http.Response{Header: resp.Header()}).Cookies()[0]
+	current, err := f.auth("").GetCurrentSession(ctx, consoleSessionRequest(session.Value))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := current.Msg.User
+	if strings.Join(u.Groups, ",") != "readers" || strings.Join(u.EffectiveRoles, ",") != "viewer" || u.Email != "oidc@example.org" {
+		t.Fatalf("configured OIDC claims produced user %v", u)
 	}
 }
 

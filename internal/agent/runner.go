@@ -60,6 +60,7 @@ func runHelper(ctx context.Context, data []byte, action catalog.Action, callback
 		case <-ctx.Done():
 			// sudo forwards TERM to the helper, whose signal context terminates
 			// the shared executor's separate process group with its target identity (design P1).
+			//allowops:ignore-error best-effort process group termination on task cancellation
 			_ = syscall.Kill(-command.Process.Pid, syscall.SIGTERM)
 		case <-done:
 		}
@@ -77,7 +78,9 @@ func runHelper(ctx context.Context, data []byte, action catalog.Action, callback
 		readErr = errors.New("HELPER_PROTOCOL_ERROR")
 	}
 	if readErr != nil {
+		//allowops:ignore-error best-effort process group termination after helper stream read failure
 		_ = syscall.Kill(-command.Process.Pid, syscall.SIGTERM)
+		//allowops:ignore-error best-effort stdout pipe close before Wait
 		_ = stdout.Close()
 	}
 	waitErr := command.Wait()

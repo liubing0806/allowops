@@ -18,6 +18,8 @@ type Appender interface {
 	Append(context.Context, Payload) (Event, error)
 }
 
+const checkpointInterval = 5 * time.Minute
+
 type Store struct {
 	Pool   *pgxpool.Pool
 	Config Config
@@ -92,7 +94,7 @@ func (s *Store) append(ctx context.Context, p Payload, checkpoint bool) (Event, 
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return Event{}, err
 		}
-		if err == nil && now.Sub(last) < 5*time.Minute {
+		if err == nil && now.Sub(last) < checkpointInterval {
 			return Event{}, nil
 		}
 		p.CheckpointSeq = &seq
@@ -132,21 +134,20 @@ func (s *Store) append(ctx context.Context, p Payload, checkpoint bool) (Event, 
 }
 
 func (s *Store) RunCheckpoints(ctx context.Context) error {
-	if _, err := s.Checkpoint(ctx); err != nil {
-		return err
-	}
-	timer := time.NewTicker(5 * time.Minute)
-	defer timer.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-timer.C:
-			if _, err := s.Checkpoint(ctx); err != nil {
-				return err
+	var backoff workerBackoff
+	for ctx.Err() == nil {
+		if _, err := s.Checkpoint(ctx); err != nil {
+			if !backoff.wait(ctx, "audit checkpoint failed; retrying", err) {
+				break
 			}
+			continue
+		}
+		backoff = 0
+		if !waitForWorker(ctx, checkpointInterval) {
+			break
 		}
 	}
+	return ctx.Err()
 }
 
 func (s *Store) Events(ctx context.Context, from, to uint64) ([]Event, error) {

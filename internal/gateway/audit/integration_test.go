@@ -196,6 +196,47 @@ func TestPostgresAudit(t *testing.T) {
 		}
 		valid(t, 1, 4)
 	})
+	t.Run("checkpoints_retry_lock_timeout", func(t *testing.T) {
+		reset(t)
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		if err := lockXact(ctx, tx, appendLock); err != nil {
+			t.Fatal(err)
+		}
+		cfg := pool.Config()
+		cfg.ConnConfig.RuntimeParams["lock_timeout"] = "50ms"
+		workerPool, err := pgxpool.NewWithConfig(ctx, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(workerPool.Close)
+		logs := captureAuditLogs(t)
+		done, stop := startAuditTestWorker(t, ctx, New(workerPool, Config{}).RunCheckpoints)
+		waitForAuditProgress(t, ctx, done, "a sanitized checkpoint lock timeout", func() bool {
+			got := logs.String()
+			return strings.Contains(got, "level=ERROR") && strings.Contains(got, "sqlstate=55P03") && strings.Contains(got, "error_type=*pgconn.PgError")
+		})
+		if strings.Contains(logs.String(), "pg_advisory_xact_lock") || strings.Contains(logs.String(), "canceling statement") {
+			t.Fatalf("checkpoint log includes database error text: %q", logs.String())
+		}
+		if err := tx.Rollback(ctx); err != nil {
+			t.Fatal(err)
+		}
+		waitForAuditProgress(t, ctx, done, "a persisted checkpoint after the lock timeout", func() bool {
+			events, err := a.Events(ctx, 1, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return len(events) == 1 && events[0].Operation == "audit_checkpoint"
+		})
+		valid(t, 1, 1)
+		stopAuditTestWorker(t, stop, done)
+	})
 	t.Run("outputs_and_rollback", func(t *testing.T) {
 		reset(t)
 		now := time.Now().UTC()
@@ -372,47 +413,45 @@ func TestPostgresAudit(t *testing.T) {
 			t.Fatalf("leader blocked retention maintenance: %v", err)
 		}
 	})
-	t.Run("exporter_stops_when_leadership_connection_is_lost", func(t *testing.T) {
+	t.Run("exporter_reacquires_leadership_after_connection_loss", func(t *testing.T) {
 		reset(t)
 		appendN(t, 2)
-		runCtx, cancel := context.WithCancel(ctx)
-		done := make(chan error, 1)
-		stopped := false
-		x := &Exporter{Store: a, Cursor: "lost-leader", Storage: FileStorage{Directory: t.TempDir(), MaxBytes: 1 << 20}}
-		go func() { done <- x.Run(runCtx, 10*time.Millisecond) }()
-		defer func() {
-			cancel()
-			if !stopped {
-				<-done
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		logs := captureAuditLogs(t)
+		dir := t.TempDir()
+		x := &Exporter{Store: a, Cursor: "lost-leader", Storage: FileStorage{Directory: dir, MaxBytes: 1 << 20}}
+		done, stop := startAuditTestWorker(t, ctx, func(ctx context.Context) error { return x.Run(ctx, 10*time.Millisecond) })
+		cursorIs := func(want uint64) func() bool {
+			return func() bool {
+				var ready bool
+				if err := pool.QueryRow(ctx, "SELECT EXISTS(SELECT FROM audit_export_cursors WHERE name=$1 AND next_seq=$2)", x.Cursor, want).Scan(&ready); err != nil {
+					t.Fatal(err)
+				}
+				return ready
 			}
-		}()
-		deadline := time.Now().Add(time.Second)
-		for {
-			var ready bool
-			if err := pool.QueryRow(ctx, "SELECT EXISTS(SELECT FROM audit_export_cursors WHERE name='lost-leader' AND next_seq=3)").Scan(&ready); err != nil {
-				t.Fatal(err)
-			}
-			if ready {
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatal("leader did not finish batch")
-			}
-			time.Sleep(10 * time.Millisecond)
 		}
+		waitForAuditProgress(t, ctx, done, "the initial export", cursorIs(3))
+		const ownerQuery = " FROM pg_locks WHERE locktype='advisory' AND classid=0 AND objid=418009 AND granted AND database=(SELECT oid FROM pg_database WHERE datname=current_database())"
+		var oldPID int32
 		var terminated bool
-		if err := pool.QueryRow(ctx, "SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype='advisory' AND classid=0 AND objid=418009 AND granted AND database=(SELECT oid FROM pg_database WHERE datname=current_database())").Scan(&terminated); err != nil || !terminated {
+		if err := pool.QueryRow(ctx, "SELECT pid,pg_terminate_backend(pid,5000)"+ownerQuery).Scan(&oldPID, &terminated); err != nil || !terminated {
 			t.Fatalf("terminate fixture leadership connection: terminated=%t err=%v", terminated, err)
 		}
-		select {
-		case err := <-done:
-			stopped = true
-			if err == nil {
-				t.Fatal("connection loss did not report failure")
-			}
-		case <-time.After(time.Second):
-			t.Fatal("exporter kept running after its leadership connection was terminated")
+		waitForAuditProgress(t, ctx, done, "the exporter to detect the connection loss", func() bool {
+			return strings.Contains(logs.String(), "level=ERROR")
+		})
+		appendN(t, 1)
+		waitForAuditProgress(t, ctx, done, "an export after the leadership connection was terminated", cursorIs(4))
+		var newPID int32
+		if err := pool.QueryRow(ctx, "SELECT pid"+ownerQuery).Scan(&newPID); err != nil || newPID == oldPID {
+			t.Fatalf("leadership backend before=%d after=%d err=%v; want a new backend", oldPID, newPID, err)
 		}
+		files, err := filepath.Glob(filepath.Join(dir, "audit-00000000000000000003-*.jsonl"))
+		if err != nil || len(files) != 1 {
+			t.Fatalf("resumed batch files=%v err=%v; want one file", files, err)
+		}
+		stopAuditTestWorker(t, stop, done)
 	})
 	t.Run("exporter_warns_on_conflicting_instance", func(t *testing.T) {
 		reset(t)
@@ -424,11 +463,7 @@ func TestPostgresAudit(t *testing.T) {
 		if _, err := lock.Exec(ctx, "SELECT pg_advisory_lock(418009),pg_advisory_lock($1)", exportLock); err != nil {
 			t.Fatal(err)
 		}
-		var logs auditLogBuffer
-		originalOutput, originalFlags := log.Writer(), log.Flags()
-		original := slog.Default()
-		slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-		defer func() { slog.SetDefault(original); log.SetOutput(originalOutput); log.SetFlags(originalFlags) }()
+		logs := captureAuditLogs(t)
 		deadline, stop := context.WithTimeout(ctx, 10*time.Second)
 		defer stop()
 		runCtx, cancel := context.WithCancel(deadline)
@@ -687,3 +722,52 @@ func (b *auditLogBuffer) Write(p []byte) (int, error) {
 }
 
 func (b *auditLogBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return b.data.String() }
+
+func captureAuditLogs(t *testing.T) *auditLogBuffer {
+	t.Helper()
+	logs := new(auditLogBuffer)
+	original, output, flags := slog.Default(), log.Writer(), log.Flags()
+	slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(original); log.SetOutput(output); log.SetFlags(flags) })
+	return logs
+}
+
+func startAuditTestWorker(t *testing.T, ctx context.Context, run func(context.Context) error) (<-chan error, context.CancelFunc) {
+	t.Helper()
+	ctx, stop := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() {
+		defer close(done)
+		done <- run(ctx)
+	}()
+	t.Cleanup(func() { stop(); <-done })
+	return done, stop
+}
+
+func waitForAuditProgress(t *testing.T, ctx context.Context, done <-chan error, description string, ready func() bool) {
+	t.Helper()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for !ready() {
+		select {
+		case err := <-done:
+			t.Fatalf("audit worker stopped while waiting for %s: %v", description, err)
+		case <-ctx.Done():
+			t.Fatalf("waiting for %s: %v", description, ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func stopAuditTestWorker(t *testing.T, stop context.CancelFunc, done <-chan error) {
+	t.Helper()
+	stop()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("audit worker stopped with %v, want context canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("audit worker did not stop after cancellation")
+	}
+}

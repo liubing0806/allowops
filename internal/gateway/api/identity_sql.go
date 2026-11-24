@@ -19,7 +19,7 @@ type storedUser struct {
 }
 
 func userFromRow(r db.ConsoleUser) storedUser {
-	u := &v1.User{UserId: r.UserID, ProviderId: r.ProviderID, Username: r.Username, Email: r.Email, DisplayName: r.DisplayName, Groups: r.Groups, ManualRoles: r.ManualRoles, Teams: r.Teams}
+	u := &v1.User{UserId: r.UserID, ProviderId: r.ProviderID, Username: r.Username, Email: r.Email, DisplayName: r.DisplayName, Groups: r.Groups, ManualRoles: r.ManualRoles, Teams: r.Teams, Disabled: r.Disabled}
 	u.Revision = strconv.FormatInt(r.Revision, 10)
 	return storedUser{u, r.Kind, r.ProviderSubject}
 }
@@ -46,6 +46,19 @@ func getUser(ctx context.Context, q querier, id string) (storedUser, error) {
 	return userFromRow(r), nil
 }
 
+func lockUser(ctx context.Context, q querier, id string) (storedUser, error) {
+	r, err := db.New(q).LockConsoleUser(ctx, id)
+	return userFromRow(r), err
+}
+
+func setUserDisabled(ctx context.Context, q querier, id string, revision int64, disabled bool) (int64, error) {
+	return db.New(q).SetConsoleUserDisabled(ctx, db.SetConsoleUserDisabledParams{UserID: id, Revision: revision, Disabled: disabled})
+}
+
+func hasOtherEnabledAdmin(ctx context.Context, q querier, id string) (bool, error) {
+	return db.New(q).HasOtherEnabledAdmin(ctx, id)
+}
+
 func searchUsers(ctx context.Context, q querier, query string) ([]storedUser, error) {
 	rows, err := db.New(q).SearchConsoleUsers(ctx, query)
 	if err != nil {
@@ -58,13 +71,9 @@ func searchUsers(ctx context.Context, q querier, query string) ([]storedUser, er
 	return items, nil
 }
 
-// upsertUser creates a console user or refreshes its email and groups.
-func upsertUser(ctx context.Context, q querier, id, provider, subject, kind, email string, groups []string) error {
+// upsertUser creates a console user or refreshes an enabled user's email and groups.
+func upsertUser(ctx context.Context, q querier, id, provider, subject, kind, email string, groups []string) (string, error) {
 	return db.New(q).UpsertConsoleUser(ctx, db.UpsertConsoleUserParams{UserID: id, ProviderID: provider, ProviderSubject: subject, Kind: kind, Email: email, Groups: groups})
-}
-
-func userIDBySubject(ctx context.Context, q querier, provider, subject string) (string, error) {
-	return db.New(q).GetConsoleUserID(ctx, db.GetConsoleUserIDParams{ProviderID: provider, ProviderSubject: subject})
 }
 
 func mappingRevision(ctx context.Context, q querier) (int64, error) {
@@ -238,6 +247,15 @@ func revokeCliSession(ctx context.Context, q querier, id, userID string) (int64,
 	return db.New(q).RevokeCliSession(ctx, db.RevokeCliSessionParams{SessionID: id, UserID: userID})
 }
 
+// The caller holds the user lock before changing sessions or login codes.
+func revokeUserSessions(ctx context.Context, q querier, userID string) error {
+	queries := db.New(q)
+	if err := queries.RevokeUserSessions(ctx, userID); err != nil {
+		return err
+	}
+	return queries.DeleteUserCliLoginCodes(ctx, userID)
+}
+
 // oidcTransaction is a pending OIDC login read back by its state hash.
 type oidcTransaction struct {
 	provider, client, nonce, verifier, loopback, cliState, challenge string
@@ -277,12 +295,11 @@ func insertCliLoginCode(ctx context.Context, q querier, codeHash []byte, userID,
 	return db.New(q).InsertCliLoginCode(ctx, db.InsertCliLoginCodeParams{CodeHash: codeHash, UserID: userID, Challenge: challenge, ExpiresAt: timestamptz(expires)})
 }
 
-// lockCliLoginCode locks a live code and returns its user and PKCE challenge.
-func lockCliLoginCode(ctx context.Context, q querier, codeHash []byte) (string, string, error) {
-	r, err := db.New(q).LockCliLoginCode(ctx, codeHash)
-	return r.UserID, r.Challenge, err
+// Lock the user before consuming a code, in the same order as revocation.
+func lockCliLoginUser(ctx context.Context, q querier, codeHash []byte) (string, error) {
+	return db.New(q).LockCliLoginUser(ctx, codeHash)
 }
 
-func deleteCliLoginCode(ctx context.Context, q querier, codeHash []byte) error {
-	return db.New(q).DeleteCliLoginCode(ctx, codeHash)
+func takeCliLoginCode(ctx context.Context, q querier, codeHash []byte) (string, error) {
+	return db.New(q).TakeCliLoginCode(ctx, codeHash)
 }

@@ -1,5 +1,8 @@
 # CLI reference
 
+The `allowops` CLI is available for Linux and macOS on amd64 and arm64, and
+for Windows on amd64 (`allowops.exe`). See [installation](installation.md#cli).
+
 Use the binaries from one release. `allowops --help` and each subcommand's
 `--help` are the authoritative interface for that release. The gateway uses a
 different command parser. Serve checks `ALLOWOPS_DATABASE_URL` before parsing
@@ -30,7 +33,7 @@ environment variable. See [identity](identity.md).
 | `allowops catalog build` | `--dir`, `--out`, `--git-commit`, `--ttl` (2160h default). |
 | `allowops catalog sign` | `--in`, `--out`, repeated `--key` for multiple signatures. |
 | `allowops catalog publish` | `-f`/`--file`, `--gateway`, `--ca-file`, `--token-env`, `--json`. |
-| `allowops catalog try <action>` | `--dir`, repeated `--param name=value`; executes locally as the current user. |
+| `allowops catalog try <action>` | Linux only. `--dir`, repeated `--param name=value`; executes locally as the current user. |
 
 Build expiry starts at build time; sign preserves it. `--out -` writes to stdout.
 Private keys are read from files. See [publishing](publishing.md).
@@ -119,6 +122,35 @@ allowops audit verify --file audit.jsonl --from-seq 1 --to-seq 100
 
 Policy get defaults to editable YAML; `--json` includes version metadata.
 Apply replaces the full rule set and performs simulation before save.
+
+Use `--cases <file>` on `policy test` or `policy apply` to simulate an explicit
+set of cases. The file must contain a nonempty YAML or JSON list of
+`PolicyTestCase` objects. Use the gateway user or service account ID for
+`subject_id`. Targets can use a selector or a list of hostnames. `at` (RFC 3339)
+and `source_ip` are optional overrides for the trial.
+
+```yaml
+- subject_id: usr_example
+  operation: execute_action
+  action: disk_usage
+  targets:
+    selector: env=prod
+- subject_id: usr_example
+  operation: view_jobs
+  targets:
+    hosts:
+      names: [host-a, host-b]
+```
+
+```sh
+allowops policy test -f rules.yaml --cases cases.yaml
+allowops policy apply -f rules.yaml --cases cases.yaml --reason 'update policy'
+```
+
+The evaluation limit `identity.max_test_evaluations` counts one input per set
+of authorization labels within each subject, operation and action combination
+or explicit case. Trial counts and change rows still represent individual hosts.
+
 Audit export and database verification read `ALLOWOPS_DATABASE_URL` directly;
 they do not use gateway login credentials. Local file verification does not
 need a database. Audit flags are detailed in [audit](audit.md).

@@ -79,10 +79,19 @@ must change.
 ## Storage and retention
 
 Use an existing S3 bucket, configure the output region/endpoint and deliver
-credentials through the AWS SDK credential chain. Configure encryption support:
-output uploads request AES256 server-side encryption. SeaweedFS needs its SSE key
-configured independently. Retention belongs to the bucket lifecycle policy;
-the gateway does not set it automatically. The intended default is one year.
+credentials through the AWS SDK credential chain. The gateway YAML and Helm
+values both accept these optional settings under `output`:
+
+- `use_path_style` selects path-style addressing when `true` and virtual-hosted
+  addressing when `false`. Set `false` for a custom endpoint that requires the
+  bucket name in the hostname. By default, custom endpoints use path-style
+  addressing and AWS endpoints use virtual-hosted addressing.
+- `server_side_encryption` defaults to `AES256` when omitted or empty. Set
+  `none` to omit the server-side encryption header and let the bucket policy
+  govern encryption. Configure a SeaweedFS SSE key when using `AES256`.
+
+Configure retention in the bucket lifecycle policy. The intended default is one
+year.
 
 SeaweedFS lifecycle configuration APIs and compressed output operations have
 local integration coverage. Actual delayed expiry deletion requires operator
@@ -90,6 +99,24 @@ verification over the configured retention interval. Check the selected storage
 version and its encryption/lifecycle behavior before relying on deletion.
 Full output writes are asynchronous; monitor failed persistence even when jobs
 succeed. The `output_stored` flag distinguishes execution from persistence.
+Gateway error logs for writes and probes include the error type and, when
+available, the HTTP status and recognized S3 error code.
+
+## PostgreSQL partition maintenance
+
+After migration, schedule `allowops-gateway ensure-partitions --months 3` with
+the maintenance role's connection string in `ALLOWOPS_DATABASE_URL`. The command
+ensures `audit_events` partitions for the current UTC month and the next two
+months. It also maintains `tasks` when the database provides
+`tasks_create_partitions(timestamptz, integer)`. The default coverage is three
+months. Set `--months` to an integer from 1 to 120 to change it.
+
+The Helm chart enables a CronJob at 02:00 UTC on the first and fifteenth of
+each month. It uses the migration Secret. For binary deployments, schedule
+the command with a systemd timer or cron at the same cadence and supply the
+maintenance credentials through the scheduler's environment. Monitor the exit
+status and restore coverage before the existing partitions expire. When the
+current audit partition is missing, audit writes fail.
 
 ## Monitoring and recovery
 
@@ -107,6 +134,12 @@ catalog loading, unsupported actions, output persistence, audit export lag and
 dependency health. Catalog expiry and token expiry require renewal before use
 ends. Inventory load reports reflect the last complete report, including for
 offline hosts; they do not prove the host's present execution environment.
+
+Host certificates have a default lifetime of 7 days (`168h`). The agent starts
+renewal after two-thirds of the lifetime, with 56 hours remaining by default.
+If the agent reports `CERTIFICATE_EXPIRED`, delete the old host in the console,
+remove `/var/lib/allowops/identity.json` on that host, and run `allowops-agent join`
+again with a valid join token.
 
 Use short join-token lifetimes and bounded uses. Set authorization labels only
 after checking the registered host identity. Deletion invalidates certificates;

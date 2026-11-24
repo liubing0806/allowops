@@ -623,6 +623,7 @@ func (s *Service) persist(jobID, taskID, hostID, hostname, actor, action string,
 	for k, stream := range out.Streams {
 		if !stream.EOF {
 			stored = false
+			slog.ErrorContext(ctx, "output stream incomplete", "job_id", jobID, "task_id", taskID)
 			continue
 		}
 		var step *uint32
@@ -638,6 +639,7 @@ func (s *Service) persist(jobID, taskID, hostID, hostname, actor, action string,
 		paths = append(paths, audit.Output{ObjectPath: key, SHA256: sum[:], Stream: int32(k.Stream), StepIndex: step})
 		if err := s.Storage.Put(ctx, key, stream.Data); err != nil {
 			stored = false
+			slog.ErrorContext(ctx, "output object write failed", "job_id", jobID, "task_id", taskID, "storage_error", output.ErrorDetails(err))
 		}
 	}
 	state := "stored"
@@ -645,7 +647,6 @@ func (s *Service) persist(jobID, taskID, hostID, hostname, actor, action string,
 	if !stored {
 		state = "failed"
 		decision = "deny"
-		slog.Error("output object write failed", "job_id", jobID, "task_id", taskID)
 	}
 	// Upload exhaustion must not consume the required state-write budget.
 	// Keep this worker responsible for retryable writes until service shutdown,

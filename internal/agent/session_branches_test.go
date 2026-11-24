@@ -17,8 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// sessionHarness calls (*Agent).session directly so that every return value is
-// observable; Agent.Run discards them.
+// sessionHarness calls (*Agent).session directly to observe its exact results.
 type sessionHarness struct {
 	g      *testGateway
 	a      *Agent
@@ -59,7 +58,7 @@ func newSessionHarness(t *testing.T, limits Limits) *sessionHarness {
 func (h *sessionHarness) start() <-chan sessionOutcome {
 	done := make(chan sessionOutcome, 1)
 	go func() {
-		delay, err := h.a.session(h.ctx, h.client)
+		delay, err := h.a.session(h.ctx, h.client, func() {})
 		done <- sessionOutcome{delay, err}
 	}()
 	return done

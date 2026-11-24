@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -27,7 +28,7 @@ import (
 	rpc "github.com/liubing0806/allowops/gen/allowops/v1/allowopsv1connect"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2"
-	"golang.org/x/sys/unix"
+	"golang.org/x/term"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
@@ -88,7 +89,10 @@ func loadCredentials() (credentials, error) {
 	if err != nil {
 		return credentials{}, errors.New("login required")
 	}
-	if !st.Mode().IsRegular() || st.Mode().Perm()&0077 != 0 {
+	if !st.Mode().IsRegular() {
+		return credentials{}, errors.New("credentials must be a regular file")
+	}
+	if runtime.GOOS != "windows" && st.Mode().Perm()&0077 != 0 {
 		return credentials{}, errors.New("credentials must be a regular file with permissions 0600")
 	}
 	b, err := os.ReadFile(path)
@@ -142,8 +146,13 @@ func rpcError(err error) error {
 	if errors.As(err, &rpcErr) {
 		for _, detail := range rpcErr.Details() {
 			value, detailErr := detail.Value()
-			if d, ok := value.(*v1.ErrorDetail); detailErr == nil && ok && d.Reason == "AUDIT_RESULT_UNAVAILABLE" {
-				return errors.New("gateway result audit unavailable; operation may have committed")
+			if d, ok := value.(*v1.ErrorDetail); detailErr == nil && ok {
+				switch d.Reason {
+				case "AUDIT_RESULT_UNAVAILABLE":
+					return errors.New("gateway result audit unavailable; operation may have committed")
+				case "POLICY_EVALUATION_LIMIT_EXCEEDED":
+					return errors.New("policy evaluation limit exceeded after grouping hosts by authorization labels. Use --cases with a smaller set of test cases or increase identity.max_test_evaluations")
+				}
 			}
 		}
 	}
@@ -223,31 +232,52 @@ func NewLoginCmd() *cobra.Command {
 }
 
 func readPassword(c *cobra.Command, stdin bool) (string, error) {
+	const maxPasswordInput = 4096
 	input := c.InOrStdin()
-	if !stdin {
-		file, ok := input.(*os.File)
-		if !ok {
-			return "", errors.New("use --password-stdin for non-terminal input")
-		}
-		original, err := unix.IoctlGetTermios(int(file.Fd()), unix.TCGETS)
-		if err != nil {
-			return "", errors.New("use --password-stdin for non-terminal input")
-		}
-		hidden := *original
-		hidden.Lflag &^= unix.ECHO
-		if err := unix.IoctlSetTermios(int(file.Fd()), unix.TCSETS, &hidden); err != nil {
-			return "", err
-		}
-		defer unix.IoctlSetTermios(int(file.Fd()), unix.TCSETS, original)
-		fmt.Fprint(c.ErrOrStderr(), "LDAP password: ")
-		defer fmt.Fprintln(c.ErrOrStderr())
-	}
-	// main cancels the command context on SIGINT instead of exiting, so the
-	// prompt waits on it too; the deferred restore then turns echo back on.
-	// A cancelled read is abandoned; the process exits after the command.
 	ctx := c.Context()
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if !stdin {
+		file, ok := input.(*os.File)
+		if !ok || !term.IsTerminal(int(file.Fd())) {
+			return "", errors.New("use --password-stdin for non-terminal input")
+		}
+		fd := int(file.Fd())
+		state, err := term.GetState(fd)
+		if err != nil {
+			return "", err
+		}
+		defer func() {
+			//allowops:ignore-error best-effort terminal echo restore on prompt exit
+			_ = term.Restore(fd, state)
+		}()
+		fmt.Fprint(c.ErrOrStderr(), "LDAP password: ")
+		defer fmt.Fprintln(c.ErrOrStderr())
+		// main cancels the command context on SIGINT instead of exiting, so the
+		// prompt waits on it too; the deferred restore then turns echo back on.
+		// A cancelled read is abandoned; the process exits after the command.
+		type result struct {
+			password []byte
+			err      error
+		}
+		read := make(chan result, 1)
+		go func() {
+			password, err := term.ReadPassword(fd)
+			read <- result{password, err}
+		}()
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case r := <-read:
+			if r.err != nil && r.err != io.EOF {
+				return "", r.err
+			}
+			if len(r.password) > maxPasswordInput {
+				return "", errors.New("password exceeds input limit")
+			}
+			return string(r.password), nil
+		}
 	}
 	type result struct {
 		line string
@@ -255,7 +285,7 @@ func readPassword(c *cobra.Command, stdin bool) (string, error) {
 	}
 	read := make(chan result, 1)
 	go func() {
-		line, err := bufio.NewReader(io.LimitReader(input, 4097)).ReadString('\n')
+		line, err := bufio.NewReader(io.LimitReader(input, maxPasswordInput+1)).ReadString('\n')
 		read <- result{line, err}
 	}()
 	var line string
@@ -268,10 +298,21 @@ func readPassword(c *cobra.Command, stdin bool) (string, error) {
 		}
 		line = r.line
 	}
-	if len(line) > 4096 {
+	if len(line) > maxPasswordInput {
 		return "", errors.New("password exceeds input limit")
 	}
 	return strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"), nil
+}
+
+func browserCommand(goos, loginURL string) *exec.Cmd {
+	switch goos {
+	case "darwin":
+		return exec.Command("open", loginURL)
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", loginURL)
+	default:
+		return exec.Command("xdg-open", loginURL)
+	}
 }
 
 func oidcLogin(c *cobra.Command, auth rpc.AuthServiceClient, gateway, provider string, noBrowser bool) (*v1.CliSession, string, error) {
@@ -312,7 +353,7 @@ func oidcLogin(c *cobra.Command, auth rpc.AuthServiceClient, gateway, provider s
 	go func() { _ = server.Serve(listener) }()
 	fmt.Fprintln(c.OutOrStdout(), result.Msg.AuthorizationUrl)
 	if !noBrowser {
-		if err := exec.Command("xdg-open", result.Msg.AuthorizationUrl).Run(); err != nil {
+		if err := browserCommand(runtime.GOOS, result.Msg.AuthorizationUrl).Run(); err != nil {
 			fmt.Fprintln(c.ErrOrStderr(), "Open the login URL in your browser.")
 		}
 	}
@@ -340,19 +381,26 @@ func outputProto(c *cobra.Command, m proto.Message) error {
 	return err
 }
 
-func readRules(path string) (*v1.PolicyRules, error) {
+func readPolicyYAML(path string, value any) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	d := yaml.NewDecoder(bytes.NewReader(b))
-	var object map[string]any
-	if err := d.Decode(&object); err != nil {
-		return nil, err
+	if err := d.Decode(value); err != nil {
+		return err
 	}
 	var extra any
 	if err := d.Decode(&extra); err != io.EOF {
-		return nil, errors.New("one YAML document required")
+		return errors.New("one YAML document required")
+	}
+	return nil
+}
+
+func readRules(path string) (*v1.PolicyRules, error) {
+	var object map[string]any
+	if err := readPolicyYAML(path, &object); err != nil {
+		return nil, err
 	}
 	if rules, ok := object["rules"].([]any); ok {
 		for _, raw := range rules {
@@ -375,6 +423,25 @@ func readRules(path string) (*v1.PolicyRules, error) {
 		return nil, errors.New("invalid structured policy rules")
 	}
 	return p, nil
+}
+
+func readPolicyCases(path string) ([]*v1.PolicyTestCase, error) {
+	var cases []map[string]any
+	if err := readPolicyYAML(path, &cases); err != nil {
+		return nil, err
+	}
+	if len(cases) == 0 {
+		return nil, errors.New("at least one policy test case required")
+	}
+	data, err := json.Marshal(map[string]any{"cases": cases})
+	if err != nil {
+		return nil, err
+	}
+	var request v1.TestPolicyRequest
+	if err := protojson.Unmarshal(data, &request); err != nil {
+		return nil, fmt.Errorf("invalid policy test cases: %w", err)
+	}
+	return request.Cases, nil
 }
 
 func NewPolicyCmd() *cobra.Command {
@@ -426,8 +493,16 @@ func NewPolicyCmd() *cobra.Command {
 	}}
 	cmd.AddCommand(get)
 	for _, verb := range []string{"apply", "test"} {
-		var path, reason string
+		var path, casesPath, reason string
 		action := &cobra.Command{Use: verb, Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
+			var cases []*v1.PolicyTestCase
+			if c.Flags().Changed("cases") {
+				var err error
+				cases, err = readPolicyCases(casesPath)
+				if err != nil {
+					return err
+				}
+			}
 			cfg, err := loadCredentials()
 			if err != nil {
 				return err
@@ -451,7 +526,7 @@ func NewPolicyCmd() *cobra.Command {
 			} else if verb == "apply" {
 				return errors.New("apply requires -f rules.yaml")
 			}
-			tested, err := p.TestPolicy(c.Context(), connect.NewRequest(&v1.TestPolicyRequest{BaseVersion: current.Msg.Policy.Version, Candidate: &v1.TestPolicyRequest_Rules{Rules: rules}}))
+			tested, err := p.TestPolicy(c.Context(), connect.NewRequest(&v1.TestPolicyRequest{BaseVersion: current.Msg.Policy.Version, Candidate: &v1.TestPolicyRequest_Rules{Rules: rules}, Cases: cases}))
 			if err != nil {
 				return rpcError(err)
 			}
@@ -484,6 +559,7 @@ func NewPolicyCmd() *cobra.Command {
 			return outputProto(c, saved.Msg.Policy)
 		}}
 		action.Flags().StringVarP(&path, "file", "f", "", "Structured rules YAML")
+		action.Flags().StringVar(&casesPath, "cases", "", "Policy test cases as a YAML or JSON list")
 		action.Flags().StringVar(&reason, "reason", "", "Audit reason for saving the policy")
 		cmd.AddCommand(action)
 	}

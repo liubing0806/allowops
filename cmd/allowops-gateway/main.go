@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"crypto/ed25519"
-	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -53,6 +52,7 @@ func main() {
 
 type configuration struct {
 	Address        string          `yaml:"address"`
+	MetricsAddress string          `yaml:"metrics_address,omitempty"`
 	TLSCertificate string          `yaml:"tls_certificate"`
 	TLSKey         string          `yaml:"tls_key"`
 	CACertificate  string          `yaml:"ca_certificate"`
@@ -113,10 +113,13 @@ func runWithAudit(args []string, auditor api.Auditor) error {
 		return runHealth(args[1:])
 	}
 	if len(args) == 0 {
-		return fmt.Errorf("usage: allowops-gateway migrate | serve --config <file>")
+		return fmt.Errorf("usage: allowops-gateway migrate | ensure-partitions [--months 3] | serve --config <file>")
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+	if args[0] == "ensure-partitions" {
+		return ensurePartitions(ctx, args[1:])
+	}
 	dsn := os.Getenv("ALLOWOPS_DATABASE_URL")
 	if dsn == "" {
 		return fmt.Errorf("ALLOWOPS_DATABASE_URL required")
@@ -225,6 +228,16 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 	if err != nil {
 		return err
 	}
+	if cfg.MetricsAddress != "" {
+		metricsListener, err := net.Listen("tcp", cfg.MetricsAddress)
+		if err != nil {
+			listener.Close()
+			agent.Close()
+			return fmt.Errorf("listen metrics: %w", err)
+		}
+		stopMetrics := startMetrics(metricsListener, db, agent)
+		defer stopMetrics()
+	}
 	auditErrors, stopAudit, waitUpdateCheck := startBackgroundWorkers(&cfg, db, auditStore)
 	defer func() { stopAudit(); waitUpdateCheck() }()
 	return serveUntilDone(ctx, cfg, srv, agent, listener, auditErrors, stopAudit)
@@ -245,18 +258,18 @@ func startIdentity(ctx context.Context, db *store.Store, cfg configuration, audi
 	return identity, nil
 }
 
-func loadTrustMaterial(cfg configuration) (*hostconn.CA, tls.Certificate, map[string]ed25519.PublicKey, error) {
+func loadTrustMaterial(cfg configuration) (*hostconn.CA, *certificateFiles, map[string]ed25519.PublicKey, error) {
 	ca, err := hostconn.OpenCA(cfg.CACertificate, cfg.CAKey)
 	if err != nil {
-		return nil, tls.Certificate{}, nil, fmt.Errorf("load host CA: %w", err)
+		return nil, nil, nil, fmt.Errorf("load host CA: %w", err)
 	}
-	certificate, err := tls.LoadX509KeyPair(cfg.TLSCertificate, cfg.TLSKey)
+	certificate, err := loadCertificateFiles(cfg.TLSCertificate, cfg.TLSKey)
 	if err != nil {
-		return nil, tls.Certificate{}, nil, fmt.Errorf("load gateway TLS certificate")
+		return nil, nil, nil, fmt.Errorf("load gateway TLS certificate")
 	}
 	trusted, err := loadCatalogKeys(cfg.CatalogKeys)
 	if err != nil {
-		return nil, tls.Certificate{}, nil, err
+		return nil, nil, nil, err
 	}
 	return ca, certificate, trusted, nil
 }
@@ -388,10 +401,10 @@ func controlPlaneChangesReader(db *store.Store) func(context.Context, time.Time,
 
 // newGatewayServer configures management and MCP and assembles the server.
 // On failure it closes the agent and the listener.
-func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service, agent *hostconn.Service, listener net.Listener, certificate tls.Certificate, trusted map[string]ed25519.PublicKey, auditStore *audit.Store, objects *output.S3, jobs *job.Service, pluginHost *pluginhost.Host) (*server.Server, error) {
+func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service, agent *hostconn.Service, listener net.Listener, certificate *certificateFiles, trusted map[string]ed25519.PublicKey, auditStore *audit.Store, objects *output.S3, jobs *job.Service, pluginHost *pluginhost.Host) (*server.Server, error) {
 	catalogs := &catalogsvc.Service{Store: db, Trusted: trusted, MaxEnvelopeBytes: cfg.Gateway.EnvelopeBytes, MaxActionBytes: cfg.Gateway.ActionBytes, MaxReferenceBytes: cfg.Gateway.MessageBytes - cfg.Gateway.ChunkBytes - 1024}
 	if cfg.Management.CAPin == "" {
-		cfg.Management.CAPin = api.TLSCAPin(certificate.Certificate)
+		cfg.Management.CAPin = api.TLSCAPin(certificate.current.Certificate)
 	}
 	if cfg.Management.CAPin == "" {
 		fmt.Fprintln(os.Stderr, "gateway TLS CA pin unavailable; CreateJoinToken disabled; configure management.ca_pin")
@@ -407,7 +420,8 @@ func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service
 		listener.Close()
 		return nil, err
 	}
-	srv := server.New(agent, certificate,
+	srv := server.New(agent, *certificate.current,
+		server.WithCertificateSource(certificate.GetCertificate),
 		server.WithIdentity(identity),
 		server.WithAudit(&audit.Service{Store: auditStore}),
 		server.WithMCP(mcpService.Handler()),
@@ -449,18 +463,27 @@ func serveUntilDone(ctx context.Context, cfg configuration, srv *server.Server, 
 	finished := make(chan error, 1)
 	go func() { finished <- srv.Serve(listener) }()
 	fmt.Printf("gateway serving %s schema=%d\n", listener.Addr(), store.SchemaVersion)
-	select {
-	case <-ctx.Done():
-	case <-auditErrors:
-		stopAudit()
-		agent.Close()
-		listener.Close()
-		return fmt.Errorf("audit background worker stopped")
-	case err := <-finished:
-		if err != nil {
-			agent.Close()
-			return fmt.Errorf("gateway listener failed")
+	var serveErr error
+	for {
+		select {
+		case <-ctx.Done():
+		case err, ok := <-auditErrors:
+			if !ok {
+				auditErrors = nil
+				continue
+			}
+			if err == nil {
+				continue
+			}
+			audit.LogWorkerError(ctx, "audit background worker stopped", err)
+			serveErr = fmt.Errorf("audit background worker stopped")
+		case err := <-finished:
+			if err != nil {
+				agent.Close()
+				return fmt.Errorf("gateway listener failed")
+			}
 		}
+		break
 	}
 	stopAudit()
 	shutdown, done := context.WithTimeout(context.Background(), cfg.Gateway.ShutdownGrace+5*time.Second)
@@ -469,7 +492,7 @@ func serveUntilDone(ctx context.Context, cfg configuration, srv *server.Server, 
 		return fmt.Errorf("gateway shutdown: %w", err)
 	}
 	fmt.Println("gateway stopped")
-	return nil
+	return serveErr
 }
 
 func loadCatalogKeys(path string) (map[string]ed25519.PublicKey, error) {

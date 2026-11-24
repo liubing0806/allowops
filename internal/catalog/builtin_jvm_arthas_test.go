@@ -452,10 +452,13 @@ func TestJVMArthasRunMapsConfigParametersAndResult(t *testing.T) {
 		arthas.KindMonitor: {map[string]any{"target": "api", "class": "demo.A", "method": "run", "count": int64(2), "cycle": int64(10)}, arthas.Request{Class: "demo.A", Method: "run", Count: 2, Cycle: 10}},
 		arthas.KindJad:     {map[string]any{"target": "api", "class": "demo.A"}, arthas.Request{Class: "demo.A"}},
 	}
+	policy, err := redact.New(&redact.Config{Builtin: []string{}, Custom: []redact.Rule{{Name: "wrap", Regex: "x"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for kind, tc := range cases {
 		a := jvmArthasAction(string(kind))
-		mask := func(s string) string { return "[" + s + "]" }
-		res, err := jvmArthasHandler{}.RunRedacted(context.Background(), a.BuiltinConfig, tc.values, mask)
+		res, err := jvmArthasHandler{}.RunRedacted(context.Background(), a.BuiltinConfig, tc.values, policy)
 		if err != nil {
 			t.Fatalf("%s: %v", kind, err)
 		}
@@ -467,7 +470,7 @@ func TestJVMArthasRunMapsConfigParametersAndResult(t *testing.T) {
 		if gotParams.Target != "api" || gotParams.Request != want {
 			t.Errorf("%s: params = %+v, want request %+v", kind, gotParams, want)
 		}
-		if gotCfg.Command != kind || gotMask == nil || gotMask("x") != "[x]" {
+		if gotCfg.Command != kind || gotMask == nil || gotMask("x") != "[REDACTED:wrap]" {
 			t.Errorf("%s: config command = %q, mask set = %v", kind, gotCfg.Command, gotMask != nil)
 		}
 	}

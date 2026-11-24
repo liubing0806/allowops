@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
+	"golang.org/x/oauth2"
 )
 
 func TestOIDCWithLocalProvider(t *testing.T) {
@@ -21,13 +23,38 @@ func TestOIDCWithLocalProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 	var issuer string
+	var userInfoCalls, insecureCalls atomic.Int32
+	insecure := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		insecureCalls.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer insecure.Close()
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/.well-known/openid-configuration":
-			_ = json.NewEncoder(w).Encode(map[string]any{"issuer": issuer, "jwks_uri": issuer + "/keys", "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token", "id_token_signing_alg_values_supported": []string{"RS256"}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"issuer": issuer, "jwks_uri": issuer + "/keys", "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token", "userinfo_endpoint": issuer + "/userinfo", "id_token_signing_alg_values_supported": []string{"RS256"}})
 		case "/keys":
 			_ = json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{Key: &key.PublicKey, KeyID: "test-key", Algorithm: "RS256", Use: "sig"}}})
+		case "/userinfo":
+			userInfoCalls.Add(1)
+			claims := map[string]any{"sub": "user-1", "email": "userinfo@example.org", "email_verified": true, "departments": []string{"audit"}}
+			switch r.Header.Get("Authorization") {
+			case "Bearer valid":
+			case "Bearer mismatch":
+				claims["sub"] = "another-user"
+			case "Bearer unverified-email":
+				claims["email_verified"] = false
+			case "Bearer malformed-groups":
+				claims["departments"] = "audit"
+			case "Bearer downgrade":
+				http.Redirect(w, r, insecure.URL, http.StatusFound)
+				return
+			default:
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(claims)
 		default:
 			http.NotFound(w, r)
 		}
@@ -104,6 +131,61 @@ func TestOIDCWithLocalProvider(t *testing.T) {
 	if _, err := authenticator.Verify(context.Background(), "not-a-token"); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("malformed token: %v", err)
 	}
+
+	t.Run("custom claims and UserInfo", func(t *testing.T) {
+		ctx := context.Background()
+		cfg := OIDCConfig{IssuerURL: issuer, ClientID: "allowops", HTTPClient: server.Client(), GroupsClaim: "departments", RoleMappings: map[string]string{"audit": "auditor"}}
+		custom, err := NewOIDC(ctx, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.FetchUserInfo = true
+		withUserInfo, err := NewOIDC(ctx, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		loginToken := func(c map[string]any, access string) *oauth2.Token {
+			c["nonce"] = "login-nonce"
+			return (&oauth2.Token{AccessToken: access}).WithExtra(map[string]any{"id_token": sign(c, key)})
+		}
+		c := claims()
+		c["departments"] = []string{"audit"}
+		got, err := custom.VerifyLogin(ctx, loginToken(c, ""), "login-nonce")
+		if err != nil || !reflect.DeepEqual(got.Roles, []string{"auditor"}) || userInfoCalls.Load() != 0 {
+			t.Fatalf("custom ID token claim: identity=%+v err=%v userinfo calls=%d", got, err, userInfoCalls.Load())
+		}
+		delete(c, "departments")
+		c["email_verified"] = false
+		if _, err := withUserInfo.VerifyLogin(ctx, loginToken(c, "valid"), "wrong-nonce"); !errors.Is(err, ErrInvalidCredentials) || userInfoCalls.Load() != 0 {
+			t.Fatalf("unverified ID token used UserInfo: err=%v userinfo calls=%d", err, userInfoCalls.Load())
+		}
+		got, err = withUserInfo.VerifyLogin(ctx, loginToken(c, "valid"), "login-nonce")
+		if err != nil || got.Email != "userinfo@example.org" || !reflect.DeepEqual(got.Groups, []string{"audit"}) || !reflect.DeepEqual(got.Roles, []string{"auditor"}) {
+			t.Fatalf("UserInfo fallback: identity=%+v err=%v", got, err)
+		}
+		got, err = withUserInfo.VerifyLogin(ctx, loginToken(c, "unverified-email"), "login-nonce")
+		if err != nil || got.Email != "" {
+			t.Fatalf("unverified UserInfo email: identity=%+v err=%v", got, err)
+		}
+		c["departments"] = []string{}
+		c["email_verified"] = true
+		got, err = withUserInfo.VerifyLogin(ctx, loginToken(c, "valid"), "login-nonce")
+		if err != nil || got.Email != "alice@example.org" || got.Groups == nil || len(got.Groups) != 0 {
+			t.Fatalf("UserInfo overwrote ID token claims: identity=%+v err=%v", got, err)
+		}
+		if _, err := withUserInfo.VerifyLogin(ctx, loginToken(c, "mismatch"), "login-nonce"); !errors.Is(err, ErrInvalidCredentials) {
+			t.Fatalf("accepted mismatched UserInfo subject: %v", err)
+		}
+		delete(c, "departments")
+		for _, access := range []string{"malformed-groups", "downgrade", ""} {
+			if _, err := withUserInfo.VerifyLogin(ctx, loginToken(c, access), "login-nonce"); !errors.Is(err, ErrInvalidCredentials) {
+				t.Errorf("UserInfo test case %q accepted: %v", access, err)
+			}
+		}
+		if insecureCalls.Load() != 0 {
+			t.Fatal("UserInfo sent a request over HTTP")
+		}
+	})
 }
 
 func TestOIDCRejectsInsecureJWKS(t *testing.T) {

@@ -1,12 +1,26 @@
 # Allowops Helm chart
 
 This chart installs two or more gateway replicas, an L4 TCP Service on port
-443, a migration hook, a PodDisruptionBudget and, by default, one audit export
-StatefulSet. PostgreSQL and object storage are supplied by the operator.
+443, a migration hook, a PodDisruptionBudget and, by default, a partition
+maintenance CronJob and one audit export StatefulSet. PostgreSQL and object
+storage are supplied by the operator.
 All containers use amd64 nodes. No Ingress or HTTP/TLS termination proxy is
 included: mutual TLS and Application-Layer Protocol Negotiation (ALPN) must
 reach the gateway process unchanged. Set the cloud-specific Service
 annotations for an L4 TCP load balancer.
+
+To preserve the client source IP, the L4 load balancer must preserve the
+source address on the TCP connection and the Service must use
+`externalTrafficPolicy: Local`. The chart defaults `service.externalTrafficPolicy`
+to `Local` for `LoadBalancer` and `NodePort` Services. With `Local`, direct
+external traffic to nodes with ready gateway pods.
+
+Setting `service.externalTrafficPolicy: Cluster` allows Kubernetes to forward
+traffic across nodes, where it can replace the client IP with a node IP. The
+gateway uses the TCP peer address, so audit `source_ip` can record the node IP
+and `source_cidrs` authorization rules can match against it. Lightweight Directory
+Access Protocol (LDAP) login attempts for the same username from different clients
+can share a rate-limit counter when the gateway sees the same node IP.
 
 Supply an image tag in `image.repository` / `image.tag`. Build locally with:
 
@@ -16,7 +30,7 @@ docker build --platform linux/amd64 -f deploy/docker/Dockerfile \
 ./deploy/docker/verify.sh allowops-gateway:0.2.0 0.2.0
 helm lint deploy/helm/allowops
 helm template allowops deploy/helm/allowops > /tmp/allowops.yaml
-python3 deploy/helm/verify.py /tmp/allowops.yaml  # local PyYAML dependency
+python3 deploy/helm/verify.py  # renders and checks default and production values, requires PyYAML
 kubeconform -strict -summary -kubernetes-version 1.32.0 /tmp/allowops.yaml
 helm package deploy/helm/allowops --destination /tmp
 ```
@@ -35,14 +49,20 @@ go-licenses; these do not replace inspection of non-Go dependencies.
 Provision these Secrets in the target namespace before installation:
 
 * `allowops-credentials`: `ca.crt`, `ca.key` (PKCS8 host identity CA),
-  `tls.crt` (server certificate and full chain), `tls.key`,
-  `catalog.pub.pem` (PKIX Ed25519 public key).
+  `tls.crt` (server certificate and full chain), `tls.key`, and at least one
+  PKIX Ed25519 public key named `catalog*.pub.pem` (typically `catalog.pub.pem`).
 * `allowops-audit-cursor`: `audit-cursor-key`, exactly 32 raw random bytes,
   shared across API and export instances and retained across restarts.
 * `allowops-output`: `aws-credentials`, an AWS shared credentials file.
 * `allowops-database`: `url`, the runtime PostgreSQL connection string.
 * `allowops-migration-database`: `url`, a separate PostgreSQL maintenance
-  connection string. It must exist before `pre-install` runs.
+  connection string shared by the migration hook and partition maintenance
+  CronJob. It must exist before `pre-install` runs.
+
+For a private registry, set `imagePullSecrets` to a list such as
+`[{name: allowops-registry}]`. The gateway, exporter, and migration Job
+use the list. Provision the registry Secret before installing the chart so
+the migration hook can pull its image.
 
 The chart can create the credentials and runtime database Secrets using
 `credentials.create` / `database.create` and the corresponding data values.
@@ -72,13 +92,20 @@ is disabled by the gateway.
 The P3 pinned TLS client also requires the TLS root CA in the presented server
 chain. Include it in `tls.crt` even when a pin is configured explicitly.
 
-The migration role needs the privileges described in `docs/audit.md`.
-The runtime role must not be a superuser, the audit table owner, or a member
-of the maintenance role. After migration, the database administrator grants
-`allowops_audit_writer` and the required non-audit table privileges to the
-runtime role. On a fresh installation, this must be done before the runtime
-gateway starts successfully. Chart validation does not validate these grants.
-Partition maintenance and backups remain operator responsibilities.
+Use a maintenance role that owns the application tables for the migration
+Secret. The runtime login requires the least-privilege grants in
+[the PostgreSQL operations guide](../../../docs/audit.md).
+Apply those grants after migration, including
+`GRANT allowops_audit_writer, allowops_job_writer TO your_gateway_login;`.
+The runtime login must have no superuser privileges, application table
+ownership, maintenance role membership, or CREATE privilege on the
+application schema. On a fresh installation, apply the grants before the
+gateway starts. Chart validation does not validate these grants.
+
+Migrations provision partitions for the current UTC month and the next two
+months. The partition maintenance CronJob below runs `allowops-gateway ensure-partitions`
+using the maintenance credentials. If `RunJob` returns `UNAVAILABLE` with reason
+`TASK_PARTITION_MISSING`, run partition maintenance and retry the job submission.
 
 Kubernetes Secret projections contain symlinks. The gateway rejects symlinks
 and requires the CA private key to have mode 0600. A short non-root init
@@ -94,6 +121,97 @@ and the Mozilla CA bundle notice (MPL-2.0).
 Secret changes supplied outside Helm require restarting the workloads,
 because credentials are copied at pod startup. Chart-owned ConfigMap and
 Secret changes update the pod template checksum.
+
+To rotate a catalog signing key, add the new public key to
+`credentials.existingSecret` under a distinct name such as
+`catalog-2026.pub.pem`. Keep the old key during the transition. The init
+container copies all `catalog*.pub.pem` files as regular files with mode
+0600. Roll out the gateway and exporter (if enabled) after updating the Secret.
+Distribute the new key to hosts and verify dual-signed publication and host
+load reports before removing the old key. Roll out the workloads again to
+remove the old key from gateway trust. Any matching filename can be the
+remaining key. See the [catalog publishing guide](../../../website/publishing.md#rotate-catalog-signing-keys).
+
+## Identity providers and runtime settings
+
+`extraEnv` and `envFrom` use Kubernetes container environment entries and
+sources. Use Secret references for OpenID Connect (OIDC) client secrets and
+Lightweight Directory Access Protocol (LDAP) bind passwords. Use
+`extraVolumes` and `extraVolumeMounts` to mount a private certificate
+authority (CA) bundle, then reference its path with `gateway.providers[].ca_file`.
+These settings apply to both the gateway and exporter.
+
+~~~yaml
+extraEnv:
+  - name: OIDC_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: allowops-oidc
+        key: client-secret
+envFrom:
+  - secretRef:
+      name: allowops-ldap  # Contains the LDAP_BIND_PASSWORD key.
+extraVolumes:
+  - name: provider-ca
+    secret:
+      secretName: allowops-provider-ca  # Contains the ca.crt key.
+extraVolumeMounts:
+  - name: provider-ca
+    mountPath: /etc/allowops-provider-ca
+    readOnly: true
+gateway:
+  certificateTTL: "168h"
+  jobs:
+    wait_seconds: 15
+    max_wait_seconds: 60
+    batch_size: 10
+    max_failures: 2
+  providers:
+    - id: workforce-oidc
+      display_name: Workforce OIDC
+      kind: oidc
+      issuer_url: https://sso.example.com
+      client_id: allowops
+      client_secret_env: OIDC_CLIENT_SECRET
+      ca_file: /etc/allowops-provider-ca/ca.crt
+    - id: workforce-ldap
+      display_name: Workforce LDAP
+      kind: ldap
+      url: ldaps://ldap.example.com
+      user_base_dn: ou=users,dc=example,dc=com
+      group_base_dn: ou=groups,dc=example,dc=com
+      bind_dn: cn=allowops,ou=services,dc=example,dc=com
+      bind_password_env: LDAP_BIND_PASSWORD
+      ca_file: /etc/allowops-provider-ca/ca.crt
+~~~
+
+`gateway.certificateTTL` controls the host identity certificate lifetime for
+issuance and renewal. Use a positive Go duration such as `168h` or `24h`.
+An empty value uses the gateway default of `168h` (7 days). Set any of the four
+`gateway.jobs` fields to override the corresponding gateway defaults
+(`30`, `120`, `20` and `5`, respectively). Keep `wait_seconds` at or below
+`max_wait_seconds`.
+
+## Partition maintenance
+
+The CronJob runs `allowops-gateway ensure-partitions --months 3` at 02:00 UTC
+on the first and fifteenth of each month. It ensures the current UTC month and
+the next two months for `audit_events` and, when the database has the tasks
+partition function, for `tasks` as well. UTC scheduling uses the [Kubernetes
+CronJob time zone field](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#time-zones),
+stable since Kubernetes 1.27.
+
+Use a gateway image that includes `ensure-partitions`. The Job uses that image
+and reads the Secret selected by `migration.existingSecret` and `migration.key`.
+The default job deadline is 300 seconds. Kubernetes skips a scheduled run while
+the previous Job is active and retains one successful and three failed Jobs.
+Monitor failed Jobs and use a one-off job from the CronJob template to restore
+coverage when needed.
+
+Configure `partitions.schedule`, `partitions.months` (1–120) and
+`partitions.activeDeadlineSeconds` to change the cadence, coverage and deadline.
+Set `partitions.enabled=false` when scheduling maintenance outside Helm. For
+that render, pass `--partitions-disabled` to `deploy/helm/verify.py`.
 
 ## Shutdown and audit export
 

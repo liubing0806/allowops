@@ -9,7 +9,7 @@ identity:
   origin: https://gateway.example.org
 gateway:
   version: '0.2.0'
-  certificate_ttl: 24h
+  certificate_ttl: 168h
   single_join_ttl: 24h
   multi_join_ttl: 24h
 management:

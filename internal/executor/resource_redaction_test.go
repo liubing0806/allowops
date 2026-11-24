@@ -199,3 +199,46 @@ func TestResourceRedisRedaction(t *testing.T) {
 		})
 	}
 }
+
+func TestRedisResultRedactsPEMAcrossValues(t *testing.T) {
+	if !rootExecutorTest(t) {
+		return
+	}
+	values := map[string]string{
+		"begin":  "-----BEGIN PRIVATE KEY-----",
+		"body":   "redis-pem-body",
+		"end":    "-----END PRIVATE KEY-----",
+		"public": "public",
+	}
+	address, credential := redisResponseFixture(t, func(args []string) any {
+		switch strings.ToLower(args[0]) {
+		case "strlen":
+			return len(values[args[1]])
+		case "getrange":
+			v := values[args[1]]
+			start, _ := strconv.Atoi(args[2])
+			end, _ := strconv.Atoi(args[3])
+			if start >= len(v) {
+				return ""
+			}
+			return v[start:min(end+1, len(v))]
+		case "exists":
+			if _, ok := values[args[1]]; ok {
+				return 1
+			}
+			return 0
+		}
+		return fmt.Errorf("ERR unexpected command")
+	})
+	a := localBuiltinAction("redis_command", map[string]any{"address": address, "credential": credential})
+	input := map[string]any{"command": "MGET", "args": []string{"begin", "missing", "body", "end", "public"}}
+	r, err := RunWithFilters(context.Background(), a, input, nil, nil)
+	const want = `["[REDACTED:pem_private_key]",null,"","","public"]` + "\n"
+	if err != nil || r.Stdout != want || r.ExitCode != 0 {
+		t.Fatalf("MGET output=%q exit=%d err=%v; want %q", r.Stdout, r.ExitCode, err, want)
+	}
+	probe, err := RunWithFilters(context.Background(), a, input, map[string]any{"match": "redis-pem-body", "count": true}, nil)
+	if err != nil || probe.Stdout != "0\n" {
+		t.Fatalf("PEM body filter returned %q, err=%v; want 0 matches", probe.Stdout, err)
+	}
+}

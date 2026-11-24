@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type ExportPage struct {
@@ -214,6 +215,31 @@ type Exporter struct {
 	BatchSize int
 }
 
+func (x *Exporter) batchSize() (int, error) {
+	n := x.BatchSize
+	if n == 0 {
+		n = 200
+	}
+	if n < 1 || n > x.Store.Config.VerifyRows {
+		return 0, ErrLimit
+	}
+	return n, nil
+}
+
+// Await the unlock when possible, then close the physical connection so an
+// interrupted lock or unlock cannot leave a pooled session holding the lock.
+func closeExportConnection(conn *pgxpool.Conn, lock int64, acquired bool) error {
+	cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var err error
+	if acquired {
+		err = unlock(cleanup, conn, lock)
+	}
+	_ = conn.Conn().Close(cleanup)
+	conn.Release()
+	return err
+}
+
 func (x *Exporter) Once(ctx context.Context) (count uint64, err error) {
 	if x.Cursor == "" || x.Storage == nil {
 		return 0, ErrInvalid
@@ -226,15 +252,9 @@ func (x *Exporter) Once(ctx context.Context) (count uint64, err error) {
 	}
 	var acquired bool
 	defer func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if acquired {
-			if unlockErr := unlock(cleanup, conn, exportLock); err == nil {
-				err = unlockErr
-			}
+		if unlockErr := closeExportConnection(conn, exportLock, acquired); err == nil {
+			err = unlockErr
 		}
-		_ = conn.Conn().Close(cleanup)
-		conn.Release()
 	}()
 	acquired, err = tryLock(ctx, conn, exportLock)
 	if err != nil {
@@ -257,12 +277,9 @@ func (x *Exporter) Once(ctx context.Context) (count uint64, err error) {
 	} else if err != nil {
 		return 0, err
 	}
-	n := x.BatchSize
-	if n == 0 {
-		n = 200
-	}
-	if n < 1 || n > x.Store.Config.VerifyRows {
-		return 0, ErrLimit
+	n, err := x.batchSize()
+	if err != nil {
+		return 0, err
 	}
 	rows, err := eventsFrom(ctx, conn, next, n)
 	if err != nil {
@@ -303,10 +320,27 @@ func (x *Exporter) Once(ctx context.Context) (count uint64, err error) {
 	return uint64(len(events)), err
 }
 
-func (x *Exporter) Run(ctx context.Context, interval time.Duration) (err error) {
-	if interval <= 0 || x.Cursor == "" || x.Storage == nil {
+func (x *Exporter) Run(ctx context.Context, interval time.Duration) error {
+	if interval <= 0 || x.Cursor == "" || x.Storage == nil || x.Store == nil || x.Store.Pool == nil {
 		return ErrInvalid
 	}
+	if _, err := x.batchSize(); err != nil {
+		return err
+	}
+	var backoff workerBackoff
+	for ctx.Err() == nil {
+		err := x.runSession(ctx, interval, &backoff)
+		if ctx.Err() == nil && errors.Is(err, ErrInvalid) {
+			return err
+		}
+		if !backoff.wait(ctx, "audit export failed; retrying", err) {
+			break
+		}
+	}
+	return ctx.Err()
+}
+
+func (x *Exporter) runSession(ctx context.Context, interval time.Duration, backoff *workerBackoff) error {
 	// Hold leadership through idle polling. The separate batch lock in Once
 	// still permits retention maintenance between batches.
 	owner, err := x.Store.Pool.Acquire(ctx)
@@ -314,17 +348,7 @@ func (x *Exporter) Run(ctx context.Context, interval time.Duration) (err error) 
 		return err
 	}
 	claimed, warned := false, false
-	defer func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if claimed {
-			if unlockErr := unlock(cleanup, owner, exportLeaderLock); err == nil {
-				err = unlockErr
-			}
-		}
-		_ = owner.Conn().Close(cleanup)
-		owner.Release()
-	}()
+	defer func() { _ = closeExportConnection(owner, exportLeaderLock, claimed) }()
 	timer := time.NewTicker(interval)
 	defer timer.Stop()
 	for {
@@ -348,6 +372,7 @@ func (x *Exporter) Run(ctx context.Context, interval time.Duration) (err error) 
 				return err
 			}
 		}
+		*backoff = 0
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

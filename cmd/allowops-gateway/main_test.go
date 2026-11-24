@@ -9,7 +9,10 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"io"
+	"log"
+	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
@@ -23,6 +26,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/jackc/pgx/v5/pgconn"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/gen/allowops/v1/allowopsv1connect"
 	"github.com/liubing0806/allowops/internal/gateway/api"
@@ -30,6 +34,7 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/hostconn"
 	"github.com/liubing0806/allowops/internal/gateway/job"
 	"github.com/liubing0806/allowops/internal/gateway/output"
+	"github.com/liubing0806/allowops/internal/gateway/server"
 	"github.com/liubing0806/allowops/internal/store"
 	"github.com/liubing0806/allowops/internal/testpg"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -48,6 +53,120 @@ func (b *safeBuffer) Write(p []byte) (int, error) {
 }
 
 func (b *safeBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return b.b.String() }
+
+func TestServeDrainsAfterAuditWorkerFailure(t *testing.T) {
+	dsn := testpg.Start(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := store.Migrate(ctx, dsn); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var logs safeBuffer
+	original, originalOutput, originalFlags := slog.Default(), log.Writer(), log.Flags()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	defer func() { slog.SetDefault(original); log.SetOutput(originalOutput); log.SetFlags(originalFlags) }()
+
+	cfg := configuration{Gateway: hostconn.DefaultConfig()}
+	draining, release := make(chan struct{}), make(chan struct{})
+	agent, err := hostconn.New(db, &hostconn.CA{}, cfg.Gateway, hostconn.Hooks{Drain: func(shutdown context.Context) error {
+		close(draining)
+		select {
+		case <-release:
+			return nil
+		case <-shutdown.Done():
+			return shutdown.Err()
+		}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := server.New(agent, tls.Certificate{})
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	auditCtx, stopAudit := context.WithCancel(context.Background())
+	defer stopAudit()
+	const privateDetail = "fixture-credential-in-sql"
+	workerErr := fmt.Errorf("exporter: %w", &pgconn.PgError{Code: "57P01", Message: privateDetail})
+	auditErrors := make(chan error, 1)
+	auditErrors <- workerErr
+	done := make(chan error, 1)
+	go func() { done <- serveUntilDone(ctx, cfg, srv, agent, listener, auditErrors, stopAudit) }()
+	select {
+	case <-draining:
+	case err := <-done:
+		t.Fatalf("serve returned %v before draining", err)
+	case <-ctx.Done():
+		t.Fatal("audit worker failure did not start draining")
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("serve returned %v while drain hook was blocked", err)
+	default:
+	}
+	if auditCtx.Err() != context.Canceled {
+		t.Error("serve started draining before canceling audit workers")
+	}
+	close(release)
+	select {
+	case err := <-done:
+		if err == nil || err.Error() != "audit background worker stopped" {
+			t.Fatalf("serve error = %v, want sanitized worker failure", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("serve did not exit after drain hook finished")
+	}
+	got := logs.String()
+	if !strings.Contains(got, "level=ERROR") || !strings.Contains(got, "sqlstate=57P01") || !strings.Contains(got, "error_type=") || strings.Contains(got, privateDetail) {
+		t.Fatalf("audit worker logs = %q, want safe error classification", got)
+	}
+}
+
+func TestCertificateTTLConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		yaml  string
+		want  time.Duration
+		valid bool
+	}{
+		{"default", "gateway: {}", 7 * 24 * time.Hour, true},
+		{"shorter", "gateway:\n  certificate_ttl: 24h", 24 * time.Hour, true},
+		{"longer", "gateway:\n  certificate_ttl: 336h", 14 * 24 * time.Hour, true},
+		{"zero", "gateway:\n  certificate_ttl: 0s", 0, false},
+		{"negative", "gateway:\n  certificate_ttl: -1h", -time.Hour, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "gateway.yaml")
+			if err := os.WriteFile(path, []byte(tc.yaml), 0600); err != nil {
+				t.Fatal(err)
+			}
+			file, err := os.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer file.Close()
+			cfg, err := decodeConfig(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Gateway.CertificateTTL != tc.want {
+				t.Fatalf("certificate_ttl = %s, want %s", cfg.Gateway.CertificateTTL, tc.want)
+			}
+			if err := cfg.Gateway.Validate(); (err == nil) != tc.valid {
+				t.Fatalf("gateway config validation = %v, want valid=%t", err, tc.valid)
+			}
+		})
+	}
+}
 
 func TestGatewayCommands(t *testing.T) {
 	dsn := testpg.Start(t)
@@ -96,6 +215,12 @@ func TestGatewayCommands(t *testing.T) {
 		t.Fatalf("unmigrated serve: err=%v output=%s", err, output)
 	}
 	t.Logf("./bin/allowops-gateway serve --config <fixture>: exit 1: %s", strings.TrimSpace(string(output)))
+	command = exec.Command(binary, "ensure-partitions")
+	command.Env = environment
+	output, err = command.CombinedOutput()
+	if err == nil || strings.TrimSpace(string(output)) != "ensure audit_events partitions failed" {
+		t.Errorf("unmigrated partition maintenance: exit=%v output=%q", err, output)
+	}
 	command = exec.Command(binary, "migrate")
 	command.Env = environment
 	output, err = command.CombinedOutput()
@@ -103,6 +228,9 @@ func TestGatewayCommands(t *testing.T) {
 		t.Fatalf("migrate: %v\n%s", err, output)
 	}
 	t.Logf("./bin/allowops-gateway migrate: exit 0: %s", strings.TrimSpace(string(output)))
+	t.Run("ensure-partitions", func(t *testing.T) {
+		testEnsurePartitionsPostgres(t, binary, dsn)
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	command = exec.CommandContext(ctx, binary, "serve", "--config", configPath)

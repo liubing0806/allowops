@@ -17,15 +17,23 @@ import (
 // removes as many tabs as a cell holds leaves the count unchanged but shifts
 // every field.
 func MaskRow(values []sql.NullString, mask func(string) string) []string {
+	return MaskRowWith(values, mask, mask)
+}
+
+// MaskRowWith returns the TSV fields of one row, masking each cell with
+// maskValue and then the tab-joined row with maskJoined. Passing a stateful
+// maskValue and a stateless maskJoined ensures only original cell values
+// advance cross-value redaction state such as PEM blocks.
+func MaskRowWith(values []sql.NullString, maskValue, maskJoined func(string) string) []string {
 	cells := make([]string, len(values))
 	for i, v := range values {
 		if v.Valid {
-			cells[i] = mask(v.String)
+			cells[i] = maskValue(v.String)
 		}
 	}
 	if len(cells) > 1 {
 		joined := strings.Join(cells, "\t")
-		if masked := mask(joined); masked != joined {
+		if masked := maskJoined(joined); masked != joined {
 			parts := strings.Split(masked, "\t")
 			if len(parts) != len(cells) || slices.ContainsFunc(cells, func(c string) bool { return strings.Contains(c, "\t") }) {
 				return []string{Escape(masked)}

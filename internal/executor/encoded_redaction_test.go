@@ -117,3 +117,18 @@ func assertMySQLOriginalStrings(t *testing.T, base catalog.Action) {
 		t.Errorf("columns/null/numbers: got=%q err=%v want=%q", r.Stdout, err, want)
 	}
 }
+
+func assertMySQLRedactionAcrossCells(t *testing.T, a catalog.Action) {
+	t.Helper()
+	input := map[string]any{
+		"database": "fixture",
+		"sql": "SELECT '-----BEGIN PRIVATE KEY-----' AS a, 'mysql-pem-body-one' AS b, NULL AS c, 'mysql-pem-body-two' AS d " +
+			"UNION ALL SELECT 'mysql-pem-body-three', '-----END PRIVATE KEY-----', 'password=', 'mysql-credential' " +
+			"UNION ALL SELECT 'public', 'ordinary', NULL, 'end'",
+	}
+	r, err := RunWithFilters(context.Background(), a, input, nil, nil)
+	want := "a\tb\tc\td\n[REDACTED:pem_private_key]\t\t\\N\t\n\\t\\t[REDACTED:credential]\npublic\tordinary\t\\N\tend\n"
+	if err != nil || r.ExitCode != 0 || r.Stdout != want {
+		t.Fatalf("MySQL output=%q exit=%d err=%v; want %q", r.Stdout, r.ExitCode, err, want)
+	}
+}

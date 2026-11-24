@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -227,8 +228,8 @@ var errMaxTargetsRange = fmt.Errorf("max_targets must be an integer from 1 to %d
 
 var actionName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
-func IsInterpreter(path string) bool {
-	name := strings.ToLower(filepath.Base(path))
+func IsInterpreter(command string) bool {
+	name := strings.ToLower(path.Base(command))
 	return strings.HasPrefix(name, "python") || slices.Contains([]string{"sh", "bash", "zsh", "dash", "ash", "ksh", "mksh", "rbash", "csh", "tcsh", "perl", "ruby", "node", "php", "lua", "awk", "gawk", "mawk", "sed"}, name)
 }
 

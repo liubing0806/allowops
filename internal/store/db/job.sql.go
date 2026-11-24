@@ -616,15 +616,6 @@ func (q *Queries) LockJobForCancel(ctx context.Context, jobID string) (LockJobFo
 	return i, err
 }
 
-const lockJobPartitionCreation = `-- name: LockJobPartitionCreation :exec
-SELECT pg_advisory_xact_lock(418006)
-`
-
-func (q *Queries) LockJobPartitionCreation(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, lockJobPartitionCreation)
-	return err
-}
-
 const lockJobSubject = `-- name: LockJobSubject :exec
 SELECT pg_advisory_xact_lock(hashtextextended($1,418006))
 `

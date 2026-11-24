@@ -36,7 +36,7 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
-	return Config{Version: "0.1.0", CertificateTTL: 24 * time.Hour, SingleJoinTTL: 24 * time.Hour, MultiJoinTTL: 24 * time.Hour,
+	return Config{Version: "0.1.0", CertificateTTL: 7 * 24 * time.Hour, SingleJoinTTL: 24 * time.Hour, MultiJoinTTL: 24 * time.Hour,
 		HeartbeatInterval: 15 * time.Second, HeartbeatTimeout: 45 * time.Second, FlushInterval: 5 * time.Minute,
 		MessageBytes: 1 << 20, ChunkBytes: 64 << 10, EnvelopeBytes: 64 << 20, ActionBytes: 256 << 10,
 		QueueMessages: 64, QueueBytes: 1 << 20, ReceiveRate: 100, ReceiveBurst: 200, MaxInflight: 4,

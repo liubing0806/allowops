@@ -125,6 +125,26 @@ func TestLDAPGatewayLoginWithLocalOpenLDAP(t *testing.T) {
 	if len(cookies) != 1 || !cookies[0].Secure || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteStrictMode {
 		t.Fatal("LDAP console cookie is unsafe")
 	}
+	u := console.Msg.User
+	disabled, err := f.users().SetUserDisabled(ctx, connect.NewRequest(&v1.SetUserDisabledRequest{UserId: u.UserId, ExpectedRevision: u.Revision, Disabled: true}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = login(v1.LoginClient_LOGIN_CLIENT_CLI, "alice", "test-user-password", "")
+	code(t, err, connect.CodeUnauthenticated)
+	_, err = login(v1.LoginClient_LOGIN_CLIENT_CONSOLE, "alice", "test-user-password", f.server.URL)
+	code(t, err, connect.CodeUnauthenticated)
+	_, err = f.auth("").GetCurrentSession(ctx, consoleSessionRequest(cookies[0].Value))
+	code(t, err, connect.CodeUnauthenticated)
+	_, err = f.auth(response.Msg.GetCliSessionToken()).GetCurrentSession(ctx, connect.NewRequest(&v1.GetCurrentSessionRequest{}))
+	code(t, err, connect.CodeUnauthenticated)
+	_, err = f.users().SetUserDisabled(ctx, connect.NewRequest(&v1.SetUserDisabledRequest{UserId: u.UserId, ExpectedRevision: disabled.Msg.User.Revision}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := login(v1.LoginClient_LOGIN_CLIENT_CLI, "alice", "test-user-password", ""); err != nil {
+		t.Fatalf("LDAP login after re-enabling: %v", err)
+	}
 	_, err = login(v1.LoginClient_LOGIN_CLIENT_CONSOLE, "alice", "test-user-password", "https://evil.example")
 	code(t, err, connect.CodePermissionDenied)
 	for range 5 {

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func prepareUnknownStatusGateway(t *testing.T) {
 	s := httptest.NewTLSServer(handler)
 	t.Cleanup(s.Close)
 	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
+	useTestConfigDir(t, dir)
 	ca := filepath.Join(dir, "ca.pem")
 	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: s.Certificate().Raw}), 0600); err != nil {
 		t.Fatal(err)
@@ -91,13 +92,16 @@ func TestRunUnknownStatusExitsNonzero(t *testing.T) {
 }
 
 func TestRunUnknownStatusProcessExit(t *testing.T) {
-	prepareUnknownStatusGateway(t)
 	binary := filepath.Join(t.TempDir(), "allowops")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	if output, err := exec.CommandContext(ctx, "go", "build", "-o", binary, "../../cmd/allowops").CombinedOutput(); err != nil {
 		t.Fatalf("CLI fixture build: %v\n%s", err, output)
 	}
+	prepareUnknownStatusGateway(t)
 	for _, tc := range []struct {
 		name string
 		want int

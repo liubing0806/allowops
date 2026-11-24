@@ -22,10 +22,13 @@ type Identity struct {
 }
 
 type OIDCConfig struct {
-	IssuerURL    string
-	ClientID     string
-	RoleMappings map[string]string
-	HTTPClient   *http.Client
+	IssuerURL     string
+	ClientID      string
+	RoleMappings  map[string]string
+	HTTPClient    *http.Client
+	Scopes        []string
+	GroupsClaim   string
+	FetchUserInfo bool
 }
 
 type RateLimit struct {

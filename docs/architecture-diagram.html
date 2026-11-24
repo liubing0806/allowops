@@ -157,7 +157,7 @@ const notes2 = [['deny 优先', '默认拒绝'], ['每批 20 台', '失败 5 台
   if (i < 3) arrow([[524 + i * (sw + sg) + sw, 380], [524 + (i + 1) * (sw + sg), 380]], { color: C.gw.stroke, lw: 1.4 });
 });
 label('③ 网关内其他职责', 524, 432, { fs: 12.5, bold: true, color: C.gw.title });
-box(524, 442, 290, 80, C.gwInner, '主机注册表与内部 CA', ['签发主机短期证书（24 小时，到期前续期）', 'CA 私钥存网关主机文件（0600），不入库'], { ts: 13, fs: 11.5 });
+box(524, 442, 290, 80, C.gwInner, '主机注册表与内部 CA', ['签发主机短期证书（默认 7 天，到期前续期）', 'CA 私钥存网关主机文件（0600），不入库'], { ts: 13, fs: 11.5 });
 box(826, 442, 290, 80, C.gwInner, '目录与策略', ['接收签名目录包，网关预先验签一次', '通知主机拉取新目录包'], { ts: 13, fs: 11.5 });
 box(524, 532, 290, 80, C.gwInner, '多实例协同', ['主机连接所在实例记录在 PostgreSQL', 'gateway_messages + LISTEN/NOTIFY 转发任务'], { ts: 13, fs: 11.5 });
 box(826, 532, 290, 80, C.gwInner, '内嵌 Web 控制台与指标', ['控制台静态页面随网关二进制发布', 'log/slog 日志，Prometheus 指标'], { ts: 13, fs: 11.5 });
@@ -207,7 +207,7 @@ box(LG - 120, 90, 240, 40, C.gw, 'allowops-gateway', [], { center: true, ts: 14,
 lifeline(LA, 130, 620); lifeline(LG, 130, 620);
 [
   ['→', '① Join（ALPN allowops-join/1，只在首次注册）：join token + CSR；用 --ca-pin 核对网关 CA'],
-  ['←', '② 返回主机证书（有效期 24 小时）'],
+  ['←', '② 返回主机证书（默认有效期 7 天）'],
   ['→', '③ 建立 Connect 流（mTLS）；网关核对证书序列号与主机记录一致'],
   ['→', '④ AgentHello：agent 版本、能力、已加载目录、最大并发'],
   ['←', '⑤ GatewayHello：心跳间隔 15 s、心跳超时 45 s、消息与分块上限'],

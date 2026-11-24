@@ -3,12 +3,24 @@ image:
   repository: allowops-gateway
   tag: "0.2.0"
   pullPolicy: IfNotPresent
+imagePullSecrets: []
+# Kubernetes container environment entries and sources for gateway and exporter.
+extraEnv: []
+envFrom: []
+# Kubernetes volumes and container mounts for gateway and exporter.
+extraVolumes: []
+extraVolumeMounts: []
 service:
   type: LoadBalancer
+  externalTrafficPolicy: Local
   annotations: {}
 # ALPN and TLS terminate in the gateway. Only use an L4 TCP load balancer.
 gateway:
   shutdownGraceSeconds: 10
+  # Empty uses the gateway's default host certificate lifetime.
+  certificateTTL: ""
+  # Optional: wait_seconds, max_wait_seconds, batch_size, max_failures.
+  jobs: {}
   management:
     ca_pin: ""
     # upstream defaults to identity.origin; use the public TLS endpoint.
@@ -23,7 +35,7 @@ gateway:
   #     key: bind-password
   providerSecretEnv: []
 credentials:
-  # Keys: ca.crt, ca.key (PKCS8), tls.crt (full chain), tls.key, catalog.pub.pem.
+  # Keys: ca.crt, ca.key (PKCS8), tls.crt (full chain), tls.key, and at least one catalog*.pub.pem.
   existingSecret: allowops-credentials
   create: false
   data:
@@ -42,6 +54,12 @@ migration:
   existingSecret: allowops-migration-database
   key: url
   activeDeadlineSeconds: 300
+partitions:
+  enabled: true
+  # Runs in UTC and uses the migration database Secret.
+  schedule: "0 2 1,15 * *"
+  months: 3
+  activeDeadlineSeconds: 300
 audit:
   # Exactly one export instance; API replicas never export files.
   enabled: true
@@ -57,6 +75,10 @@ output:
   region: us-east-1
   # Empty endpoint uses the AWS regional S3 endpoint. Set for SeaweedFS.
   endpoint: ""
+  # Defaults to true with a custom endpoint and false with the AWS endpoint.
+  # use_path_style: false
+  # Defaults to AES256. Set to "none" to omit the upload encryption header.
+  # server_side_encryption: "none"
   existingSecret: allowops-output
   credentialsKey: aws-credentials
 # Used only to copy Kubernetes Secret projections into ordinary 0600 files.
