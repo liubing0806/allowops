@@ -15,7 +15,7 @@ import (
 
 var (
 	clientRequestIDPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,64}$`)
-	evidenceJobIDPattern   = regexp.MustCompile(`^job-[0-9]{8}-[0-9]{4,20}$`)
+	evidenceJobIDPattern   = regexp.MustCompile(`^job-[0-9]{8}-[0-9]{1,20}$`)
 )
 
 func validApprovalText(text string) bool {
@@ -30,7 +30,7 @@ func (s *Service) validateApprovalEvidence(ctx context.Context, r *v1.RunJobRequ
 	if evidence == nil {
 		return nil, nil
 	}
-	if len(evidence.JobIds) < 1 || len(evidence.JobIds) > 5 || !validApprovalText(evidence.Summary) {
+	if (len(evidence.JobIds) == 0 && strings.TrimSpace(evidence.Summary) == "") || len(evidence.JobIds) > 5 || !validApprovalText(evidence.Summary) {
 		return nil, failure(connect.CodeInvalidArgument, "INVALID_EVIDENCE")
 	}
 	evidenceCtx := context.WithValue(reqctx.ForkRequestContext(ctx), operationKey{}, &operationState{})

@@ -267,7 +267,7 @@ func (s *Service) runAction(ctx context.Context, r *sdk.CallToolRequest, action 
 	}
 	if response.Job.Status == v1.JobStatus_JOB_STATUS_PENDING_APPROVAL {
 		state.pendingApproval = true
-		return pendingApprovalResult(response.Job)
+		return pendingApprovalResult(response.Job, response.Summary.GetTruncated())
 	}
 	return nativeSummaryResult(reqctx.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, "")
 }
@@ -420,7 +420,7 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 	if host == "" {
 		if response.Job.Status == v1.JobStatus_JOB_STATUS_PENDING_APPROVAL {
 			state.pendingApproval = true
-			return pendingApprovalResult(response.Job)
+			return pendingApprovalResult(response.Job, response.Summary.GetTruncated())
 		}
 		return nativeSummaryResult(reqctx.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, cursor)
 	}

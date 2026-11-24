@@ -9,11 +9,17 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func pendingApprovalResult(job *v1.Job) (*ToolResult, error) {
+func pendingApprovalResult(job *v1.Job, summaryTruncated bool) (*ToolResult, error) {
 	if job.Approval == nil {
 		return nil, accessError(connect.CodeUnavailable, "job approval receipt unavailable")
 	}
 	data := jobMetadata(job)
+	if summaryTruncated {
+		if approval, ok := data["approval"].(map[string]any); ok {
+			delete(approval, "required_approver_role_sets")
+		}
+		data["details_truncated"] = true
+	}
 	data["hint"] = "Do not retry submitting this action. Share the approval_id and console_url with the user. Poll with jobs_get(job_id, wait_seconds=30), or withdraw with jobs_cancel(job_id)."
 	return boundedJobResult(data, data)
 }

@@ -36,10 +36,22 @@ func TestApprovalResultsFitWireBudget(t *testing.T) {
 	if err != nil || fullSize <= resultByteLimit {
 		t.Fatalf("test receipt is not oversized: bytes=%d err=%v", fullSize, err)
 	}
-	pending, err := pendingApprovalResult(job)
+	pending, err := pendingApprovalResult(job, false)
 	pendingData := assertApprovalBudget(t, pending, err)
 	if pendingData["status"] != "pending_approval" || !strings.Contains(pendingData["hint"].(string), "Do not retry") {
 		t.Fatalf("pending receipt=%v", pendingData)
+	}
+	preTrimmed := &v1.Job{
+		JobId: "job-20261124-0001", Action: "gated_write", Status: v1.JobStatus_JOB_STATUS_PENDING_APPROVAL, TotalTasks: 1,
+		Approval: &v1.JobApprovalSummary{
+			ApprovalId: "apr-20261124-0001", Status: v1.ApprovalStatus_APPROVAL_STATUS_PENDING,
+			ExpiresAt: a.ExpiresAt, MinApprovals: 2, ApprovedCount: 1, ConsoleUrl: a.ConsoleUrl,
+		},
+	}
+	trimmedPending, err := pendingApprovalResult(preTrimmed, true)
+	trimmedData := assertApprovalBudget(t, trimmedPending, err)
+	if _, hasRoles := trimmedData["approval"].(map[string]any)["required_approver_role_sets"]; hasRoles {
+		t.Fatalf("pre-trimmed pending receipt should omit required_approver_role_sets: %v", trimmedData)
 	}
 	metadata, err := jobMetadataResult(job)
 	assertApprovalBudget(t, metadata, err)
