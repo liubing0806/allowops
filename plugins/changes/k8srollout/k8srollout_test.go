@@ -141,9 +141,9 @@ func TestKubernetesRolloutErrorsDoNotExposeRemoteData(t *testing.T) {
 		opts []plugintest.HostOption
 		want string
 	}{
-		{"missing credential", []plugintest.HostOption{plugintest.WithHTTPServer(server)}, "Kubernetes rollout credential unavailable"},
-		{"network blocked", []plugintest.HostOption{plugintest.WithCredential("kube", []byte(secret))}, "Kubernetes rollout request failed"},
-		{"HTTP error", []plugintest.HostOption{plugintest.WithHTTPServer(server), plugintest.WithCredential("kube", []byte(secret))}, "Kubernetes rollout returned an unsuccessful HTTP status"},
+		{"missing credential", []plugintest.HostOption{plugintest.WithHTTPServer(server)}, "k8s rollout credential unavailable"},
+		{"network blocked", []plugintest.HostOption{plugintest.WithCredential("kube", []byte(secret))}, "k8s rollout request failed"},
+		{"HTTP error", []plugintest.HostOption{plugintest.WithHTTPServer(server), plugintest.WithCredential("kube", []byte(secret))}, "k8s rollout returned an unsuccessful HTTP status"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := Module{APIServer: server.URL, CredentialRef: "kube", Namespaces: []string{"apps"}}

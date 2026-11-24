@@ -170,12 +170,8 @@ func projectRules(rules []authz.Rule) ruleSnapshot {
 	return projected
 }
 
-// visibleTools returns the tool definitions to register, plus the set of
+// visiblePluginTools returns the tool definitions to register, plus the set of
 // callable names and the subset whose schema the SDK cannot register.
-func visibleTools(ctx context.Context, engine *authz.Engine, id *reqctx.Identity, actions map[string]catalog.Action, cfg job.Config, sources ...string) ([]ToolDefinition, map[string]bool, map[string]bool, error) {
-	return visiblePluginTools(ctx, engine, id, actions, cfg, sources, nil, nil)
-}
-
 func visiblePluginTools(ctx context.Context, engine *authz.Engine, id *reqctx.Identity, actions map[string]catalog.Action, cfg job.Config, invSources, changeSources, knowledgeSources []string) ([]ToolDefinition, map[string]bool, map[string]bool, error) {
 	definitions := fixedPluginTools(cfg, invSources, changeSources, knowledgeSources)
 	names := slices.Collect(maps.Keys(actions))

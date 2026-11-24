@@ -253,31 +253,31 @@ func (m *Module) change(item rollout, namespace, kind string) (changes.Change, b
 func (m *Module) fetch(ctx context.Context, endpoint string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, errors.New("Kubernetes rollout request invalid")
+		return nil, errors.New("k8s rollout request invalid")
 	}
 	req.Header.Set("Accept", "application/json")
 	if m.CredentialRef != "" {
 		data, err := m.host.Credential(m.CredentialRef)
 		token := strings.TrimSpace(string(data))
 		if err != nil || token == "" || !httpguts.ValidHeaderFieldValue(token) {
-			return nil, errors.New("Kubernetes rollout credential unavailable")
+			return nil, errors.New("k8s rollout credential unavailable")
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := m.host.HTTPClient().Do(req)
 	if err != nil {
-		return nil, errors.New("Kubernetes rollout request failed")
+		return nil, errors.New("k8s rollout request failed")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, errors.New("Kubernetes rollout returned an unsuccessful HTTP status")
+		return nil, errors.New("k8s rollout returned an unsuccessful HTTP status")
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, m.MaxResponseBytes+1))
 	if err != nil {
-		return nil, errors.New("Kubernetes rollout response read failed")
+		return nil, errors.New("k8s rollout response read failed")
 	}
 	if int64(len(body)) > m.MaxResponseBytes {
-		return nil, errors.New("Kubernetes rollout response exceeds max_response_bytes")
+		return nil, errors.New("k8s rollout response exceeds max_response_bytes")
 	}
 	return body, nil
 }

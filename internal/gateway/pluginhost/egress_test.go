@@ -227,8 +227,7 @@ func TestEgressBlocksMethodsPathsAndRedirectTargets(t *testing.T) {
 	var hits atomic.Int32
 	target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
 	defer target.Close()
-	var origin *httptest.Server
-	origin = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
 		switch r.URL.Path {
 		case "/allowed/downgrade":
