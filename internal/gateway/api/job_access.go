@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"time"
 
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
@@ -44,11 +43,8 @@ func (s *Service) RequireBatch(ctx context.Context, op authz.Operation, action a
 	}
 	current := s.state.Load()
 	t := transport(ctx)
-	results := current.engine.EvaluateBatch(ctx, authz.Input{Subject: t.identity.Subject, Operation: op, Action: action, Env: authz.Environment{TimeNS: time.Now().UnixNano(), SourceIP: t.ip}}, hosts)
-	for i, host := range hosts {
-		if op == authz.ExecuteAction && len(host.Labels) == 0 {
-			results[i].Result = authz.Result{Decision: "deny", RuleIDs: []string{"HOST_UNLABELED"}}
-		}
+	results := s.EvaluateWithEngine(ctx, current.engine, current.version, t.identity.Subject, t.ip, op, action, hosts)
+	for i := range results {
 		t.matchedRules = unique(append(t.matchedRules, results[i].Result.RuleIDs...))
 	}
 	t.policyVersion = current.version

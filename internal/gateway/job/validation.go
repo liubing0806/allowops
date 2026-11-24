@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
@@ -99,9 +100,9 @@ func (s *Service) waitValue(value *uint32, defaultValue uint32) (uint32, error) 
 	return *value, nil
 }
 
-func prepare(action catalog.Action, r *v1.RunJobRequest, c Config) (uint32, uint32, error) {
-	if strings.TrimSpace(r.Reason) == "" || len(r.Reason) > 4096 {
-		return 0, 0, failure(connect.CodeInvalidArgument, "REASON_REQUIRED_OR_TOO_LONG")
+func prepare(action catalog.Action, r *v1.RunJobRequest, c Config) (uint32, uint32, map[string]any, error) {
+	if strings.TrimSpace(r.Reason) == "" || len(r.Reason) > 4096 || !utf8.ValidString(r.Reason) || strings.ContainsRune(r.Reason, 0) {
+		return 0, 0, nil, failure(connect.CodeInvalidArgument, "REASON_REQUIRED_OR_TOO_LONG")
 	}
 	data := r.GetParams().GetJson()
 	if len(data) == 0 {
@@ -109,20 +110,21 @@ func prepare(action catalog.Action, r *v1.RunJobRequest, c Config) (uint32, uint
 	}
 	input, err := execd.DecodeParameters(data)
 	if err != nil {
-		return 0, 0, failure(connect.CodeInvalidArgument, "INVALID_PARAMETERS")
+		return 0, 0, nil, failure(connect.CodeInvalidArgument, "INVALID_PARAMETERS")
 	}
 	defs, err := catalog.ParameterDefinitions(action)
 	if err != nil {
-		return 0, 0, failure(connect.CodeFailedPrecondition, "ACTION_UNSUPPORTED")
+		return 0, 0, nil, failure(connect.CodeFailedPrecondition, "ACTION_UNSUPPORTED")
 	}
-	if _, err := params.ParseGateway(defs, input); err != nil {
+	parsed, err := params.ParseGateway(defs, input)
+	if err != nil {
 		// Values never enter error text. Constraints come from the signed schema.
 		violations := []*v1.FieldViolation{}
 		for name, def := range defs {
 			violations = append(violations, &v1.FieldViolation{Field: name, Description: string(def.Type), AllowedValues: def.Values})
 		}
 		slices.SortFunc(violations, func(a, b *v1.FieldViolation) int { return strings.Compare(a.Field, b.Field) })
-		return 0, 0, detailError(connect.CodeInvalidArgument, &v1.ErrorDetail{Reason: "INVALID_PARAMETERS", Violations: violations})
+		return 0, 0, nil, detailError(connect.CodeInvalidArgument, &v1.ErrorDetail{Reason: "INVALID_PARAMETERS", Violations: violations})
 	}
 	filters := map[string]any{}
 	selected := 0
@@ -147,10 +149,10 @@ func prepare(action catalog.Action, r *v1.RunJobRequest, c Config) (uint32, uint
 		}
 	}
 	if selected > 1 {
-		return 0, 0, failure(connect.CodeInvalidArgument, "INVALID_FILTERS")
+		return 0, 0, nil, failure(connect.CodeInvalidArgument, "INVALID_FILTERS")
 	}
 	if _, err := executor.ParseFilters(action.Filters, filters); err != nil {
-		return 0, 0, failure(connect.CodeInvalidArgument, "INVALID_FILTERS")
+		return 0, 0, nil, failure(connect.CodeInvalidArgument, "INVALID_FILTERS")
 	}
 	batch, failures := c.BatchSize, c.MaxFailures
 	if action.BatchSize > 0 {
@@ -161,17 +163,17 @@ func prepare(action catalog.Action, r *v1.RunJobRequest, c Config) (uint32, uint
 	}
 	if r.BatchSize != nil {
 		if *r.BatchSize == 0 || *r.BatchSize > batch {
-			return 0, 0, failure(connect.CodeInvalidArgument, "BATCH_SIZE_MUST_TIGHTEN")
+			return 0, 0, nil, failure(connect.CodeInvalidArgument, "BATCH_SIZE_MUST_TIGHTEN")
 		}
 		batch = *r.BatchSize
 	}
 	if r.MaxFailures != nil {
 		if *r.MaxFailures > failures {
-			return 0, 0, failure(connect.CodeInvalidArgument, "MAX_FAILURES_MUST_TIGHTEN")
+			return 0, 0, nil, failure(connect.CodeInvalidArgument, "MAX_FAILURES_MUST_TIGHTEN")
 		}
 		failures = *r.MaxFailures
 	}
-	return batch, failures, nil
+	return batch, failures, parsed, nil
 }
 
 func (s *Service) action(ctx context.Context, name string) (*catalog.Package, catalog.Action, []byte, error) {

@@ -678,7 +678,7 @@ func (s *Service) TestPolicy(ctx context.Context, r *connect.Request[v1.TestPoli
 	default:
 		return nil, failure(connect.CodeInvalidArgument, "candidate required")
 	}
-	after, err := rulesFromProto(candidate)
+	after, err := s.candidateRules(candidate)
 	if err != nil {
 		return nil, err
 	}
@@ -785,7 +785,7 @@ func (s *Service) persistPolicy(ctx context.Context, base uint64, candidate *v1.
 		}
 		candidate = p.Rules
 	}
-	rules, err := rulesFromProto(candidate)
+	rules, err := s.candidateRules(candidate)
 	if err != nil {
 		return nil, err
 	}

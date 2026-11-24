@@ -13,11 +13,13 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/jackc/pgx/v5"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/cluster"
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
+	"github.com/liubing0806/allowops/internal/store/db"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -39,6 +41,10 @@ func pageSize(r *v1.PageRequest) (int, error) {
 
 // fitResponse returns how many leading items fit in ResponseBytes.
 func fitResponse[T proto.Message](items []T) (int, error) {
+	return fitResponseBytes(items, ResponseBytes)
+}
+
+func fitResponseBytes[T proto.Message](items []T, limit int) (int, error) {
 	bytes := 512
 	for i, item := range items {
 		raw, err := protojson.Marshal(item)
@@ -46,7 +52,7 @@ func fitResponse[T proto.Message](items []T) (int, error) {
 			return 0, err
 		}
 		size := max(len(raw), proto.Size(item)) + 2
-		if bytes+size > ResponseBytes {
+		if bytes+size > limit {
 			if i == 0 {
 				return 0, failure(connect.CodeResourceExhausted, "JOB_RESPONSE_LIMIT")
 			}
@@ -118,6 +124,29 @@ func parseJobCursor(token, binding string) (*jobCursor, error) {
 	return &jobCursor{created: time.UnixMicro(micros), id: parts[2]}, nil
 }
 
+func jobTimeRange(r *v1.TimeRange) (from, to *time.Time, err error) {
+	if r != nil {
+		if r.From != nil {
+			if err := r.From.CheckValid(); err != nil {
+				return nil, nil, failure(connect.CodeInvalidArgument, "INVALID_TIME_RANGE")
+			}
+			v := r.From.AsTime()
+			from = &v
+		}
+		if r.To != nil {
+			if err := r.To.CheckValid(); err != nil {
+				return nil, nil, failure(connect.CodeInvalidArgument, "INVALID_TIME_RANGE")
+			}
+			v := r.To.AsTime()
+			to = &v
+		}
+		if from != nil && to != nil && !from.Before(*to) {
+			return nil, nil, failure(connect.CodeInvalidArgument, "INVALID_TIME_RANGE")
+		}
+	}
+	return from, to, nil
+}
+
 type jobFilter struct {
 	subject, action string
 	from, to        *time.Time
@@ -148,8 +177,13 @@ func (s *Service) GetJob(ctx context.Context, r *v1.GetJobRequest) (*v1.GetJobRe
 		if _, _, err := s.authorize(ctx, j, authz.ViewJobs, false, ""); err != nil {
 			return nil, err
 		}
-		j, err = s.wait(ctx, r.JobId, seconds)
-		if err != nil {
+		if j.Status != v1.JobStatus_JOB_STATUS_PENDING_APPROVAL || r.GetWaitSeconds() > 0 {
+			j, err = s.wait(ctx, r.JobId, seconds)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if err := s.attachApproval(ctx, j); err != nil {
 			return nil, err
 		}
 		summary, err := s.summary(ctx, j, f, grouping)
@@ -178,29 +212,13 @@ func (s *Service) ListJobs(ctx context.Context, r *v1.ListJobsRequest) (*v1.List
 			}
 			subject = actor
 		}
-		var from, to *time.Time
-		if r.Created != nil {
-			if r.Created.From != nil {
-				if err := r.Created.From.CheckValid(); err != nil {
-					return nil, failure(connect.CodeInvalidArgument, "INVALID_TIME_RANGE")
-				}
-				v := r.Created.From.AsTime()
-				from = &v
-			}
-			if r.Created.To != nil {
-				if err := r.Created.To.CheckValid(); err != nil {
-					return nil, failure(connect.CodeInvalidArgument, "INVALID_TIME_RANGE")
-				}
-				v := r.Created.To.AsTime()
-				to = &v
-			}
-			if from != nil && to != nil && !from.Before(*to) {
-				return nil, failure(connect.CodeInvalidArgument, "INVALID_TIME_RANGE")
-			}
+		from, to, err := jobTimeRange(r.Created)
+		if err != nil {
+			return nil, err
 		}
 		statuses := []int16{}
 		for _, status := range r.Statuses {
-			if status < 1 || status > 7 {
+			if status < 1 || status > 8 {
 				return nil, failure(connect.CodeInvalidArgument, "INVALID_JOB_STATUS")
 			}
 			statuses = append(statuses, int16(status))
@@ -251,6 +269,9 @@ func (s *Service) ListJobs(ctx context.Context, r *v1.ListJobsRequest) (*v1.List
 		}
 		more := len(items) > size
 		items = items[:min(len(items), size)]
+		if err := s.attachApprovals(ctx, items); err != nil {
+			return nil, err
+		}
 		fit, err := fitResponse(items)
 		if err != nil {
 			return nil, err
@@ -356,21 +377,66 @@ func (s *Service) CancelJob(ctx context.Context, r *v1.CancelJobRequest) (*v1.Ca
 		if err != nil {
 			return nil, err
 		}
-		version, rules, err := s.authorize(ctx, j, authz.ViewJobs, true, "")
-		if err != nil {
-			return nil, err
+		approvalID, err := db.New(s.Store.Pool).GetApprovalIDByJob(ctx, j.JobId)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, approvalError(err)
 		}
-		if err := s.audit(ctx, "cancel_job", "authorized", "allow", j.JobId, "", version, rules); err != nil {
-			return nil, err
+		if approvalID == "" {
+			version, rules, err := s.authorize(ctx, j, authz.ViewJobs, true, "")
+			if err != nil {
+				return nil, err
+			}
+			if err := s.audit(ctx, "cancel_job", "authorized", "allow", j.JobId, "", version, rules); err != nil {
+				return nil, err
+			}
 		}
 		tx, err := s.Store.Pool.Begin(ctx)
 		if err != nil {
 			return nil, err
 		}
 		defer tx.Rollback(ctx)
-		status, requested, err := lockJobForCancel(ctx, tx, j.JobId)
-		if err != nil {
-			return nil, err
+		var status int16
+		var requested bool
+		if approvalID == "" {
+			status, requested, err = lockJobForCancel(ctx, tx, j.JobId)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			q := db.New(tx)
+			a, lockedJob, err := lockApprovalForCancel(ctx, q, approvalID)
+			if err != nil {
+				return nil, approvalError(err)
+			}
+			if lockedJob.Status == int16(jobPendingApproval) {
+				if a.Status != int16(approvalPending) {
+					return nil, failure(connect.CodeFailedPrecondition, "APPROVAL_NOT_PENDING")
+				}
+				a, err = s.cancelPendingApproval(ctx, tx, a, "cancel_job")
+				if err != nil {
+					return nil, approvalError(err)
+				}
+				j, err = getJob(ctx, tx, j.JobId)
+				if err != nil {
+					return nil, err
+				}
+				j.Approval, err = s.approvalSummary(a)
+				if err != nil {
+					return nil, err
+				}
+				if err := s.commitCancelledApproval(ctx, tx, a); err != nil {
+					return nil, approvalError(err)
+				}
+				return &v1.CancelJobResponse{Job: j}, nil
+			}
+			if err := s.authorizeApprovalCancel(ctx, tx, a, false); err != nil {
+				return nil, approvalError(err)
+			}
+			state := operationInfo(ctx)
+			if err := s.auditApproval(ctx, a, "cancel_job", "allow", "authorized", state.Version, state.Rules); err != nil {
+				return nil, err
+			}
+			status, requested = lockedJob.Status, lockedJob.CancelRequested
 		}
 		var cancelledTasks []string
 		if status <= 2 && !requested {
@@ -395,6 +461,9 @@ func (s *Service) CancelJob(ctx context.Context, r *v1.CancelJobRequest) (*v1.Ca
 			s.mu.Unlock()
 		}
 		j, err = s.get(ctx, j.JobId)
+		if err == nil && approvalID != "" {
+			err = s.attachApproval(ctx, j)
+		}
 		return &v1.CancelJobResponse{Job: j}, err
 	})
 	if err != nil {

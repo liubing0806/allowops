@@ -77,6 +77,7 @@ type fixture struct {
 	Trusted             map[string]ed25519.PublicKey
 	Signer              ed25519.PrivateKey
 	Storage             *failingStorage
+	ApprovalAudit       *audit.Store
 	Package             *catalog.Package
 	ExtraActions        []catalog.Action
 	Hosts               []string
@@ -233,7 +234,7 @@ func awaitFixtureOutputs(t *testing.T, f *fixture) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		var done bool
-		err := f.DB.Pool.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM tasks WHERE output_state='pending')
+		err := f.DB.Pool.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM tasks JOIN jobs USING(job_id) WHERE output_state='pending' AND jobs.status<>8)
           AND (SELECT count(*) FROM tasks WHERE output_state IN ('stored','failed'))
             = (SELECT count(*) FROM audit_events WHERE operation='store_output')`).Scan(&done)
 		if err != nil {
@@ -259,7 +260,11 @@ func (f *fixture) start(t *testing.T) *gateway {
 	if err != nil {
 		t.Fatal(err)
 	}
-	access, err := api.New(ctx, f.DB, api.Config{Origin: "https://" + listener.Addr().String()}, api.NewAuditor(audit.New(f.DB.Pool, audit.Config{})))
+	auditor := f.ApprovalAudit
+	if auditor == nil {
+		auditor = audit.New(f.DB.Pool, audit.Config{})
+	}
+	access, err := api.New(ctx, f.DB, api.Config{Origin: "https://" + listener.Addr().String()}, api.NewAuditor(auditor))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +276,7 @@ func (f *fixture) start(t *testing.T) *gateway {
 	if err != nil {
 		t.Fatal(err)
 	}
-	jobs, err := job.New(f.DB, access, hosts, f.Storage, audit.New(f.DB.Pool, audit.Config{}), f.Trusted, job.DefaultConfig())
+	jobs, err := job.New(f.DB, access, hosts, f.Storage, auditor, f.Trusted, job.DefaultConfig())
 	if err != nil {
 		t.Fatal(err)
 	}

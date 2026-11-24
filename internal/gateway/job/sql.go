@@ -83,14 +83,36 @@ func selectJob(ctx context.Context, d db.DBTX, id string) (*v1.Job, error) {
 	return scanJob(d.QueryRow(ctx, "SELECT "+jobColumns+" FROM jobs WHERE job_id=$1", id))
 }
 
-// partition serializes partition creation and creates the month's tasks partition.
-func partition(ctx context.Context, tx pgx.Tx, at time.Time) error {
+// ensureJobPartition keeps schema locks out of the job creation transaction.
+func (s *Service) ensureJobPartition(ctx context.Context, at time.Time) error {
+	month := time.Date(at.UTC().Year(), at.UTC().Month(), 1, 0, 0, 0, 0, time.UTC)
+	name := "tasks_" + month.Format("200601")
+	var exists bool
+	err := s.Store.Pool.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", name).Scan(&exists)
+	if err != nil || exists {
+		return err
+	}
+	tx, err := s.Store.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
 	if err := db.New(tx).LockJobPartitionCreation(ctx); err != nil {
 		return err
 	}
-	month := time.Date(at.UTC().Year(), at.UTC().Month(), 1, 0, 0, 0, 0, time.UTC)
-	_, err := tx.Exec(ctx, fmt.Sprintf("CREATE TABLE IF NOT EXISTS tasks_%s PARTITION OF tasks FOR VALUES FROM ('%s') TO ('%s')", month.Format("200601"), month.Format(time.RFC3339), month.AddDate(0, 1, 0).Format(time.RFC3339)))
-	return err
+	err = tx.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", name).Scan(&exists)
+	if err != nil || exists {
+		return err
+	}
+	// ATTACH takes SHARE UPDATE EXCLUSIVE on tasks, compatible with a
+	// decision that already holds a job lock and still has to update tasks.
+	if _, err := tx.Exec(ctx, fmt.Sprintf("CREATE TABLE %s (LIKE tasks INCLUDING DEFAULTS INCLUDING CONSTRAINTS)", name)); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, fmt.Sprintf("ALTER TABLE tasks ATTACH PARTITION %s FOR VALUES FROM ('%s') TO ('%s')", name, month.Format(time.RFC3339), month.AddDate(0, 1, 0).Format(time.RFC3339))); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func readCancelRequested(ctx context.Context, d db.DBTX, id string) (bool, error) {

@@ -138,9 +138,10 @@ func New(agent *hostconn.Service, certificate tls.Certificate, opts ...Option) *
 func (s *Server) handler(protocol string) http.Handler {
 	_, agent := allowopsv1connect.NewAgentServiceHandler(s.Agent, connect.WithReadMaxBytes(s.Agent.Config.MessageBytes), connect.WithSendMaxBytes(s.Agent.Config.MessageBytes))
 	var auditHandler http.Handler
-	var jobHandler http.Handler
+	var jobHandler, approvalHandler http.Handler
 	if s.Jobs != nil {
 		jobHandler = s.Jobs.Handler()
+		approvalHandler = s.Jobs.ApprovalHandler()
 	}
 	if s.Audit != nil {
 		opts := []connect.HandlerOption{connect.WithReadMaxBytes(s.Audit.Store.Config.ResponseBytes), connect.WithSendMaxBytes(s.Audit.Store.Config.ResponseBytes)}
@@ -187,6 +188,8 @@ func (s *Server) handler(protocol string) http.Handler {
 				s.health(w, r)
 			} else if jobHandler != nil && strings.HasPrefix(r.URL.Path, "/allowops.v1.JobService/") {
 				jobHandler.ServeHTTP(w, r)
+			} else if approvalHandler != nil && strings.HasPrefix(r.URL.Path, "/allowops.v1.ApprovalService/") {
+				approvalHandler.ServeHTTP(w, r)
 			} else if r.URL.Path == "/mcp" || r.URL.Path == "/mcp/" {
 				s.MCP.ServeHTTP(w, r)
 			} else if auditHandler != nil && (r.URL.Path == allowopsv1connect.AuditServiceListAuditEventsProcedure || r.URL.Path == allowopsv1connect.AuditServiceExportAuditProcedure || r.URL.Path == allowopsv1connect.AuditServiceVerifyAuditProcedure) {

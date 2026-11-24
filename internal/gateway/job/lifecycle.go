@@ -16,6 +16,7 @@ func (s *Service) Start() {
 	if !s.started.CompareAndSwap(false, true) {
 		return
 	}
+	s.startApprovalSweeper()
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()

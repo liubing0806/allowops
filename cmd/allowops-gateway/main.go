@@ -74,6 +74,7 @@ type configuration struct {
 	Providers  []api.ProviderConfig  `yaml:"providers"`
 	Plugins    pluginhost.ConfigList `yaml:"plugins"`
 	Jobs       job.Config            `yaml:"jobs"`
+	Approvals  job.ApprovalConfig    `yaml:"approvals,omitempty"`
 	Output     output.Config         `yaml:"output"`
 	// Opt-in: the gateway makes no outbound request unless enabled.
 	UpdateCheck updatecheck.Config `yaml:"update_check"`
@@ -144,13 +145,19 @@ func (c *mcpConfig) validate() error {
 // decodeConfig applies the defaults, rejects unknown keys, validates
 // update_check when it is enabled, and validates mcp.
 func decodeConfig(r io.Reader) (configuration, error) {
-	cfg := configuration{Address: ":443", Gateway: hostconn.DefaultConfig(), Identity: api.Config{Origin: "https://localhost"}, Jobs: job.DefaultConfig(), UpdateCheck: updatecheck.DefaultConfig(), MCP: mcpConfig{Mode: "flat"}}
+	cfg := configuration{Address: ":443", Gateway: hostconn.DefaultConfig(), Identity: api.Config{Origin: "https://localhost"}, Jobs: job.DefaultConfig(), Approvals: job.DefaultApprovalConfig(), UpdateCheck: updatecheck.DefaultConfig(), MCP: mcpConfig{Mode: "flat"}}
 	if version != "dev" {
 		cfg.Gateway.Version = version
 	}
 	decoder := yaml.NewDecoder(r)
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cfg); err != nil {
+		return cfg, fmt.Errorf("invalid gateway config: %w", err)
+	}
+	if cfg.Approvals.ConsoleBaseURL == "" {
+		cfg.Approvals.ConsoleBaseURL = cfg.Identity.Origin
+	}
+	if err := cfg.Approvals.Validate(); err != nil {
 		return cfg, fmt.Errorf("invalid gateway config: %w", err)
 	}
 	if cfg.UpdateCheck.Enabled {
@@ -302,6 +309,7 @@ func startIdentity(ctx context.Context, db *store.Store, cfg configuration, audi
 	if err != nil {
 		return nil, err
 	}
+	identity.SetMaxApprovalTTL(cfg.Approvals.MaxTTL)
 	if err := identity.ConfigureProviders(ctx, cfg.Providers); err != nil {
 		return nil, err
 	}
@@ -340,6 +348,10 @@ func newJobServices(ctx context.Context, db *store.Store, identity *api.Service,
 	}
 	jobs, err := job.New(db, identity, agent, objects, auditStore, trusted, cfg.Jobs)
 	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err := jobs.ConfigureApprovals(cfg.Approvals); err != nil {
+		jobs.Close()
 		return nil, nil, nil, err
 	}
 	return agent, objects, jobs, nil

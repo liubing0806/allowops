@@ -38,6 +38,9 @@ func (s *Service) GetJobOutput(ctx context.Context, r *v1.GetJobOutputRequest) (
 		if _, _, err := s.authorize(ctx, j, authz.ViewOutput, false, r.Hostname); err != nil {
 			return nil, err
 		}
+		if j.Status == v1.JobStatus_JOB_STATUS_PENDING_APPROVAL {
+			return nil, failure(connect.CodeFailedPrecondition, "JOB_PENDING_APPROVAL")
+		}
 		row, err := getTaskOutput(ctx, s.Store.Pool, r.JobId, r.Hostname)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, failure(connect.CodeNotFound, "TASK_UNKNOWN")

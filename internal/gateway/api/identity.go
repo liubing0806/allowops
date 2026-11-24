@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authn"
+	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
 func revision(value string) (int64, error) {
@@ -68,7 +69,7 @@ func (s *Service) CreateServiceAccountToken(ctx context.Context, r *connect.Requ
 	if err != nil {
 		return nil, failure(connect.CodeInternal, "token generation failed")
 	}
-	t, err := insertAccountToken(ctx, s.Store.Pool, secret("tok_"), r.Msg.AccountId, record.Hash[:], r.Msg.Description, record.ExpiresAt)
+	t, err := insertAccountToken(ctx, s.Store.Pool, secret("tok_"), r.Msg.AccountId, record.Hash[:], r.Msg.Description, record.ExpiresAt, reqctx.ActorID(ctx))
 	if err != nil {
 		return nil, dbError(err)
 	}
