@@ -14,9 +14,9 @@ GRANT SELECT, INSERT, UPDATE ON gateway_instances, hosts, host_catalog_reports, 
     catalog_versions, console_users, service_accounts, service_account_tokens
     TO your_gateway_login;
 GRANT SELECT, INSERT, UPDATE, DELETE ON gateway_messages, host_import_previews, catalog_uploads,
-    identity_sessions, policy_tests
+    identity_sessions, policy_tests, oidc_transactions, cli_login_codes
     TO your_gateway_login;
-GRANT SELECT, INSERT, DELETE ON role_mappings, oidc_transactions, cli_login_codes
+GRANT SELECT, INSERT, DELETE ON role_mappings
     TO your_gateway_login;
 ```
 

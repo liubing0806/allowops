@@ -26,11 +26,12 @@ func TestRestrictedRuntimeJobPartitions(t *testing.T) {
 			GRANT allowops_audit_writer, allowops_job_writer TO job_runtime_fixture;
 			GRANT SELECT ON goose_db_version, roles TO job_runtime_fixture;
 			GRANT SELECT, INSERT, UPDATE ON gateway_instances, hosts, host_catalog_reports, join_tokens, catalog_versions,
-			    console_users, service_accounts, service_account_tokens, identity_sessions, policy_tests
+			    console_users, service_accounts, service_account_tokens
 			    TO job_runtime_fixture;
-			GRANT SELECT, INSERT, UPDATE, DELETE ON gateway_messages, host_import_previews, catalog_uploads
+			GRANT SELECT, INSERT, UPDATE, DELETE ON gateway_messages, host_import_previews, catalog_uploads,
+			    identity_sessions, policy_tests, oidc_transactions, cli_login_codes
 			    TO job_runtime_fixture;
-			GRANT SELECT, INSERT, DELETE ON role_mappings, oidc_transactions, cli_login_codes TO job_runtime_fixture;
+			GRANT SELECT, INSERT, DELETE ON role_mappings TO job_runtime_fixture;
 			GRANT SELECT, INSERT ON policy_versions TO job_runtime_fixture;
 			GRANT SELECT, UPDATE ON role_mapping_state TO job_runtime_fixture;
 		`); err != nil {
@@ -53,6 +54,22 @@ func TestRestrictedRuntimeJobPartitions(t *testing.T) {
 	current := pgx.Identifier{month.Format("tasks_200601")}.Sanitize()
 	if _, err := f.DB.Pool.Exec(ctx, "SELECT 1 FROM "+current); err != nil {
 		t.Fatalf("read migration-created partition: %v", err)
+	}
+	if _, err := f.DB.Pool.Exec(ctx, "UPDATE oidc_transactions SET binding_hash=NULL WHERE false"); err != nil {
+		t.Fatalf("update oidc_transactions as restricted role: %v", err)
+	}
+	for _, fn := range []struct {
+		name string
+		run  func(context.Context, int32) error
+	}{
+		{"policy_tests", f.DB.Queries.DeleteExpiredPolicyTestBatch},
+		{"cli_login_codes", f.DB.Queries.DeleteExpiredCliLoginCodeBatch},
+		{"oidc_transactions", f.DB.Queries.DeleteExpiredOidcTransactionBatch},
+		{"identity_sessions", f.DB.Queries.DeleteOldIdentitySessionBatch},
+	} {
+		if err := fn.run(ctx, 10); err != nil {
+			t.Fatalf("expired %s cleanup as restricted role: %v", fn.name, err)
+		}
 	}
 	for _, sql := range []string{
 		"SELECT tasks_create_partitions(now(), 3)",
