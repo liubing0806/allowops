@@ -21,6 +21,8 @@ describe('gateway catalog definitions', () => {
     {
       definition: {
         params: {},
+        tags: [],
+        entity_kinds: [],
         builtin: 'redis_command',
         builtin_config: { commands: ['GET'] },
         timeout: '10s',
@@ -52,6 +54,11 @@ describe('gateway catalog definitions', () => {
           name: 'journal_view_log',
         })
         expect(await within(dialog).findByText(text)).toBeInTheDocument()
+        for (const label of ['工具集', '标签', '实体类型']) {
+          expect(
+            within(dialog).queryByText(label, { selector: 'dt' }),
+          ).not.toBeInTheDocument()
+        }
         if (!('redact' in definition))
           expect(
             await within(dialog).findByText('未指定（使用目录全局规则）'),
