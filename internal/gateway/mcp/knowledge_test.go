@@ -21,11 +21,11 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/jsonschema-go/jsonschema"
+	_ "github.com/liubing0806/allowops/extensions/knowledge/gitdocs"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/plugin/knowledge"
-	_ "github.com/liubing0806/allowops/plugins/knowledge/gitdocs"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"gopkg.in/yaml.v3"
 )
