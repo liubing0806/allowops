@@ -108,10 +108,13 @@ func runWithAudit(args []string, auditor api.Auditor) error {
 		return runHealth(args[1:])
 	}
 	if len(args) == 0 {
-		return fmt.Errorf("usage: allowops-gateway migrate | serve --config <file>")
+		return fmt.Errorf("usage: allowops-gateway migrate | ensure-partitions [--months 3] | serve --config <file>")
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+	if args[0] == "ensure-partitions" {
+		return ensurePartitions(ctx, args[1:])
+	}
 	dsn := os.Getenv("ALLOWOPS_DATABASE_URL")
 	if dsn == "" {
 		return fmt.Errorf("ALLOWOPS_DATABASE_URL required")

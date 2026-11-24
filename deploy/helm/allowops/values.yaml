@@ -53,6 +53,12 @@ migration:
   existingSecret: allowops-migration-database
   key: url
   activeDeadlineSeconds: 300
+partitions:
+  enabled: true
+  # Runs in UTC and uses the migration database Secret.
+  schedule: "0 2 1,15 * *"
+  months: 3
+  activeDeadlineSeconds: 300
 audit:
   # Exactly one export instance; API replicas never export files.
   enabled: true

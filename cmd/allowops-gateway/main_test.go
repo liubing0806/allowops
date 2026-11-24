@@ -215,6 +215,12 @@ func TestGatewayCommands(t *testing.T) {
 		t.Fatalf("unmigrated serve: err=%v output=%s", err, output)
 	}
 	t.Logf("./bin/allowops-gateway serve --config <fixture>: exit 1: %s", strings.TrimSpace(string(output)))
+	command = exec.Command(binary, "ensure-partitions")
+	command.Env = environment
+	output, err = command.CombinedOutput()
+	if err == nil || strings.TrimSpace(string(output)) != "ensure audit_events partitions failed" {
+		t.Errorf("unmigrated partition maintenance: exit=%v output=%q", err, output)
+	}
 	command = exec.Command(binary, "migrate")
 	command.Env = environment
 	output, err = command.CombinedOutput()
@@ -222,6 +228,9 @@ func TestGatewayCommands(t *testing.T) {
 		t.Fatalf("migrate: %v\n%s", err, output)
 	}
 	t.Logf("./bin/allowops-gateway migrate: exit 0: %s", strings.TrimSpace(string(output)))
+	t.Run("ensure-partitions", func(t *testing.T) {
+		testEnsurePartitionsPostgres(t, binary, dsn)
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	command = exec.CommandContext(ctx, binary, "serve", "--config", configPath)

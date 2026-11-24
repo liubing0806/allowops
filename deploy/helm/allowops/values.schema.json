@@ -116,6 +116,15 @@
         "key": {"type": "string", "minLength": 1},
         "activeDeadlineSeconds": {"type": "integer", "minimum": 1}
       }
+    },
+    "partitions": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "schedule": {"type": "string", "minLength": 1},
+        "months": {"type": "integer", "minimum": 1, "maximum": 120},
+        "activeDeadlineSeconds": {"type": "integer", "minimum": 1}
+      }
     }
   }
 }

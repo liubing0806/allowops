@@ -52,14 +52,15 @@ audit:
 
 ## 分区维护与 A19
 
-迁移创建当月及未来两个月的 UTC 分区。维护账号每月执行下列函数，覆盖这三个 UTC 月份。两个函数都可以重复调用。
+迁移创建当月及未来两个月的 UTC 分区。部署后定期使用维护账号运行以下命令，覆盖当月及未来两个月的审计和任务分区（也可直接执行 `SELECT audit_create_partitions(now(), 3); SELECT tasks_create_partitions(now(), 3);`）：
 
-```sql
-SELECT audit_create_partitions(now(), 3);
-SELECT tasks_create_partitions(now(), 3);
+```sh
+allowops-gateway ensure-partitions --months 3
 ```
 
-缺少当前审计分区时 Append 返回写入错误。缺少当前任务分区时，`RunJob` 返回 `UNAVAILABLE`，错误原因是 `TASK_PARTITION_MISSING`。维护账号补建分区后，可以重试提交 Job。
+命令从 `ALLOWOPS_DATABASE_URL` 读取维护账号凭据。`--months` 取值为 1–120，默认 3，包含当前 UTC 月。命令在同一事务中调用 `audit_create_partitions(now(), months)` 与 `tasks_create_partitions(now(), months)`（存在时），失败时回滚并以非零状态退出，可重复执行。
+
+Helm 默认在每月 1 日和 15 日的 02:00 UTC 运行该命令。裸机部署可用 systemd timer 或 cron 按同样的频率运行。监控任务失败和分区覆盖范围。缺少当前审计分区时 `Append` 返回写入错误；缺少当前任务分区时 `RunJob` 返回 `UNAVAILABLE`（错误原因 `TASK_PARTITION_MISSING`），补建分区后可重试提交 Job。
 
 维护账号通过 `audit.Store.Prune(ctx, RetentionOptions{})` 删除结束时间不晚于当前 UTC 月起点减 12 个月的分区。部分月份保留，所以实际最早数据可超过一年不足一个月。删除和追加、导出互斥，边界更新与 DROP TABLE 在同一事务中。已登记导出游标若还未越过待删除记录，删除失败。保留区间必须至少留下边界之后的一条记录。
 

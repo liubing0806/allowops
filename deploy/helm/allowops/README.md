@@ -1,8 +1,9 @@
 # Allowops Helm chart
 
 This chart installs two or more gateway replicas, an L4 TCP Service on port
-443, a migration hook, a PodDisruptionBudget and, by default, one audit export
-StatefulSet. PostgreSQL and object storage are supplied by the operator.
+443, a migration hook, a PodDisruptionBudget and, by default, a partition
+maintenance CronJob and one audit export StatefulSet. PostgreSQL and object
+storage are supplied by the operator.
 All containers use amd64 nodes. No Ingress or HTTP/TLS termination proxy is
 included: mutual TLS and Application-Layer Protocol Negotiation (ALPN) must
 reach the gateway process unchanged. Set the cloud-specific Service
@@ -42,7 +43,8 @@ Provision these Secrets in the target namespace before installation:
 * `allowops-output`: `aws-credentials`, an AWS shared credentials file.
 * `allowops-database`: `url`, the runtime PostgreSQL connection string.
 * `allowops-migration-database`: `url`, a separate PostgreSQL maintenance
-  connection string. It must exist before `pre-install` runs.
+  connection string shared by the migration hook and partition maintenance
+  CronJob. It must exist before `pre-install` runs.
 
 For a private registry, set `imagePullSecrets` to a list such as
 `[{name: allowops-registry}]`. The gateway, exporter, and migration Job
@@ -85,18 +87,12 @@ Apply those grants after migration, including
 The runtime login must have no superuser privileges, application table
 ownership, maintenance role membership, or CREATE privilege on the
 application schema. On a fresh installation, apply the grants before the
-gateway starts.
+gateway starts. Chart validation does not validate these grants.
 
 Migrations provision partitions for the current UTC month and the next two
-months. Schedule these commands monthly using the maintenance credentials.
-
-```sql
-SELECT audit_create_partitions(now(), 3);
-SELECT tasks_create_partitions(now(), 3);
-```
-
-If `RunJob` returns `UNAVAILABLE` with reason `TASK_PARTITION_MISSING`, run the
-task partition maintenance command and retry the job submission.
+months. The partition maintenance CronJob below runs `allowops-gateway ensure-partitions`
+using the maintenance credentials. If `RunJob` returns `UNAVAILABLE` with reason
+`TASK_PARTITION_MISSING`, run partition maintenance and retry the job submission.
 
 Kubernetes Secret projections contain symlinks. The gateway rejects symlinks
 and requires the CA private key to have mode 0600. A short non-root init
@@ -151,7 +147,7 @@ extraVolumeMounts:
     mountPath: /etc/allowops-provider-ca
     readOnly: true
 gateway:
-  certificateTTL: "12h"
+  certificateTTL: "168h"
   jobs:
     wait_seconds: 15
     max_wait_seconds: 60
@@ -177,11 +173,32 @@ gateway:
 ~~~
 
 `gateway.certificateTTL` controls the host identity certificate lifetime for
-issuance and renewal. Use a positive Go duration such as `12h` or `1h30m`.
-An empty value uses the gateway default of `24h`. Set any of the four
+issuance and renewal. Use a positive Go duration such as `168h` or `24h`.
+An empty value uses the gateway default of `168h` (7 days). Set any of the four
 `gateway.jobs` fields to override the corresponding gateway defaults
 (`30`, `120`, `20` and `5`, respectively). Keep `wait_seconds` at or below
 `max_wait_seconds`.
+
+## Partition maintenance
+
+The CronJob runs `allowops-gateway ensure-partitions --months 3` at 02:00 UTC
+on the first and fifteenth of each month. It ensures the current UTC month and
+the next two months for `audit_events` and, when the database has the tasks
+partition function, for `tasks` as well. UTC scheduling uses the [Kubernetes
+CronJob time zone field](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/#time-zones),
+stable since Kubernetes 1.27.
+
+Use a gateway image that includes `ensure-partitions`. The Job uses that image
+and reads the Secret selected by `migration.existingSecret` and `migration.key`.
+The default job deadline is 300 seconds. Kubernetes skips a scheduled run while
+the previous Job is active and retains one successful and three failed Jobs.
+Monitor failed Jobs and use a one-off job from the CronJob template to restore
+coverage when needed.
+
+Configure `partitions.schedule`, `partitions.months` (1–120) and
+`partitions.activeDeadlineSeconds` to change the cadence, coverage and deadline.
+Set `partitions.enabled=false` when scheduling maintenance outside Helm. For
+that render, pass `--partitions-disabled` to `deploy/helm/verify.py`.
 
 ## Shutdown and audit export
 

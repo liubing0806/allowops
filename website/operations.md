@@ -102,6 +102,22 @@ succeed. The `output_stored` flag distinguishes execution from persistence.
 Gateway error logs for writes and probes include the error type and, when
 available, the HTTP status and recognized S3 error code.
 
+## PostgreSQL partition maintenance
+
+After migration, schedule `allowops-gateway ensure-partitions --months 3` with
+the maintenance role's connection string in `ALLOWOPS_DATABASE_URL`. The command
+ensures `audit_events` partitions for the current UTC month and the next two
+months. It also maintains `tasks` when the database provides
+`tasks_create_partitions(timestamptz, integer)`. The default coverage is three
+months. Set `--months` to an integer from 1 to 120 to change it.
+
+The Helm chart enables a CronJob at 02:00 UTC on the first and fifteenth of
+each month. It uses the migration Secret. For binary deployments, schedule
+the command with a systemd timer or cron at the same cadence and supply the
+maintenance credentials through the scheduler's environment. Monitor the exit
+status and restore coverage before the existing partitions expire. When the
+current audit partition is missing, audit writes fail.
+
 ## Monitoring and recovery
 
 Use HTTPS GET `/health/live` for liveness and `/health/ready` for readiness.

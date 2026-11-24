@@ -197,3 +197,39 @@ volumes:
   {{- toYaml . | nindent 2 }}
   {{- end }}
 {{- end -}}
+
+{{- define "allowops.maintenancePod" -}}
+automountServiceAccountToken: false
+{{- with .Values.imagePullSecrets }}
+imagePullSecrets:
+{{- toYaml . | nindent 2 }}
+{{- end }}
+restartPolicy: Never
+nodeSelector:
+  kubernetes.io/arch: amd64
+  kubernetes.io/os: linux
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+containers:
+  - name: {{ .name }}
+    image: {{ printf "%s:%s" .Values.image.repository .Values.image.tag | quote }}
+    imagePullPolicy: {{ .Values.image.pullPolicy }}
+    args: {{ toJson .args }}
+    env:
+      - name: ALLOWOPS_DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: {{ .Values.migration.existingSecret }}
+            key: {{ .Values.migration.key }}
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+    resources:
+{{ toYaml .Values.resources | indent 6 }}
+{{- end -}}
