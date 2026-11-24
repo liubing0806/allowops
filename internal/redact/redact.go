@@ -426,11 +426,24 @@ func applyRuleTracking(line string, rule compiledRule, replaced func(int, int)) 
 }
 
 func (r *Redactor) Line(line string) string {
+	text, _ := r.LineTracked(line)
+	return text
+}
+
+// LineTracked redacts a standalone line and reports whether redaction affected it.
+func (r *Redactor) LineTracked(line string) (string, bool) {
+	inside := false
+	return r.lineTracked(line, &inside)
+}
+
+func (r *Redactor) lineTracked(rawText string, inside *bool) (string, bool) {
+	wasInside := *inside
+	text := rawText
 	if r.secrets {
-		inside := false
-		line = r.pemLine(line, &inside)
+		text = r.pemLine(text, inside)
 	}
-	return r.applyRules(line)
+	text = r.applyRules(text)
+	return text, wasInside || *inside || text != rawText
 }
 
 // applyRules runs the rules in order. A rule with needs is skipped when the
@@ -684,9 +697,16 @@ func (r *Redactor) pemLine(line string, inside *bool) string {
 	}
 }
 
-// Stream retains at most maxLine bytes of one original line. Overlong lines fail closed.
-// PEM state is local to each stream so one Redactor can handle stdout/stderr concurrently.
 func (r *Redactor) Stream(input io.Reader, output io.Writer, maxLine int) error {
+	return r.StreamTracked(input, maxLine, func(line string, _ bool) error {
+		_, err := io.WriteString(output, line)
+		return err
+	})
+}
+
+// StreamTracked emits only redacted lines and reports whether redaction affected
+// each line. Overlong lines fail closed. PEM state is local to each stream.
+func (r *Redactor) StreamTracked(input io.Reader, maxLine int, emit func(line string, modified bool) error) error {
 	if maxLine <= 0 {
 		return fmt.Errorf("maximum line length must be positive")
 	}
@@ -719,15 +739,11 @@ func (r *Redactor) Stream(input io.Reader, output io.Writer, maxLine int) error 
 		if len(line) > maxLine {
 			return fmt.Errorf("output line exceeds maximum length %d", maxLine)
 		}
-		text := string(line)
-		if r.secrets {
-			text = r.pemLine(text, &inside)
-		}
-		text = r.applyRules(text)
+		text, modified := r.lineTracked(string(line), &inside)
 		if newline {
 			text += "\n"
 		}
-		if _, err := io.WriteString(output, text); err != nil {
+		if err := emit(text, modified); err != nil {
 			return err
 		}
 		if readErr == io.EOF {

@@ -10,7 +10,7 @@
 
 ## 顺序步骤和备用路径 {#sequential-steps-and-fallback-paths}
 
-`steps` 按顺序运行一组带名称的固定 `exec` 数组。`on_error` 取值为 `continue` 或 `stop`。所有步骤共用一个动作超时和一个输出预算。最终退出码是第一个失败步骤的退出码；没有失败步骤时为零。被跳过的步骤仍然可见。`exec_fallbacks` 在主可执行文件不存在时提供备用的可执行文件绝对路径。它不用于在命令失败后重试。
+`steps` 按声明顺序运行一组带名称的固定 `exec` 数组（线性 DAG，不支持循环或反向跳转）。`on_error` 取值为 `continue` 或 `stop`。所有步骤共用一个动作超时和一个输出预算。最终退出码是第一个失败步骤的退出码；所有步骤均成功或按条件跳过时为零。被跳过的步骤仍然可见，并附带 `skip_reason`：`CONDITION_FALSE`（步骤的 `when` 条件未求值为真）或 `STOPPED`（因前置失败且 `on_error: stop`、超时或取消而停止）。`exec_fallbacks` 在主可执行文件不存在时提供备用的可执行文件绝对路径。它不用于在命令失败后重试。
 
 ```yaml
 name: host_snapshot
@@ -29,6 +29,47 @@ filters: [head, count]
 redact:
   builtin: [secrets]
 ```
+
+### 受控步骤数据传递与条件分支 {#controlled-step-dataflow-and-branching}
+
+步骤可声明 `extract` 从更早步骤脱敏后的 stdout 中提取强类型字段，在后续步骤中以整元素占位符 `{steps.<step_name>.<var>}` 引用，并用声明式 `when` 条件控制是否执行：
+
+- **提取器（`steps[].extract`）**：每个变量三选一声明 `regex`（单捕获组 Go RE2，支持 `match: first | exactly_one`）、`json_path`（严格 `$` 开头字段/下标路径，拒绝重复键，最大嵌套深度 32）或 `tsv`（`line`、`column`、`delimiter: tab | whitespace`），扫描字节受 `max_bytes` 限制（默认 `64KB`，上限 `1MB`）。提取运行在**脱敏之后**、**调用方输出过滤器与预算截断之前**。被脱敏规则修改过的行或 JSON 文档一律拒绝（`EXTRACT_FAILED`），JSON 解码后的标量会再做一次脱敏复检；触发 `max_scan`、管道排空超时或 `max_bytes` 溢出时同样 fail-closed 报错。
+- **强类型闸门（`as`）**：提取结果必须满足显式声明的 `as` 类型：`int`（必填 `min` 与 `max`，用于 `exec` 时 `min >= 0`）、`enum`（禁止 `-` 开头的值）、`string`（必填强制整串锚定的 `regex` 与 `max_len` 1..1024）、`path`（`allowed_roots`，经 `EvalSymlinks` 解析并在消费步骤启动前做 `PATH_NOT_TRUSTED` 检查）或 `bool`。类型或前导 `-` 校验失败时即使声明 `optional: true` 也会返回 `EXTRACT_TYPE_INVALID`，且错误消息绝不回显原始值。
+- **安全放置边界**：`{steps.*}` 仅允许出现在最终命令的普通参数位置；静态禁止出现在 `exec[0]`、所有包装程序选项与操作数（`env`、`timeout`、`nice`、`ionice`、`stdbuf`、`xargs`、`nsenter`、`chroot`）、`docker`/`kubectl` 全局选项/子命令/连接参数与 `exec` 目标、以及任何 `allow_interpreter: true` 动作中。可选参数组仅在产生步干净成功且 `optional: true` 未命中时省略，否则以 `EXTRACT_MISSING` 失败。
+- **条件分支（`steps[].when`）**：第 0 步禁止声明 `when`。支持有界静态布尔组合（`all`、`any`、`not`，最大深度 4、最多 32 个节点），引用更早步骤的确定性事实（`prev.exit_code`、`prev.skipped`、`steps.<name>.exit_code`、`steps.<name>.skipped`、`steps.<name>.<var>`）与类型化运算符（`exists`、`eq`、`ne`、`gt`、`gte`、`lt`、`lte`、`in`）。求值采用 Kleene 三值逻辑（缺失值为 `unknown`，`not unknown` 仍为 `unknown`），仅根节点求值为 `true` 时执行步骤。`when` 是排障流程优化而非授权边界，动作中的每一步都必须在无条件执行时也安全。
+
+```yaml
+name: disk_pressure_diagnose
+description: Read filesystem usage and list top-level directory sizes when usage reaches 80 percent.
+risk: read
+params:
+  path:
+    type: path
+    description: Existing directory within the allowed roots to diagnose.
+    allowed_roots: [/var/log, /data]
+    default: /var/log
+timeout: 20s
+max_output: 64KB
+on_error: stop
+steps:
+  - name: check_usage
+    exec: [/usr/bin/df, -P, --, '{path}']
+    extract:
+      use_pct:
+        regex: '^\S+\s+[0-9]+\s+[0-9]+\s+[0-9]+\s+([0-9]{1,3})%\s+'
+        match: exactly_one
+        as: {type: int, min: 0, max: 100}
+  - name: top_dirs
+    when: {ref: steps.check_usage.use_pct, gte: 80}
+    exec: [/usr/bin/du, -x, -h, --max-depth=1, --, '{path}']
+filters: []
+max_scan: 256MB
+redact:
+  builtin: [secrets]
+```
+
+运行旧版 `allowops-agent` 或 `allowops-exec` 的主机无法加载使用 `extract` 或 `when` 的目录，见[主机必须认识的字段](publishing.md#fields-that-hosts-must-understand)。
 
 ## 签名脚本和解释器例外 {#signed-scripts-and-interpreter-exceptions}
 

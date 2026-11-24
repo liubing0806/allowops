@@ -20,7 +20,7 @@ def main():
         return result.stdout
 
     validated = run('validate', '--dir', str(catalog))
-    if validated.strip() != 'catalog generic-ops: 133 actions valid':
+    if validated.strip() != 'catalog generic-ops: 136 actions valid':
         raise RuntimeError('Unexpected catalog validation result: ' + validated)
     print(validated, end='')
 
@@ -39,10 +39,49 @@ def main():
         if not result['stdout'] or result['truncated']:
             raise RuntimeError(f'{action}: expected nonempty, untruncated output')
 
+    def check_steps(result, names):
+        steps = result.get('steps', [])
+        if [step['name'] for step in steps] != names:
+            raise RuntimeError(f"{result['action']}: unexpected steps: {steps}")
+        first, *conditional = steps
+        if first.get('skipped') or first.get('exit_code') != 0 or not first['stdout']:
+            raise RuntimeError(f"{result['action']}: expected successful producer: {first}")
+        for step in conditional:
+            if step.get('skipped'):
+                valid = step.get('skip_reason') == 'CONDITION_FALSE' and 'exit_code' not in step
+            else:
+                valid = step.get('exit_code') == 0
+            if not valid:
+                raise RuntimeError(f"{result['action']}: unexpected conditional result: {step}")
+        return steps
+
+    steps = check_steps(smoke(catalog, 'top_process_diagnose'),
+                        ['find_top_process', 'process_detail', 'process_threads'])
+    rss_kb = int(steps[0]['stdout'].splitlines()[0].split()[1])
+    if any(step.get('skipped', False) != (rss_kb < 524288) for step in steps[1:]):
+        raise RuntimeError(f'top_process_diagnose: unexpected branching for RSS {rss_kb} KiB')
+
     with tempfile.TemporaryDirectory(prefix='allowops-examples-') as temporary:
         root = Path(temporary)
         local_catalog = root / 'catalog'
         shutil.copytree(catalog, local_catalog)
+
+        disk_action = local_catalog / 'actions' / 'disk_pressure_diagnose.yaml'
+        action = disk_action.read_text(encoding='utf-8')
+        original = '    allowed_roots: [/var/log, /data]\n    default: /var/log'
+        if action.count(original) != 1:
+            raise RuntimeError('Expected one disk_pressure_diagnose path declaration')
+        disk_action.write_text(
+            action.replace(original, '    allowed_roots: ' + json.dumps([str(root)])
+                           + '\n    default: ' + json.dumps(str(root))),
+            encoding='utf-8',
+        )
+        steps = check_steps(smoke(local_catalog, 'disk_pressure_diagnose', f'path={root}'),
+                            ['check_usage', 'top_dirs'])
+        use_pct = int(steps[0]['stdout'].splitlines()[1].split()[4].removesuffix('%'))
+        if steps[1].get('skipped', False) != (use_pct < 80):
+            raise RuntimeError(f'disk_pressure_diagnose: unexpected branching for usage {use_pct}%')
+
         logs = root / 'logs'
         logs.mkdir()
         plain = logs / 'app.log'

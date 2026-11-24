@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -31,7 +31,7 @@ jobs:
       - run: make opa-test
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       ALLOWOPS_REQUIRE_DOCKER: '1'
     steps:
@@ -54,7 +54,7 @@ jobs:
   # Pull requests skip the short fuzz pass; nightly.yml fuzzes every target for 10m.
   fuzz:
     if: github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -63,7 +63,7 @@ jobs:
       - run: make fuzz FUZZTIME=30s
 
   generate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -80,7 +80,7 @@ jobs:
       - run: make generate && git diff --exit-code && test -z "$(git status --porcelain)"
 
   web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: web
