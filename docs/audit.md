@@ -1,12 +1,27 @@
 # P7 审计存储与运维接口
 
-数据库迁移由维护账号执行 `allowops-gateway migrate`。00002 接在 P4 的 00001 后面。迁移账号需要创建表、函数和角色的权限。迁移创建 `allowops_audit_writer`（NOLOGIN）。部署时由数据库管理员把该角色授予网关的实际登录角色：
+数据库迁移由维护账号执行 `allowops-gateway migrate`。维护账号拥有应用表，并需要创建表、函数和角色的权限。迁移 00002 创建 `allowops_audit_writer`，迁移 00008 创建 `allowops_job_writer`。两者均为 NOLOGIN 角色。数据库管理员在迁移后将这两个角色授予网关登录角色。以下 SQL 使用 `allowops` 数据库、`public` schema 和 `your_gateway_login` 登录角色作为示例。
 
 ```sql
-GRANT allowops_audit_writer TO your_gateway_login;
+GRANT CONNECT ON DATABASE allowops TO your_gateway_login;
+GRANT USAGE ON SCHEMA public TO your_gateway_login;
+GRANT allowops_audit_writer, allowops_job_writer TO your_gateway_login;
+
+GRANT SELECT ON goose_db_version, roles TO your_gateway_login;
+GRANT SELECT, INSERT ON policy_versions TO your_gateway_login;
+GRANT SELECT, UPDATE ON role_mapping_state TO your_gateway_login;
+GRANT SELECT, INSERT, UPDATE ON gateway_instances, hosts, host_catalog_reports, join_tokens,
+    catalog_versions, console_users, service_accounts, service_account_tokens, identity_sessions, policy_tests
+    TO your_gateway_login;
+GRANT SELECT, INSERT, UPDATE, DELETE ON gateway_messages, host_import_previews, catalog_uploads
+    TO your_gateway_login;
+GRANT SELECT, INSERT, DELETE ON role_mappings, oidc_transactions, cli_login_codes
+    TO your_gateway_login;
 ```
 
-实际网关账号不能是超级用户、审计表所有者或继承维护角色。该角色对审计父表及所有通过维护函数创建的分区只有 INSERT、SELECT；对导出游标允许 SELECT、INSERT、UPDATE；对保留边界只允许 SELECT。游标与边界不是审计事件表。PUBLIC 不能调用分区维护函数。历史 00001 不授予既有网关表的权限，既有表的授权仍由 P4 部署负责。撤销审计迁移时保留 NOLOGIN 角色，因为其他数据库可能使用它。
+网关登录角色须继承这两个 NOLOGIN 角色的权限，且不得拥有应用表、超级用户权限、维护角色成员资格或应用 schema 的 CREATE 权限。若旧数据库通过 PUBLIC 授予了 `public` schema 的 CREATE 权限，请在专用应用数据库中执行 `REVOKE CREATE ON SCHEMA public FROM PUBLIC;`。策略发布使用 `LOCK TABLE ... IN SHARE MODE` 锁定 `catalog_versions`，上面的 UPDATE 授权用于满足该锁的权限要求。
+
+`allowops_audit_writer` 对审计父表及维护函数创建的分区拥有 SELECT、INSERT，对导出游标拥有 SELECT、INSERT、UPDATE，对保留边界拥有 SELECT。`allowops_job_writer` 对 `job_sequences`、`jobs`、`tasks` 及维护函数管理的任务分区拥有 SELECT、INSERT、UPDATE，对 `task_steps` 拥有 SELECT、INSERT。通过 `tasks` 父表查询迁移前的历史分区时，PostgreSQL 使用父表权限。两个维护函数仅供维护账号执行。撤销迁移时保留 NOLOGIN 角色，因为其他数据库可能使用它们。
 
 `audit.Append` 是网关业务写入接口。`Payload` 只接收审计元数据，不接收参数或输出内容。调用方必须把原因及资源限制为可审计的业务字段，不能传秘密或原始请求。Append 显式使用读已提交（Read Committed）事务，取得锁 418007，再读取链尾、分配 seq、写入规范字节和摘要。链尾查询使用锁等待之后的新快照；不能继承 Repeatable Read 默认值，否则等待前的快照可能看不到前一个写入者的提交。分区删除也显式选择 Read Committed。seq 不使用 PostgreSQL sequence，所以事务回滚不留空洞。所有实例必须通过 Append 写入；拥有 INSERT 的恶意网关仍可插入伪造事件，哈希链检查会报告结构或摘要错误。数据库管理员重写整链只有与外部可信锚比较才能发现。
 
@@ -37,13 +52,16 @@ audit:
 
 ## 分区维护与 A19
 
-迁移创建当月及未来两个月的 UTC 分区。维护账号每月执行下列函数，覆盖未来三个月；重复调用无副作用：
+迁移创建当月及未来两个月的 UTC 分区。维护账号每月执行下列函数，覆盖这三个 UTC 月份。两个函数都可以重复调用。
 
 ```sql
 SELECT audit_create_partitions(now(), 3);
+SELECT tasks_create_partitions(now(), 3);
 ```
 
-该函数必须由维护账号执行，网关账号不能创建分区。缺少当前分区时 Append 返回写入错误。维护账号通过 `audit.Store.Prune(ctx, RetentionOptions{})` 删除结束时间不晚于当前 UTC 月起点减 12 个月的分区。部分月份保留，所以实际最早数据可超过一年不足一个月。删除和追加、导出互斥，边界更新与 DROP TABLE 在同一事务中。已登记导出游标若还未越过待删除记录，删除失败。保留区间必须至少留下边界之后的一条记录。
+缺少当前审计分区时 Append 返回写入错误。缺少当前任务分区时，`RunJob` 返回 `UNAVAILABLE`，错误原因是 `TASK_PARTITION_MISSING`。维护账号补建分区后，可以重试提交 Job。
+
+维护账号通过 `audit.Store.Prune(ctx, RetentionOptions{})` 删除结束时间不晚于当前 UTC 月起点减 12 个月的分区。部分月份保留，所以实际最早数据可超过一年不足一个月。删除和追加、导出互斥，边界更新与 DROP TABLE 在同一事务中。已登记导出游标若还未越过待删除记录，删除失败。保留区间必须至少留下边界之后的一条记录。
 
 删除前把最后被删除记录的 seq/hash 存入 `audit_boundary`，作为保留边界检查点。校验从下一 seq 开始；其 prev_hash 必须与边界一致。删除的历史区间报告无法验证。该数据库边界只证明内部一致性。`RetentionOptions.RequireExternalCheckpoint=true` 时必须同时传入从可信外部系统取得的 `ExternalCheckpoint`，seq/hash 必须等于删除边界。缺少或不匹配时回滚。A19 已确定该开关默认关闭（false）。默认保存数据库边界锚后即可删除；只有需要外部确认的部署才设置 true。未提供外部可信锚的校验结果返回 externally_anchored=false，表示只证明数据库内部一致性。
 

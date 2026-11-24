@@ -7,9 +7,6 @@ SELECT status,count(*) FROM tasks WHERE job_id=$1 GROUP BY status ORDER BY statu
 -- name: ListJobTasks :many
 SELECT job_id,task_id,host_id,hostname,result,started_at,finished_at,output_stored,step_count FROM tasks WHERE job_id=$1 ORDER BY position;
 
--- name: LockJobPartitionCreation :exec
-SELECT pg_advisory_xact_lock(418006);
-
 -- name: LockJobSubject :exec
 SELECT pg_advisory_xact_lock(hashtextextended($1,418006));
 

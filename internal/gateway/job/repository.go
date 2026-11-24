@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
@@ -56,9 +57,6 @@ func (s *Service) create(ctx context.Context, subject string, p *catalog.Package
 	}
 	defer tx.Rollback(ctx)
 	at := time.Now().UTC().Truncate(time.Microsecond)
-	if err := partition(ctx, tx, at); err != nil {
-		return nil, err
-	}
 	if err := lockJobSubject(ctx, tx, subject); err != nil {
 		return nil, err
 	}
@@ -94,6 +92,11 @@ func (s *Service) create(ctx context.Context, subject string, p *catalog.Package
 		raw, _ := proto.Marshal(&v1.ExecutionResult{Status: v1.TaskStatus_TASK_STATUS_PENDING})
 		for i, h := range targets {
 			if err := insertPendingTask(ctx, tx, id, fmt.Sprintf("%s-%d", id, i), at, h, i, raw); err != nil {
+				// A partition routing failure reports the parent table and no check constraint.
+				var pgErr *pgconn.PgError
+				if errors.As(err, &pgErr) && pgErr.Code == "23514" && pgErr.TableName == "tasks" && pgErr.ConstraintName == "" {
+					return nil, failure(connect.CodeUnavailable, "TASK_PARTITION_MISSING")
+				}
 				return nil, err
 			}
 		}

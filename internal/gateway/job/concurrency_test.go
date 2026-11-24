@@ -40,10 +40,11 @@ func concurrencyFixture(t *testing.T) *Service {
 		t.Fatal(err)
 	}
 	t.Cleanup(db.Close)
+	// Seed a past month so task events exercise the default fixture partition.
 	if _, err := db.Pool.Exec(ctx, `INSERT INTO gateway_instances(instance_id) VALUES ('fixture');
  INSERT INTO hosts(host_id,hostname,certificate_serial,certificate_expires_at) VALUES ('slow','slow','serial-slow',now()+interval '1 hour'),('fast','fast','serial-fast',now()+interval '1 hour');
  INSERT INTO jobs(job_id,created_at,subject_id,origin_instance,action,action_definition,catalog_id,catalog_version,action_sha256,policy_version,reason,status,batch_size,max_failures)
- VALUES ('job',now(),'sa','fixture','action',convert_to('{}','UTF8'),'catalog',1,decode(repeat('00',32),'hex'),1,'test',2,20,5);
+ VALUES ('job',now()-interval '2 months','sa','fixture','action',convert_to('{}','UTF8'),'catalog',1,decode(repeat('00',32),'hex'),1,'test',2,20,5);
  CREATE TABLE tasks_fixture PARTITION OF tasks DEFAULT;
  INSERT INTO tasks(job_id,task_id,created_at,host_id,hostname,position,connection_id,dispatched,status,result)
  SELECT job_id,task,created_at,task,task,position,'connection',true,1,decode('0801','hex') FROM jobs CROSS JOIN (VALUES ('slow',0),('fast',1)) AS t(task,position);

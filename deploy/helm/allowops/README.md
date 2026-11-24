@@ -72,13 +72,26 @@ is disabled by the gateway.
 The P3 pinned TLS client also requires the TLS root CA in the presented server
 chain. Include it in `tls.crt` even when a pin is configured explicitly.
 
-The migration role needs the privileges described in `docs/audit.md`.
-The runtime role must not be a superuser, the audit table owner, or a member
-of the maintenance role. After migration, the database administrator grants
-`allowops_audit_writer` and the required non-audit table privileges to the
-runtime role. On a fresh installation, this must be done before the runtime
-gateway starts successfully. Chart validation does not validate these grants.
-Partition maintenance and backups remain operator responsibilities.
+Use a maintenance role that owns the application tables for the migration
+Secret. The runtime login requires the least-privilege grants in
+[the PostgreSQL operations guide](../../../docs/audit.md).
+Apply those grants after migration, including
+`GRANT allowops_audit_writer, allowops_job_writer TO your_gateway_login;`.
+The runtime login must have no superuser privileges, application table
+ownership, maintenance role membership, or CREATE privilege on the
+application schema. On a fresh installation, apply the grants before the
+gateway starts.
+
+Migrations provision partitions for the current UTC month and the next two
+months. Schedule these commands monthly using the maintenance credentials.
+
+```sql
+SELECT audit_create_partitions(now(), 3);
+SELECT tasks_create_partitions(now(), 3);
+```
+
+If `RunJob` returns `UNAVAILABLE` with reason `TASK_PARTITION_MISSING`, run the
+task partition maintenance command and retry the job submission.
 
 Kubernetes Secret projections contain symlinks. The gateway rejects symlinks
 and requires the CA private key to have mode 0600. A short non-root init
