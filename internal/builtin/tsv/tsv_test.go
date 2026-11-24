@@ -65,13 +65,13 @@ func TestMaskRowKeepsFieldsWhenRowRuleKeepsTabs(t *testing.T) {
 // A cell that contains a tab makes the field boundaries ambiguous. When a
 // row rule changes such a row, the row collapses instead of splitting wrongly.
 func TestMaskRowFailsClosedWhenFieldBoundariesAreAmbiguous(t *testing.T) {
-	mask := func(s string) string { return strings.ReplaceAll(s, "secret", "[R]") }
-	got := MaskRow(cells("a\tb", "c"), func(s string) string {
+	mask := func(s string) string {
 		if strings.Contains(s, "\t") {
-			return mask(s + "secret")
+			return strings.ReplaceAll(s+"secret", "secret", "[R]")
 		}
 		return s
-	})
+	}
+	got := MaskRow(cells("a\tb", "c"), mask)
 	if len(got) != 1 || strings.Contains(got[0], "\t") {
 		t.Fatalf("got %q", got)
 	}

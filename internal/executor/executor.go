@@ -185,7 +185,7 @@ func (p *runPlan) trustPaths() error {
 // and creates no context. The checks run in a fixed order, so the first
 // failing check decides the returned error.
 func prepareRun(a catalog.Action, actionInput, filterInput map[string]any, globalRedact *redact.Config) (*runPlan, error) {
-	support := catalog.CheckHost(a)
+	support := catalog.CheckExecutionHost(a)
 	if !support.Supported {
 		return nil, fmt.Errorf("unsupported: %s", support.Reason)
 	}
@@ -303,7 +303,7 @@ func runBuiltin(ctx context.Context, plan *runPlan, onStart func() error) (Resul
 		raw, runErr = budgeted.RunBudgeted(ctx, a.BuiltinConfig, plan.values, text, plan.limit)
 		stdoutRedactor = &redact.Redactor{}
 	} else if structured, ok := handler.(catalog.RedactingBuiltinHandler); ok {
-		raw, runErr = structured.RunRedacted(ctx, a.BuiltinConfig, plan.values, plan.redactor.Line)
+		raw, runErr = structured.RunRedacted(ctx, a.BuiltinConfig, plan.values, plan.redactor)
 		// Original values have already been redacted. Reapplying a custom
 		// rule to JSON/TSV could match encoding characters or replacement text.
 		stdoutRedactor = &redact.Redactor{}
@@ -448,7 +448,7 @@ func renderCommand(template []any, fallbacks []string, allow bool, defs map[stri
 	if err := catalog.CheckCommand(argv, allow); err != nil {
 		return nil, err
 	}
-	return argv, nil
+	return catalog.PinExecutionCommand(argv, allow)
 }
 
 func streamStdout(input io.Reader, output *limitedOutput, r *redact.Redactor, filters FilterOptions, scan int64) error {
@@ -477,7 +477,7 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	command := exec.Command(argv[0], argv[1:]...)
-	command.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8", "PAGER=cat", "SYSTEMD_PAGER="}
+	command.Env = []string{"PATH=" + catalog.ExecutionPATH, "LANG=C.UTF-8", "PAGER=cat", "SYSTEMD_PAGER="}
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	command.WaitDelay = pipeDrainDelay
 	stdoutReader, stdoutWriter := io.Pipe()

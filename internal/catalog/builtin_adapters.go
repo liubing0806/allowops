@@ -18,6 +18,7 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin/starrocksdiag"
 	"github.com/liubing0806/allowops/internal/builtin/starrocksprofile"
 	"github.com/liubing0806/allowops/internal/params"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 func decodeBuiltinConfig(input map[string]any, out any) error {
@@ -66,6 +67,13 @@ func positiveBound(n, defaultValue int) int {
 func integerDefinition(description string, min, max int, defaultValue any) params.Definition {
 	lower := int64(min)
 	return params.Definition{Type: params.Int, Description: description, Min: &lower, Max: max, Default: defaultValue}
+}
+
+func valueMask(policy *redact.Redactor) func(string) string {
+	if policy == nil {
+		return nil
+	}
+	return policy.ValueMask()
 }
 
 func adaptBuiltinResult(r builtin.Result) BuiltinResult {
@@ -183,8 +191,8 @@ func (logQueryHandler) Parameters(input map[string]any) (map[string]params.Defin
 func (h logQueryHandler) Run(ctx context.Context, input, values map[string]any) (BuiltinResult, error) {
 	return h.RunBudgeted(ctx, input, values, nil, 0)
 }
-func (h logQueryHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
-	return h.RunBudgeted(ctx, input, values, mask, 0)
+func (h logQueryHandler) RunRedacted(ctx context.Context, input, values map[string]any, policy *redact.Redactor) (BuiltinResult, error) {
+	return h.RunBudgeted(ctx, input, values, valueMask(policy), 0)
 }
 func (logQueryHandler) RunBudgeted(ctx context.Context, input, values map[string]any, redact func(string) string, maxOutput int64) (BuiltinResult, error) {
 	cfg, err := logQueryConfig(input)
@@ -314,12 +322,16 @@ func (redisHandler) Run(ctx context.Context, input, values map[string]any) (Buil
 	return (redisHandler{}).RunRedacted(ctx, input, values, nil)
 }
 
-func (redisHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+func (redisHandler) RunRedacted(ctx context.Context, input, values map[string]any, policy *redact.Redactor) (BuiltinResult, error) {
 	cfg, err := redisConfig(input)
 	if err != nil {
 		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
 	}
 	args, _ := values["args"].([]string)
+	var mask func(string) string
+	if policy != nil {
+		mask = policy.ValueMask()
+	}
 	r, err := redisbuiltin.RunRedacted(ctx, cfg, redisbuiltin.Params{Command: values["command"].(string), Args: args}, mask)
 	return adaptBuiltinResult(r), err
 }
@@ -375,14 +387,14 @@ func (h starRocksHandler) Run(ctx context.Context, input, values map[string]any)
 	return h.RunRedacted(ctx, input, values, nil)
 }
 
-func (starRocksHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+func (starRocksHandler) RunRedacted(ctx context.Context, input, values map[string]any, policy *redact.Redactor) (BuiltinResult, error) {
 	cfg, err := starRocksConfig(input)
 	if err != nil {
 		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
 	}
 	database, _ := values["database"].(string)
 	sql, _ := values["sql"].(string)
-	r, err := starrocks.RunRedacted(ctx, cfg, starrocks.Params{Database: database, SQL: sql}, mask)
+	r, err := starrocks.RunRedacted(ctx, cfg, starrocks.Params{Database: database, SQL: sql}, valueMask(policy))
 	if err != nil {
 		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
 	}
@@ -451,7 +463,7 @@ func (h starRocksDiagHandler) Run(ctx context.Context, input, values map[string]
 	return h.RunRedacted(ctx, input, values, nil)
 }
 
-func (starRocksDiagHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+func (starRocksDiagHandler) RunRedacted(ctx context.Context, input, values map[string]any, policy *redact.Redactor) (BuiltinResult, error) {
 	cfg, err := starRocksDiagConfig(input)
 	if err != nil {
 		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
@@ -462,7 +474,7 @@ func (starRocksDiagHandler) RunRedacted(ctx context.Context, input, values map[s
 		Op: text("op"), Component: text("component"), SinceMinutes: number("since_minutes"), MinDurationMs: number("min_duration_ms"),
 		State: text("state"), Limit: number("limit"), QueryID: text("query_id"), TopN: number("top_n"), SQL: text("sql"), Database: text("database"),
 	}
-	r, err := starrocksdiag.RunRedacted(ctx, cfg, p, mask)
+	r, err := starrocksdiag.RunRedacted(ctx, cfg, p, valueMask(policy))
 	if err != nil {
 		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
 	}

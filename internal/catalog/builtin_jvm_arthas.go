@@ -13,6 +13,7 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin/jvmarthas"
 	"github.com/liubing0806/allowops/internal/jvmtarget"
 	"github.com/liubing0806/allowops/internal/params"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 type jvmArthasHandler struct{}
@@ -243,7 +244,7 @@ func (h jvmArthasHandler) Run(ctx context.Context, input, values map[string]any)
 	return h.RunRedacted(ctx, input, values, nil)
 }
 
-func (jvmArthasHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+func (jvmArthasHandler) RunRedacted(ctx context.Context, input, values map[string]any, policy *redact.Redactor) (BuiltinResult, error) {
 	cfg, err := jvmArthasConfig(input)
 	if err != nil {
 		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
@@ -271,6 +272,6 @@ func (jvmArthasHandler) RunRedacted(ctx context.Context, input, values map[strin
 	if n, ok := values["cycle"].(int64); ok {
 		req.Cycle = int(n)
 	}
-	r, err := jvmArthasRun(ctx, cfg, jvmarthas.Params{Target: target, Request: req}, mask)
+	r, err := jvmArthasRun(ctx, cfg, jvmarthas.Params{Target: target, Request: req}, valueMask(policy))
 	return BuiltinResult{Stdout: r.Stdout, Stderr: r.Stderr, ExitCode: r.ExitCode}, err
 }

@@ -229,6 +229,54 @@ func TestContainerIdentityAndEnvironment(t *testing.T) {
 	}
 }
 
+func TestContainerWrappedPATHUsesRunAsIdentity(t *testing.T) {
+	requireContainer(t)
+	dir, err := os.MkdirTemp("", "allowops-path-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	if err := os.Chmod(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	first, second := filepath.Join(dir, "first"), filepath.Join(dir, "second")
+	for _, path := range []string{first, second} {
+		if err := os.Mkdir(path, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const name = "checked-command"
+	// The root-only first entry is empty. Checking its format as root
+	// would reject the action before nobody can skip it.
+	if err := os.WriteFile(filepath.Join(first, name), nil, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/usr/bin/true", filepath.Join(second, name)); err != nil {
+		t.Fatal(err)
+	}
+	a := catalog.Action{
+		Name: "wrapped", Description: "wrapped command", Risk: "read", RunAs: "nobody",
+		Exec: []any{"/usr/bin/env", "PATH=" + first + ":" + second, name}, Timeout: "5s", MaxOutput: 1024,
+	}
+	data, err := json.Marshal(signedActionRequest(t, a))
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("/usr/libexec/allowops/allowops-exec")
+	command.Stdin = bytes.NewReader(data)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("helper execution: %v\n%s", err, output)
+	}
+	var response execd.Response
+	if err := decodeHelperResponse(output, &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Reason != "" || response.Result.ExitCode != 0 {
+		t.Fatalf("helper rejected the executable selected for nobody: %+v", response)
+	}
+}
+
 func TestContainerSudoCancellationKillsRootProcessGroup(t *testing.T) {
 	requireContainer(t)
 	path := filepath.Join(t.TempDir(), "pids")

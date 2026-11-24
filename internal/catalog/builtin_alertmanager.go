@@ -8,6 +8,7 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/liubing0806/allowops/internal/builtin/alertmanager"
 	"github.com/liubing0806/allowops/internal/params"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 type alertmanagerHandler struct{}
@@ -67,13 +68,13 @@ func (alertmanagerHandler) Run(ctx context.Context, input, values map[string]any
 	return (alertmanagerHandler{}).RunRedacted(ctx, input, values, nil)
 }
 
-func (alertmanagerHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+func (alertmanagerHandler) RunRedacted(ctx context.Context, input, values map[string]any, policy *redact.Redactor) (BuiltinResult, error) {
 	cfg, err := alertmanagerConfig(input)
 	if err != nil {
 		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
 	}
 	filter, _ := values["filter"].([]string)
 	p := alertmanager.Params{Filter: filter, Active: values["active"].(bool), Silenced: values["silenced"].(bool), Inhibited: values["inhibited"].(bool)}
-	r, err := alertmanager.Run(ctx, cfg, p, mask)
+	r, err := alertmanager.Run(ctx, cfg, p, valueMask(policy))
 	return BuiltinResult{Stdout: r.Stdout, Stderr: r.Stderr, ExitCode: r.ExitCode, ResourceLimited: r.Truncated}, err
 }

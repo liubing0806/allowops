@@ -60,7 +60,7 @@ func executionPrefix(argv []string) (int, error) {
 		return 0, err
 	}
 	if nested == nil {
-		if name := strings.ToLower(path.Base(argv[0])); name == "docker" || name == "kubectl" {
+		if name := strings.ToLower(path.Base(argv[0])); name == "docker" || name == "kubectl" || name == "xargs" {
 			return len(argv), nil
 		}
 		return 1, nil
@@ -244,7 +244,7 @@ func wrapperCommand(name string, args []string) ([]string, error) {
 	}
 	if len(args) == 0 {
 		if name == "xargs" {
-			return []string{"echo"}, nil
+			return nil, nil // xargs supplies its default command, echo.
 		}
 		return nil, fmt.Errorf("explicit command required")
 	}

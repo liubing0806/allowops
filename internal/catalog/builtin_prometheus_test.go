@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/liubing0806/allowops/internal/params"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 func prometheusAction(api string, config map[string]any) Action {
@@ -167,8 +168,12 @@ func TestPrometheusHandlerRun(t *testing.T) {
 	if !ok {
 		t.Fatal("prometheus_query must mask before TSV encoding")
 	}
-	r, err = redacting.RunRedacted(context.Background(), a.BuiltinConfig, map[string]any{"query": "up"}, func(s string) string { return strings.ReplaceAll(s, `job="a"`, "job=***") })
-	if err != nil || !strings.Contains(r.Stdout, "up{job=***}") {
+	policy, err := redact.New(&redact.Config{Builtin: []string{}, Custom: []redact.Rule{{Name: "job", Regex: `job="a"`}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err = redacting.RunRedacted(context.Background(), a.BuiltinConfig, map[string]any{"query": "up"}, policy)
+	if err != nil || !strings.Contains(r.Stdout, "up{[REDACTED:job]}") {
 		t.Errorf("redacted = %+v, %v", r, err)
 	}
 }

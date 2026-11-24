@@ -8,6 +8,7 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin/apiclient"
 	prombuiltin "github.com/liubing0806/allowops/internal/builtin/prometheus"
 	"github.com/liubing0806/allowops/internal/params"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 type prometheusHandler struct{}
@@ -88,7 +89,7 @@ func (prometheusHandler) Run(ctx context.Context, input, values map[string]any) 
 	return (prometheusHandler{}).RunRedacted(ctx, input, values, nil)
 }
 
-func (prometheusHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+func (prometheusHandler) RunRedacted(ctx context.Context, input, values map[string]any, policy *redact.Redactor) (BuiltinResult, error) {
 	cfg, err := prometheusConfig(input)
 	if err != nil {
 		return BuiltinResult{ExitCode: 1}, err
@@ -98,6 +99,6 @@ func (prometheusHandler) RunRedacted(ctx context.Context, input, values map[stri
 	p.Step, p.HasStep = values["step"].(time.Duration)
 	p.Match, _ = values["match"].([]string)
 	p.Summary, _ = values["summary"].(bool)
-	r, err := prombuiltin.RunRedacted(ctx, cfg, p, mask)
+	r, err := prombuiltin.RunRedacted(ctx, cfg, p, valueMask(policy))
 	return BuiltinResult{Stdout: r.Stdout, Stderr: r.Stderr, ExitCode: r.ExitCode, ResourceLimited: r.Truncated, StatusCode: r.StatusCode}, err
 }

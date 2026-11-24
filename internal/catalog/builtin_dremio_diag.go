@@ -8,6 +8,7 @@ import (
 	"github.com/liubing0806/allowops/internal/builtin"
 	"github.com/liubing0806/allowops/internal/builtin/dremio"
 	"github.com/liubing0806/allowops/internal/params"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 type dremioDiagHandler struct{}
@@ -94,7 +95,7 @@ func diagInt(values map[string]any, name string) *int {
 	return nil
 }
 
-func (dremioDiagHandler) RunRedacted(ctx context.Context, input, values map[string]any, mask func(string) string) (BuiltinResult, error) {
+func (dremioDiagHandler) RunRedacted(ctx context.Context, input, values map[string]any, policy *redact.Redactor) (BuiltinResult, error) {
 	cfg, err := dremioDiagConfig(input)
 	if err != nil {
 		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
@@ -104,7 +105,7 @@ func (dremioDiagHandler) RunRedacted(ctx context.Context, input, values map[stri
 		Op: text("op"), JobID: text("job_id"), State: text("state"), User: text("user"),
 		Since: diagDuration(values, "since"), MinDuration: diagDuration(values, "min_duration"),
 		Limit: diagInt(values, "limit"), TopN: diagInt(values, "top_n"),
-	}, mask)
+	}, valueMask(policy))
 	if err != nil {
 		return BuiltinResult{ExitCode: builtin.ExitFailure}, err
 	}

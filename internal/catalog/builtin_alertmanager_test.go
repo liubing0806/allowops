@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/liubing0806/allowops/internal/params"
+	"github.com/liubing0806/allowops/internal/redact"
 )
 
 func alertmanagerAction(config map[string]any) Action {
@@ -156,13 +157,16 @@ func TestAlertmanagerRunThroughAdapter(t *testing.T) {
 		t.Fatal("alertmanager_alerts is not registered")
 	}
 	values := map[string]any{"filter": []string{`alertname="A"`}, "active": true, "silenced": true, "inhibited": false}
-	mask := func(s string) string { return strings.ReplaceAll(s, "hunter2", "[REDACTED]") }
+	policy, err := redact.New(&redact.Config{Builtin: []string{}, Custom: []redact.Rule{{Name: "pw", Regex: "hunter2"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	r, err := handler.(RedactingBuiltinHandler).RunRedacted(context.Background(), config, values, mask)
+	r, err := handler.(RedactingBuiltinHandler).RunRedacted(context.Background(), config, values, policy)
 	if err != nil || r.ExitCode != 0 || !r.ResourceLimited {
 		t.Fatalf("result = %+v, err = %v", r, err)
 	}
-	if strings.Contains(r.Stdout, "hunter2") || !strings.Contains(r.Stdout, "[REDACTED]") || strings.Count(r.Stdout, "\n") != 1 {
+	if strings.Contains(r.Stdout, "hunter2") || !strings.Contains(r.Stdout, "[REDACTED:pw]") || strings.Count(r.Stdout, "\n") != 1 {
 		t.Fatalf("stdout = %q", r.Stdout)
 	}
 	if !strings.Contains(r.Stderr, "1 of 2") {

@@ -45,7 +45,9 @@ type compiledRule struct {
 	// runs to the end of the line, so the full expression cannot be used to
 	// look for the next match after a skipped part: every search would read
 	// the rest of the line again.
-	head *regexp.Regexp
+	head      *regexp.Regexp
+	plainHead *regexp.Regexp // simpler matcher for input without backslashes
+	value     *regexp.Regexp // reads the value after head
 	// needs lists lower-case substrings; one of them must occur in the line,
 	// otherwise the expression cannot match and is not run. It is a speed-up
 	// only and must be a necessary condition of the expression.
@@ -78,11 +80,21 @@ const (
 	// A double-quoted value accepts backslash escapes, a single-quoted value
 	// accepts a doubled quote. An unquoted value runs to the end of the line:
 	// a password may contain spaces or ';'.
-	dqValue   = `"(?:[^"\\\r\n]|\\.)*"`
-	sqValue   = `'(?:[^'\r\n]|'')*'`
-	lineValue = `(?:` + dqValue + `|` + sqValue + `|\S.*)`
-	keyPrefix = `[A-Za-z0-9_.-]*`
+	dqValue = `"(?:[^"\\\r\n]|\\.)*"`
+	sqValue = `'(?:[^'\r\n]|'')*'`
+	// JSON string escapes can occur in the input itself. Only a quote
+	// preceded by one backslash closes the quoted value; an escaped quote
+	// in its content has three backslashes.
+	escapedDQValue  = `\\"(?:[^"\\\r\n]|\\\\(?:\\"|\\\\|[^"\\\r\n])|\\[^"\\\r\n])*\\"`
+	escapedSpace    = `(?-i:\\[nrt])`
+	textSpace       = `(?:\s|` + escapedSpace + `)`
+	wordStart       = `(?:\b|` + escapedSpace + `)`
+	lineValue       = `(?:` + dqValue + `|` + sqValue + `|\S.*)`
+	structuredValue = `(?:` + escapedDQValue + `|` + lineValue + `)`
+	keyPrefix       = `[A-Za-z0-9_.-]*`
 )
+
+var lineValueAtStart = regexp.MustCompile("^" + lineValue)
 
 // Value of a command-line option, read as one shell word: quoted strings,
 // backslash escapes and plain characters joined without whitespace. It does not
@@ -102,34 +114,42 @@ const authSchemes = `(?:basic|digest|bearer|negotiate|ntlm|aws4-hmac-sha256|oaut
 
 // A header name: Authorization, Proxy-Authorization, HTTP_AUTHORIZATION.
 const authName = `(?:[a-z0-9]+_)*(?:proxy-)?authorization`
+const apiKeyHeader = `x-[A-Za-z0-9-]*(?:key|token|secret|auth|pass|pwd|credential)[A-Za-z0-9-]*`
 
 type secretRule struct {
-	name   string
-	regex  string
-	needs  []string
-	keep   func(string) bool
-	skip   func(string) int
-	head   string
-	group  int
-	anchor string
+	name      string
+	regex     string
+	needs     []string
+	keep      func(string) bool
+	skip      func(string) int
+	head      string
+	plainHead string
+	value     *regexp.Regexp
+	group     int
+	anchor    string
 }
 
 // The expressions of the NAME: value rule and the "name": value rule, up to
 // the value. Both rules have a skip, which is why they are also used without
 // the value.
 const (
-	colonHead  = `(?i)` + keyPrefix + `(?:` + credentialWords + `|pwd)\s*:\s*`
-	jsonPrefix = `(?i)(?:^(?:\s*-)*|[{\[,]|(?:failed\s+for\s+)?\bvolume\s)\s*`
-	jsonKey    = `(?:"` + keyPrefix + `(?:` + credentialWords + `|pwd)"|'` + keyPrefix + `(?:` + credentialWords + `|pwd)'|\\"` + keyPrefix + `(?:` + credentialWords + `|pwd)\\")\s*:\s*`
+	credentialKey = keyPrefix + `(?:` + credentialWords + `|pwd)`
+	colonHead     = `(?i)` + credentialKey + `\s*:\s*`
+	jsonBoundary  = `^(?:\s*-)*|[{\[,]|(?:failed\s+for\s+)?\bvolume\s`
+	quotedKey     = `"` + credentialKey + `"|'` + credentialKey + `'`
+	escapedKey    = `\\"` + credentialKey + `\\"`
+	jsonPrefix    = `(?i)(?:` + jsonBoundary + "|" + escapedSpace + `)` + textSpace + `*`
+	jsonKey       = `(?:` + quotedKey + "|" + escapedKey + `)` + textSpace + `*:` + textSpace + `*`
+	plainJSONHead = `(?i)(?:` + jsonBoundary + `)\s*((?:` + quotedKey + `)\s*:\s*)`
 )
 
 // Rules are applied in order. Specific markers (bearer, url_credentials,
 // auth_header ...) come before the generic credential rules, so a header or
 // URL keeps its own marker.
 var secretRules = []secretRule{
-	{name: "aliyun_access_key", needs: []string{"ltai"}, regex: `\bLTAI[A-Za-z0-9]{12,}\b`},
-	{name: "aws_access_key", needs: []string{"akia"}, regex: `\bAKIA[A-Z0-9]{16}\b`},
-	{name: "jwt", needs: []string{"eyj"}, regex: `\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b`},
+	{name: "aliyun_access_key", needs: []string{"ltai"}, group: 1, regex: wordStart + `(LTAI[A-Za-z0-9]{12,})\b`},
+	{name: "aws_access_key", needs: []string{"akia"}, group: 1, regex: wordStart + `(AKIA[A-Z0-9]{16})\b`},
+	{name: "jwt", needs: []string{"eyj"}, group: 1, regex: wordStart + `(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\b`},
 	{name: "bearer", needs: []string{"bearer"}, regex: `(?i)Authorization\s*:\s*Bearer\s+[^\s]+`},
 	// The user name may be empty (redis://:password@host). The password runs to
 	// the last '@' of the token, so a password containing '@' is covered; it
@@ -149,22 +169,24 @@ var secretRules = []secretRule{
 	// Go MySQL DSN: user:password@tcp(host:3306)/db and @unix(/path)/db.
 	{name: "url_credentials", needs: []string{"@tcp(", "@unix("}, group: 1, regex: `([A-Za-z0-9_.-]+:\S*@)(?:tcp|unix)\(`},
 	// Oracle thin: jdbc:oracle:thin:user/password@host
-	{name: "url_credentials", needs: []string{"jdbc:oracle"}, regex: `(?i)\bjdbc:oracle:(?:thin|oci8?):[^\s/@:"']+/[^\s"']+@`},
+	{name: "url_credentials", needs: []string{"jdbc:oracle"}, group: 1, regex: `(?i)` + wordStart + `(jdbc:oracle:(?:thin|oci8?):[^\s/@:"']+/[^\s"']+@)`},
 	// A query parameter ends at whitespace or '&', so a request line in an
 	// access log keeps its protocol, status and size.
 	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, group: 1, regex: `(?i)[?&](` + keyPrefix + `(?:` + credentialWords + `|pwd)=[^\s&"']+)`},
-	{name: "mysql_pwd", needs: []string{"mysql_pwd"}, regex: `(?i)\bMYSQL_PWD\s*=\s*` + lineValue},
-	{name: "rediscli_auth", needs: []string{"rediscli_auth"}, regex: `(?i)\bREDISCLI_AUTH\s*=\s*` + lineValue},
-	{name: "credential", needs: []string{"password", "secret", "token"}, regex: `(?i)\b(?:password|secret|token)\s*=\s*` + lineValue},
+	{name: "mysql_pwd", needs: []string{"mysql_pwd"}, group: 1, regex: `(?i)` + wordStart + `(MYSQL_PWD\s*=\s*` + lineValue + `)`},
+	{name: "rediscli_auth", needs: []string{"rediscli_auth"}, group: 1, regex: `(?i)` + wordStart + `(REDISCLI_AUTH\s*=\s*` + lineValue + `)`},
+	{name: "credential", needs: []string{"password", "secret", "token"}, group: 1, regex: `(?i)` + wordStart + `((?:password|secret|token)\s*=\s*` + lineValue + `)`},
 	// Authorization header: at the start of a line, after a quote, brace, '['
 	// or '>' (curl -v), whatever the value is; anywhere else when the value
 	// starts with an authentication scheme. Prose such as "may require
 	// authorization: server message" stays readable.
+	{name: "auth_header", needs: []string{"authorization"}, regex: `(?i)\\"` + authName + `\\"` + textSpace + `*:` + textSpace + `*` + structuredValue},
 	{name: "auth_header", needs: []string{"authorization"}, group: 1, regex: `(?i)(?:^|["'{>\[])\s*(` + authName + `["']?\s*:\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\r\n]*))`},
 	{name: "auth_header", needs: []string{"authorization"}, regex: `(?i)\b` + authName + `["']?\s*:\s*(?:"` + authSchemes + `[^"\r\n]*"|'` + authSchemes + `[^'\r\n]*'|` + authSchemes + `[^\r\n]*)`},
-	{name: "auth_header", needs: []string{"authorization"}, regex: `(?i)\b` + authName + `\s*=\s*` + lineValue},
+	{name: "auth_header", needs: []string{"authorization"}, group: 1, regex: `(?i)` + wordStart + `(` + authName + `\s*=\s*` + lineValue + `)`},
 	{name: "auth_header", needs: []string{"authorization"}, regex: `(?i)\b(?:[a-z0-9_]*set_header|add_header|more_set_headers|[a-z0-9_]*_param)\s+["']?(?:http_)?(?:proxy[-_])?authorization["']?\s+[^;\r\n]*`},
-	{name: "api_key_header", needs: []string{"x-", "set_header", "add_header"}, regex: `(?i)\bx-[A-Za-z0-9-]*(?:key|token|secret|auth|pass|pwd|credential)[A-Za-z0-9-]*["']?\s*:\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\r\n]*)|\b(?:[a-z0-9_]*set_header|add_header|more_set_headers)\s+["']?[A-Za-z0-9_-]*(?:key|token|secret|pass|pwd|credential)[A-Za-z0-9_-]*["']?\s+[^;\r\n]*`},
+	{name: "api_key_header", needs: []string{"x-", "set_header", "add_header"}, regex: `(?i)\\"` + apiKeyHeader + `\\"` + textSpace + `*:` + textSpace + `*` + structuredValue +
+		`|\b` + apiKeyHeader + `["']?\s*:\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\r\n]*)|\b(?:[a-z0-9_]*set_header|add_header|more_set_headers)\s+["']?[A-Za-z0-9_-]*(?:key|token|secret|pass|pwd|credential)[A-Za-z0-9_-]*["']?\s+[^;\r\n]*`},
 	{name: "htpasswd_hash", needs: []string{"$", "sha"}, regex: `\$(?:apr1|1|5|6|2[abxy]|y|7)\$(?:[./0-9A-Za-z,=]+\$)+[./0-9A-Za-z]{20,}|\{S?SHA(?:256|512)?\}[A-Za-z0-9+/=]{20,}`},
 	// NAME=value with a prefixed key: DB_PASSWORD=x, AWS_SECRET_ACCESS_KEY=x,
 	// access_token=x. A bare PWD or OLDPWD (working directory) is not matched.
@@ -172,12 +194,15 @@ var secretRules = []secretRule{
 	// NAME: value, such as the Environment section of kubectl describe pod and
 	// YAML. The key is not quoted here, so a quoted name followed by a colon
 	// in prose ("volume "db-secret" : secret ... not found") is not a key.
-	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: colonHead + lineValue, head: colonHead, keep: describeSecretReference, skip: skipOpenSSLMessage},
+	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: colonHead + lineValue, head: colonHead, value: lineValueAtStart, keep: describeSecretReference, skip: skipOpenSSLMessage},
 	// "name": value in JSON and quoted YAML. The key starts a line (also after
 	// the "- " of a YAML list item), follows '{', '[' or ',', or follows the word
 	// volume, so it is a key and not a quoted word inside a sentence. The
 	// kubelet event "failed for volume "x" : reason" is kept by skipVolumeEvent.
-	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, group: 1, skip: skipVolumeEvent, regex: jsonPrefix + `(` + jsonKey + lineValue + `)`, head: jsonPrefix + `(` + jsonKey + `)`},
+	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, group: 1, skip: skipVolumeEvent,
+		regex: jsonPrefix + `(` + jsonKey + structuredValue + `)`, head: jsonPrefix + `(` + jsonKey + `)`, plainHead: plainJSONHead, value: regexp.MustCompile("^" + structuredValue)},
+	// A serialized key/value fragment can itself start a JSON string.
+	{name: "credential", needs: []string{`\"`}, group: 1, regex: `(?i)[:\[,]\s*"\s*(` + escapedKey + textSpace + `*:` + textSpace + `*` + escapedDQValue + `)`},
 	// A map or Properties entry as Arthas prints an object (watch of the jvm_arthas builtin):
 	// @String[db.password]:@String[value]. A bare PWD key is the working directory, as above.
 	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: `(?i)@[A-Za-z0-9_$]+\[` + keyPrefix + `(?:` + credentialWords + `|[_.-]pwd)\]:` + lineValue},
@@ -189,23 +214,23 @@ var secretRules = []secretRule{
 	{name: "credential", needs: []string{"pass", "secret", "token", "credential", "key", "pwd"}, regex: `(?i)\bset[A-Za-z0-9_]*?(?:` + setterWords + `)\(\s*` + dqValue + `\s*\)`},
 	// Command lines. Options that are also used with other meanings (-u, -a,
 	// -p) are only recognised after the command that gives them a password.
-	{name: "cli_password", needs: []string{"--"}, regex: `(?i)(?:^|\s)--` + optionWords + `(?:\s+|=)` + optionValue, keep: negatedOption, group: 1},
+	{name: "cli_password", needs: []string{"--"}, regex: `(?i)(?:^|` + textSpace + `)--` + optionWords + `(?:\s+|=)` + optionValue, keep: negatedOption, group: 1},
 	// The same options as elements of a JSON array: ["--requirepass","value"].
 	{name: "cli_password", needs: []string{`"--`}, regex: `(?i)"--` + optionWords + `"\s*,\s*"((?:[^"\\]|\\.)*)"`, keep: negatedOption, group: 1},
 	// curl -u user:password, also attached (-uuser:password) and repeated. The
 	// value is one shell word, in which quoted and unquoted parts follow each
 	// other: -u "a b":'p w'. Without a colon it is only a user name; curl asks
 	// for the password, so it stays.
-	{name: "cli_password", needs: []string{"curl"}, anchor: `(?i)\bcurl\b`, regex: `(?i)\s-(?:(?:-user|-proxy-user)(?:\s+|=)|[A-Za-z]*?[uU](?:\s*|=))(` + shellWord + `)`, keep: withoutColon, group: 1},
-	{name: "cli_password", needs: []string{"redis-cli", "valkey-cli"}, regex: `(?i)\b(?:redis|valkey)-cli\b[^\r\n]*?\s-a\s*("[^"\r\n]*"|'[^'\r\n]*'|\S+)`, group: 1},
-	{name: "cli_password", needs: []string{"sshpass"}, regex: `(?i)\bsshpass\b[^\r\n]*?\s-p\s+("[^"\r\n]*"|'[^'\r\n]*'|\S+)`, group: 1},
+	{name: "cli_password", needs: []string{"curl"}, anchor: `(?i)` + wordStart + `curl\b`, regex: `(?i)\s-(?:(?:-user|-proxy-user)(?:\s+|=)|[A-Za-z]*?[uU](?:\s*|=))(` + shellWord + `)`, keep: withoutColon, group: 1},
+	{name: "cli_password", needs: []string{"redis-cli", "valkey-cli"}, regex: `(?i)` + wordStart + `(?:redis|valkey)-cli\b[^\r\n]*?\s-a\s*("[^"\r\n]*"|'[^'\r\n]*'|\S+)`, group: 1},
+	{name: "cli_password", needs: []string{"sshpass"}, regex: `(?i)` + wordStart + `sshpass\b[^\r\n]*?\s-p\s+("[^"\r\n]*"|'[^'\r\n]*'|\S+)`, group: 1},
 	// The same short options as elements of a JSON argument array (docker
 	// inspect Cmd, Args, Healthcheck.Test): ["redis-cli","-a","pw"] or "-apw".
 	{name: "cli_password", needs: []string{`"curl"`, `/curl"`}, anchor: `(?i)"(?:[^"]*/)?curl"`, regex: `(?i)"-(?:-user|-proxy-user|[A-Za-z]*?[uU])(?:"\s*,\s*")?((?:[^"\\]|\\.)+)"`, keep: withoutColon, group: 1},
 	{name: "cli_password", needs: []string{`redis-cli"`, `valkey-cli"`}, anchor: `(?i)"(?:[^"]*/)?(?:redis|valkey)-cli"`, regex: `"-a(?:"\s*,\s*")?((?:[^"\\]|\\.)+)"`, group: 1},
 	{name: "cli_password", needs: []string{`sshpass"`}, anchor: `(?i)"(?:[^"]*/)?sshpass"`, regex: `"-p(?:"\s*,\s*")?((?:[^"\\]|\\.)+)"`, group: 1},
 	// Keep the boundary out of the replacement; -p without a value stays unchanged.
-	{name: "mysql_password", needs: []string{"-p"}, regex: `(?:^|[\s])(-p(?:"[^"\r\n]+"|'[^'\r\n]+'|[^\s]+))`, group: 1},
+	{name: "mysql_password", needs: []string{"-p"}, regex: `(?:^|` + textSpace + `)(-p(?:"[^"\r\n]+"|'[^'\r\n]+'|[^\s]+))`, group: 1},
 }
 
 // kubectl describe prints a reference to a secret or config map instead of the
@@ -247,7 +272,7 @@ func optionName(match string) bool { return strings.HasPrefix(match, `"-`) }
 // withoutColon reports a curl -u value that holds no user:password separator.
 func withoutColon(match string) bool { return !strings.Contains(match, ":") }
 
-var negatedOptionName = regexp.MustCompile(`(?i)^\s*"?--(?:no|ask|skip|disable|without)-`)
+var negatedOptionName = regexp.MustCompile(`(?i)^` + textSpace + `*"?--(?:no|ask|skip|disable|without)-`)
 
 // negatedOption reports flags such as --no-password or --ask-pass, which take no value.
 func negatedOption(match string) bool { return negatedOptionName.MatchString(match) }
@@ -267,7 +292,11 @@ func New(config *Config) (*Redactor, error) {
 	if slices.Contains(builtins, "secrets") {
 		r.secrets = true
 		for _, rule := range secretRules {
-			r.rules = append(r.rules, compiledRule{name: rule.name, re: regexp.MustCompile(rule.regex), keep: rule.keep, skip: rule.skip, head: anchorRegexp(rule.head), needs: rule.needs, group: rule.group, anchor: anchorRegexp(rule.anchor)})
+			r.rules = append(r.rules, compiledRule{
+				name: rule.name, re: regexp.MustCompile(rule.regex), keep: rule.keep, skip: rule.skip,
+				head: anchorRegexp(rule.head), plainHead: anchorRegexp(rule.plainHead), value: rule.value,
+				needs: rule.needs, group: rule.group, anchor: anchorRegexp(rule.anchor),
+			})
 		}
 	}
 	if slices.Contains(builtins, "pii") {
@@ -312,18 +341,19 @@ func replacement(name string) string { return "[REDACTED:" + name + "]" }
 func digit(b byte) bool              { return b >= '0' && b <= '9' }
 func letter(b byte) bool             { return b|0x20 >= 'a' && b|0x20 <= 'z' }
 
-// lineValueAtStart reads the value of a rule from the start of a text.
-var lineValueAtStart = regexp.MustCompile(`^` + lineValue)
-
 // applyRuleWithSkip is applyRule for a rule with skip. It looks for the part in
 // front of the value (head) and reads the value only for a match that is not
 // skipped, so the text after a skipped part is searched once, from the end of
 // that part, and the whole line is read once.
 func applyRuleWithSkip(line string, rule compiledRule) string {
+	head, value := rule.head, rule.value
+	if rule.plainHead != nil && !strings.Contains(line, "\\") {
+		head, value = rule.plainHead, lineValueAtStart
+	}
 	var out strings.Builder
 	cursor, pos := 0, 0
 	for pos < len(line) {
-		loc := rule.head.FindStringSubmatchIndex(line[pos:])
+		loc := head.FindStringSubmatchIndex(line[pos:])
 		if loc == nil {
 			break
 		}
@@ -342,7 +372,7 @@ func applyRuleWithSkip(line string, rule compiledRule) string {
 			pos = from + n
 			continue
 		}
-		valueEnd := headEnd + lineValueAtStart.FindStringIndex(line[headEnd:])[1]
+		valueEnd := headEnd + value.FindStringIndex(line[headEnd:])[1]
 		pos = valueEnd
 		if rule.keep != nil && rule.keep(line[from:valueEnd]) {
 			continue
@@ -418,6 +448,18 @@ func (r *Redactor) Line(line string) string {
 		line = r.pemLine(line, &inside)
 	}
 	return r.applyRules(line)
+}
+
+// ValueMask returns a mask for the ordered values of one result. Each call
+// matches rules on a single original value and carries PEM state to the next.
+func (r *Redactor) ValueMask() func(string) string {
+	inside := false
+	return func(value string) string {
+		if r.secrets {
+			value = r.pemLine(value, &inside)
+		}
+		return r.applyRules(value)
+	}
 }
 
 // applyRules runs the rules in order. A rule with needs is skipped when the
@@ -498,7 +540,7 @@ func (r *Redactor) Stream(input io.Reader, output io.Writer, maxLine int) error 
 		return fmt.Errorf("maximum line length must be positive")
 	}
 	reader := bufio.NewReaderSize(input, min(maxLine+1, 64*1024))
-	inside := false
+	mask := r.ValueMask()
 	for {
 		var line []byte
 		var readErr error
@@ -526,11 +568,7 @@ func (r *Redactor) Stream(input io.Reader, output io.Writer, maxLine int) error 
 		if len(line) > maxLine {
 			return fmt.Errorf("output line exceeds maximum length %d", maxLine)
 		}
-		text := string(line)
-		if r.secrets {
-			text = r.pemLine(text, &inside)
-		}
-		text = r.applyRules(text)
+		text := mask(string(line))
 		if newline {
 			text += "\n"
 		}
