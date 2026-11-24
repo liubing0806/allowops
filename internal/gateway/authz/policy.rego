@@ -27,7 +27,7 @@ action_ok(rule) if not input.operation in action_filtered_operations
 # A global view check (no action) matches only allow rules when the rule is
 # scoped by actions or risks, so a scoped deny does not block the whole list.
 action_ok(rule) if {
-	input.operation != "execute_action"
+	not input.operation in {"execute_action", "approve_jobs"}
 	input.action.name == ""
 	rule.effect == "allow"
 }

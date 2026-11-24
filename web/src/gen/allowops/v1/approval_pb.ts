@@ -4,9 +4,9 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { ApprovalStatus, ApprovalStatusJson, ApprovalVote, ApprovalVoteJson, CatalogRef, CatalogRefJson, PageRequest, PageRequestJson, PageResponse, PageResponseJson, TimeRange, TimeRangeJson } from "./common_pb";
+import type { ApprovalStatus, ApprovalStatusJson, ApprovalVote, ApprovalVoteJson, CatalogRef, CatalogRefJson, OutputTrust, OutputTrustJson, PageRequest, PageRequestJson, PageResponse, PageResponseJson, TimeRange, TimeRangeJson } from "./common_pb";
 import { file_allowops_v1_common } from "./common_pb";
-import type { JobEvidence, JobEvidenceJson } from "./job_pb";
+import type { Job, JobEvidence, JobEvidenceJson, JobJson } from "./job_pb";
 import { file_allowops_v1_job } from "./job_pb";
 import type { PolicyApprovalRoleSet, PolicyApprovalRoleSetJson } from "./policy_pb";
 import { file_allowops_v1_policy } from "./policy_pb";
@@ -18,7 +18,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file allowops/v1/approval.proto.
  */
 export const file_allowops_v1_approval: GenFile = /*@__PURE__*/
-  fileDesc("ChphbGxvd29wcy92MS9hcHByb3ZhbC5wcm90bxILYWxsb3dvcHMudjEiMwoOQXBwcm92YWxUYXJnZXQSDwoHaG9zdF9pZBgBIAEoCRIQCghob3N0bmFtZRgCIAEoCSLXAQoWQXBwcm92YWxEZWNpc2lvblJlY29yZBIQCghhY3Rvcl9pZBgBIAEoCRITCgthY3Rvcl9lbWFpbBgCIAEoCRInCgR2b3RlGAMgASgOMhkuYWxsb3dvcHMudjEuQXBwcm92YWxWb3RlEg4KBnJlYXNvbhgEIAEoCRIuCgpkZWNpZGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIWCg5wb2xpY3lfdmVyc2lvbhgGIAEoBBIVCg1tYXRjaGVkX3J1bGVzGAcgAygJIpQICg9BcHByb3ZhbFJlcXVlc3QSEwoLYXBwcm92YWxfaWQYASABKAkSDgoGam9iX2lkGAIgASgJEisKBnN0YXR1cxgDIAEoDjIbLmFsbG93b3BzLnYxLkFwcHJvdmFsU3RhdHVzEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBmFjdGlvbhgGIAEoCRITCgthY3Rpb25fcmlzaxgHIAEoCRIoCgdjYXRhbG9nGAggASgLMhcuYWxsb3dvcHMudjEuQ2F0YWxvZ1JlZhIVCg1hY3Rpb25fc2hhMjU2GAkgASgMEhMKC3BhcmFtc19qc29uGAogASgMEhQKDGZpbHRlcnNfanNvbhgLIAEoDBIXCg90YXJnZXRfc2VsZWN0b3IYDCABKAkSLAoHdGFyZ2V0cxgNIAMoCzIbLmFsbG93b3BzLnYxLkFwcHJvdmFsVGFyZ2V0EhIKCmJhdGNoX3NpemUYDiABKA0SFAoMbWF4X2ZhaWx1cmVzGA8gASgNEhYKDnJlcXVlc3RfZGlnZXN0GBAgASgMEhwKFHJlcXVlc3Rlcl9zdWJqZWN0X2lkGBEgASgJEhYKDnJlcXVlc3Rlcl9raW5kGBIgASgJEg4KBnJlYXNvbhgTIAEoCRIqCghldmlkZW5jZRgUIAEoCzIYLmFsbG93b3BzLnYxLkpvYkV2aWRlbmNlEhYKDnBvbGljeV92ZXJzaW9uGBUgASgEEhUKDW1hdGNoZWRfcnVsZXMYFiADKAkSRwobcmVxdWlyZWRfYXBwcm92ZXJfcm9sZV9zZXRzGBcgAygLMiIuYWxsb3dvcHMudjEuUG9saWN5QXBwcm92YWxSb2xlU2V0EhUKDW1pbl9hcHByb3ZhbHMYGCABKA0SGwoTYWxsb3dfb3duZXJfYXBwcm92ZRgZIAEoCBIWCg5hcHByb3ZlZF9jb3VudBgaIAEoDRI2CglkZWNpc2lvbnMYGyADKAsyIy5hbGxvd29wcy52MS5BcHByb3ZhbERlY2lzaW9uUmVjb3JkEi4KCmRlY2lkZWRfYXQYHCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmRlY2lkZWRfYnkYHSABKAkSFwoPZGVjaXNpb25fcmVhc29uGB4gASgJEiMKFnJlY2hlY2tfcG9saWN5X3ZlcnNpb24YHyABKARIAIgBARIVCg1yZWNoZWNrX2Vycm9yGCAgASgJEhMKC2NvbnNvbGVfdXJsGCEgASgJQhkKF19yZWNoZWNrX3BvbGljeV92ZXJzaW9uIsQBChRMaXN0QXBwcm92YWxzUmVxdWVzdBImCgRwYWdlGAEgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QSJwoHY3JlYXRlZBgCIAEoCzIWLmFsbG93b3BzLnYxLlRpbWVSYW5nZRItCghzdGF0dXNlcxgDIAMoDjIbLmFsbG93b3BzLnYxLkFwcHJvdmFsU3RhdHVzEg4KBmFjdGlvbhgEIAEoCRIcChRyZXF1ZXN0ZXJfc3ViamVjdF9pZBgFIAEoCSJxChVMaXN0QXBwcm92YWxzUmVzcG9uc2USLwoJYXBwcm92YWxzGAEgAygLMhwuYWxsb3dvcHMudjEuQXBwcm92YWxSZXF1ZXN0EicKBHBhZ2UYAiABKAsyGS5hbGxvd29wcy52MS5QYWdlUmVzcG9uc2UiKQoSR2V0QXBwcm92YWxSZXF1ZXN0EhMKC2FwcHJvdmFsX2lkGAEgASgJIkUKE0dldEFwcHJvdmFsUmVzcG9uc2USLgoIYXBwcm92YWwYASABKAsyHC5hbGxvd29wcy52MS5BcHByb3ZhbFJlcXVlc3QiXQoVQXBwcm92ZVJlcXVlc3RSZXF1ZXN0EhMKC2FwcHJvdmFsX2lkGAEgASgJEh8KF2V4cGVjdGVkX3JlcXVlc3RfZGlnZXN0GAIgASgMEg4KBnJlYXNvbhgDIAEoCSJIChZBcHByb3ZlUmVxdWVzdFJlc3BvbnNlEi4KCGFwcHJvdmFsGAEgASgLMhwuYWxsb3dvcHMudjEuQXBwcm92YWxSZXF1ZXN0IjsKFFJlamVjdFJlcXVlc3RSZXF1ZXN0EhMKC2FwcHJvdmFsX2lkGAEgASgJEg4KBnJlYXNvbhgCIAEoCSJHChVSZWplY3RSZXF1ZXN0UmVzcG9uc2USLgoIYXBwcm92YWwYASABKAsyHC5hbGxvd29wcy52MS5BcHByb3ZhbFJlcXVlc3QiLAoVQ2FuY2VsQXBwcm92YWxSZXF1ZXN0EhMKC2FwcHJvdmFsX2lkGAEgASgJIkgKFkNhbmNlbEFwcHJvdmFsUmVzcG9uc2USLgoIYXBwcm92YWwYASABKAsyHC5hbGxvd29wcy52MS5BcHByb3ZhbFJlcXVlc3QyyQMKD0FwcHJvdmFsU2VydmljZRJWCg1MaXN0QXBwcm92YWxzEiEuYWxsb3dvcHMudjEuTGlzdEFwcHJvdmFsc1JlcXVlc3QaIi5hbGxvd29wcy52MS5MaXN0QXBwcm92YWxzUmVzcG9uc2USUAoLR2V0QXBwcm92YWwSHy5hbGxvd29wcy52MS5HZXRBcHByb3ZhbFJlcXVlc3QaIC5hbGxvd29wcy52MS5HZXRBcHByb3ZhbFJlc3BvbnNlElkKDkFwcHJvdmVSZXF1ZXN0EiIuYWxsb3dvcHMudjEuQXBwcm92ZVJlcXVlc3RSZXF1ZXN0GiMuYWxsb3dvcHMudjEuQXBwcm92ZVJlcXVlc3RSZXNwb25zZRJWCg1SZWplY3RSZXF1ZXN0EiEuYWxsb3dvcHMudjEuUmVqZWN0UmVxdWVzdFJlcXVlc3QaIi5hbGxvd29wcy52MS5SZWplY3RSZXF1ZXN0UmVzcG9uc2USWQoOQ2FuY2VsQXBwcm92YWwSIi5hbGxvd29wcy52MS5DYW5jZWxBcHByb3ZhbFJlcXVlc3QaIy5hbGxvd29wcy52MS5DYW5jZWxBcHByb3ZhbFJlc3BvbnNlQjxaOmdpdGh1Yi5jb20vbGl1YmluZzA4MDYvYWxsb3dvcHMvZ2VuL2FsbG93b3BzL3YxO2FsbG93b3BzdjFiBnByb3RvMw", [file_allowops_v1_common, file_allowops_v1_job, file_allowops_v1_policy, file_google_protobuf_timestamp]);
+  fileDesc("ChphbGxvd29wcy92MS9hcHByb3ZhbC5wcm90bxILYWxsb3dvcHMudjEiMwoOQXBwcm92YWxUYXJnZXQSDwoHaG9zdF9pZBgBIAEoCRIQCghob3N0bmFtZRgCIAEoCSLXAQoWQXBwcm92YWxEZWNpc2lvblJlY29yZBIQCghhY3Rvcl9pZBgBIAEoCRITCgthY3Rvcl9lbWFpbBgCIAEoCRInCgR2b3RlGAMgASgOMhkuYWxsb3dvcHMudjEuQXBwcm92YWxWb3RlEg4KBnJlYXNvbhgEIAEoCRIuCgpkZWNpZGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIWCg5wb2xpY3lfdmVyc2lvbhgGIAEoBBIVCg1tYXRjaGVkX3J1bGVzGAcgAygJIsIJCg9BcHByb3ZhbFJlcXVlc3QSEwoLYXBwcm92YWxfaWQYASABKAkSDgoGam9iX2lkGAIgASgJEisKBnN0YXR1cxgDIAEoDjIbLmFsbG93b3BzLnYxLkFwcHJvdmFsU3RhdHVzEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBmFjdGlvbhgGIAEoCRITCgthY3Rpb25fcmlzaxgHIAEoCRIoCgdjYXRhbG9nGAggASgLMhcuYWxsb3dvcHMudjEuQ2F0YWxvZ1JlZhIVCg1hY3Rpb25fc2hhMjU2GAkgASgMEhMKC3BhcmFtc19qc29uGAogASgMEhQKDGZpbHRlcnNfanNvbhgLIAEoDBIXCg90YXJnZXRfc2VsZWN0b3IYDCABKAkSLAoHdGFyZ2V0cxgNIAMoCzIbLmFsbG93b3BzLnYxLkFwcHJvdmFsVGFyZ2V0EhIKCmJhdGNoX3NpemUYDiABKA0SFAoMbWF4X2ZhaWx1cmVzGA8gASgNEhYKDnJlcXVlc3RfZGlnZXN0GBAgASgMEhwKFHJlcXVlc3Rlcl9zdWJqZWN0X2lkGBEgASgJEhYKDnJlcXVlc3Rlcl9raW5kGBIgASgJEg4KBnJlYXNvbhgTIAEoCRIqCghldmlkZW5jZRgUIAEoCzIYLmFsbG93b3BzLnYxLkpvYkV2aWRlbmNlEhYKDnBvbGljeV92ZXJzaW9uGBUgASgEEhUKDW1hdGNoZWRfcnVsZXMYFiADKAkSRwobcmVxdWlyZWRfYXBwcm92ZXJfcm9sZV9zZXRzGBcgAygLMiIuYWxsb3dvcHMudjEuUG9saWN5QXBwcm92YWxSb2xlU2V0EhUKDW1pbl9hcHByb3ZhbHMYGCABKA0SGwoTYWxsb3dfb3duZXJfYXBwcm92ZRgZIAEoCBIWCg5hcHByb3ZlZF9jb3VudBgaIAEoDRI2CglkZWNpc2lvbnMYGyADKAsyIy5hbGxvd29wcy52MS5BcHByb3ZhbERlY2lzaW9uUmVjb3JkEi4KCmRlY2lkZWRfYXQYHCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmRlY2lkZWRfYnkYHSABKAkSFwoPZGVjaXNpb25fcmVhc29uGB4gASgJEiMKFnJlY2hlY2tfcG9saWN5X3ZlcnNpb24YHyABKARIAIgBARIVCg1yZWNoZWNrX2Vycm9yGCAgASgJEhMKC2NvbnNvbGVfdXJsGCEgASgJEhoKEnJlcXVlc3Rlcl9vd25lcl9pZBgiIAEoCRIvCg1jb250ZXh0X3RydXN0GCMgASgOMhguYWxsb3dvcHMudjEuT3V0cHV0VHJ1c3QSFQoNbm90aWZ5X3N0YXR1cxgkIAEoCRIUCgxub3RpZnlfZXJyb3IYJSABKAkSEwoLY2FuX2FwcHJvdmUYJiABKAgSHQoVY2Fubm90X2FwcHJvdmVfcmVhc29uGCcgASgJQhkKF19yZWNoZWNrX3BvbGljeV92ZXJzaW9uIt0BChRMaXN0QXBwcm92YWxzUmVxdWVzdBImCgRwYWdlGAEgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QSJwoHY3JlYXRlZBgCIAEoCzIWLmFsbG93b3BzLnYxLlRpbWVSYW5nZRItCghzdGF0dXNlcxgDIAMoDjIbLmFsbG93b3BzLnYxLkFwcHJvdmFsU3RhdHVzEg4KBmFjdGlvbhgEIAEoCRIcChRyZXF1ZXN0ZXJfc3ViamVjdF9pZBgFIAEoCRIXCg9vbmx5X2FjdGlvbmFibGUYBiABKAgicQoVTGlzdEFwcHJvdmFsc1Jlc3BvbnNlEi8KCWFwcHJvdmFscxgBIAMoCzIcLmFsbG93b3BzLnYxLkFwcHJvdmFsUmVxdWVzdBInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlIikKEkdldEFwcHJvdmFsUmVxdWVzdBITCgthcHByb3ZhbF9pZBgBIAEoCSJFChNHZXRBcHByb3ZhbFJlc3BvbnNlEi4KCGFwcHJvdmFsGAEgASgLMhwuYWxsb3dvcHMudjEuQXBwcm92YWxSZXF1ZXN0Il0KFUFwcHJvdmVSZXF1ZXN0UmVxdWVzdBITCgthcHByb3ZhbF9pZBgBIAEoCRIfChdleHBlY3RlZF9yZXF1ZXN0X2RpZ2VzdBgCIAEoDBIOCgZyZWFzb24YAyABKAkiZwoWQXBwcm92ZVJlcXVlc3RSZXNwb25zZRIuCghhcHByb3ZhbBgBIAEoCzIcLmFsbG93b3BzLnYxLkFwcHJvdmFsUmVxdWVzdBIdCgNqb2IYAiABKAsyEC5hbGxvd29wcy52MS5Kb2IiOwoUUmVqZWN0UmVxdWVzdFJlcXVlc3QSEwoLYXBwcm92YWxfaWQYASABKAkSDgoGcmVhc29uGAIgASgJIkcKFVJlamVjdFJlcXVlc3RSZXNwb25zZRIuCghhcHByb3ZhbBgBIAEoCzIcLmFsbG93b3BzLnYxLkFwcHJvdmFsUmVxdWVzdCIsChVDYW5jZWxBcHByb3ZhbFJlcXVlc3QSEwoLYXBwcm92YWxfaWQYASABKAkiSAoWQ2FuY2VsQXBwcm92YWxSZXNwb25zZRIuCghhcHByb3ZhbBgBIAEoCzIcLmFsbG93b3BzLnYxLkFwcHJvdmFsUmVxdWVzdDLJAwoPQXBwcm92YWxTZXJ2aWNlElYKDUxpc3RBcHByb3ZhbHMSIS5hbGxvd29wcy52MS5MaXN0QXBwcm92YWxzUmVxdWVzdBoiLmFsbG93b3BzLnYxLkxpc3RBcHByb3ZhbHNSZXNwb25zZRJQCgtHZXRBcHByb3ZhbBIfLmFsbG93b3BzLnYxLkdldEFwcHJvdmFsUmVxdWVzdBogLmFsbG93b3BzLnYxLkdldEFwcHJvdmFsUmVzcG9uc2USWQoOQXBwcm92ZVJlcXVlc3QSIi5hbGxvd29wcy52MS5BcHByb3ZlUmVxdWVzdFJlcXVlc3QaIy5hbGxvd29wcy52MS5BcHByb3ZlUmVxdWVzdFJlc3BvbnNlElYKDVJlamVjdFJlcXVlc3QSIS5hbGxvd29wcy52MS5SZWplY3RSZXF1ZXN0UmVxdWVzdBoiLmFsbG93b3BzLnYxLlJlamVjdFJlcXVlc3RSZXNwb25zZRJZCg5DYW5jZWxBcHByb3ZhbBIiLmFsbG93b3BzLnYxLkNhbmNlbEFwcHJvdmFsUmVxdWVzdBojLmFsbG93b3BzLnYxLkNhbmNlbEFwcHJvdmFsUmVzcG9uc2VCPFo6Z2l0aHViLmNvbS9saXViaW5nMDgwNi9hbGxvd29wcy9nZW4vYWxsb3dvcHMvdjE7YWxsb3dvcHN2MWIGcHJvdG8z", [file_allowops_v1_common, file_allowops_v1_job, file_allowops_v1_policy, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message allowops.v1.ApprovalTarget
@@ -314,6 +314,36 @@ export type ApprovalRequest = Message<"allowops.v1.ApprovalRequest"> & {
    * @generated from field: string console_url = 33;
    */
   consoleUrl: string;
+
+  /**
+   * @generated from field: string requester_owner_id = 34;
+   */
+  requesterOwnerId: string;
+
+  /**
+   * @generated from field: allowops.v1.OutputTrust context_trust = 35;
+   */
+  contextTrust: OutputTrust;
+
+  /**
+   * @generated from field: string notify_status = 36;
+   */
+  notifyStatus: string;
+
+  /**
+   * @generated from field: string notify_error = 37;
+   */
+  notifyError: string;
+
+  /**
+   * @generated from field: bool can_approve = 38;
+   */
+  canApprove: boolean;
+
+  /**
+   * @generated from field: string cannot_approve_reason = 39;
+   */
+  cannotApproveReason: string;
 };
 
 /**
@@ -486,6 +516,36 @@ export type ApprovalRequestJson = {
    * @generated from field: string console_url = 33;
    */
   consoleUrl?: string;
+
+  /**
+   * @generated from field: string requester_owner_id = 34;
+   */
+  requesterOwnerId?: string;
+
+  /**
+   * @generated from field: allowops.v1.OutputTrust context_trust = 35;
+   */
+  contextTrust?: OutputTrustJson;
+
+  /**
+   * @generated from field: string notify_status = 36;
+   */
+  notifyStatus?: string;
+
+  /**
+   * @generated from field: string notify_error = 37;
+   */
+  notifyError?: string;
+
+  /**
+   * @generated from field: bool can_approve = 38;
+   */
+  canApprove?: boolean;
+
+  /**
+   * @generated from field: string cannot_approve_reason = 39;
+   */
+  cannotApproveReason?: string;
 };
 
 /**
@@ -523,6 +583,11 @@ export type ListApprovalsRequest = Message<"allowops.v1.ListApprovalsRequest"> &
    * @generated from field: string requester_subject_id = 5;
    */
   requesterSubjectId: string;
+
+  /**
+   * @generated from field: bool only_actionable = 6;
+   */
+  onlyActionable: boolean;
 };
 
 /**
@@ -553,6 +618,11 @@ export type ListApprovalsRequestJson = {
    * @generated from field: string requester_subject_id = 5;
    */
   requesterSubjectId?: string;
+
+  /**
+   * @generated from field: bool only_actionable = 6;
+   */
+  onlyActionable?: boolean;
 };
 
 /**
@@ -712,6 +782,11 @@ export type ApproveRequestResponse = Message<"allowops.v1.ApproveRequestResponse
    * @generated from field: allowops.v1.ApprovalRequest approval = 1;
    */
   approval?: ApprovalRequest | undefined;
+
+  /**
+   * @generated from field: allowops.v1.Job job = 2;
+   */
+  job?: Job | undefined;
 };
 
 /**
@@ -722,6 +797,11 @@ export type ApproveRequestResponseJson = {
    * @generated from field: allowops.v1.ApprovalRequest approval = 1;
    */
   approval?: ApprovalRequestJson;
+
+  /**
+   * @generated from field: allowops.v1.Job job = 2;
+   */
+  job?: JobJson;
 };
 
 /**

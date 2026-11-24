@@ -202,6 +202,12 @@ type ApprovalRequest struct {
 	RecheckPolicyVersion     *uint64                   `protobuf:"varint,31,opt,name=recheck_policy_version,json=recheckPolicyVersion,proto3,oneof" json:"recheck_policy_version,omitempty"`
 	RecheckError             string                    `protobuf:"bytes,32,opt,name=recheck_error,json=recheckError,proto3" json:"recheck_error,omitempty"`
 	ConsoleUrl               string                    `protobuf:"bytes,33,opt,name=console_url,json=consoleUrl,proto3" json:"console_url,omitempty"`
+	RequesterOwnerId         string                    `protobuf:"bytes,34,opt,name=requester_owner_id,json=requesterOwnerId,proto3" json:"requester_owner_id,omitempty"`
+	ContextTrust             OutputTrust               `protobuf:"varint,35,opt,name=context_trust,json=contextTrust,proto3,enum=allowops.v1.OutputTrust" json:"context_trust,omitempty"`
+	NotifyStatus             string                    `protobuf:"bytes,36,opt,name=notify_status,json=notifyStatus,proto3" json:"notify_status,omitempty"`
+	NotifyError              string                    `protobuf:"bytes,37,opt,name=notify_error,json=notifyError,proto3" json:"notify_error,omitempty"`
+	CanApprove               bool                      `protobuf:"varint,38,opt,name=can_approve,json=canApprove,proto3" json:"can_approve,omitempty"`
+	CannotApproveReason      string                    `protobuf:"bytes,39,opt,name=cannot_approve_reason,json=cannotApproveReason,proto3" json:"cannot_approve_reason,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -467,6 +473,48 @@ func (x *ApprovalRequest) GetConsoleUrl() string {
 	return ""
 }
 
+func (x *ApprovalRequest) GetRequesterOwnerId() string {
+	if x != nil {
+		return x.RequesterOwnerId
+	}
+	return ""
+}
+
+func (x *ApprovalRequest) GetContextTrust() OutputTrust {
+	if x != nil {
+		return x.ContextTrust
+	}
+	return OutputTrust_OUTPUT_TRUST_UNSPECIFIED
+}
+
+func (x *ApprovalRequest) GetNotifyStatus() string {
+	if x != nil {
+		return x.NotifyStatus
+	}
+	return ""
+}
+
+func (x *ApprovalRequest) GetNotifyError() string {
+	if x != nil {
+		return x.NotifyError
+	}
+	return ""
+}
+
+func (x *ApprovalRequest) GetCanApprove() bool {
+	if x != nil {
+		return x.CanApprove
+	}
+	return false
+}
+
+func (x *ApprovalRequest) GetCannotApproveReason() string {
+	if x != nil {
+		return x.CannotApproveReason
+	}
+	return ""
+}
+
 type ListApprovalsRequest struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Page               *PageRequest           `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
@@ -474,6 +522,7 @@ type ListApprovalsRequest struct {
 	Statuses           []ApprovalStatus       `protobuf:"varint,3,rep,packed,name=statuses,proto3,enum=allowops.v1.ApprovalStatus" json:"statuses,omitempty"`
 	Action             string                 `protobuf:"bytes,4,opt,name=action,proto3" json:"action,omitempty"`
 	RequesterSubjectId string                 `protobuf:"bytes,5,opt,name=requester_subject_id,json=requesterSubjectId,proto3" json:"requester_subject_id,omitempty"`
+	OnlyActionable     bool                   `protobuf:"varint,6,opt,name=only_actionable,json=onlyActionable,proto3" json:"only_actionable,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -541,6 +590,13 @@ func (x *ListApprovalsRequest) GetRequesterSubjectId() string {
 		return x.RequesterSubjectId
 	}
 	return ""
+}
+
+func (x *ListApprovalsRequest) GetOnlyActionable() bool {
+	if x != nil {
+		return x.OnlyActionable
+	}
+	return false
 }
 
 type ListApprovalsResponse struct {
@@ -747,6 +803,7 @@ func (x *ApproveRequestRequest) GetReason() string {
 type ApproveRequestResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Approval      *ApprovalRequest       `protobuf:"bytes,1,opt,name=approval,proto3" json:"approval,omitempty"`
+	Job           *Job                   `protobuf:"bytes,2,opt,name=job,proto3" json:"job,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -784,6 +841,13 @@ func (*ApproveRequestResponse) Descriptor() ([]byte, []int) {
 func (x *ApproveRequestResponse) GetApproval() *ApprovalRequest {
 	if x != nil {
 		return x.Approval
+	}
+	return nil
+}
+
+func (x *ApproveRequestResponse) GetJob() *Job {
+	if x != nil {
+		return x.Job
 	}
 	return nil
 }
@@ -989,7 +1053,7 @@ const file_allowops_v1_approval_proto_rawDesc = "" +
 	"\n" +
 	"decided_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tdecidedAt\x12%\n" +
 	"\x0epolicy_version\x18\x06 \x01(\x04R\rpolicyVersion\x12#\n" +
-	"\rmatched_rules\x18\a \x03(\tR\fmatchedRules\"\xc6\v\n" +
+	"\rmatched_rules\x18\a \x03(\tR\fmatchedRules\"\xd0\r\n" +
 	"\x0fApprovalRequest\x12\x1f\n" +
 	"\vapproval_id\x18\x01 \x01(\tR\n" +
 	"approvalId\x12\x15\n" +
@@ -1033,14 +1097,22 @@ const file_allowops_v1_approval_proto_rawDesc = "" +
 	"\x16recheck_policy_version\x18\x1f \x01(\x04H\x00R\x14recheckPolicyVersion\x88\x01\x01\x12#\n" +
 	"\rrecheck_error\x18  \x01(\tR\frecheckError\x12\x1f\n" +
 	"\vconsole_url\x18! \x01(\tR\n" +
-	"consoleUrlB\x19\n" +
-	"\x17_recheck_policy_version\"\xf9\x01\n" +
+	"consoleUrl\x12,\n" +
+	"\x12requester_owner_id\x18\" \x01(\tR\x10requesterOwnerId\x12=\n" +
+	"\rcontext_trust\x18# \x01(\x0e2\x18.allowops.v1.OutputTrustR\fcontextTrust\x12#\n" +
+	"\rnotify_status\x18$ \x01(\tR\fnotifyStatus\x12!\n" +
+	"\fnotify_error\x18% \x01(\tR\vnotifyError\x12\x1f\n" +
+	"\vcan_approve\x18& \x01(\bR\n" +
+	"canApprove\x122\n" +
+	"\x15cannot_approve_reason\x18' \x01(\tR\x13cannotApproveReasonB\x19\n" +
+	"\x17_recheck_policy_version\"\xa2\x02\n" +
 	"\x14ListApprovalsRequest\x12,\n" +
 	"\x04page\x18\x01 \x01(\v2\x18.allowops.v1.PageRequestR\x04page\x120\n" +
 	"\acreated\x18\x02 \x01(\v2\x16.allowops.v1.TimeRangeR\acreated\x127\n" +
 	"\bstatuses\x18\x03 \x03(\x0e2\x1b.allowops.v1.ApprovalStatusR\bstatuses\x12\x16\n" +
 	"\x06action\x18\x04 \x01(\tR\x06action\x120\n" +
-	"\x14requester_subject_id\x18\x05 \x01(\tR\x12requesterSubjectId\"\x82\x01\n" +
+	"\x14requester_subject_id\x18\x05 \x01(\tR\x12requesterSubjectId\x12'\n" +
+	"\x0fonly_actionable\x18\x06 \x01(\bR\x0eonlyActionable\"\x82\x01\n" +
 	"\x15ListApprovalsResponse\x12:\n" +
 	"\tapprovals\x18\x01 \x03(\v2\x1c.allowops.v1.ApprovalRequestR\tapprovals\x12-\n" +
 	"\x04page\x18\x02 \x01(\v2\x19.allowops.v1.PageResponseR\x04page\"5\n" +
@@ -1053,9 +1125,10 @@ const file_allowops_v1_approval_proto_rawDesc = "" +
 	"\vapproval_id\x18\x01 \x01(\tR\n" +
 	"approvalId\x126\n" +
 	"\x17expected_request_digest\x18\x02 \x01(\fR\x15expectedRequestDigest\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"R\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"v\n" +
 	"\x16ApproveRequestResponse\x128\n" +
-	"\bapproval\x18\x01 \x01(\v2\x1c.allowops.v1.ApprovalRequestR\bapproval\"O\n" +
+	"\bapproval\x18\x01 \x01(\v2\x1c.allowops.v1.ApprovalRequestR\bapproval\x12\"\n" +
+	"\x03job\x18\x02 \x01(\v2\x10.allowops.v1.JobR\x03job\"O\n" +
 	"\x14RejectRequestRequest\x12\x1f\n" +
 	"\vapproval_id\x18\x01 \x01(\tR\n" +
 	"approvalId\x12\x16\n" +
@@ -1107,9 +1180,11 @@ var file_allowops_v1_approval_proto_goTypes = []any{
 	(*CatalogRef)(nil),             // 16: allowops.v1.CatalogRef
 	(*JobEvidence)(nil),            // 17: allowops.v1.JobEvidence
 	(*PolicyApprovalRoleSet)(nil),  // 18: allowops.v1.PolicyApprovalRoleSet
-	(*PageRequest)(nil),            // 19: allowops.v1.PageRequest
-	(*TimeRange)(nil),              // 20: allowops.v1.TimeRange
-	(*PageResponse)(nil),           // 21: allowops.v1.PageResponse
+	(OutputTrust)(0),               // 19: allowops.v1.OutputTrust
+	(*PageRequest)(nil),            // 20: allowops.v1.PageRequest
+	(*TimeRange)(nil),              // 21: allowops.v1.TimeRange
+	(*PageResponse)(nil),           // 22: allowops.v1.PageResponse
+	(*Job)(nil),                    // 23: allowops.v1.Job
 }
 var file_allowops_v1_approval_proto_depIdxs = []int32{
 	13, // 0: allowops.v1.ApprovalDecisionRecord.vote:type_name -> allowops.v1.ApprovalVote
@@ -1123,30 +1198,32 @@ var file_allowops_v1_approval_proto_depIdxs = []int32{
 	18, // 8: allowops.v1.ApprovalRequest.required_approver_role_sets:type_name -> allowops.v1.PolicyApprovalRoleSet
 	1,  // 9: allowops.v1.ApprovalRequest.decisions:type_name -> allowops.v1.ApprovalDecisionRecord
 	14, // 10: allowops.v1.ApprovalRequest.decided_at:type_name -> google.protobuf.Timestamp
-	19, // 11: allowops.v1.ListApprovalsRequest.page:type_name -> allowops.v1.PageRequest
-	20, // 12: allowops.v1.ListApprovalsRequest.created:type_name -> allowops.v1.TimeRange
-	15, // 13: allowops.v1.ListApprovalsRequest.statuses:type_name -> allowops.v1.ApprovalStatus
-	2,  // 14: allowops.v1.ListApprovalsResponse.approvals:type_name -> allowops.v1.ApprovalRequest
-	21, // 15: allowops.v1.ListApprovalsResponse.page:type_name -> allowops.v1.PageResponse
-	2,  // 16: allowops.v1.GetApprovalResponse.approval:type_name -> allowops.v1.ApprovalRequest
-	2,  // 17: allowops.v1.ApproveRequestResponse.approval:type_name -> allowops.v1.ApprovalRequest
-	2,  // 18: allowops.v1.RejectRequestResponse.approval:type_name -> allowops.v1.ApprovalRequest
-	2,  // 19: allowops.v1.CancelApprovalResponse.approval:type_name -> allowops.v1.ApprovalRequest
-	3,  // 20: allowops.v1.ApprovalService.ListApprovals:input_type -> allowops.v1.ListApprovalsRequest
-	5,  // 21: allowops.v1.ApprovalService.GetApproval:input_type -> allowops.v1.GetApprovalRequest
-	7,  // 22: allowops.v1.ApprovalService.ApproveRequest:input_type -> allowops.v1.ApproveRequestRequest
-	9,  // 23: allowops.v1.ApprovalService.RejectRequest:input_type -> allowops.v1.RejectRequestRequest
-	11, // 24: allowops.v1.ApprovalService.CancelApproval:input_type -> allowops.v1.CancelApprovalRequest
-	4,  // 25: allowops.v1.ApprovalService.ListApprovals:output_type -> allowops.v1.ListApprovalsResponse
-	6,  // 26: allowops.v1.ApprovalService.GetApproval:output_type -> allowops.v1.GetApprovalResponse
-	8,  // 27: allowops.v1.ApprovalService.ApproveRequest:output_type -> allowops.v1.ApproveRequestResponse
-	10, // 28: allowops.v1.ApprovalService.RejectRequest:output_type -> allowops.v1.RejectRequestResponse
-	12, // 29: allowops.v1.ApprovalService.CancelApproval:output_type -> allowops.v1.CancelApprovalResponse
-	25, // [25:30] is the sub-list for method output_type
-	20, // [20:25] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	19, // 11: allowops.v1.ApprovalRequest.context_trust:type_name -> allowops.v1.OutputTrust
+	20, // 12: allowops.v1.ListApprovalsRequest.page:type_name -> allowops.v1.PageRequest
+	21, // 13: allowops.v1.ListApprovalsRequest.created:type_name -> allowops.v1.TimeRange
+	15, // 14: allowops.v1.ListApprovalsRequest.statuses:type_name -> allowops.v1.ApprovalStatus
+	2,  // 15: allowops.v1.ListApprovalsResponse.approvals:type_name -> allowops.v1.ApprovalRequest
+	22, // 16: allowops.v1.ListApprovalsResponse.page:type_name -> allowops.v1.PageResponse
+	2,  // 17: allowops.v1.GetApprovalResponse.approval:type_name -> allowops.v1.ApprovalRequest
+	2,  // 18: allowops.v1.ApproveRequestResponse.approval:type_name -> allowops.v1.ApprovalRequest
+	23, // 19: allowops.v1.ApproveRequestResponse.job:type_name -> allowops.v1.Job
+	2,  // 20: allowops.v1.RejectRequestResponse.approval:type_name -> allowops.v1.ApprovalRequest
+	2,  // 21: allowops.v1.CancelApprovalResponse.approval:type_name -> allowops.v1.ApprovalRequest
+	3,  // 22: allowops.v1.ApprovalService.ListApprovals:input_type -> allowops.v1.ListApprovalsRequest
+	5,  // 23: allowops.v1.ApprovalService.GetApproval:input_type -> allowops.v1.GetApprovalRequest
+	7,  // 24: allowops.v1.ApprovalService.ApproveRequest:input_type -> allowops.v1.ApproveRequestRequest
+	9,  // 25: allowops.v1.ApprovalService.RejectRequest:input_type -> allowops.v1.RejectRequestRequest
+	11, // 26: allowops.v1.ApprovalService.CancelApproval:input_type -> allowops.v1.CancelApprovalRequest
+	4,  // 27: allowops.v1.ApprovalService.ListApprovals:output_type -> allowops.v1.ListApprovalsResponse
+	6,  // 28: allowops.v1.ApprovalService.GetApproval:output_type -> allowops.v1.GetApprovalResponse
+	8,  // 29: allowops.v1.ApprovalService.ApproveRequest:output_type -> allowops.v1.ApproveRequestResponse
+	10, // 30: allowops.v1.ApprovalService.RejectRequest:output_type -> allowops.v1.RejectRequestResponse
+	12, // 31: allowops.v1.ApprovalService.CancelApproval:output_type -> allowops.v1.CancelApprovalResponse
+	27, // [27:32] is the sub-list for method output_type
+	22, // [22:27] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_allowops_v1_approval_proto_init() }

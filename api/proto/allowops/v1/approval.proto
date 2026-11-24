@@ -67,6 +67,12 @@ message ApprovalRequest {
   optional uint64 recheck_policy_version = 31;
   string recheck_error = 32;
   string console_url = 33;
+  string requester_owner_id = 34;
+  OutputTrust context_trust = 35;
+  string notify_status = 36;
+  string notify_error = 37;
+  bool can_approve = 38;
+  string cannot_approve_reason = 39;
 }
 
 message ListApprovalsRequest {
@@ -75,6 +81,7 @@ message ListApprovalsRequest {
   repeated ApprovalStatus statuses = 3;
   string action = 4;
   string requester_subject_id = 5;
+  bool only_actionable = 6;
 }
 
 message ListApprovalsResponse {
@@ -99,6 +106,7 @@ message ApproveRequestRequest {
 
 message ApproveRequestResponse {
   ApprovalRequest approval = 1;
+  Job job = 2;
 }
 
 message RejectRequestRequest {
