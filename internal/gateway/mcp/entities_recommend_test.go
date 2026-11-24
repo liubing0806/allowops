@@ -58,13 +58,14 @@ func TestEntitiesSearchRecommendedActions(t *testing.T) {
 	if !strings.Contains(data, `"toolset":"logs"`) || strings.Contains(data, "recommended_actions_truncated") || strings.Contains(data, "secret") {
 		t.Fatalf("json=%s", data)
 	}
-	// Only kinds of entities kept after the limit are recommended.
-	result, err = s.searchEntities(context.Background(), json.RawMessage(`{"limit":1}`), visible)
+	// Only kinds of entities kept after the limit are recommended (merged
+	// entities are sorted by kind then name: cache, database, service).
+	result, err = s.searchEntities(context.Background(), json.RawMessage(`{"limit":2}`), visible)
 	if err != nil {
 		t.Fatal(err)
 	}
 	out = result.StructuredContent.(inventoryResult)
-	if !out.Truncated || len(out.RecommendedActions) != 1 || out.RecommendedActions["service"] == nil {
+	if !out.Truncated || len(out.RecommendedActions) != 1 || out.RecommendedActions["database"] == nil || out.RecommendedActions["service"] != nil {
 		t.Fatalf("limited=%+v", out)
 	}
 	// Without matching actions both fields are omitted.
