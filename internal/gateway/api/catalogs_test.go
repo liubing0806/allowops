@@ -16,6 +16,8 @@ import (
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/audit"
 	"github.com/liubing0806/allowops/internal/gateway/catalogsvc"
+	"github.com/liubing0806/allowops/internal/store"
+	"github.com/liubing0806/allowops/internal/store/db"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -53,6 +55,33 @@ func signedTestCatalog(t *testing.T, key ed25519.PrivateKey, id, name string, no
 		t.Fatal(err)
 	}
 	return b
+}
+
+// signedReservedCatalog signs a catalog whose action uses a name reserved after
+// an older CLI could sign it. Build refuses the name, so the digest is computed
+// directly.
+func signedReservedCatalog(t *testing.T, key ed25519.PrivateKey, id, name string, now time.Time) ([]byte, *catalog.Package) {
+	t.Helper()
+	now = now.UTC().Truncate(time.Second)
+	a := catalog.Action{Name: name, Description: "fixture", Risk: "read", Exec: []any{"/usr/bin/true"}, Timeout: "1s", MaxOutput: 1024}
+	digest, err := catalog.ActionDigest(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &catalog.Package{SchemaVersion: 1, CatalogID: id, Version: now.Unix(), CreatedAt: now, ExpiresAt: now.Add(time.Hour), Actions: map[string]catalog.Action{name: a}, Digests: map[string]string{name: digest}}
+	b, err := catalog.CanonicalJSON(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := catalog.Sign(b, catalog.SigningKey{PrivateKey: key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err = json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b, p
 }
 
 func uploadTestCatalog(t *testing.T, client rpc.CatalogServiceClient, raw []byte) string {
@@ -119,6 +148,50 @@ func TestP4BCatalogAtomicPublishAndUpload(t *testing.T) {
 	id = uploadTestCatalog(t, client, signedTestCatalog(t, other, "three", "different", time.Now()))
 	_, err = client.PublishCatalog(ctx, connect.NewRequest(&v1.PublishCatalogRequest{UploadId: id}))
 	code(t, err, connect.CodeInvalidArgument)
+}
+
+// Publication refuses the progressive disclosure meta-tool names. A version
+// that a gateway stored before they were reserved stays readable.
+func TestCatalogPublishRejectsProgressiveReservedNames(t *testing.T) {
+	f, key := catalogFixture(t)
+	client := catalogClient(f, f.adminToken)
+	ctx := context.Background()
+	names := []string{"actions_search", "actions_invoke_read", "actions_invoke_write", "actions_invoke_dangerous"}
+	for _, name := range names {
+		raw, _ := signedReservedCatalog(t, key, "new_"+name, name, time.Now())
+		id := uploadTestCatalog(t, client, raw)
+		_, err := client.PublishCatalog(ctx, connect.NewRequest(&v1.PublishCatalogRequest{UploadId: id}))
+		code(t, err, connect.CodeInvalidArgument)
+		if _, err = f.service.management.catalogs.Publish(ctx, raw); err == nil {
+			t.Fatalf("catalogsvc published %s", name)
+		}
+	}
+	versions, err := client.ListCatalogs(ctx, connect.NewRequest(&v1.ListCatalogsRequest{}))
+	if err != nil || len(versions.Msg.Catalogs) != 0 {
+		t.Fatalf("rejected publication stored a version: %v %v", versions, err)
+	}
+
+	raw, p := signedReservedCatalog(t, key, "history", "actions_search", time.Now())
+	if err := f.db.Publish(ctx, db.InsertCatalogParams{CatalogID: p.CatalogID, Version: p.Version, Dsse: raw, Digest: hash(string(raw)), ExpiresAt: store.Timestamp(p.ExpiresAt), ActionNames: []string{"actions_search"}}); err != nil {
+		t.Fatal(err)
+	}
+	viewer := catalogClient(f, f.viewerToken)
+	versions, err = viewer.ListCatalogs(ctx, connect.NewRequest(&v1.ListCatalogsRequest{CatalogId: "history"}))
+	if err != nil || len(versions.Msg.Catalogs) != 1 {
+		t.Fatalf("ListCatalogs: %v %v", versions, err)
+	}
+	ref := &v1.CatalogRef{CatalogId: "history", Version: uint64(p.Version)}
+	if _, err = viewer.GetCatalog(ctx, connect.NewRequest(&v1.GetCatalogRequest{Catalog: ref})); err != nil {
+		t.Fatalf("GetCatalog: %v", err)
+	}
+	actions, err := viewer.ListActions(ctx, connect.NewRequest(&v1.ListActionsRequest{Catalog: ref}))
+	if err != nil || len(actions.Msg.Actions) != 1 || actions.Msg.Actions[0].Name != "actions_search" {
+		t.Fatalf("ListActions: %v %v", actions, err)
+	}
+	action, err := viewer.GetAction(ctx, connect.NewRequest(&v1.GetActionRequest{Action: "actions_search"}))
+	if err != nil || action.Msg.Action.Name != "actions_search" {
+		t.Fatalf("GetAction: %v %v", action, err)
+	}
 }
 
 func TestP4BResourcePermissionAndRealAudit(t *testing.T) {
