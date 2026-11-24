@@ -124,7 +124,7 @@ redact:                                # 可选，覆盖全局脱敏规则
 9. 主机上不存在 exec[0]、exec[0] 是 `#!` 脚本且未声明 `allow_interpreter`、或用到主机端不支持的功能时，该 action 在该主机标记 `unsupported`。
 10. 执行方式四选一：`exec`、`steps`、`script`、`builtin`（见下文“扩展执行能力”）。
 11. `max_targets`：可选，1 到 2147483647 的整数，省略表示不限制。`catalog validate` 拒绝 0、负数、非整数、非数字和超出范围的值，也拒绝空值。该字段计入 action 摘要，受签名保护。限制由网关执行，MCP 和 CLI 调用不能放宽或收紧；主机端不使用该值。
-12. 兼容性：主机端用严格 JSON 解析目录包。不认识 `max_targets` 的旧版主机端拒绝整个目录包（`CATALOG_REJECTED`）：该目录版本的全部 action 在该主机上返回 `unsupported`（`CATALOG_UNAVAILABLE`），主机进程、连接和已加载的旧版本不受影响，之后不含该字段的版本可以正常加载。支持该字段的主机端在 hello 的 `features` 中报告 `max_targets`。发布使用 `max_targets` 的目录前，先升级主机端，并确认目标主机的 `features` 含 `max_targets`。网关目前不根据 `features` 阻止发布。
+12. 兼容性：主机端用严格 JSON 解析目录包。不认识 `max_targets`、`steps[].extract` 或 `steps[].when` 的旧版主机端拒绝整个目录包（`CATALOG_REJECTED`）：该目录版本的全部 action 在该主机上返回 `unsupported`（`CATALOG_UNAVAILABLE`），主机进程、连接和已加载的旧版本不受影响，之后不含新字段的版本可以正常加载。支持这些字段的主机端在 hello 的 `features` 中分别报告 `max_targets`、`step_extract`、`step_when`。发布使用这些字段的目录前，先升级目标主机的 `allowops-agent` 与 `allowops-exec`（两者需同步升级），并确认目标主机的 `features` 含对应字段。网关目前不根据 `features` 阻止发布。
 
 ### 扩展执行能力
 
@@ -133,7 +133,7 @@ redact:                                # 可选，覆盖全局脱敏规则
 | 能力 | 写法 | 说明 |
 |---|---|---|
 | 输出过滤 | `filters: [match, exclude, tail, head, count]` | agent 可传过滤参数；`tail`、`head`、`count` 互斥；主机端按“stdout → 脱敏 → 过滤 → 截断”逐行处理；扫描上限 `max_scan` 默认 256MB |
-| 组合 action | `steps: [{name, exec}]`、`on_error: continue\|stop` | 多条固定命令顺序执行，结果分段 |
+| 组合 action | `steps: [{name, exec, when?, extract?}]`、`on_error: continue\|stop` | 多条固定命令按声明顺序执行（线性 DAG，非图灵完备），结果分段；支持脱敏后/过滤前流式提取（单捕获组 RE2、`json_path`、`tsv` + 强类型 `as` 校验）、整元素 `{steps.<step>.<var>}` 传递（仅限最终命令普通参数，禁用于 `allow_interpreter` 与包装/执行环境位）以及 Kleene 三值逻辑条件分支 `when`（跳过原因区分 `CONDITION_FALSE` / `STOPPED`），设计见 `step-dataflow-design.md` |
 | 候选路径 | `exec_fallbacks: [...]` | exec[0] 不存在时依次尝试，均须为绝对路径 |
 | 签名脚本 | `script: {file, interpreter}`、`args` | 脚本随目录签名，摘要计入 action 摘要；写入私有临时目录执行后删除；Python 加 `-I`；只在主机上执行 |
 | 日志检索 | `builtin: log_search` | Go 实现，支持 `.gz`、路径通配（限 allowed_roots）、固定串或正则、排除、上下文、最大匹配数 |

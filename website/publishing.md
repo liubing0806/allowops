@@ -54,9 +54,12 @@ returns `unsupported` on that host until the agent is upgraded; the host stays
 connected and later versions that it understands load normally.
 
 An agent reports the optional action fields it understands in `features` when
-it connects. `max_targets` is one of them. Before publishing a catalog that uses
-a new field, upgrade the agents and confirm that `features` of the target hosts
-contains it. The gateway does not check this when it accepts a publication.
+it connects. `max_targets`, `step_extract` (`steps[].extract`) and `step_when`
+(`steps[].when`) are among them. Before publishing a catalog that uses a new
+field, upgrade both `allowops-agent` and `allowops-exec` on target hosts and
+confirm that `features` contains it (an unupgraded `allowops-exec` rejects
+`run_as` actions from a catalog with unknown fields as `REQUEST_REJECTED`). The
+gateway does not check this when it accepts a publication.
 
 ## CI boundary
 
