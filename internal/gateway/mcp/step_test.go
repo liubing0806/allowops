@@ -27,6 +27,10 @@ func (j *stepErrorJobs) GetJobOutput(_ context.Context, r *v1.GetJobOutputReques
 	return &v1.GetJobOutputResponse{Data: []byte("single"), NextOffset: 6, Eof: true, OutputTrust: v1.OutputTrust_OUTPUT_TRUST_UNTRUSTED}, j.err
 }
 
+func (j *stepErrorJobs) DiffJobs(_ context.Context, _ *v1.DiffJobsRequest) (*v1.DiffJobsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("unimplemented"))
+}
+
 func TestA33OmittedCompositeStepIsParameterErrorWithReadingHint(t *testing.T) {
 	for _, test := range []struct {
 		name, reason string

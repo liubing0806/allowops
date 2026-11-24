@@ -32,6 +32,10 @@ func (j *pagedOutputJobs) GetJobOutput(_ context.Context, r *v1.GetJobOutputRequ
 	return &v1.GetJobOutputResponse{Data: j.payload[start:end], NextOffset: end, Eof: end == uint64(len(j.payload)), OutputStored: true}, nil
 }
 
+func (j *pagedOutputJobs) DiffJobs(_ context.Context, _ *v1.DiffJobsRequest) (*v1.DiffJobsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, nil)
+}
+
 func getJobOutput(t *testing.T, jobs JobService, args map[string]any) (map[string]any, error) {
 	t.Helper()
 	raw, err := json.Marshal(args)

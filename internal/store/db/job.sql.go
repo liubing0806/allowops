@@ -445,11 +445,12 @@ func (q *Queries) ListJobAuthorizationHosts(ctx context.Context, arg ListJobAuth
 }
 
 const listJobTaskPreviews = `-- name: ListJobTaskPreviews :many
-SELECT task_id,hostname,result,stdout_preview,stderr_preview,stdout_sha256,stderr_sha256,stdout_size,stderr_size FROM tasks WHERE job_id=$1 ORDER BY position
+SELECT task_id,host_id,hostname,result,stdout_preview,stderr_preview,stdout_sha256,stderr_sha256,stdout_size,stderr_size FROM tasks WHERE job_id=$1 ORDER BY position
 `
 
 type ListJobTaskPreviewsRow struct {
 	TaskID        string
+	HostID        string
 	Hostname      string
 	Result        []byte
 	StdoutPreview []byte
@@ -471,6 +472,7 @@ func (q *Queries) ListJobTaskPreviews(ctx context.Context, jobID string) ([]List
 		var i ListJobTaskPreviewsRow
 		if err := rows.Scan(
 			&i.TaskID,
+			&i.HostID,
 			&i.Hostname,
 			&i.Result,
 			&i.StdoutPreview,

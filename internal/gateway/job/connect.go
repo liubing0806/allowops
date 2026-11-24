@@ -71,3 +71,11 @@ func (c *ConnectService) GetJobOutput(ctx context.Context, r *connect.Request[v1
 	}
 	return connect.NewResponse(v), nil
 }
+
+func (c *ConnectService) DiffJobs(ctx context.Context, r *connect.Request[v1.DiffJobsRequest]) (*connect.Response[v1.DiffJobsResponse], error) {
+	v, e := c.Client.DiffJobs(ctx, r.Msg)
+	if e != nil {
+		return nil, e
+	}
+	return connect.NewResponse(v), nil
+}

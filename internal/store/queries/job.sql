@@ -98,4 +98,4 @@ SELECT t.task_id,t.host_id,t.result,t.created_at,t.output_stored,t.output_state,
 SELECT result FROM task_steps WHERE job_id=$1 AND task_id=$2 AND step_index=$3;
 
 -- name: ListJobTaskPreviews :many
-SELECT task_id,hostname,result,stdout_preview,stderr_preview,stdout_sha256,stderr_sha256,stdout_size,stderr_size FROM tasks WHERE job_id=$1 ORDER BY position;
+SELECT task_id,host_id,hostname,result,stdout_preview,stderr_preview,stdout_sha256,stderr_sha256,stdout_size,stderr_size FROM tasks WHERE job_id=$1 ORDER BY position;

@@ -222,7 +222,7 @@ func TestSDKToolFilteringCacheInvalidationAndRevocation(t *testing.T) {
 	admin, _ := f.client(t, f.admin, nil)
 	viewer, _ := f.client(t, f.viewer, nil)
 	list, err := viewer.ListTools(context.Background(), nil)
-	if err != nil || len(list.Tools) != 4 {
+	if err != nil || len(list.Tools) != 5 {
 		t.Fatalf("viewer=%v error=%v", list, err)
 	}
 	if _, err := admin.ListTools(context.Background(), nil); err != nil {
@@ -256,7 +256,7 @@ func TestSDKToolFilteringCacheInvalidationAndRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	list, err = admin.ListTools(context.Background(), nil)
-	if err != nil || len(list.Tools) != 4 {
+	if err != nil || len(list.Tools) != 5 {
 		t.Fatalf("changed identity=%v error=%v", list, err)
 	}
 	f.service.mu.Lock()
@@ -530,6 +530,30 @@ func (j *testJobs) GetJobOutput(ctx context.Context, r *v1.GetJobOutputRequest) 
 	}
 	end := min(uint64(len(data)), r.Offset+uint64(r.LimitBytes))
 	return &v1.GetJobOutputResponse{Data: data[r.Offset:end], NextOffset: end, Eof: end == uint64(len(data)), OutputStored: true}, nil
+}
+
+func (j *testJobs) DiffJobs(ctx context.Context, r *v1.DiffJobsRequest) (*v1.DiffJobsResponse, error) {
+	base, err := j.GetJob(ctx, &v1.GetJobRequest{JobId: r.BaseJobId})
+	if err != nil {
+		return nil, err
+	}
+	target, err := j.GetJob(ctx, &v1.GetJobRequest{JobId: r.TargetJobId})
+	if err != nil {
+		return nil, err
+	}
+	grouping := r.Grouping
+	if grouping == "" {
+		grouping = "normalized"
+	}
+	return &v1.DiffJobsResponse{
+		BaseJob:   base.Job,
+		TargetJob: target.Job,
+		Diff: &v1.JobDiff{
+			OutputTrust:         v1.OutputTrust_OUTPUT_TRUST_UNTRUSTED,
+			Grouping:            grouping,
+			UnchangedHostsCount: target.Job.GetTotalTasks(),
+		},
+	}, nil
 }
 
 func (f *transportFixture) latestServer() *sdk.Server {

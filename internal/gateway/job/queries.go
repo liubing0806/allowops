@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"github.com/liubing0806/allowops/internal/gateway/cluster"
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	"github.com/liubing0806/allowops/internal/store"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -132,6 +133,10 @@ func (s *Service) GetJob(ctx context.Context, r *v1.GetJobRequest) (*v1.GetJobRe
 		if err != nil {
 			return nil, err
 		}
+		grouping, err := groupingMode(r.Grouping, cluster.GroupingExact)
+		if err != nil {
+			return nil, err
+		}
 		seconds, err := s.waitValue(r.WaitSeconds, s.Config.WaitSeconds)
 		if err != nil {
 			return nil, err
@@ -147,7 +152,7 @@ func (s *Service) GetJob(ctx context.Context, r *v1.GetJobRequest) (*v1.GetJobRe
 		if err != nil {
 			return nil, err
 		}
-		summary, err := s.summary(ctx, j, f)
+		summary, err := s.summary(ctx, j, f, grouping)
 		if err != nil {
 			return nil, err
 		}
@@ -355,7 +360,7 @@ func (s *Service) CancelJob(ctx context.Context, r *v1.CancelJobRequest) (*v1.Ca
 		if err != nil {
 			return nil, err
 		}
-		if err := s.audit(ctx, "cancel_job", "authorized", "allow", j.JobId, version, rules); err != nil {
+		if err := s.audit(ctx, "cancel_job", "authorized", "allow", j.JobId, "", version, rules); err != nil {
 			return nil, err
 		}
 		tx, err := s.Store.Pool.Begin(ctx)
