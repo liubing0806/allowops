@@ -10,7 +10,7 @@ func TestMCPConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.MCP.Mode != "flat" || !cfg.MCP.AutoThreshold.set || cfg.MCP.AutoThreshold.value != 40 {
+	if cfg.MCP.Mode != "flat" || cfg.MCP.AutoThreshold != 40 {
 		t.Fatalf("defaults %+v", cfg.MCP)
 	}
 	for yaml, want := range map[string]struct {
@@ -30,7 +30,7 @@ func TestMCPConfiguration(t *testing.T) {
 		"mcp:\n  <<: {auto_threshold: null}\n  auto_threshold: 25\n":            {"flat", 25},
 	} {
 		cfg, err := decodeConfig(strings.NewReader(yaml))
-		if err != nil || cfg.MCP.Mode != want.mode || !cfg.MCP.AutoThreshold.set || cfg.MCP.AutoThreshold.value != want.threshold {
+		if err != nil || cfg.MCP.Mode != want.mode || cfg.MCP.AutoThreshold != want.threshold {
 			t.Fatalf("%q config=%+v error=%v", yaml, cfg.MCP, err)
 		}
 	}
@@ -46,6 +46,7 @@ func TestMCPConfiguration(t *testing.T) {
 		"merge null threshold":    "mcp: {<<: {auto_threshold: null}}\n",
 		"merge float threshold":   "mcp: {<<: {auto_threshold: 1.5}}\n",
 		"merge unknown key":       "mcp: {<<: {page_size: 10}}\n",
+		"bogus merge tag":         "mcp: {!!merge typo: {mode: auto}}\n",
 		"duplicate key":           "mcp:\n  mode: flat\n  mode: auto\n",
 		"float threshold":         "mcp:\n  auto_threshold: 1.5\n",
 		"float whole threshold":   "mcp:\n  auto_threshold: 10.0\n",

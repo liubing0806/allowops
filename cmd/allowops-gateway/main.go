@@ -75,55 +75,23 @@ type configuration struct {
 	MCP         mcpConfig          `yaml:"mcp"`
 }
 
-// optionalInt holds an integer config option together with whether it was
-// explicitly present in YAML.
-type optionalInt struct {
-	set   bool
-	value int
-}
-
-func (n optionalInt) IsZero() bool { return !n.set }
-
-func (n optionalInt) MarshalYAML() (any, error) { return n.value, nil }
-
-// mcpConfig selects how MCP tools/list exposes catalog actions. Fields are
-// omitted when empty, so a marshalled configuration decodes to the defaults.
+// mcpConfig selects how MCP tools/list exposes catalog actions. Raw YAML nodes
+// are populated natively by yaml.v3 (retaining KnownFields, merge keys, aliases
+// and duplicate-key checks) so validate can reject explicit null or float values.
 type mcpConfig struct {
 	// Mode is flat (default), progressive or auto.
-	Mode string `yaml:"mode,omitempty"`
+	Mode string `yaml:"-"`
 	// AutoThreshold is the auto mode action count; omitted means 40.
-	AutoThreshold optionalInt `yaml:"auto_threshold,omitempty"`
+	AutoThreshold    int       `yaml:"-"`
+	RawMode          yaml.Node `yaml:"mode"`
+	RawAutoThreshold yaml.Node `yaml:"auto_threshold"`
 }
 
-// UnmarshalYAML decodes mcpConfig strictly so explicit null/empty values and
-// floats cannot silently fall back to defaults or truncate to integers, while
-// preserving YAML merge key (<<) and alias compatibility.
-func (c *mcpConfig) UnmarshalYAML(value *yaml.Node) error {
-	fields, err := decodeMCPMapping(value, map[*yaml.Node]bool{})
-	if err != nil {
-		return err
-	}
-	for name, v := range fields {
-		switch name {
-		case "mode":
-			if v == nil || v.Kind != yaml.ScalarNode || v.Tag != "!!str" {
-				return errors.New("mcp.mode allowed: flat, progressive, auto")
-			}
-			c.Mode = v.Value
-		case "auto_threshold":
-			if v == nil || v.Kind != yaml.ScalarNode || v.Tag != "!!int" {
-				return errors.New("mcp.auto_threshold allowed: integer in [1,1000]")
-			}
-			var parsed int
-			if err := v.Decode(&parsed); err != nil {
-				return err
-			}
-			c.AutoThreshold = optionalInt{set: true, value: parsed}
-		default:
-			return fmt.Errorf("field %s not found in type mcpConfig", name)
-		}
-	}
-	return nil
+func (c mcpConfig) MarshalYAML() (any, error) {
+	return struct {
+		Mode          string `yaml:"mode,omitempty"`
+		AutoThreshold int    `yaml:"auto_threshold,omitempty"`
+	}{Mode: c.Mode, AutoThreshold: c.AutoThreshold}, nil
 }
 
 func resolveYAMLNode(node *yaml.Node) *yaml.Node {
@@ -133,82 +101,36 @@ func resolveYAMLNode(node *yaml.Node) *yaml.Node {
 	return node
 }
 
-func decodeMCPMapping(node *yaml.Node, seen map[*yaml.Node]bool) (map[string]*yaml.Node, error) {
-	node = resolveYAMLNode(node)
-	if node == nil || node.Kind != yaml.MappingNode {
-		return nil, errors.New("mcp must be a YAML mapping")
-	}
-	if seen[node] {
-		return nil, errors.New("cyclic YAML alias in mcp configuration")
-	}
-	seen[node] = true
-	defer delete(seen, node)
-	out := map[string]*yaml.Node{}
-	var merges []*yaml.Node
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		k, v := resolveYAMLNode(node.Content[i]), node.Content[i+1]
-		if k == nil || k.Kind != yaml.ScalarNode {
-			return nil, errors.New("invalid mcp configuration key")
-		}
-		if k.Tag == "!!merge" {
-			merges = append(merges, v)
-			continue
-		}
-		var name string
-		if err := k.Decode(&name); err != nil {
-			return nil, errors.New("invalid mcp configuration key")
-		}
-		if _, duplicate := out[name]; duplicate {
-			return nil, fmt.Errorf("duplicate mcp configuration key %q", name)
-		}
-		out[name] = resolveYAMLNode(v)
-	}
-	mergeOne := func(target *yaml.Node) error {
-		inherited, err := decodeMCPMapping(target, seen)
-		if err != nil {
-			return err
-		}
-		for name, v := range inherited {
-			if _, exists := out[name]; !exists {
-				out[name] = v
-			}
-		}
-		return nil
-	}
-	for _, m := range merges {
-		m = resolveYAMLNode(m)
-		if m == nil {
-			return nil, errors.New("invalid YAML merge in mcp configuration")
-		}
-		switch m.Kind {
-		case yaml.MappingNode:
-			if err := mergeOne(m); err != nil {
-				return nil, err
-			}
-		case yaml.SequenceNode:
-			for _, item := range m.Content {
-				if err := mergeOne(item); err != nil {
-					return nil, err
-				}
-			}
-		default:
-			return nil, errors.New("invalid YAML merge in mcp configuration")
-		}
-	}
-	return out, nil
-}
-
-// validate applies the auto_threshold default and checks both values. An
-// explicit auto_threshold (including zero or null) is checked in every mode,
-// so that switching to auto later cannot start with an invalid value.
+// validate applies defaults for omitted fields and checks both values. An
+// explicit auto_threshold (including zero, null or float) is checked in every
+// mode, so that switching to auto later cannot start with an invalid value.
 func (c *mcpConfig) validate() error {
+	if c.RawMode.Kind != 0 {
+		v := resolveYAMLNode(&c.RawMode)
+		if v == nil || v.Kind != yaml.ScalarNode || v.Tag != "!!str" {
+			return errors.New("mcp.mode allowed: flat, progressive, auto")
+		}
+		c.Mode = v.Value
+	} else if c.Mode == "" {
+		c.Mode = "flat"
+	}
 	if c.Mode != "flat" && c.Mode != "progressive" && c.Mode != "auto" {
 		return errors.New("mcp.mode allowed: flat, progressive, auto")
 	}
-	if !c.AutoThreshold.set {
-		c.AutoThreshold = optionalInt{set: true, value: 40}
+	if c.RawAutoThreshold.Kind != 0 {
+		v := resolveYAMLNode(&c.RawAutoThreshold)
+		if v == nil || v.Kind != yaml.ScalarNode || v.Tag != "!!int" {
+			return errors.New("mcp.auto_threshold allowed: integer in [1,1000]")
+		}
+		var parsed int
+		if err := v.Decode(&parsed); err != nil {
+			return errors.New("mcp.auto_threshold allowed: integer in [1,1000]")
+		}
+		c.AutoThreshold = parsed
+	} else if c.AutoThreshold == 0 {
+		c.AutoThreshold = 40
 	}
-	if c.AutoThreshold.value < 1 || c.AutoThreshold.value > 1000 {
+	if c.AutoThreshold < 1 || c.AutoThreshold > 1000 {
 		return errors.New("mcp.auto_threshold allowed: integer in [1,1000]")
 	}
 	return nil
@@ -465,12 +387,7 @@ func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service
 		listener.Close()
 		return nil, err
 	}
-	mcpConfig := mcp.Config{Jobs: cfg.Jobs, Inventory: inventoryHost, Mode: cfg.MCP.Mode, CursorKey: cursorKey}
-	// A configuration built without decodeConfig leaves the threshold unset;
-	// zero selects the MCP default.
-	if cfg.MCP.AutoThreshold.set {
-		mcpConfig.AutoThreshold = cfg.MCP.AutoThreshold.value
-	}
+	mcpConfig := mcp.Config{Jobs: cfg.Jobs, Inventory: inventoryHost, Mode: cfg.MCP.Mode, AutoThreshold: cfg.MCP.AutoThreshold, CursorKey: cursorKey}
 	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcpConfig)
 	if err != nil {
 		agent.Close()

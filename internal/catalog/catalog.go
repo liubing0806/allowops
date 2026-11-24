@@ -114,73 +114,41 @@ func ParseAction(data []byte) (Action, error) {
 	if len(node.Content) != 1 || node.Content[0].Kind != yaml.MappingNode {
 		return a, fmt.Errorf("action must be a YAML mapping")
 	}
-	merged := effectiveMapping(node.Content[0])
-	if _, ok := merged["max_output"]; ok {
+	// Decode the checked fields via yaml.Node so yaml.v3 handles merge keys,
+	// aliases and key decoding identically to struct unmarshaling while
+	// preserving raw YAML tags (rejecting null, floats and bools).
+	var raw struct {
+		MaxOutput   yaml.Node `yaml:"max_output"`
+		MaxTargets  yaml.Node `yaml:"max_targets"`
+		Toolset     yaml.Node `yaml:"toolset"`
+		Tags        yaml.Node `yaml:"tags"`
+		EntityKinds yaml.Node `yaml:"entity_kinds"`
+	}
+	if err := node.Content[0].Decode(&raw); err != nil {
+		return a, err
+	}
+	if raw.MaxOutput.Kind != 0 {
 		a.maxOutputSet = true
 	}
 	// yaml.v3 truncates 1.5 to 1 and reads an empty value as unset. For a
 	// limit, either would silently loosen what the author wrote.
-	if value, ok := merged["max_targets"]; ok && (value == nil || value.Kind != yaml.ScalarNode || value.Tag != "!!int") {
-		return a, errMaxTargetsRange
+	if raw.MaxTargets.Kind != 0 {
+		value := resolveAlias(&raw.MaxTargets)
+		if value == nil || value.Kind != yaml.ScalarNode || value.Tag != "!!int" {
+			return a, errMaxTargetsRange
+		}
 	}
-	for _, key := range []string{"toolset", "tags", "entity_kinds"} {
-		if value, ok := merged[key]; ok {
-			if err := checkMetadataNode(key, value); err != nil {
+	for _, field := range []struct {
+		name string
+		node *yaml.Node
+	}{{"toolset", &raw.Toolset}, {"tags", &raw.Tags}, {"entity_kinds", &raw.EntityKinds}} {
+		if field.node.Kind != 0 {
+			if err := checkMetadataNode(field.name, field.node); err != nil {
 				return a, err
 			}
 		}
 	}
 	return a, nil
-}
-
-// effectiveMapping collects the top-level keys of a YAML mapping after
-// expanding << merge keys and aliases, matching yaml.v3 precedence where
-// explicit keys override merged keys and earlier merge entries win.
-func effectiveMapping(node *yaml.Node) map[string]*yaml.Node {
-	out := map[string]*yaml.Node{}
-	collectMapping(node, out, map[*yaml.Node]bool{})
-	return out
-}
-
-func collectMapping(node *yaml.Node, out map[string]*yaml.Node, seen map[*yaml.Node]bool) {
-	node = resolveAlias(node)
-	if node == nil || node.Kind != yaml.MappingNode || seen[node] {
-		return
-	}
-	seen[node] = true
-	defer delete(seen, node)
-	var merges []*yaml.Node
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		k, v := resolveAlias(node.Content[i]), node.Content[i+1]
-		if k == nil || k.Kind != yaml.ScalarNode {
-			continue
-		}
-		if k.Tag == "!!merge" {
-			merges = append(merges, v)
-			continue
-		}
-		var name string
-		if err := k.Decode(&name); err != nil {
-			continue
-		}
-		if _, exists := out[name]; !exists {
-			out[name] = resolveAlias(v)
-		}
-	}
-	for _, m := range merges {
-		m = resolveAlias(m)
-		if m == nil {
-			continue
-		}
-		switch m.Kind {
-		case yaml.MappingNode:
-			collectMapping(m, out, seen)
-		case yaml.SequenceNode:
-			for _, item := range m.Content {
-				collectMapping(item, out, seen)
-			}
-		}
-	}
 }
 
 func resolveAlias(node *yaml.Node) *yaml.Node {
