@@ -189,7 +189,7 @@ const ph = box(326, 266, 928, 190, C.plugin, 'internal/gateway/pluginhost（新�
  ['宿主上下文 Host', ['HTTPClient 只访问 egress', 'Credential(ref) 读凭据文件', 'Cache、State、Health']]].forEach(([t, d], i) =>
   box(340 + i * 182, 304, 172, 138, C.gwInner, t, d, { ts: 13, fs: 11.5, pad: 9 }));
 const api = box(326, 474, 928, 104, C.plugin, 'plugin/（新增公开包，internal 之外，供第三方导入；1.0 前为实验性）', ['`plugin.Register(Module)   ModuleInfo{ID, New}   Provisioner / Validator / Cleaner', '`plugin/inventory.Resolver   plugin/changes.Lister   plugin/knowledge.Store   plugin/trigger.Source', '`plugin/plugintest：每个扩展点一套契约测试'], { ts: 14, fs: 12 });
-const std = box(326, 596, 928, 118, C.plugin, 'plugins/standard（新增官方插件，网关 main 空白导入；第三方插件经 allowops build 自定义构建加入）', [], { ts: 14 });
+const std = box(326, 596, 928, 118, C.plugin, 'extensions/standard（新增官方插件，网关 main 空白导入；第三方插件经 allowops build 自定义构建加入）', [], { ts: 14 });
 [['inventory.static', '拓扑 YAML 文件'], ['inventory.host_labels', '由主机标签推导'], ['changes.allowops', '目录和策略版本'], ['knowledge.git_markdown', 'Git 仓库 runbook'], ['第三方 / 以后', 'k8s、nacos、cmdb、jenkins']].forEach(([n, d], i) =>
   box(340 + i * 182, 634, 172, 66, i === 4 ? C.ext : C.gwInner, n, [d], { ts: 11.5, fs: 11.5, pad: 7, monoTitle: i !== 4, dash: i === 4 ? [5, 4] : undefined }));
 arrow([[790, 456], [790, 474]], { color: C.plugin.stroke, both: true });
@@ -240,7 +240,7 @@ canvas('life', 420);
 heading('4', '插件从编写到运行', '参照 Caddy 模块与 xcaddy；生命周期规则参照 dsh-superagent 的 ctx.effect（注册与注销成对）。依据 plugin-architecture.md 第 5、8 节。');
 const life = [
   ['① 编写', ['实现扩展点接口', '`init(){ plugin.Register(M{}) }', '跑 plugintest 契约测试'], C.plugin],
-  ['② 构建', ['官方：空白导入', '`plugins/standard', '第三方：allowops build --with'], C.plugin],
+  ['② 构建', ['官方：空白导入', '`extensions/standard', '第三方：allowops build --with'], C.plugin],
   ['③ 配置', ['gateway.yaml plugins 节', 'id、module、egress、', 'timeout、required、config'], C.gwInner],
   ['④ 启动', ['严格解码 config', 'Provision → Validate', 'required 失败则拒绝启动'], C.gwInner],
   ['⑤ 运行', ['MCP 固定工具调用', '健康状态到控制台系统页', 'Trigger：advisory lock 单实例'], C.gwInner],

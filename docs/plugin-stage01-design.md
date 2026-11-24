@@ -47,9 +47,9 @@
 ```
 plugin/plugin.go                         Register、Lookup、ModuleID、ModuleInfo、Module、Provisioner、Host、HostInfo
 plugin/inventory/inventory.go            Entity、Query、Resolver
-plugins/standard/standard.go             空白导入两个官方插件
-plugins/inventory/static/static.go       inventory.static
-plugins/inventory/hostlabels/hostlabels.go  inventory.host_labels
+extensions/standard/standard.go             空白导入两个官方插件
+extensions/inventory/static/static.go       inventory.static
+extensions/inventory/hostlabels/hostlabels.go  inventory.host_labels
 internal/gateway/pluginhost/config.go    Config 类型与解码
 internal/gateway/pluginhost/host.go      实例构造、SearchInventory、Health
 cmd/allowops-gateway/main.go             配置字段、构造、注入
@@ -59,7 +59,7 @@ internal/gateway/mcp/                    entities_search
 internal/catalog/catalog.go:269          保留名称增加 entities_search
 ```
 
-`plugin/` 和 `plugins/` 放在 `internal/` 之外（PL2）。`plugins/` 下的官方插件属于同一个 module，本轮不导入任何 `internal/` 包，以保证它们和第三方插件用同样的接口。
+`plugin/` 和 `extensions/` 放在 `internal/` 之外（PL2）。`extensions/` 下的官方插件属于同一个 module，本轮不导入任何 `internal/` 包，以保证它们和第三方插件用同样的接口。
 
 ## 4. `plugin` 包
 

@@ -86,11 +86,11 @@ plugin/changes/             扩展点接口：Lister
 plugin/knowledge/           扩展点接口：Store
 plugin/trigger/             扩展点接口：Source、WebhookSource
 plugin/plugintest/          契约测试套件
-plugins/standard/           官方插件集合，网关 main 空白导入
-plugins/inventory/static/       inventory.static
-plugins/inventory/hostlabels/   inventory.host_labels
-plugins/changes/allowops/       changes.allowops（目录和策略版本）
-plugins/knowledge/gitdocs/      knowledge.git_markdown
+extensions/standard/           官方插件集合，网关 main 空白导入
+extensions/inventory/static/       inventory.static
+extensions/inventory/hostlabels/   inventory.host_labels
+extensions/changes/allowops/       changes.allowops（目录和策略版本）
+extensions/knowledge/gitdocs/      knowledge.git_markdown
 internal/gateway/pluginhost/  网关内部：配置解析、构造、健康状态、调用包装、停止
 internal/gateway/mcp/         新增固定工具 entities_search、changes_list、runbooks_search、runbooks_read
 internal/gateway/authz/       新增操作 view_inventory、view_changes、view_knowledge
@@ -98,7 +98,7 @@ internal/builtin/registry     主机端 builtin 注册表（阶段 0）
 cmd/allowops/ 的 build 子命令  自定义构建，加入第三方插件
 ```
 
-`plugin/` 和 `plugins/` 放在 `internal/` 之外。Go 不允许其他 module 导入 `internal/` 下的包，第三方插件需要导入 `plugin/`。
+`plugin/` 和 `extensions/` 放在 `internal/` 之外。Go 不允许其他 module 导入 `internal/` 下的包，第三方插件需要导入 `plugin/`。
 
 ## 5. 插件核心机制
 
@@ -158,7 +158,7 @@ func (Module) Module() plugin.ModuleInfo {
 网关的 `main` 用空白导入决定包含哪些插件：
 
 ```go
-import _ "github.com/liubing0806/allowops/plugins/standard"
+import _ "github.com/liubing0806/allowops/extensions/standard"
 ```
 
 不使用 Go 标准库的 `plugin` 包（运行时加载 `.so`）。它要求插件和主程序使用相同的工具链和依赖版本，只支持 Linux 和 macOS（PL1）。
@@ -174,7 +174,7 @@ allowops build --with github.com/acme/allowops-cmdb@v1.2.0 --output allowops-gat
 `allowops build` 生成一个带空白导入的 `main.go`，然后执行 `go build`。规则：
 
 - 插件依赖的 allowops 版本必须和网关版本一致，由 `go.mod` 确定。
-- 官方发布的二进制只包含 `plugins/standard`。
+- 官方发布的二进制只包含 `extensions/standard`。
 - 网关启动时把已编译的模块 ID 和来源 module 版本写入日志，控制台系统页显示同样的列表。
 
 ### 5.3 配置

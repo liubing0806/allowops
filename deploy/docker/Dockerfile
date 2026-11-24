@@ -6,7 +6,7 @@ RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 COPY plugin ./plugin
-COPY plugins ./plugins
+COPY extensions ./extensions
 COPY gen ./gen
 COPY deploy/packaging/notices.sh ./deploy/packaging/notices.sh
 COPY LICENSE ./LICENSE
