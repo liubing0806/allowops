@@ -6,7 +6,8 @@
       "type": "object",
       "properties": {
         "repository": {"type": "string", "minLength": 1},
-        "tag": {"type": "string", "minLength": 1}
+        "tag": {"type": "string", "minLength": 1},
+        "pullPolicy": {"type": "string", "enum": ["Always", "IfNotPresent", "Never"]}
       }
     },
     "imagePullSecrets": {
@@ -37,7 +38,9 @@
     "service": {
       "type": "object",
       "properties": {
-        "externalTrafficPolicy": {"type": "string", "enum": ["Local", "Cluster"]}
+        "type": {"type": "string", "enum": ["LoadBalancer", "NodePort", "ClusterIP"]},
+        "externalTrafficPolicy": {"type": "string", "enum": ["Local", "Cluster"]},
+        "annotations": {"type": "object", "additionalProperties": {"type": "string"}}
       }
     },
     "gateway": {
@@ -71,6 +74,24 @@
             "batch_size": {"type": "integer", "minimum": 1, "maximum": 4294967295},
             "max_failures": {"type": "integer", "minimum": 0, "maximum": 4294967295}
           }
+        },
+        "management": {
+          "type": "object",
+          "properties": {
+            "ca_pin": {"type": "string"},
+            "upstream": {"type": "string"}
+          }
+        },
+        "identity": {
+          "type": "object",
+          "properties": {
+            "origin": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": true
+        },
+        "providers": {
+          "type": "array",
+          "items": {"type": "object"}
         }
       }
     },
@@ -84,7 +105,10 @@
         "maxFileBytes": {"type": "integer", "minimum": 1},
         "persistence": {
           "type": "object",
-          "properties": {"size": {"type": "string", "minLength": 1}}
+          "properties": {
+            "size": {"type": "string", "minLength": 1},
+            "storageClass": {"type": "string"}
+          }
         }
       }
     },
@@ -92,7 +116,17 @@
       "type": "object",
       "properties": {
         "existingSecret": {"type": "string", "minLength": 1},
-        "create": {"type": "boolean"}
+        "create": {"type": "boolean"},
+        "data": {
+          "type": "object",
+          "properties": {
+            "caCertificate": {"type": "string"},
+            "caKey": {"type": "string"},
+            "tlsCertificate": {"type": "string"},
+            "tlsKey": {"type": "string"},
+            "catalogPublicKey": {"type": "string"}
+          }
+        }
       }
     },
     "database": {
@@ -100,7 +134,8 @@
       "properties": {
         "existingSecret": {"type": "string", "minLength": 1},
         "key": {"type": "string", "minLength": 1},
-        "create": {"type": "boolean"}
+        "create": {"type": "boolean"},
+        "url": {"type": "string"}
       }
     },
     "output": {
@@ -130,6 +165,18 @@
         "schedule": {"type": "string", "minLength": 1},
         "months": {"type": "integer", "minimum": 1, "maximum": 120},
         "activeDeadlineSeconds": {"type": "integer", "minimum": 1}
+      }
+    },
+    "secretCopyImage": {"type": "string", "minLength": 1},
+    "resources": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "properties": {
+        "minAvailable": {"type": ["integer", "string"]},
+        "maxUnavailable": {"type": ["integer", "string"]}
       }
     }
   }

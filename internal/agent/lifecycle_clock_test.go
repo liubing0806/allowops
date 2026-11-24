@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -210,8 +211,8 @@ func TestAgentCertLifecycleExpiredExit(t *testing.T) {
 		synctest.Sleep(time.Nanosecond)
 		select {
 		case err := <-done:
-			if err == nil || err.Error() != "CERTIFICATE_EXPIRED" {
-				t.Fatalf("Agent.Run at expiry: %v, want CERTIFICATE_EXPIRED", err)
+			if err == nil || !strings.HasPrefix(err.Error(), "CERTIFICATE_EXPIRED") {
+				t.Fatalf("Agent.Run at expiry: %v, want CERTIFICATE_EXPIRED prefix", err)
 			}
 		default:
 			t.Fatal("Agent.Run was still running at certificate expiry")

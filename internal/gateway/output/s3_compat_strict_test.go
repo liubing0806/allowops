@@ -1,5 +1,3 @@
-//go:build compat_strict
-
 package output_test
 
 import (
@@ -10,20 +8,36 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/liubing0806/allowops/internal/gateway/output"
 )
 
-// Each provider must accept a gateway write. These assertions intentionally
-// fail while a custom endpoint forces path style and every PUT requests SSE.
+// Each provider must accept a gateway write when configured for its compatibility mode.
 func TestS3StrictCompatibility(t *testing.T) {
+	falseVal := false
 	for _, tc := range []struct {
-		name    string
-		options s3ProviderOptions
+		name      string
+		options   s3ProviderOptions
+		configure func(*output.Config)
 	}{
-		{"NoSSEProvider", s3ProviderOptions{rejectSSE: true}},
-		{"VirtualHostedOnlyProvider", s3ProviderOptions{virtualHostedOnly: true}},
+		{
+			name:    "NoSSEProvider",
+			options: s3ProviderOptions{rejectSSE: true},
+			configure: func(c *output.Config) {
+				c.ServerSideEncryption = "none"
+			},
+		},
+		{
+			name:    "VirtualHostedOnlyProvider",
+			options: s3ProviderOptions{virtualHostedOnly: true},
+			configure: func(c *output.Config) {
+				c.UsePathStyle = &falseVal
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			provider, store := newS3Provider(t, s3ContractConfig(), tc.options)
+			cfg := s3ContractConfig()
+			tc.configure(&cfg)
+			provider, store := newS3Provider(t, cfg, tc.options)
 			const key = "output.zst"
 			writeErr := store.Put(t.Context(), key, []byte("output"))
 			requests := provider.history()

@@ -31,5 +31,4 @@ jobs:
           install -D linux-amd64/helm bin/helm
           GOBIN="$PWD/bin" go install github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0
           echo "$PWD/bin" >> "$GITHUB_PATH"
-      # Enable --check-schema-coverage once values.schema.json declares the 11 missing settings.
-      - run: python3 deploy/helm/verify_matrix.py --kubeconform kubeconform
+      - run: python3 deploy/helm/verify_matrix.py --check-schema-coverage --kubeconform kubeconform

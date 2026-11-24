@@ -167,11 +167,15 @@ func (f *sourceFile) checkErrors(info *types.Info) {
 			f.checkReceive(n.X, info)
 		case *ast.AssignStmt:
 			for i, lhs := range n.Lhs {
-				f.checkDiscardedResult(lhs, i, n.Rhs, info)
+				f.checkDiscardedResult(lhs, i, n.Lhs, n.Rhs, info)
 			}
 		case *ast.ValueSpec:
+			lhsList := make([]ast.Expr, len(n.Names))
 			for i, name := range n.Names {
-				f.checkDiscardedResult(name, i, n.Values, info)
+				lhsList[i] = name
+			}
+			for i, name := range n.Names {
+				f.checkDiscardedResult(name, i, lhsList, n.Values, info)
 			}
 		}
 		return true
@@ -189,7 +193,7 @@ func (f *sourceFile) checkReceive(expr ast.Expr, info *types.Info) {
 	}
 }
 
-func (f *sourceFile) checkDiscardedResult(lhs ast.Expr, slot int, values []ast.Expr, info *types.Info) {
+func (f *sourceFile) checkDiscardedResult(lhs ast.Expr, slot int, lhsList, values []ast.Expr, info *types.Info) {
 	id, ok := ast.Unparen(lhs).(*ast.Ident)
 	if !ok || id.Name != "_" || len(values) == 0 {
 		return
@@ -197,7 +201,8 @@ func (f *sourceFile) checkDiscardedResult(lhs ast.Expr, slot int, values []ast.E
 	// A single initializer can supply a tuple. In a list of initializers
 	// each expression supplies exactly one value at its corresponding position.
 	rhs := values[0]
-	if len(values) > 1 {
+	singleInit := len(values) == 1
+	if !singleInit {
 		rhs = values[slot]
 		slot = 0
 	}
@@ -211,6 +216,9 @@ func (f *sourceFile) checkDiscardedResult(lhs ast.Expr, slot int, values []ast.E
 	if info.Types[call.Fun].IsType() {
 		return
 	}
+	if singleInit && slot == 0 && isHandledErrorsAsType(call, lhsList, info) {
+		return
+	}
 	result := info.TypeOf(call)
 	if tuple, ok := result.(*types.Tuple); ok {
 		result = tuple.At(slot).Type()
@@ -218,4 +226,35 @@ func (f *sourceFile) checkDiscardedResult(lhs ast.Expr, slot int, values []ast.E
 	if types.Implements(result, errorInterface) {
 		f.report(lhs.Pos(), errorRule, "blank identifier discards error from "+types.ExprString(call.Fun)+". Handle it or document "+ignoreError+" <reason>")
 	}
+}
+
+// errors.AsType[T](err) returns (T, bool) for error classification. Binding the
+// ok flag while discarding the extracted value checks the error type rather
+// than dropping an unhandled failure.
+func isHandledErrorsAsType(call *ast.CallExpr, lhsList []ast.Expr, info *types.Info) bool {
+	if len(lhsList) != 2 {
+		return false
+	}
+	okIdent, ok := ast.Unparen(lhsList[1]).(*ast.Ident)
+	if !ok || okIdent.Name == "_" {
+		return false
+	}
+	fun := ast.Unparen(call.Fun)
+	switch idx := fun.(type) {
+	case *ast.IndexExpr:
+		fun = ast.Unparen(idx.X)
+	case *ast.IndexListExpr:
+		fun = ast.Unparen(idx.X)
+	}
+	var ident *ast.Ident
+	switch target := fun.(type) {
+	case *ast.SelectorExpr:
+		ident = target.Sel
+	case *ast.Ident:
+		ident = target
+	default:
+		return false
+	}
+	fn, ok := info.Uses[ident].(*types.Func)
+	return ok && fn.Pkg() != nil && fn.Pkg().Path() == "errors" && fn.Name() == "AsType"
 }

@@ -40,7 +40,10 @@ BEGIN
             SELECT oid FROM pg_roles WHERE rolname NOT IN (login_name, 'allowops_audit_writer')
             UNION ALL SELECT nspowner FROM pg_namespace WHERE oid = 'public'::regnamespace
             UNION ALL SELECT relowner FROM pg_class WHERE relnamespace = 'public'::regnamespace
-            UNION ALL SELECT proowner FROM pg_proc WHERE oid = 'public.audit_create_partitions(timestamptz,integer)'::regprocedure
+            UNION ALL SELECT proowner FROM pg_proc WHERE oid IN (
+                'public.audit_create_partitions(timestamptz,integer)'::regprocedure,
+                'public.tasks_create_partitions(timestamptz,integer)'::regprocedure
+            )
         ) forbidden
         WHERE pg_has_role(login_oid, forbidden.oid, 'MEMBER')
            OR pg_has_role('allowops_audit_writer'::regrole, forbidden.oid, 'MEMBER')
@@ -98,6 +101,8 @@ BEGIN
     GRANT SELECT ON TABLE public.audit_boundary TO allowops_audit_writer;
     GRANT SELECT, INSERT, UPDATE ON TABLE public.audit_export_cursors TO allowops_audit_writer;
     EXECUTE format('REVOKE EXECUTE ON FUNCTION public.audit_create_partitions(timestamptz, integer)
+                    FROM PUBLIC, allowops_audit_writer, %I', login_name);
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION public.tasks_create_partitions(timestamptz, integer)
                     FROM PUBLIC, allowops_audit_writer, %I', login_name);
     EXECUTE format('GRANT SELECT ON TABLE public.goose_db_version TO %I', login_name);
 END

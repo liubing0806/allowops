@@ -49,7 +49,14 @@ func (a *Agent) session(parent context.Context, client allowopsv1connect.AgentSe
 	ctx, cancel := context.WithCancel(parent)
 	stream := client.Connect(ctx)
 	var workers sync.WaitGroup
-	defer func() { cancel(); _ = stream.CloseRequest(); _ = stream.CloseResponse(); workers.Wait() }()
+	defer func() {
+		cancel()
+		//allowops:ignore-error best-effort request stream close during session teardown
+		_ = stream.CloseRequest()
+		//allowops:ignore-error best-effort response stream close during session teardown
+		_ = stream.CloseResponse()
+		workers.Wait()
+	}()
 	// Connect reports remote and transport errors through Receive when Send returns EOF.
 	if err := stream.Send(&v1.ConnectRequest{Message: &v1.ConnectRequest_Hello{Hello: a.hello()}}); err != nil && !errors.Is(err, io.EOF) {
 		return 0, err

@@ -54,7 +54,7 @@ func addTrialReaders(t *testing.T, f *fixture, from, to int) {
 	t.Helper()
 	for i := from; i < to; i++ {
 		id := authn.Identity{ID: fmt.Sprintf("reader-%02d", i), Kind: "oidc", Groups: []string{"readers"}}
-		if _, err := f.service.syncUser(t.Context(), "test", id); err != nil {
+		if _, err := syncUser(t.Context(), f.db.Pool, "test", id); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -118,24 +118,40 @@ func TestPolicyExplicitCasesScaleWithRealCatalog(t *testing.T) {
 	maxSubjects := limit / perSubject
 	subjects := max(15, maxSubjects+1)
 	addTrialHosts(t, f, hosts)
+	addTrialReaders(t, f, 2, subjects)
 	client := f.policy(f.adminToken)
-	t.Logf("default_limit=%d actions=%d hosts=%d evaluations_per_subject=%d last_allowed_subjects=%d last_allowed_evaluations=%d first_rejected_subjects=%d first_rejected_evaluations=%d",
-		limit, len(actions), hosts, perSubject, maxSubjects, maxSubjects*perSubject, maxSubjects+1, (maxSubjects+1)*perSubject)
-	// Check the first over-limit deployment, then the deployment used for the cases.
-	currentSubjects := 2
-	trialSizes := []int{max(currentSubjects, maxSubjects+1), subjects}
-	for _, n := range slices.Compact(trialSizes) {
-		addTrialReaders(t, f, currentSubjects, n)
-		currentSubjects = n
-		ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
-		_, err := client.TestPolicy(ctx, scaleTrialRequest())
-		cancel()
-		var rpcErr *connect.Error
-		if !errors.As(err, &rpcErr) || rpcErr.Code() != connect.CodeResourceExhausted || rpcErr.Message() != "policy evaluation limit exceeded" {
-			t.Fatalf("default trial at %d subjects x %d hosts: got %v; want resource_exhausted: policy evaluation limit exceeded", n, hosts, err)
-		}
-		t.Logf("subjects=%d hosts=%d requested_evaluations=%d error=%v", n, hosts, n*perSubject, err)
+
+	// Shared authorization label tiers (web/db) collapse 40 hosts into 2 groups,
+	// so the full default trial succeeds well within the grouped limit.
+	ctx, cancel := context.WithTimeout(t.Context(), fullPolicyTrialBudget)
+	start := time.Now()
+	groupedResp, err := client.TestPolicy(ctx, scaleTrialRequest())
+	groupedElapsed := time.Since(start)
+	cancel()
+	if err != nil {
+		t.Fatalf("grouped default trial at %d subjects x %d hosts: %v", subjects, hosts, err)
 	}
+	t.Logf("grouped_default actions=%d subjects=%d hosts=%d logical_evaluations=%d elapsed=%s",
+		len(actions), subjects, hosts, groupedResp.Msg.GetTest().GetEvaluatedCount(), groupedElapsed)
+	if want := defaultTrialEvaluations(subjects, hosts, len(actions)); groupedResp.Msg.GetTest().GetEvaluatedCount() != uint64(want) {
+		t.Fatalf("grouped evaluated_count=%d; want %d", groupedResp.Msg.GetTest().GetEvaluatedCount(), want)
+	}
+
+	// Distinct authorization label sets per host defeat grouping and hit the
+	// grouped evaluation limit; explicit cases must still scale linearly.
+	if _, err := f.db.Pool.Exec(t.Context(), `UPDATE hosts SET authorization_labels=jsonb_build_object('tier',split_part(hostname,'-',1),'shard',hostname)`); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("default_limit=%d actions=%d unique_host_groups=%d evaluations_per_subject=%d last_allowed_subjects=%d first_rejected_subjects=%d",
+		limit, len(actions), hosts, perSubject, maxSubjects, maxSubjects+1)
+	ctx, cancel = context.WithTimeout(t.Context(), 15*time.Second)
+	_, err = client.TestPolicy(ctx, scaleTrialRequest())
+	cancel()
+	var rpcErr *connect.Error
+	if !errors.As(err, &rpcErr) || rpcErr.Code() != connect.CodeResourceExhausted {
+		t.Fatalf("ungrouped default trial at %d subjects x %d unique hosts: got %v; want resource_exhausted", subjects, hosts, err)
+	}
+	t.Logf("subjects=%d unique_hosts=%d requested_evaluations=%d error=%v", subjects, hosts, subjects*perSubject, err)
 
 	web := &v1.HostTargets{Selection: &v1.HostTargets_Selector{Selector: "tier=web"}}
 	cases := []*v1.PolicyTestCase{

@@ -63,6 +63,7 @@ func pinnedTLS(config Config) (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	//allowops:ignore-error upstreamURL already validated address as a parseable URL
 	u, _ := url.Parse(address)
 	pin, err := parsePin(config.CAPin)
 	if err != nil {

@@ -77,7 +77,9 @@ func New(config Config, options Options) (*Agent, error) {
 	if err != nil {
 		return nil, err
 	}
+	//allowops:ignore-error config.validate already validated config.Upstream
 	upstream, _ := upstreamURL(config.Upstream)
+	//allowops:ignore-error LoadIdentity already validated stored identity upstream
 	joinedUpstream, _ := upstreamURL(value.Upstream)
 	if upstream != joinedUpstream || config.CAPin != value.CAPin {
 		return nil, errors.New("IDENTITY_CONFIG_MISMATCH")

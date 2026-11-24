@@ -41,6 +41,7 @@ func runHealth(args []string) error {
 		return errors.New("gateway health request failed")
 	}
 	defer response.Body.Close()
+	//allowops:ignore-error draining bounded response body before closing probe connection
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 	if response.StatusCode != http.StatusOK {
 		return errors.New("gateway health check failed")

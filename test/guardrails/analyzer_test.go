@@ -315,14 +315,21 @@ func run(a agent, finished <-chan error) {
 
 func TestDiscardedConcreteErrors(t *testing.T) {
 	checkFixture(t, map[string]string{"cmd/allowops-gateway/run.go": `package main
-import "os"
+import (
+	"errors"
+	"os"
+)
 type failure struct{}
 func (*failure) Error() string { return "failure" }
-func run(pathError func() *os.PathError, result func() (int, *failure), value func() failure) {
+func run(err error, pathError func() *os.PathError, result func() (int, *failure), value func() failure) {
 	_ = pathError() // want no-silent-error-drop
 	_, _ = result() // want no-silent-error-drop
 	_ = value()
 	_ = (*failure)(nil)
+	if _, ok := errors.AsType[*os.PathError](err); ok {
+		return
+	}
+	_, _ = errors.AsType[*os.PathError](err) // want no-silent-error-drop
 }
 `})
 }

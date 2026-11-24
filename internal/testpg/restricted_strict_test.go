@@ -1,5 +1,3 @@
-//go:build production_invariants
-
 package testpg_test
 
 import (

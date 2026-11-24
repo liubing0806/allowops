@@ -13,7 +13,7 @@ OPA_VERSION = $(shell go list -m -f '{{.Version}}' github.com/open-policy-agent/
 FUZZTIME ?= 30s
 ALLOWED_LICENSES := MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0,ISC,MPL-2.0
 
-.PHONY: build $(BINARIES) test examples-check script-checks lint vuln generate web-build licenses package package-arthas opa-test scale bench-opa vm fuzz e2e local-up local-down
+.PHONY: build $(BINARIES) test examples-check script-checks guardrails helm-check cross-check hygiene-check release-gate lint vuln generate web-build licenses package package-arthas opa-test scale bench-opa vm fuzz e2e local-up local-down
 
 build: $(BINARIES)
 
@@ -60,14 +60,33 @@ fuzz:
 		go test "$$package" -run '^$$' -fuzz "^$$target$$" -fuzztime "$(FUZZTIME)" -parallel=4 -timeout=0; \
 	done
 
-# Python checks of the packaging scripts and the CI dist-drift check (needs PyYAML).
+# Python checks of the packaging scripts, CI drift/gates and repository hygiene (needs PyYAML).
 script-checks:
 	python3 deploy/packaging/test-postinstall-nosudo.py
 	python3 -I deploy/packaging/arthas/test-stage.py
 	python3 test/ci-dist-check.py
 	python3 deploy/compose/test-local-up-bootstrap.py
+	python3 test/ci-gates-check.py
+	python3 test/repo-hygiene-check.py
 
-lint: script-checks
+guardrails:
+	go test -tags=guardrails ./test/guardrails
+
+helm-check:
+	python3 -B deploy/helm/test_verify_matrix.py
+	python3 deploy/helm/verify_matrix.py --check-schema-coverage
+
+cross-check:
+	./test/cross-compile-check.sh
+
+hygiene-check:
+	python3 test/test_repo_hygiene_check.py
+	python3 test/repo-hygiene-check.py --include-untracked
+
+release-gate:
+	python3 test/repo-hygiene-check.py --release-gate
+
+lint: script-checks guardrails
 	go vet ./...
 	go run honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) ./...
 

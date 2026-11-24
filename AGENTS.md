@@ -25,10 +25,12 @@ make lint
 make test
 make opa-test
 make build
+make cross-check
+make helm-check
 ```
 
-`lint` 包含 Python 脚本检查、Go vet 和 staticcheck。`test` 校验示例目录并启用 Go 竞态检测。
-`opa-test` 运行 Open Policy Agent（OPA）授权策略测试。`build` 将四个程序写入 `bin/`。
+`lint` 包含 Python 脚本检查、仓库卫生检查、Go AST 静态门禁（`make guardrails`）、`go vet` 和 `staticcheck`。`test` 校验示例目录并启用 Go 竞态检测。
+`opa-test` 运行 Open Policy Agent（OPA）授权策略测试。`build` 将四个程序写入 `bin/`。`cross-check` 检查四平台 CLI 交叉编译。`helm-check` 运行 Helm 渲染矩阵与 Schema 覆盖校验。
 
 ### 控制台与端到端测试
 

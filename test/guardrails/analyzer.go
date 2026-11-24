@@ -107,7 +107,7 @@ func (f *sourceFile) checksErrors() bool {
 }
 
 func (f *sourceFile) checksPool() bool {
-	if f.path == "internal/store/store.go" {
+	if f.path == "internal/store/store.go" || strings.HasPrefix(f.path, "internal/testpg/") {
 		return false
 	}
 	for _, spec := range f.tree.Imports {

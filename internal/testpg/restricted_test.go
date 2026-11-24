@@ -154,6 +154,7 @@ func TestRuntimeRole(t *testing.T) {
 		{"audit_delete", "DELETE FROM audit_events"},
 		{"audit_truncate", "TRUNCATE audit_events"},
 		{"audit_create_partitions", "SELECT audit_create_partitions(now(), 1)"},
+		{"tasks_create_partitions", "SELECT tasks_create_partitions(now(), 1)"},
 		{"audit_boundary_update", "UPDATE audit_boundary SET seq=0"},
 		{"audit_cursor_delete", "DELETE FROM audit_export_cursors"},
 		{"audit_partition_registry", "SELECT * FROM audit_partitions"},

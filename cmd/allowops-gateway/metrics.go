@@ -59,6 +59,7 @@ func startMetrics(listener net.Listener, db *store.Store, agent *hostconn.Servic
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(ctx); err != nil {
+			//allowops:ignore-error best-effort force close after graceful metrics shutdown timeout
 			_ = srv.Close()
 		}
 		<-done
