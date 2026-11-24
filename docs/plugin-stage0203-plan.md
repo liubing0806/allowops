@@ -7,7 +7,7 @@
 采用「阶段 A 基线先行 → 阶段 B/C/D 三路并行（零文件重叠、各自独立可编译可测）→ 阶段 E 公共接线与全量验收」的推进方式：
 
 - 每个提交单独可编译并通过对应包测试。
-- 接口变更（如 `plugin.Host`）与所有现有实现、测试替身（含 `internal/gateway/api/inventory_selector_test.go`、`plugins/inventory/hostlabels/hostlabels_test.go`、`internal/gateway/pluginhost/host.go`）在**同一个提交**中交付。
+- 接口变更（如 `plugin.Host`）与所有现有实现、测试替身（含 `internal/gateway/api/inventory_selector_test.go`、`extensions/inventory/hostlabels/hostlabels_test.go`、`internal/gateway/pluginhost/host.go`）在**同一个提交**中交付。
 - 阶段 C/D 处理器依赖的新授权常量（`authz.ViewChanges`、`authz.ViewKnowledge`）、目录保留名与 `mcp.Config` 的 `Changes`/`Knowledge` 接口定义放在阶段 A 最后一笔提交（A-6）中作为共同基线，使阶段 B/C/D 在三个独立 worktree 中互不重叠且各自 `go test -race ./...` 全部通过。
 - 子会话只在本地构建与测试，不 push、不合并；总指挥审核全部 diff 并独立重跑验收命令后再合入 `feat/investigation-context-plugins`。
 
@@ -33,7 +33,7 @@ feat/investigation-context-plugins (基线 9640cd8)
 - `internal/gateway/authz/{types.go,defaults.go,engine.go,engine_test.go}`
 - `internal/catalog/{catalog.go,catalog_test.go}`
 - `internal/gateway/mcp/service.go`（仅声明 `Changes`、`Knowledge` 接口与 `Config` 可选字段，保持零值兼容）
-- `plugins/inventory/static/static_test.go`、`plugins/inventory/hostlabels/hostlabels_test.go`
+- `extensions/inventory/static/static_test.go`、`extensions/inventory/hostlabels/hostlabels_test.go`
 - `cmd/allowops-gateway/main.go`（`configuration.Plugins` 改用 `pluginhost.ConfigList` + 测试 `cmd/allowops-gateway/plugin_config_test.go`）
 - `deploy/docker/Dockerfile`
 
@@ -43,7 +43,7 @@ feat/investigation-context-plugins (基线 9640cd8)
 | A-2 | `internal/redact/redact.go` 新增 `Redactor.LineSecrets(line)` 及单元测试 |
 | A-3 | `pluginhost` 基础设施：`ConfigList`/`Config` 防回显 `UnmarshalYAML`、`egress.go`（规范化源+有效端口、跨源重定向决策表、单次解析锁定 IP 含 IPv6 IMDS/转换前缀/显式 `::1`、私有 CA）、`credential*.go`（启动期固定 `dirFD`、普通文件 `openat(O_NOFOLLOW)` 与 Linux `openat2(RESOLVE_IN_ROOT)` 投射卷）、`cache.go`（LRU+TTL+4 MiB）+ `cmd/allowops-gateway/main.go` 接入 `ConfigList` 与对应单测 |
 | A-4 | `pluginhost/host.go` 完整运行时：多命名空间隔离、`controlPlaneHost` 独立具体类型、并发信号量、`refs` 引用计数释放与有界启动/关闭、脱敏 logger 包装、`MergeVisibleInventory`（原始身份关联可见组内跨源凭据传播）、`ListChanges`（跨字段脱敏+`Kind` 检查+脱敏后过滤+`HasMore`）、`SearchKnowledge`/`ReadKnowledge`（单快照 `ReadResult`+统一 `sanitizeDoc`+正文元数据凭据二次抹除+唯一章节编号+`revision`）及全套单测 |
-| A-5 | `plugin/plugintest` 契约测试套件 + `plugins/...` AST 禁直连护栏测试；现有 `inventory.static`/`inventory.host_labels` 接入契约测试；`deploy/docker/Dockerfile` 补齐 `COPY plugin` 与 `COPY plugins` |
+| A-5 | `plugin/plugintest` 契约测试套件 + `extensions/...` AST 禁直连护栏测试；现有 `inventory.static`/`inventory.host_labels` 接入契约测试；`deploy/docker/Dockerfile` 补齐 `COPY plugin` 与 `COPY extensions` |
 | A-6 | 共享控制面基线：`authz.ViewChanges`/`ViewKnowledge`、默认角色、`authz/engine_test.go` 角色全集、`api/policy.go` `consoleOperations` 与 `policy_view_inputs_rework_test.go`（`35/34`→`37/36`）、既有策略不自动授予回归测试、`catalog.go` 保留名称（`changes_list`/`runbooks_search`/`runbooks_read`）、`mcp/service.go` 声明可选 `Changes`/`Knowledge` 接口字段 |
 
 **阶段 A 检查命令**：
@@ -51,7 +51,7 @@ feat/investigation-context-plugins (基线 9640cd8)
 gofmt -l $(git ls-files '*.go' | grep -v '^gen/')
 go vet ./...
 ALLOWOPS_REQUIRE_DOCKER=1 go test -race -count=1 \
-  ./internal/redact/... ./plugin/... ./plugins/... ./internal/gateway/pluginhost/... \
+  ./internal/redact/... ./plugin/... ./extensions/... ./internal/gateway/pluginhost/... \
   ./internal/gateway/authz/... ./internal/gateway/api/... ./internal/catalog/... \
   ./internal/gateway/mcp/... ./cmd/allowops-gateway/...
 ```
@@ -61,9 +61,9 @@ ALLOWOPS_REQUIRE_DOCKER=1 go test -race -count=1 \
 ### 3.1 阶段 B：动态 Inventory 插件与 `entities_search` 合并（分支 `plugin/sB-dynamic-inventory`）
 
 **独占文件集合**：
-- `plugins/inventory/k8s/{k8s.go,k8s_test.go}`
-- `plugins/inventory/promtargets/{promtargets.go,promtargets_test.go}`
-- `plugins/inventory/cmdbhttp/{cmdbhttp.go,cmdbhttp_test.go}`
+- `extensions/inventory/k8s/{k8s.go,k8s_test.go}`
+- `extensions/inventory/promtargets/{promtargets.go,promtargets_test.go}`
+- `extensions/inventory/cmdbhttp/{cmdbhttp.go,cmdbhttp_test.go}`
 - `internal/gateway/mcp/inventory.go`、`internal/gateway/mcp/inventory_test.go`
 
 | 提交 | 内容 |
@@ -77,9 +77,9 @@ ALLOWOPS_REQUIRE_DOCKER=1 go test -race -count=1 \
 
 **独占文件集合**：
 - `internal/store/queries/plugin_changes.sql`、`internal/store/db/plugin_changes.sql.go`、`internal/store/db/querier.go`（如由 `sqlc generate` 更新）及 `internal/store/plugin_changes_test.go`
-- `plugins/changes/allowops/{allowops.go,allowops_test.go}`
-- `plugins/changes/k8srollout/{k8srollout.go,k8srollout_test.go}`
-- `plugins/changes/httpfeed/{httpfeed.go,httpfeed_test.go}`
+- `extensions/changes/allowops/{allowops.go,allowops_test.go}`
+- `extensions/changes/k8srollout/{k8srollout.go,k8srollout_test.go}`
+- `extensions/changes/httpfeed/{httpfeed.go,httpfeed_test.go}`
 - `internal/gateway/mcp/changes.go`、`internal/gateway/mcp/changes_test.go`
 
 | 提交 | 内容 |
@@ -91,7 +91,7 @@ ALLOWOPS_REQUIRE_DOCKER=1 go test -race -count=1 \
 ### 3.3 阶段 D：Knowledge 插件、`runbooks_*` 与 MCP Resources 处理器（分支 `plugin/sD-knowledge-plugin`）
 
 **独占文件集合**：
-- `plugins/knowledge/gitdocs/{gitdocs.go,gitdocs_test.go}`
+- `extensions/knowledge/gitdocs/{gitdocs.go,gitdocs_test.go}`
 - `internal/gateway/mcp/knowledge.go`、`internal/gateway/mcp/knowledge_test.go`
 
 | 提交 | 内容 |
@@ -106,7 +106,7 @@ ALLOWOPS_REQUIRE_DOCKER=1 go test -race -count=1 \
 
 | 提交 | 内容 | 主要文件 |
 | --- | --- | --- |
-| E-1 | MCP 公共接线（`fixed.go` 暴露新工具、`cache.go` 注入 Changes/Knowledge 并注册 `ResourceTemplate` 与 Resources 中间件、`call.go` 在 `s.jobs == nil` 前分派新工具并更新只读工具判断）、`plugins/standard/standard.go` 空白导入全部 7 个新官方插件、`cmd/allowops-gateway/main.go` 注入 `ControlPlaneChanges` / `Changes` / `Knowledge` 与 `pluginHost.Close`、`web/src/pages/Policies.tsx` 补齐三个操作 | `internal/gateway/mcp/{fixed,cache,call}.go`、`plugins/standard/standard.go`、`cmd/allowops-gateway/main.go`、`web/src/pages/Policies.tsx` |
+| E-1 | MCP 公共接线（`fixed.go` 暴露新工具、`cache.go` 注入 Changes/Knowledge 并注册 `ResourceTemplate` 与 Resources 中间件、`call.go` 在 `s.jobs == nil` 前分派新工具并更新只读工具判断）、`extensions/standard/standard.go` 空白导入全部 7 个新官方插件、`cmd/allowops-gateway/main.go` 注入 `ControlPlaneChanges` / `Changes` / `Knowledge` 与 `pluginHost.Close`、`web/src/pages/Policies.tsx` 补齐三个操作 | `internal/gateway/mcp/{fixed,cache,call}.go`、`extensions/standard/standard.go`、`cmd/allowops-gateway/main.go`、`web/src/pages/Policies.tsx` |
 | E-2 | 端到端闭环集成测试（PostgreSQL + SeaweedFS + 真实 job/agent + 动态 Inventory + `changes.allowops` + `knowledge.git_markdown` + MCP Tools + MCP Resources 真实 HTTP 传输测试，实测最终 JSON-RPC `result <= 32768` 字节、刷新 TOCTOU、仅单命名空间部署） | `internal/gateway/mcp/investigation_e2e_test.go`、`cmd/allowops-gateway/plugin_config_test.go` |
 | E-3 | 文档、示例与升级顺序说明（`docs/design.md`、`docs/architecture-decisions.md`、`docs/plugin-architecture.md`、`docs/protocol.md`、`docs/p4b-management-api.md`、`website/policies.md`、`website/zh/policies.md`、`website/mcp.md`、`website/zh/mcp.md`、`examples/gateway.yaml`、`examples/policy/read-only.yaml`、`examples/policy/maintenance.yaml`、`CHANGELOG.md`） | 上述文档与示例文件 |
 
@@ -116,7 +116,7 @@ ALLOWOPS_REQUIRE_DOCKER=1 go test -race -count=1 \
 gofmt -l $(git ls-files '*.go' | grep -v '^gen/')
 go vet ./...
 ALLOWOPS_REQUIRE_DOCKER=1 go test -race -count=1 \
-  ./internal/redact/... ./plugin/... ./plugins/... ./internal/gateway/pluginhost/... \
+  ./internal/redact/... ./plugin/... ./extensions/... ./internal/gateway/pluginhost/... \
   ./internal/gateway/authz/... ./internal/gateway/api/... ./internal/gateway/mcp/... \
   ./internal/catalog/... ./internal/store/... ./cmd/allowops-gateway/...
 make opa-test

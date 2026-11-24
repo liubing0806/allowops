@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liubing0806/allowops/extensions/inventory/hostlabels"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/plugin"
 	"github.com/liubing0806/allowops/plugin/inventory"
-	"github.com/liubing0806/allowops/plugins/inventory/hostlabels"
 )
 
 type inventoryHosts []plugin.HostInfo

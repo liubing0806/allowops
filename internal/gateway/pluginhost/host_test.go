@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
+	_ "github.com/liubing0806/allowops/extensions/inventory/hostlabels"
 	"github.com/liubing0806/allowops/plugin"
 	"github.com/liubing0806/allowops/plugin/inventory"
-	_ "github.com/liubing0806/allowops/plugins/inventory/hostlabels"
 	"gopkg.in/yaml.v3"
 )
 

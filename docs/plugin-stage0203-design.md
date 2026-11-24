@@ -14,7 +14,7 @@
 | B | 动态 Inventory 官方插件（`inventory.k8s`、`inventory.prometheus_targets`、`inventory.cmdb_http`）与 `entities_search` 跨来源实体合并、`conflicts`/`selector_conflicts` 冲突报告及调用前审计 |
 | C | Changes 扩展点官方插件（`changes.allowops`、`changes.k8s_rollout`、`changes.http`）、只读控制面变更 SQL 查询与 `changes_list` 处理器 |
 | D | Knowledge 扩展点官方插件 `knowledge.git_markdown`（支持本地同步目录 `dir` 与远程 Git 归档 `archive_url` 双模式）、`runbooks_search`/`runbooks_read` 与 MCP Resources 处理器 |
-| E | 公共接线（`mcp/{fixed,cache,call}.go`、`plugins/standard`、`cmd/allowops-gateway/main.go`、`web/src/pages/Policies.tsx`）、端到端闭环测试、文档/示例/升级说明更新与全量验收 |
+| E | 公共接线（`mcp/{fixed,cache,call}.go`、`extensions/standard`、`cmd/allowops-gateway/main.go`、`web/src/pages/Policies.tsx`）、端到端闭环测试、文档/示例/升级说明更新与全量验收 |
 
 ### 1.1 首批官方插件选型与取舍
 
@@ -37,7 +37,7 @@ plugin/
   knowledge/knowledge.go            Knowledge 扩展点：Doc、SearchQuery、ReadResult、Store、ErrNotFound
   plugintest/plugintest.go          契约测试套件（Resolver / Lister / Store + TestHost）
 
-plugins/
+extensions/
   standard/standard.go              空白导入全部官方插件
   inventory/k8s/                    inventory.k8s
   inventory/promtargets/            inventory.prometheus_targets
@@ -71,10 +71,10 @@ internal/gateway/mcp/
 internal/catalog/catalog.go         保留名称增加 changes_list、runbooks_search、runbooks_read
 cmd/allowops-gateway/main.go        configuration.Plugins 使用 ConfigList、注入 ControlPlaneChanges、Changes/Knowledge、停机与早期退出调用 pluginHost.Close
 web/src/pages/Policies.tsx          testOperations 补齐 view_inventory、view_changes、view_knowledge
-deploy/docker/Dockerfile            补齐 COPY plugin ./plugin 与 COPY plugins ./plugins
+deploy/docker/Dockerfile            补齐 COPY plugin ./plugin 与 COPY extensions ./extensions
 ```
 
-官方插件包 `plugins/...` 仍不导入任何 `internal/` 包，与第三方插件使用完全相同的公开契约（PL2）。给 `plugin.Host` 新增必需方法属于 1.0 之前的实验期接口演进（PL2），将在 `CHANGELOG.md` 中明确说明。
+官方插件包 `extensions/...` 仍不导入任何 `internal/` 包，与第三方插件使用完全相同的公开契约（PL2）。给 `plugin.Host` 新增必需方法属于 1.0 之前的实验期接口演进（PL2），将在 `CHANGELOG.md` 中明确说明。
 
 ---
 
@@ -254,25 +254,25 @@ type Config struct {
 
 - `NewHost(t, opts...) *TestHost`：默认禁网 `HTTPClient`；支持 `WithHTTPServer`、`WithHTTPClient`、`WithCredential`、`WithHosts`、`WithNow`、`WithControlPlaneChanges`、`WithExpectHTTP`。
 - `RunResolverContract`、`RunListerContract`、`RunStoreContract` 验证：模块 ID 与独立 `New()`、未知配置字段拒绝、已取消 `ctx` `< 1s` 返回（含 `Store.Read`）、固定时钟与响应下结果深度相等且顺序稳定、修改返回值不污染插件、遵守 `MaxItems`/`MaxDocs`、`Store.Read` 不存在返回 `ErrNotFound` 且错误不含凭据、`ExpectHTTP` 验证经 `Host.HTTPClient` 发起且切禁网清空缓存后失败。
-- 配套静态 AST 单测扫描 `plugins/...`（不含 `*_test.go`），禁止直接调用 `net.Dial*`、`http.Get`/`Post`/`Head`/`Do`、`http.DefaultClient`、`http.DefaultTransport` 或构造 `&http.Client{}`。
+- 配套静态 AST 单测扫描 `extensions/...`（不含 `*_test.go`），禁止直接调用 `net.Dial*`、`http.Get`/`Post`/`Head`/`Do`、`http.DefaultClient`、`http.DefaultTransport` 或构造 `&http.Client{}`。
 
 ---
 
 ## 3. 阶段 B：动态 Inventory 插件与多源合并
 
-### 3.1 `inventory.k8s`（`plugins/inventory/k8s`）
+### 3.1 `inventory.k8s`（`extensions/inventory/k8s`）
 
 - 配置：`api_server`（带 `credential_ref` 须 `https://`）、`credential_ref`、`namespaces`（必填 1~64 项）、`cluster`、`workloads`（默认 `[deployment, statefulset, daemonset]`）、`entity_kind`（空时输出 `deployment`/`statefulset`/`daemonset`）、`include_pods`（默认 `true`）、`label_allowlist`、`selector_label`、`cache_ttl`（默认 30s，最大 10m）、`max_response_bytes`（默认 4 MiB，最大 16 MiB）。
 - 标签键映射：将 `/` 替换为 `_`（如 `app.kubernetes.io/name` → `app.kubernetes.io_name`），校验符合 `attrPattern`，多原键碰撞时按原键字典序取首个。
 - Pod 选择器：完整实现 `matchLabels` 与 `matchExpressions`（`In`/`NotIn`/`Exists`/`DoesNotExist`）；空选择器或未知操作符跳过该工作负载的 Pod 节点关联。
 - 来源内唯一性：当 `entity_kind` 覆盖为统一值且同命名空间同名不同类型工作负载冲突时，名称附加 `/<workload_kind>` 保证来源内 `(Kind, Name)` 唯一。绝不读取 `annotations`、`env`、`args`。
 
-### 3.2 `inventory.prometheus_targets`（`plugins/inventory/promtargets`）
+### 3.2 `inventory.prometheus_targets`（`extensions/inventory/promtargets`）
 
 - 配置：`address`（带 `credential_ref` 须 `https://`）、`credential_ref`、`kind`（默认 `service`）、`name_label`（默认 `job`）、`host_label`（默认 `instance`）、`cluster`、`label_allowlist`（默认空）、`cache_ttl`、`max_response_bytes`。
 - 默认仅输出 `<name_label>: <value>` 与静态 `cluster` 属性，避免隐藏 target 主机标签影响可见实体属性；`host_label == "instance"` 时用 `net.SplitHostPort` 去端口。
 
-### 3.3 `inventory.cmdb_http`（`plugins/inventory/cmdbhttp`）
+### 3.3 `inventory.cmdb_http`（`extensions/inventory/cmdbhttp`）
 
 - 配置：`url`（带 `credential_ref` 须 `https://`）、`credential_ref`、`auth_header`（默认 `Authorization`，禁止 `Accept`/`Host`/`Content-Length`/`Transfer-Encoding`）、`auth_scheme`（默认 `Bearer`）、`cache_ttl`、`max_response_bytes`。
 - `GET <url>`（仅 `q.Kind != ""` 时传 `?kind=<q.Kind>`，绝不传 `Name`），`DisallowUnknownFields()` 解码，拒绝来源内重复 `(Kind, Name)`。
@@ -409,7 +409,7 @@ type Store interface {
 }
 ```
 
-### 5.2 `knowledge.git_markdown`（`plugins/knowledge/gitdocs`）
+### 5.2 `knowledge.git_markdown`（`extensions/knowledge/gitdocs`）
 
 - 配置（`dir` 与 `archive_url` 互斥必填）：
   - `dir` 或 `archive_url`（带 `credential_ref` 须 `https://`）、`credential_ref`、`strip_components`（默认 1，0..4）、`subdir`、`refresh_ttl`（默认 1m，最大 1h）、`max_file_bytes`（默认 512 KiB，最大 1 MiB）、`max_total_bytes`（默认 16 MiB，最大 32 MiB）、`max_archive_bytes`（默认 8 MiB，最大 32 MiB）、`max_decompressed_bytes`（默认 32 MiB，最大 64 MiB）、`max_files`（默认 1000，**最大 1000**，与宿主 `MaxDocs = 1000` 一致，避免加载的文档被截断隐藏）、`max_entries`（默认 5000，最大 20000；在 `dir` 模式为遍历目录项总数，在 `archive_url` 模式为 `tar.Reader.Next()` 返回的逻辑条目总数，物理扩展头与跳过负载全部受 `max_decompressed_bytes` 约束）。
@@ -454,7 +454,7 @@ type Store interface {
 ## 6. 网关装配、容器镜像与升级顺序
 
 1. `cmd/allowops-gateway/main.go`：`configuration.Plugins` 改为 `pluginhost.ConfigList`；注入 `ControlPlaneChanges` 闭包、`Changes`/`Knowledge` 到 MCP；`defer pluginHost.Close(shutdownCtx)` 覆盖早期退出与正常停机（在 `srv.Shutdown` 之后）。
-2. `deploy/docker/Dockerfile`：补齐 `COPY plugin ./plugin` 与 `COPY plugins ./plugins`。
+2. `deploy/docker/Dockerfile`：补齐 `COPY plugin ./plugin` 与 `COPY extensions ./extensions`。
 3. **严格升级顺序**：
    - ① 升级前检查并重命名、重签、发布任何与 `changes_list`/`runbooks_search`/`runbooks_read` 同名的有效目录 action（避免全站 MCP HTTP 503）；
    - ② 滚动升级全部 `allowops-gateway` 实例至新二进制；
@@ -467,7 +467,7 @@ type Store interface {
 ## 7. 测试矩阵
 
 覆盖阶段 A~E 全部安全红线：
-- **A**：`ConfigList` 标量/元素类型错误不回显无特征凭据；重定向决策表（默认拒跨源目标零请求、开启跨源仅放行白名单 HTTPS 且替换固定 `Accept: */*` 并清 `Referer` 含自定义 `auth_header` 与 `A→B→A` 连续跳）；IP 策略逐项断言（`169.254.169.254`/`fe80::1`/`100.100.100.200`/`fd00:ec2::254`/`64:ff9b::169.254.169.254`/`64:ff9b:1::10.0.0.1`/`2002:7f00:0001::`/`::10.0.0.1` 拒绝；显式字面量 `127.0.0.1` 与 `[::1]` 放行；单次解析锁定 IP；私有 CA）；`Credential(ref)` 固定 `dirFD` 普通文件与 `allow_projected_credentials`（`token -> ..data/token` 首次+轮转+越界拒绝+不拒只读 `0777` 卷根+实际读取 >16 KiB 拒绝）；`refs` 引用计数释放与迟到 `Provision` 清理；`plugintest` 与 `plugins/...` AST 护栏。
+- **A**：`ConfigList` 标量/元素类型错误不回显无特征凭据；重定向决策表（默认拒跨源目标零请求、开启跨源仅放行白名单 HTTPS 且替换固定 `Accept: */*` 并清 `Referer` 含自定义 `auth_header` 与 `A→B→A` 连续跳）；IP 策略逐项断言（`169.254.169.254`/`fe80::1`/`100.100.100.200`/`fd00:ec2::254`/`64:ff9b::169.254.169.254`/`64:ff9b:1::10.0.0.1`/`2002:7f00:0001::`/`::10.0.0.1` 拒绝；显式字面量 `127.0.0.1` 与 `[::1]` 放行；单次解析锁定 IP；私有 CA）；`Credential(ref)` 固定 `dirFD` 普通文件与 `allow_projected_credentials`（`token -> ..data/token` 首次+轮转+越界拒绝+不拒只读 `0777` 卷根+实际读取 >16 KiB 拒绝）；`refs` 引用计数释放与迟到 `Provision` 清理；`plugintest` 与 `extensions/...` AST 护栏。
 - **B**：三个动态 Inventory 插件 `plugintest` + `httptest` TLS 单测（含带凭据拒明文 HTTP、K8s `/` 键映射与 `matchExpressions`、Prometheus 默认无跨目标泄露）；`entities_search` 合并测试（含**同名且名称本身被来源 A 脱敏时同步抹除来源 B**、隐藏 A 不影响 B、只查 B 边界、首条超大 Attrs/Conflicts 最小身份降级、调用前审计失败零插件调用）。
 - **C**：三个 Changes 插件 `plugintest` + `httptest` TLS + PostgreSQL 真实库验证；`ListChanges` 跨字段凭据抹除（含命中 `Kind` 整条丢弃）、闭区间窗口、`HasMore`、`Actor` 平局排序；`changes_list` 调用前后审计与 32 KiB 预算。
 - **D**：`knowledge.git_markdown` 本地临时 git repo（逐级 `openat`）与 `httptest` TLS `.tar.gz`（全流解压炸弹+`max_entries`）；单快照 TOCTOU 刷新测试（搜索后与读取间发生刷新隐藏某 ID 时 `runbooks_read` 与 `resources/read` 均返回 `NotFound`）；元数据凭据二次应用至正文；重名章节与字面 `"Steps (2)"` 全局唯一编号；`revision` 变更拒续页；`Redactor.Stream` 小 `maxLine` fail-closed 丢弃前缀；MCP Resources 真实 HTTP 传输测试（`resources/list` 省略 `params`、`Cacheable`、`resultType`、`authorized` 失败中止且零插件调用、最终 JSON-RPC `result` 实测 `<= 32768` 字节）。

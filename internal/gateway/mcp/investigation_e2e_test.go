@@ -16,12 +16,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	_ "github.com/liubing0806/allowops/extensions/standard"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/api"
 	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
 	storedb "github.com/liubing0806/allowops/internal/store/db"
 	"github.com/liubing0806/allowops/plugin"
-	_ "github.com/liubing0806/allowops/plugins/standard"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/yaml.v3"

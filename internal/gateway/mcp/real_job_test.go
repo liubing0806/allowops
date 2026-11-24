@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	_ "github.com/liubing0806/allowops/extensions/inventory/static"
 	"github.com/liubing0806/allowops/internal/agent"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/api"
@@ -29,7 +30,6 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
 	"github.com/liubing0806/allowops/internal/gateway/server"
 	"github.com/liubing0806/allowops/internal/testseaweedfs"
-	_ "github.com/liubing0806/allowops/plugins/inventory/static"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"gopkg.in/yaml.v3"
 )

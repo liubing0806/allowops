@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	_ "github.com/liubing0806/allowops/extensions/standard"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/api"
 	"github.com/liubing0806/allowops/internal/gateway/audit"
@@ -34,7 +35,6 @@ import (
 	"github.com/liubing0806/allowops/internal/store"
 	storedb "github.com/liubing0806/allowops/internal/store/db"
 	"github.com/liubing0806/allowops/plugin"
-	_ "github.com/liubing0806/allowops/plugins/standard"
 	"gopkg.in/yaml.v3"
 )
 
