@@ -66,6 +66,10 @@ type Config struct {
 	Mode string
 	// AutoThreshold is the auto mode action count; zero means 40.
 	AutoThreshold int
+	// CursorKey authenticates stateless actions_search pagination cursors with
+	// HMAC-SHA256. Gateway replicas sharing the same key verify each other's
+	// cursors; when empty, New generates a random 32-byte per-process key.
+	CursorKey []byte
 }
 
 const (
@@ -85,10 +89,11 @@ type Service struct {
 	lru      *list.List
 	versions string
 	// catalogMu guards the verified catalog snapshot (tier 1) and its loads.
-	catalogMu       sync.Mutex
-	catalog         *catalogSnapshot
-	loads           map[string]*catalogLoad
-	testLoadCatalog func(context.Context, *serverSnapshot) (*catalogSnapshot, error)
+	catalogMu     sync.Mutex
+	catalog       *catalogSnapshot
+	loads         map[string]*catalogLoad
+	cursorKeyOnce sync.Once
+	cursorKey     []byte
 }
 
 type cacheEntry struct {
@@ -127,7 +132,11 @@ func New(identity Identity, catalogs *catalogsvc.Service, jobs JobService, cfg C
 	if cfg.AutoThreshold < 1 || cfg.AutoThreshold > 1000 {
 		return nil, errors.New("MCP auto threshold allowed: integer in [1,1000]")
 	}
-	return &Service{identity: identity, catalogs: catalogs, jobs: jobs, config: cfg, entries: map[string]*list.Element{}, lru: list.New(), loads: map[string]*catalogLoad{}}, nil
+	s := &Service{identity: identity, catalogs: catalogs, jobs: jobs, config: cfg, entries: map[string]*list.Element{}, lru: list.New(), loads: map[string]*catalogLoad{}}
+	if len(cfg.CursorKey) > 0 {
+		s.cursorKey = slices.Clone(cfg.CursorKey)
+	}
+	return s, nil
 }
 
 func (s *Service) Handler() http.Handler {

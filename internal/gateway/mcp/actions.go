@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -116,13 +118,14 @@ func (s *Service) searchActions(ctx context.Context, raw json.RawMessage, scope 
 		}
 		matched = slices.DeleteFunc(matched, func(a catalog.Action) bool { return !allowed[a.Name] })
 	}
+	key := s.cursorSecret()
 	snapshot, err := actionsSnapshot(ctx, scope, q, matched)
 	if err != nil {
 		return nil, err
 	}
 	start := 0
 	if cursor != "" {
-		if start, err = decodeActionsCursor(cursor, snapshot); err != nil {
+		if start, err = decodeActionsCursor(cursor, snapshot, key); err != nil {
 			return nil, err
 		}
 		if start >= len(matched) {
@@ -144,7 +147,7 @@ func (s *Service) searchActions(ctx context.Context, raw json.RawMessage, scope 
 		out.Actions = entries[:n]
 		out.NextCursor = ""
 		if start+n < len(matched) {
-			out.NextCursor = encodeActionsCursor(snapshot, start+n)
+			out.NextCursor = encodeActionsCursor(snapshot, start+n, key)
 		}
 		out.Truncated = n < len(entries) || toolsetsDropped
 		return toolResult(out)
@@ -338,23 +341,40 @@ func actionsSnapshot(ctx context.Context, scope *serverScope, q actionsQuery, ma
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func actionsCursorTag(snapshot string, offset int) string {
-	sum := sha256.Sum256([]byte("actions_search_cursor_v1:" + snapshot + ":" + strconv.Itoa(offset)))
-	return hex.EncodeToString(sum[:])
+func (s *Service) cursorSecret() []byte {
+	s.cursorKeyOnce.Do(func() {
+		if len(s.cursorKey) == 0 {
+			key := make([]byte, 32)
+			if _, err := rand.Read(key); err != nil {
+				panic(err)
+			}
+			s.cursorKey = key
+		}
+	})
+	return s.cursorKey
 }
 
-func encodeActionsCursor(snapshot string, offset int) string {
-	data, _ := json.Marshal(actionsCursor{Offset: offset, Tag: actionsCursorTag(snapshot, offset)})
+func actionsCursorTag(key []byte, snapshot string, offset int) string {
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte("actions_search_cursor_v1:"))
+	mac.Write([]byte(snapshot))
+	mac.Write([]byte(":"))
+	mac.Write([]byte(strconv.Itoa(offset)))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func encodeActionsCursor(snapshot string, offset int, key []byte) string {
+	data, _ := json.Marshal(actionsCursor{Offset: offset, Tag: actionsCursorTag(key, snapshot, offset)})
 	return base64.RawURLEncoding.EncodeToString(data)
 }
 
-func decodeActionsCursor(cursor, snapshot string) (int, error) {
+func decodeActionsCursor(cursor, snapshot string, key []byte) (int, error) {
 	invalid := accessError(connect.CodeInvalidArgument, invalidActionsCursor)
-	if len(cursor) > 256 {
+	if len(cursor) > 256 || strings.ContainsAny(cursor, "\r\n") {
 		return 0, invalid
 	}
 	data, err := base64.RawURLEncoding.Strict().DecodeString(cursor)
-	if err != nil {
+	if err != nil || base64.RawURLEncoding.EncodeToString(data) != cursor {
 		return 0, invalid
 	}
 	args, err := argumentObject(data)
@@ -366,7 +386,7 @@ func decodeActionsCursor(cursor, snapshot string) (int, error) {
 	if decodeField(args, "offset", &offset, true) != nil || decodeField(args, "tag", &tag, true) != nil {
 		return 0, invalid
 	}
-	want := actionsCursorTag(snapshot, offset)
+	want := actionsCursorTag(key, snapshot, offset)
 	if offset < 1 || subtle.ConstantTimeCompare([]byte(tag), []byte(want)) != 1 {
 		return 0, invalid
 	}

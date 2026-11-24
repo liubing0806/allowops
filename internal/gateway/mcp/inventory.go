@@ -145,8 +145,65 @@ func (s *Service) searchEntities(ctx context.Context, raw json.RawMessage, actio
 // order as whole groups while the result stays within budget; omitted groups
 // and kinds with more than recommendationsPerKind matches set
 // recommended_actions_truncated. If the truncation marker alone exceeds the
-// budget, entities are trimmed and truncated is set so both markers fit.
+// budget, entities are trimmed, truncated is set, and recommendations are
+// packed again into the newly freed budget.
 func recommendActions(out inventoryResult, result *ToolResult, actions map[string]catalog.Action) (*ToolResult, error) {
+	final, size, hasGroups, err := packRecommendations(out, actions)
+	if err != nil {
+		return nil, err
+	}
+	if !hasGroups {
+		return result, nil
+	}
+	if size <= resultByteLimit {
+		return final, nil
+	}
+	// Entities sit right at the 32 KiB limit so even the truncation marker of
+	// an empty recommendation set pushed the response over budget. Trim
+	// entities so the truncation markers fit, then pack recommendations for
+	// the retained entities into the remaining budget.
+	out.Truncated = true
+	low, high := 0, len(out.Entities)-1
+	var best *ToolResult
+	kept := 0
+	for low <= high {
+		middle := low + (high-low)/2
+		candidate := out
+		candidate.Entities = out.Entities[:middle]
+		candidate.RecommendedActions = nil
+		candidate.RecommendedActionsTruncated = true
+		r, s, err := toolResult(candidate)
+		if err != nil {
+			return nil, err
+		}
+		if s <= resultByteLimit {
+			best, kept = r, middle
+			low = middle + 1
+		} else {
+			high = middle - 1
+		}
+	}
+	if best == nil {
+		return result, nil
+	}
+	out.Entities = out.Entities[:kept]
+	out.RecommendedActions = nil
+	out.RecommendedActionsTruncated = false
+	final, _, hasGroups, err = packRecommendations(out, actions)
+	if err != nil {
+		return nil, err
+	}
+	if !hasGroups {
+		trimmed, _, err := toolResult(out)
+		if err != nil {
+			return nil, err
+		}
+		return trimmed, nil
+	}
+	return final, nil
+}
+
+func packRecommendations(out inventoryResult, actions map[string]catalog.Action) (*ToolResult, int, bool, error) {
 	var kinds []string
 	for _, e := range out.Entities {
 		kinds = append(kinds, e.Kind)
@@ -176,7 +233,7 @@ func recommendActions(out inventoryResult, result *ToolResult, actions map[strin
 		groups[kind] = group
 	}
 	if len(groups) == 0 {
-		return result, nil
+		return nil, 0, false, nil
 	}
 	added := map[string][]recommendedAction{}
 	for _, kind := range slices.Sorted(maps.Keys(groups)) {
@@ -188,7 +245,7 @@ func recommendActions(out inventoryResult, result *ToolResult, actions map[strin
 		candidate.RecommendedActionsTruncated = true
 		_, size, err := toolResult(candidate)
 		if err != nil {
-			return nil, err
+			return nil, 0, true, err
 		}
 		if size <= resultByteLimit {
 			added[kind] = groups[kind]
@@ -202,51 +259,7 @@ func recommendActions(out inventoryResult, result *ToolResult, actions map[strin
 	out.RecommendedActionsTruncated = truncated
 	final, size, err := toolResult(out)
 	if err != nil {
-		return nil, err
+		return nil, 0, true, err
 	}
-	if size <= resultByteLimit {
-		return final, nil
-	}
-	// Entities sit right at the 32 KiB limit so even the truncation marker of
-	// an empty recommendation set pushed the response over budget. Trim
-	// entities to keep both truncation markers accurate within budget.
-	out.Truncated = true
-	low, high := 0, len(out.Entities)-1
-	var best *ToolResult
-	kept := 0
-	for low <= high {
-		middle := low + (high-low)/2
-		candidate := out
-		candidate.Entities = out.Entities[:middle]
-		r, s, err := toolResult(candidate)
-		if err != nil {
-			return nil, err
-		}
-		if s <= resultByteLimit {
-			best, kept = r, middle
-			low = middle + 1
-		} else {
-			high = middle - 1
-		}
-	}
-	if best == nil {
-		return result, nil
-	}
-	hasRecommendedKind := false
-	for _, e := range out.Entities[:kept] {
-		if _, ok := groups[e.Kind]; ok {
-			hasRecommendedKind = true
-			break
-		}
-	}
-	if hasRecommendedKind {
-		return best, nil
-	}
-	out.Entities = out.Entities[:kept]
-	out.RecommendedActionsTruncated = false
-	trimmed, _, err := toolResult(out)
-	if err != nil {
-		return nil, err
-	}
-	return trimmed, nil
+	return final, size, true, nil
 }

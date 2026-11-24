@@ -151,7 +151,10 @@ func collectMapping(node *yaml.Node, out map[string]*yaml.Node, seen map[*yaml.N
 	defer delete(seen, node)
 	var merges []*yaml.Node
 	for i := 0; i+1 < len(node.Content); i += 2 {
-		k, v := node.Content[i], node.Content[i+1]
+		k, v := resolveAlias(node.Content[i]), node.Content[i+1]
+		if k == nil || k.Kind != yaml.ScalarNode {
+			continue
+		}
 		if k.Tag == "!!merge" {
 			merges = append(merges, v)
 			continue

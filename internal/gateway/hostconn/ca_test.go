@@ -145,3 +145,39 @@ func TestOpenCARejectsKeyWithoutCertificate(t *testing.T) {
 		t.Fatalf("created a certificate for an existing key: %v", err)
 	}
 }
+
+func TestCADeriveKey(t *testing.T) {
+	dir1, dir2 := t.TempDir(), t.TempDir()
+	ca1, err := OpenCA(filepath.Join(dir1, "ca.pem"), filepath.Join(dir1, "ca.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca1Reopened, err := OpenCA(filepath.Join(dir1, "ca.pem"), filepath.Join(dir1, "ca.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca2, err := OpenCA(filepath.Join(dir2, "ca.pem"), filepath.Join(dir2, "ca.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k1, err := ca1.DeriveKey("domain-a")
+	if err != nil || len(k1) != 32 {
+		t.Fatalf("DeriveKey len=%d err=%v", len(k1), err)
+	}
+	k1Again, err := ca1Reopened.DeriveKey("domain-a")
+	if err != nil || !bytes.Equal(k1, k1Again) {
+		t.Fatalf("reopened CA derived different key: err=%v", err)
+	}
+	k1OtherDomain, err := ca1.DeriveKey("domain-b")
+	if err != nil || bytes.Equal(k1, k1OtherDomain) {
+		t.Fatalf("different domain derived same key: err=%v", err)
+	}
+	k2, err := ca2.DeriveKey("domain-a")
+	if err != nil || bytes.Equal(k1, k2) {
+		t.Fatalf("different CA derived same key: err=%v", err)
+	}
+	var nilCA *CA
+	if _, err := nilCA.DeriveKey("domain-a"); err == nil {
+		t.Fatal("nil CA derived key")
+	}
+}

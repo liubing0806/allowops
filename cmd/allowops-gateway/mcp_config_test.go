@@ -10,7 +10,7 @@ func TestMCPConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.MCP.Mode != "flat" || cfg.MCP.AutoThreshold == nil || *cfg.MCP.AutoThreshold != 40 {
+	if cfg.MCP.Mode != "flat" || !cfg.MCP.AutoThreshold.set || cfg.MCP.AutoThreshold.value != 40 {
 		t.Fatalf("defaults %+v", cfg.MCP)
 	}
 	for yaml, want := range map[string]struct {
@@ -26,7 +26,7 @@ func TestMCPConfiguration(t *testing.T) {
 		"mcp:\n  mode: progressive\n  auto_threshold: 7\n": {"progressive", 7},
 	} {
 		cfg, err := decodeConfig(strings.NewReader(yaml))
-		if err != nil || cfg.MCP.Mode != want.mode || int(*cfg.MCP.AutoThreshold) != want.threshold {
+		if err != nil || cfg.MCP.Mode != want.mode || !cfg.MCP.AutoThreshold.set || cfg.MCP.AutoThreshold.value != want.threshold {
 			t.Fatalf("%q config=%+v error=%v", yaml, cfg.MCP, err)
 		}
 	}
@@ -36,6 +36,9 @@ func TestMCPConfiguration(t *testing.T) {
 		"negative":                "mcp:\n  mode: auto\n  auto_threshold: -1\n",
 		"over limit":              "mcp:\n  auto_threshold: 1001\n",
 		"over limit, progressive": "mcp:\n  mode: progressive\n  auto_threshold: 5000\n",
+		"null threshold":          "mcp:\n  auto_threshold: null\n",
+		"tilde null threshold":    "mcp:\n  auto_threshold: ~\n",
+		"empty threshold":         "mcp:\n  auto_threshold:\n",
 		"float threshold":         "mcp:\n  auto_threshold: 1.5\n",
 		"float whole threshold":   "mcp:\n  auto_threshold: 10.0\n",
 		"string threshold":        "mcp:\n  auto_threshold: forty\n",

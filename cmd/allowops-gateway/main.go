@@ -75,21 +75,16 @@ type configuration struct {
 	MCP         mcpConfig          `yaml:"mcp"`
 }
 
-// strictInt rejects non-integer YAML scalars (such as 1.5, which yaml.v3
-// would otherwise truncate to 1).
-type strictInt int
-
-func (n *strictInt) UnmarshalYAML(value *yaml.Node) error {
-	if value.Kind != yaml.ScalarNode || value.Tag != "!!int" {
-		return errors.New("integer required")
-	}
-	var parsed int
-	if err := value.Decode(&parsed); err != nil {
-		return err
-	}
-	*n = strictInt(parsed)
-	return nil
+// optionalInt holds an integer config option together with whether it was
+// explicitly present in YAML.
+type optionalInt struct {
+	set   bool
+	value int
 }
+
+func (n optionalInt) IsZero() bool { return !n.set }
+
+func (n optionalInt) MarshalYAML() (any, error) { return n.value, nil }
 
 // mcpConfig selects how MCP tools/list exposes catalog actions. Fields are
 // omitted when empty, so a marshalled configuration decodes to the defaults.
@@ -97,21 +92,64 @@ type mcpConfig struct {
 	// Mode is flat (default), progressive or auto.
 	Mode string `yaml:"mode,omitempty"`
 	// AutoThreshold is the auto mode action count; omitted means 40.
-	AutoThreshold *strictInt `yaml:"auto_threshold,omitempty"`
+	AutoThreshold optionalInt `yaml:"auto_threshold,omitempty"`
+}
+
+// UnmarshalYAML decodes mcpConfig strictly so explicit null/empty values and
+// floats cannot silently fall back to defaults or truncate to integers.
+func (c *mcpConfig) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.MappingNode {
+		return errors.New("mcp must be a YAML mapping")
+	}
+	seen := map[string]bool{}
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		k, v := value.Content[i], value.Content[i+1]
+		for k != nil && k.Kind == yaml.AliasNode {
+			k = k.Alias
+		}
+		for v != nil && v.Kind == yaml.AliasNode {
+			v = v.Alias
+		}
+		if k == nil || k.Kind != yaml.ScalarNode || k.Tag != "!!str" {
+			return errors.New("invalid mcp configuration key")
+		}
+		if seen[k.Value] {
+			return fmt.Errorf("duplicate mcp configuration key %q", k.Value)
+		}
+		seen[k.Value] = true
+		switch k.Value {
+		case "mode":
+			if v == nil || v.Kind != yaml.ScalarNode || v.Tag != "!!str" {
+				return errors.New("mcp.mode allowed: flat, progressive, auto")
+			}
+			c.Mode = v.Value
+		case "auto_threshold":
+			if v == nil || v.Kind != yaml.ScalarNode || v.Tag != "!!int" {
+				return errors.New("mcp.auto_threshold allowed: integer in [1,1000]")
+			}
+			var parsed int
+			if err := v.Decode(&parsed); err != nil {
+				return err
+			}
+			c.AutoThreshold = optionalInt{set: true, value: parsed}
+		default:
+			return fmt.Errorf("field %s not found in type mcpConfig", k.Value)
+		}
+	}
+	return nil
 }
 
 // validate applies the auto_threshold default and checks both values. An
-// explicit auto_threshold is checked in every mode, so that switching to auto
-// later cannot start with an invalid value.
+// explicit auto_threshold (including zero or null) is checked in every mode,
+// so that switching to auto later cannot start with an invalid value.
 func (c *mcpConfig) validate() error {
 	if c.Mode != "flat" && c.Mode != "progressive" && c.Mode != "auto" {
 		return errors.New("mcp.mode allowed: flat, progressive, auto")
 	}
-	if c.AutoThreshold == nil {
-		threshold := strictInt(40)
-		c.AutoThreshold = &threshold
+	if !c.AutoThreshold.set {
+		c.AutoThreshold = optionalInt{set: true, value: 40}
 	}
-	if *c.AutoThreshold < 1 || *c.AutoThreshold > 1000 {
+	if c.AutoThreshold.value < 1 || c.AutoThreshold.value > 1000 {
 		return errors.New("mcp.auto_threshold allowed: integer in [1,1000]")
 	}
 	return nil
@@ -271,7 +309,7 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 	if err != nil {
 		return err
 	}
-	srv, err := newGatewayServer(&cfg, db, identity, agent, listener, certificate, trusted, auditStore, objects, jobs, inventoryHost)
+	srv, err := newGatewayServer(&cfg, db, identity, ca, agent, listener, certificate, trusted, auditStore, objects, jobs, inventoryHost)
 	if err != nil {
 		return err
 	}
@@ -349,7 +387,7 @@ func startJobServices(identity *api.Service, agent *hostconn.Service, objects *o
 
 // newGatewayServer configures management and MCP and assembles the server.
 // On failure it closes the agent and the listener.
-func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service, agent *hostconn.Service, listener net.Listener, certificate tls.Certificate, trusted map[string]ed25519.PublicKey, auditStore *audit.Store, objects *output.S3, jobs *job.Service, inventoryHost *pluginhost.Host) (*server.Server, error) {
+func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service, ca *hostconn.CA, agent *hostconn.Service, listener net.Listener, certificate tls.Certificate, trusted map[string]ed25519.PublicKey, auditStore *audit.Store, objects *output.S3, jobs *job.Service, inventoryHost *pluginhost.Host) (*server.Server, error) {
 	catalogs := &catalogsvc.Service{Store: db, Trusted: trusted, MaxEnvelopeBytes: cfg.Gateway.EnvelopeBytes, MaxActionBytes: cfg.Gateway.ActionBytes, MaxReferenceBytes: cfg.Gateway.MessageBytes - cfg.Gateway.ChunkBytes - 1024}
 	if cfg.Management.CAPin == "" {
 		cfg.Management.CAPin = api.TLSCAPin(certificate.Certificate)
@@ -362,11 +400,17 @@ func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service
 		listener.Close()
 		return nil, err
 	}
-	mcpConfig := mcp.Config{Jobs: cfg.Jobs, Inventory: inventoryHost, Mode: cfg.MCP.Mode}
+	cursorKey, err := ca.DeriveKey("allowops-mcp-actions-cursor-v1")
+	if err != nil {
+		agent.Close()
+		listener.Close()
+		return nil, err
+	}
+	mcpConfig := mcp.Config{Jobs: cfg.Jobs, Inventory: inventoryHost, Mode: cfg.MCP.Mode, CursorKey: cursorKey}
 	// A configuration built without decodeConfig leaves the threshold unset;
 	// zero selects the MCP default.
-	if cfg.MCP.AutoThreshold != nil {
-		mcpConfig.AutoThreshold = int(*cfg.MCP.AutoThreshold)
+	if cfg.MCP.AutoThreshold.set {
+		mcpConfig.AutoThreshold = cfg.MCP.AutoThreshold.value
 	}
 	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcpConfig)
 	if err != nil {

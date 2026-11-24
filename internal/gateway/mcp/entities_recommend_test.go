@@ -143,41 +143,57 @@ func TestEntitiesSearchRecommendationLimits(t *testing.T) {
 		t.Fatalf("size=%d truncated=%v recTrunc=%v recommended=%v", size, out.Truncated, out.RecommendedActionsTruncated, out.RecommendedActions)
 	}
 
-	// Tight boundary: entities fit within 32 KiB on their own with fewer than
-	// 50 bytes to spare, so adding recommended_actions_truncated pushes over
-	// budget. Entities must be trimmed so both truncation markers are kept.
-	base := []inventory.Entity{
-		{Kind: "jvm", Name: "e0", Selector: "app=jvm"},
-		{Kind: "jvm", Name: "e1", Selector: "app=jvm"},
+	// Tight boundary A: entities fit within 32 KiB on their own with fewer than
+	// 30 bytes to spare, so adding recommended_actions_truncated pushes over
+	// budget. After trimming the oversized trailing entity, recommendations for
+	// the retained entity fit into the freed budget and must be included.
+	fitTight := func(e0Name string) []inventory.Entity {
+		pair := []inventory.Entity{
+			{Kind: "jvm", Name: e0Name, Selector: "app=jvm"},
+			{Kind: "jvm", Name: "e1", Selector: "app=jvm"},
+		}
+		for pad := 10; pad < 20000; pad += 10 {
+			pair[1].Name = "e1-" + strings.Repeat("x", pad)
+			probeOut := inventoryResult{
+				Entities: []inventoryEntity{
+					{Kind: "jvm", Name: pair[0].Name, Hosts: []string{}, Selector: "app=jvm", Source: "static"},
+					{Kind: "jvm", Name: pair[1].Name, Hosts: []string{}, Selector: "app=jvm", Source: "static"},
+				},
+				SourceErrors: []pluginhost.SourceError{},
+				OutputTrust:  "untrusted",
+			}
+			_, sz, err := toolResult(probeOut)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if sz > resultByteLimit-30 && sz <= resultByteLimit {
+				return pair
+			}
+		}
+		t.Fatal("failed to construct tight-boundary entities")
+		return nil
 	}
-	// Grow e1's name until the entities-only response sits within 30 bytes of
-	// resultByteLimit without setting truncated.
-	for pad := 1000; pad < 20000; pad += 10 {
-		base[1].Name = "e1-" + strings.Repeat("x", pad)
-		probeOut := inventoryResult{
-			Entities: []inventoryEntity{
-				{Kind: "jvm", Name: base[0].Name, Hosts: []string{}, Selector: "app=jvm", Source: "static"},
-				{Kind: "jvm", Name: base[1].Name, Hosts: []string{}, Selector: "app=jvm", Source: "static"},
-			},
-			SourceErrors: []pluginhost.SourceError{},
-			OutputTrust:  "untrusted",
-		}
-		_, sz, err := toolResult(probeOut)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if sz > resultByteLimit-30 && sz <= resultByteLimit {
-			break
-		}
+	s.config.Inventory = entitySource(fitTight("e0")...)
+	smallAction := map[string]catalog.Action{"jvm_00": {Name: "jvm_00", Description: "small", Risk: "read", EntityKinds: []string{"jvm"}}}
+	result, err = s.searchEntities(context.Background(), nil, smallAction)
+	if err != nil {
+		t.Fatal(err)
 	}
-	s.config.Inventory = entitySource(base...)
+	out = result.StructuredContent.(inventoryResult)
+	if size := len(mustJSON(t, result)); size > resultByteLimit || !out.Truncated || out.RecommendedActionsTruncated || len(out.Entities) != 1 || !reflect.DeepEqual(recommendNames(out, "jvm"), []string{"jvm_00"}) {
+		t.Fatalf("tight boundary repack: size=%d entities=%d truncated=%v recTrunc=%v recommended=%v", size, len(out.Entities), out.Truncated, out.RecommendedActionsTruncated, out.RecommendedActions)
+	}
+
+	// Tight boundary B: even after trimming e1, e0 + jvm_00 still exceed 32 KiB,
+	// so both truncated and recommended_actions_truncated remain true within budget.
+	s.config.Inventory = entitySource(fitTight("e0-" + strings.Repeat("a", 14500))...)
 	result, err = s.searchEntities(context.Background(), nil, visible)
 	if err != nil {
 		t.Fatal(err)
 	}
 	out = result.StructuredContent.(inventoryResult)
 	if size := len(mustJSON(t, result)); size > resultByteLimit || !out.Truncated || !out.RecommendedActionsTruncated || out.RecommendedActions != nil || len(out.Entities) != 1 {
-		t.Fatalf("tight boundary: size=%d entities=%d truncated=%v recTrunc=%v recommended=%v", size, len(out.Entities), out.Truncated, out.RecommendedActionsTruncated, out.RecommendedActions)
+		t.Fatalf("tight boundary both truncated: size=%d entities=%d truncated=%v recTrunc=%v recommended=%v", size, len(out.Entities), out.Truncated, out.RecommendedActionsTruncated, out.RecommendedActions)
 	}
 }
 

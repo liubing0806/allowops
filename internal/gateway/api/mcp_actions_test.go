@@ -4,13 +4,37 @@ import (
 	"context"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
+	"github.com/liubing0806/allowops/internal/store"
+	"github.com/liubing0806/allowops/internal/store/db"
 )
+
+type cancelAfterHostQueryTracer struct {
+	cancel context.CancelFunc
+}
+
+type cancelAfterHostKey struct{}
+
+func (c *cancelAfterHostQueryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	if strings.Contains(data.SQL, "FROM hosts") {
+		return context.WithValue(ctx, cancelAfterHostKey{}, true)
+	}
+	return ctx
+}
+
+func (c *cancelAfterHostQueryTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
+	if ctx.Value(cancelAfterHostKey{}) != nil {
+		c.cancel()
+	}
+}
 
 func TestAllowedActionsOnHost(t *testing.T) {
 	f := newFixture(t)
@@ -103,10 +127,21 @@ func TestAllowedActionsOnHost(t *testing.T) {
 	if _, err := f.service.AllowedActionsOnHost(context.Background(), "prod-01", candidates); err == nil {
 		t.Fatal("unauthenticated precheck succeeded")
 	}
-	// A cancelled context must surface an error rather than returning an empty allow set.
-	cancelledCtx, cancel := context.WithCancel(ctx)
-	cancel()
-	if _, err := f.service.AllowedActionsOnHost(cancelledCtx, "prod-01", candidates); err == nil {
-		t.Fatal("cancelled context precheck succeeded")
+	// A cancellation occurring AFTER the host query succeeds (during ViewHosts
+	// OPA evaluation) must propagate an error instead of returning an empty allow set.
+	cancelCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cfg := f.db.Pool.Config()
+	cfg.ConnConfig.Tracer = &cancelAfterHostQueryTracer{cancel: cancel}
+	tracedPool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(tracedPool.Close)
+	origStore := f.service.Store
+	f.service.Store = &store.Store{Pool: tracedPool, Queries: db.New(tracedPool)}
+	defer func() { f.service.Store = origStore }()
+	if _, err := f.service.AllowedActionsOnHost(cancelCtx, "prod-01", candidates); err == nil {
+		t.Fatal("post-host-query cancellation during ViewHosts evaluation succeeded")
 	}
 }

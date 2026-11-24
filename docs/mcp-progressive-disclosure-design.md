@@ -286,9 +286,9 @@ AllowedActionsOnHost(ctx context.Context, hostname string, actions []authz.Actio
 
 - `invoke_tool`：直接标明该动作应使用的调用工具名（`actions_invoke_read` / `actions_invoke_write` / `actions_invoke_dangerous`），消除 LLM 猜测。
 - `toolsets`：仅在第一页（`next_cursor == ""`）返回当前结果集（经过所有筛选条件后的可见匹配集合）中**已标注 `toolset`** 的动作按 `toolset` 聚合计数（按名称升序；**未标注 `toolset` 的动作省略，不生成伪 `"unassigned"` 项**）。
-- **分页游标绑定**：`base64.RawURLEncoding` 编码 `{"offset": <int>, "tag": "<hex>"}`，长度上限 256 字节，解码使用严格 Base64（`Strict()`）并复用 `argumentObject` 拒绝重复 JSON 键与尾随数据；其中：
+- **分页游标绑定**：`base64.RawURLEncoding` 编码 `{"offset": <int>, "tag": "<hex>"}`，长度上限 256 字节，解码拒绝 `\r`/`\n` 并校验严格规范 Base64 与重编码一致，复用 `argumentObject` 拒绝重复 JSON 键与尾随数据；其中：
   `snapshot = sha256(actor, subject, versions, effectiveMode, effectiveToolsets, canonicalQueryParamsIncludingHostname, matchedActionNamesAfterHostPrecheck)`，
-  `tag = sha256("actions_search_cursor_v1:" + snapshot + ":" + offset)`（常量时间比对）。
+  `tag = HMAC-SHA256(cursorKey, "actions_search_cursor_v1:" + snapshot + ":" + offset)`（常量时间比对；多实例网关通过共享 Host CA 派生域分离密钥 `ca.DeriveKey("allowops-mcp-actions-cursor-v1")`）。
   任意维度变化（包括角色变更、主机标签变更导致 `hostname` 预检结果变化，但策略/目录版本未变）或篡改 `offset` 均返回 `CodeInvalidArgument`（`"invalid actions_search cursor; restart without next_cursor"`）。
 - **32 KiB 预算与单条超限降级**（同时覆盖 `include_schema: true` 和 `false`，防超大 `description` 突破预算）：
   1. 逐条装入 `actions[start:end]`（最多 `limit` 条），每次经 `toolResult(out)` 测量完整 MCP 响应字节数（含 `structuredContent`、文本副本与 `_meta`），超出 `resultByteLimit`（32 KiB）则停在上一条并附带 `next_cursor` 无损分页。
@@ -366,7 +366,7 @@ type inventoryResult struct {
 1. **先完成实体过滤与 32 KiB 截断**：完全保持现有 `VisibleHostnames` → `limit` → 32 KiB 二分截断逻辑不变，确保 `truncated` 的含义始终且唯一表示“实体被截断”，不破坏现有行为。
 2. **仅基于最终保留实体的 `kind` 生成推荐**：收集最终保留的 `out.Entities` 中出现的去重 `kind` 并按字典序排序（绝不泄漏被隐藏或截断实体的 `kind`）。
 3. **仅从当前请求作用域的可见动作 $V_s$ 匹配**：对每个 `kind`，筛选 `slices.Contains(a.EntityKinds, kind)` 的动作，按风险升序（`read` < `write` < `dangerous`）再按 `name` 升序排列，每个 `kind` 最多取前 **10** 条；若某 `kind` 匹配超过 10 条则标记 `RecommendedActionsTruncated = true`。
-4. **确定性顺序装入剩余 32 KiB 预算**：按 `kind` 字典序逐组尝试加入 `out.RecommendedActions` 并用 `toolResult(out)` 校验 `<= resultByteLimit`；放不下的整组省略，置 `RecommendedActionsTruncated = true`。仅当实体本身已紧贴 32 KiB 导致连空推荐集合的 `recommended_actions_truncated: true` 标记都放不下时，才二分裁剪实体并置 `out.Truncated = true`，确保两项截断标记在 32 KiB 内同时准确送达。
+4. **确定性顺序装入剩余 32 KiB 预算**：按 `kind` 字典序逐组尝试加入 `out.RecommendedActions` 并用 `toolResult(out)` 校验 `<= resultByteLimit`；放不下的整组省略，置 `RecommendedActionsTruncated = true`。仅当实体本身已紧贴 32 KiB 导致连空推荐集合的 `recommended_actions_truncated: true` 标记都放不下时，才二分裁剪实体并置 `out.Truncated = true`，随后对保留实体的种类按剩余预算重新装入推荐并确定最终 `recommended_actions_truncated`。
 5. **无匹配向后兼容**：当无任何匹配动作时（如旧目录无 `entity_kinds`、或 `viewer` 无可执行动作、`catalogs == nil` 的单测夹具），`RecommendedActions` 为 `nil`、`RecommendedActionsTruncated` 为 `false`，因 `omitempty` 均不出现在 JSON 输出中，现有 `inventory_test.go` 全部保持零变更通过。
 
 ---

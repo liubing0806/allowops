@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
@@ -36,12 +37,22 @@ func (s *Service) AllowedActionsOnHost(ctx context.Context, hostname string, act
 	if len(hosts) != 1 {
 		return allowed, nil
 	}
-	host := hostAttributes(hosts[0])
-	visible, err := s.can(ctx, authz.ViewHosts, authz.Action{}, host)
-	if err != nil || !visible {
-		return allowed, err
+	if !r.transportChecked && id.Client == v1.LoginClient_LOGIN_CLIENT_CONSOLE {
+		if err := s.checkCSRF(ctx); err != nil {
+			return nil, err
+		}
 	}
+	host := hostAttributes(hosts[0])
 	env := authz.Environment{TimeNS: time.Now().UnixNano(), SourceIP: r.ip}
+	viewResult, _, err := evaluate(ctx, current.engine, authz.Input{Subject: id.Subject, Operation: authz.ViewHosts, Host: host, Env: env})
+	if err != nil {
+		return nil, err
+	}
+	r.policyVersion = current.version
+	r.matchedRules = unique(append(r.matchedRules, viewResult.RuleIDs...))
+	if viewResult.Decision != "allow" {
+		return allowed, nil
+	}
 	for _, action := range actions {
 		result, _, err := evaluate(ctx, current.engine, authz.Input{Subject: id.Subject, Operation: authz.ExecuteAction, Action: action, Host: host, Env: env})
 		if err != nil {

@@ -170,14 +170,10 @@ func (s *Service) catalogFor(ctx context.Context, snap *serverSnapshot) (*catalo
 	load = &catalogLoad{done: make(chan struct{})}
 	s.loads[snap.versions] = load
 	s.catalogMu.Unlock()
-	loadFn := s.loadCatalog
-	if s.testLoadCatalog != nil {
-		loadFn = s.testLoadCatalog
-	}
 	go func() {
 		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), catalogLoadTimeout)
 		defer cancel()
-		load.snapshot, load.err = loadFn(loadCtx, snap)
+		load.snapshot, load.err = s.loadCatalog(loadCtx, snap)
 		s.catalogMu.Lock()
 		delete(s.loads, snap.versions)
 		if load.err == nil {

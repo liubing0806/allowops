@@ -7,14 +7,19 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/authn"
 	"github.com/liubing0806/allowops/internal/params"
+	"github.com/liubing0806/allowops/internal/store"
+	"github.com/liubing0806/allowops/internal/store/db"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -357,52 +362,85 @@ func TestCatalogLoadIsShared(t *testing.T) {
 	}
 }
 
+type blockingCatalogTracer struct {
+	once      sync.Once
+	started   chan struct{}
+	release   chan struct{}
+	mu        sync.Mutex
+	loadCtxOK bool
+}
+
+func (b *blockingCatalogTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	// GetCatalog reads the DSSE envelope from catalog_versions; intercept it
+	// once to pause the shared tier-1 load without any production test hook.
+	if strings.Contains(data.SQL, "name: GetCatalog :one") {
+		b.once.Do(func() {
+			close(b.started)
+			<-b.release
+			b.mu.Lock()
+			b.loadCtxOK = ctx.Err() == nil
+			b.mu.Unlock()
+		})
+	}
+	return ctx
+}
+
+func (b *blockingCatalogTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
 func TestCatalogLoadSurvivesFirstCallerCancel(t *testing.T) {
-	started := make(chan struct{})
-	release := make(chan struct{})
-	want := &catalogSnapshot{versions: "v-shared"}
-	var loadCtxErr error
-	s := &Service{
-		loads: map[string]*catalogLoad{},
-		testLoadCatalog: func(ctx context.Context, _ *serverSnapshot) (*catalogSnapshot, error) {
-			close(started)
-			<-release
-			loadCtxErr = ctx.Err()
-			return want, nil
-		},
+	f := newProgressiveFixture(t, nil)
+	tracer := &blockingCatalogTracer{started: make(chan struct{}), release: make(chan struct{})}
+	cfg := f.db.Pool.Config()
+	cfg.ConnConfig.Tracer = tracer
+	tracedPool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(tracedPool.Close)
+	f.identity.Store = &store.Store{Pool: tracedPool, Queries: db.New(tracedPool)}
+
+	snap, err := f.service.snapshot(callerContext("admin", "admin"))
+	if err != nil {
+		t.Fatal(err)
 	}
 	ctx1, cancel1 := context.WithCancel(context.Background())
 	err1Ch := make(chan error, 1)
 	go func() {
-		_, err := s.catalogFor(ctx1, &serverSnapshot{versions: "v-shared"})
+		_, err := f.service.catalogFor(ctx1, snap)
 		err1Ch <- err
 	}()
-	<-started
+	<-tracer.started
 	type result struct {
 		snap *catalogSnapshot
 		err  error
 	}
 	res2Ch := make(chan result, 1)
 	go func() {
-		snap, err := s.catalogFor(context.Background(), &serverSnapshot{versions: "v-shared"})
-		res2Ch <- result{snap, err}
+		got, err := f.service.catalogFor(context.Background(), snap)
+		res2Ch <- result{got, err}
 	}()
 	// Wait until caller 2 has joined the in-flight load before cancelling caller 1.
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
 	cancel1()
 	if err := <-err1Ch; err != context.Canceled {
 		t.Fatalf("first caller error=%v, want context.Canceled", err)
 	}
-	close(release)
+	close(tracer.release)
 	res2 := <-res2Ch
-	if res2.err != nil || res2.snap != want {
-		t.Fatalf("second caller snap=%v err=%v, want %v", res2.snap, res2.err, want)
+	if res2.err != nil || res2.snap == nil || len(res2.snap.actions) == 0 {
+		t.Fatalf("second caller snap=%v err=%v", res2.snap, res2.err)
 	}
-	if loadCtxErr != nil {
-		t.Fatalf("shared load context was cancelled: %v", loadCtxErr)
+	tracer.mu.Lock()
+	ok := tracer.loadCtxOK
+	tracer.mu.Unlock()
+	if !ok {
+		t.Fatal("shared catalog load context was cancelled with first caller")
 	}
-	if s.catalog != want {
-		t.Fatalf("catalog cache not populated: %v", s.catalog)
+	f.service.catalogMu.Lock()
+	cached := f.service.catalog
+	f.service.catalogMu.Unlock()
+	if cached != res2.snap {
+		t.Fatalf("catalog cache not populated: got %v want %v", cached, res2.snap)
 	}
 }
 

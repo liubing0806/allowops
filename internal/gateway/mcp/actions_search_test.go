@@ -234,26 +234,28 @@ func TestActionsSearchPaginationAndCursorBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 	tamperedOffset, _ := json.Marshal(actionsCursor{Offset: 1, Tag: decoded.Tag})
-	nonStrict := cursor
-	if last := nonStrict[len(nonStrict)-1]; last == 'A' {
-		nonStrict = nonStrict[:len(nonStrict)-1] + "B"
-	} else {
-		// Force non-zero trailing unused bits on a 2-char remainder payload.
-		nonStrict = base64.RawURLEncoding.EncodeToString(data)
-		for _, ch := range []byte{'B', 'C', 'D'} {
-			cand := nonStrict[:len(nonStrict)-1] + string(ch)
-			if cand != nonStrict {
-				nonStrict = cand
-				break
-			}
+	// Attacker who knows snapshot still cannot forge a tag for offset=1 without
+	// the server's HMAC key.
+	wrongKeyCursor := encodeActionsCursor(snapshot, 1, []byte("wrong-key-for-test-only-32-bytes"))
+	nonStrict := base64.RawURLEncoding.EncodeToString(data)
+	for _, ch := range []byte{'B', 'C', 'D'} {
+		cand := nonStrict[:len(nonStrict)-1] + string(ch)
+		if cand != nonStrict {
+			nonStrict = cand
+			break
 		}
 	}
+	withNewline := cursor[:4] + "\n" + cursor[4:]
+	withCR := cursor[:4] + "\r" + cursor[4:]
 	for name, forged := range map[string]string{
 		"tampered offset": base64.RawURLEncoding.EncodeToString(tamperedOffset),
-		"offset zero":     encodeActionsCursor(snapshot, 0),
-		"offset beyond":   encodeActionsCursor(snapshot, 4),
+		"wrong hmac key":  wrongKeyCursor,
+		"offset zero":     encodeActionsCursor(snapshot, 0, s.cursorSecret()),
+		"offset beyond":   encodeActionsCursor(snapshot, 4, s.cursorSecret()),
 		"not base64":      "%%%",
 		"non-strict b64":  nonStrict,
+		"newline in b64":  withNewline,
+		"cr in b64":       withCR,
 		"unknown field":   base64.RawURLEncoding.EncodeToString([]byte(`{"offset":3,"tag":"` + decoded.Tag + `","x":1}`)),
 		"duplicate key":   base64.RawURLEncoding.EncodeToString([]byte(`{"offset":1,"offset":3,"tag":"` + decoded.Tag + `"}`)),
 		"trailing value":  base64.RawURLEncoding.EncodeToString([]byte(`{"offset":3,"tag":"` + decoded.Tag + `"} {}`)),
@@ -263,6 +265,22 @@ func TestActionsSearchPaginationAndCursorBinding(t *testing.T) {
 	}
 	if len(cursor) > 256 {
 		t.Fatalf("cursor has %d bytes", len(cursor))
+	}
+	// Multi-replica HA: two Service instances configured with the same shared
+	// CursorKey verify each other's cursors; a different key rejects them.
+	sharedKey := []byte("0123456789abcdef0123456789abcdef")
+	replicaA := &Service{identity: &hostIdentity{}, cursorKey: sharedKey}
+	replicaB := &Service{identity: &hostIdentity{}, cursorKey: slices.Clone(sharedKey)}
+	otherCluster := &Service{identity: &hostIdentity{}, cursorKey: []byte("fedcba9876543210fedcba9876543210")}
+	p1, err := searchActionsFor(t, replicaA, ctx, scope, `{"limit":3}`)
+	if err != nil || p1.NextCursor == "" {
+		t.Fatalf("replicaA page1=%+v err=%v", p1, err)
+	}
+	if p2, err := searchActionsFor(t, replicaB, ctx, scope, fmt.Sprintf(`{"limit":3,"next_cursor":%q}`, p1.NextCursor)); err != nil || len(p2.Actions) != 1 {
+		t.Fatalf("replicaB page2=%+v err=%v", p2, err)
+	}
+	if _, err := otherCluster.searchActions(ctx, json.RawMessage(fmt.Sprintf(`{"limit":3,"next_cursor":%q}`, p1.NextCursor)), scope); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("different key accepted cursor: err=%v", err)
 	}
 	// Host precheck drift (e.g. host authorization labels changed between pages
 	// without changing catalog or policy versions) invalidates the cursor.
