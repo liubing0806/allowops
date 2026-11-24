@@ -68,6 +68,10 @@ output:
   region: us-east-1
   # Empty endpoint uses the AWS regional S3 endpoint. Set for SeaweedFS.
   endpoint: ""
+  # Defaults to true with a custom endpoint and false with the AWS endpoint.
+  # use_path_style: false
+  # Defaults to AES256. Set to "none" to omit the upload encryption header.
+  # server_side_encryption: "none"
   existingSecret: allowops-output
   credentialsKey: aws-credentials
 # Used only to copy Kubernetes Secret projections into ordinary 0600 files.

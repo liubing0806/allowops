@@ -103,6 +103,8 @@
         "bucket": {"type": "string", "minLength": 1},
         "region": {"type": "string", "minLength": 1},
         "endpoint": {"type": "string"},
+        "use_path_style": {"type": "boolean"},
+        "server_side_encryption": {"type": "string", "enum": ["", "AES256", "none"]},
         "existingSecret": {"type": "string", "minLength": 1},
         "credentialsKey": {"type": "string", "minLength": 1}
       }

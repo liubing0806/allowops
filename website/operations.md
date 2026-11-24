@@ -79,10 +79,19 @@ must change.
 ## Storage and retention
 
 Use an existing S3 bucket, configure the output region/endpoint and deliver
-credentials through the AWS SDK credential chain. Configure encryption support:
-output uploads request AES256 server-side encryption. SeaweedFS needs its SSE key
-configured independently. Retention belongs to the bucket lifecycle policy;
-the gateway does not set it automatically. The intended default is one year.
+credentials through the AWS SDK credential chain. The gateway YAML and Helm
+values both accept these optional settings under `output`:
+
+- `use_path_style` selects path-style addressing when `true` and virtual-hosted
+  addressing when `false`. Set `false` for a custom endpoint that requires the
+  bucket name in the hostname. By default, custom endpoints use path-style
+  addressing and AWS endpoints use virtual-hosted addressing.
+- `server_side_encryption` defaults to `AES256` when omitted or empty. Set
+  `none` to omit the server-side encryption header and let the bucket policy
+  govern encryption. Configure a SeaweedFS SSE key when using `AES256`.
+
+Configure retention in the bucket lifecycle policy. The intended default is one
+year.
 
 SeaweedFS lifecycle configuration APIs and compressed output operations have
 local integration coverage. Actual delayed expiry deletion requires operator
@@ -90,6 +99,8 @@ verification over the configured retention interval. Check the selected storage
 version and its encryption/lifecycle behavior before relying on deletion.
 Full output writes are asynchronous; monitor failed persistence even when jobs
 succeed. The `output_stored` flag distinguishes execution from persistence.
+Gateway error logs for writes and probes include the error type and, when
+available, the HTTP status and recognized S3 error code.
 
 ## Monitoring and recovery
 

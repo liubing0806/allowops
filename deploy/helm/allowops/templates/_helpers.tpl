@@ -18,6 +18,12 @@ output:
   bucket: {{ .Values.output.bucket | quote }}
   region: {{ .Values.output.region | quote }}
   endpoint: {{ .Values.output.endpoint | quote }}
+  {{- if hasKey .Values.output "use_path_style" }}
+  use_path_style: {{ .Values.output.use_path_style }}
+  {{- end }}
+  {{- if hasKey .Values.output "server_side_encryption" }}
+  server_side_encryption: {{ .Values.output.server_side_encryption | quote }}
+  {{- end }}
 gateway:
   shutdown_grace: {{ printf "%ds" (int .Values.gateway.shutdownGraceSeconds) | quote }}
   {{- with .Values.gateway.certificateTTL }}
