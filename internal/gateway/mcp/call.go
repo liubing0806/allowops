@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
+	"github.com/liubing0806/allowops/internal/gateway/job"
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -178,7 +179,9 @@ func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, scope *se
 	case "entities_search":
 		return s.searchEntities(ctx, r.Params.Arguments, scope.visible)
 	case "actions_search":
-		return s.searchActions(ctx, r.Params.Arguments, scope)
+		if scope.metaTools[name] {
+			return s.searchActions(ctx, r.Params.Arguments, scope)
+		}
 	}
 	if s.jobs == nil {
 		return nil, accessError(connect.CodeUnavailable, "job service unavailable")
@@ -208,19 +211,24 @@ func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, scope *se
 		}
 		return jobMetadataResult(response.Job)
 	case "actions_invoke_read":
-		return s.invokeAction(ctx, r, scope, "read", state)
-	case "actions_invoke_write":
-		return s.invokeAction(ctx, r, scope, "write", state)
-	case "actions_invoke_dangerous":
-		return s.invokeAction(ctx, r, scope, "dangerous", state)
-	default:
-		state.mutating = true
-		action, err := s.currentAction(ctx, name)
-		if err != nil {
-			return nil, err
+		if scope.metaTools[name] {
+			return s.invokeAction(ctx, r, scope, "read", state)
 		}
-		return s.runAction(ctx, r, action, r.Params.Arguments, nil, state)
+	case "actions_invoke_write":
+		if scope.metaTools[name] {
+			return s.invokeAction(ctx, r, scope, "write", state)
+		}
+	case "actions_invoke_dangerous":
+		if scope.metaTools[name] {
+			return s.invokeAction(ctx, r, scope, "dangerous", state)
+		}
 	}
+	state.mutating = true
+	action, err := s.currentAction(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return s.runAction(ctx, r, action, r.Params.Arguments, nil, state)
 }
 
 // runAction validates the arguments against the verified action and runs the
@@ -262,10 +270,13 @@ func (s *Service) invokeAction(ctx context.Context, r *sdk.CallToolRequest, scop
 		return nil, invalidArguments(err)
 	}
 	var name string
-	if decodeField(args, "action", &name, true) != nil || !actionName.MatchString(name) || slices.Contains(metaToolNames, name) {
+	if decodeField(args, "action", &name, true) != nil || !actionName.MatchString(name) || slices.Contains(fixedReservedToolNames, name) {
 		return nil, accessError(connect.CodeInvalidArgument, "action required; allowed: action name returned by actions_search")
 	}
 	if _, visible := scope.allAvailable[name]; !visible {
+		if slices.Contains(progressiveMetaToolNames, name) {
+			return nil, accessError(connect.CodeInvalidArgument, "action required; allowed: action name returned by actions_search")
+		}
 		return nil, accessError(connect.CodeNotFound, "tool removed or unavailable for this identity; call actions_search to refresh")
 	}
 	state.operation = "mcp/" + name
@@ -285,7 +296,7 @@ func (s *Service) invokeAction(ctx context.Context, r *sdk.CallToolRequest, scop
 	if err != nil {
 		return nil, invalidArguments(err)
 	}
-	return s.runAction(ctx, r, action, rest, []string{"action"}, state)
+	return s.runAction(job.WithExpectedRisk(ctx, risk), r, action, rest, []string{"action"}, state)
 }
 
 func fixedArguments(raw json.RawMessage, allowed ...string) (map[string]json.RawMessage, error) {

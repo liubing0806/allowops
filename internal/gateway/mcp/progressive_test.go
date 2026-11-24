@@ -357,6 +357,55 @@ func TestCatalogLoadIsShared(t *testing.T) {
 	}
 }
 
+func TestCatalogLoadSurvivesFirstCallerCancel(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	want := &catalogSnapshot{versions: "v-shared"}
+	var loadCtxErr error
+	s := &Service{
+		loads: map[string]*catalogLoad{},
+		testLoadCatalog: func(ctx context.Context, _ *serverSnapshot) (*catalogSnapshot, error) {
+			close(started)
+			<-release
+			loadCtxErr = ctx.Err()
+			return want, nil
+		},
+	}
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	err1Ch := make(chan error, 1)
+	go func() {
+		_, err := s.catalogFor(ctx1, &serverSnapshot{versions: "v-shared"})
+		err1Ch <- err
+	}()
+	<-started
+	type result struct {
+		snap *catalogSnapshot
+		err  error
+	}
+	res2Ch := make(chan result, 1)
+	go func() {
+		snap, err := s.catalogFor(context.Background(), &serverSnapshot{versions: "v-shared"})
+		res2Ch <- result{snap, err}
+	}()
+	// Wait until caller 2 has joined the in-flight load before cancelling caller 1.
+	time.Sleep(10 * time.Millisecond)
+	cancel1()
+	if err := <-err1Ch; err != context.Canceled {
+		t.Fatalf("first caller error=%v, want context.Canceled", err)
+	}
+	close(release)
+	res2 := <-res2Ch
+	if res2.err != nil || res2.snap != want {
+		t.Fatalf("second caller snap=%v err=%v, want %v", res2.snap, res2.err, want)
+	}
+	if loadCtxErr != nil {
+		t.Fatalf("shared load context was cancelled: %v", loadCtxErr)
+	}
+	if s.catalog != want {
+		t.Fatalf("catalog cache not populated: %v", s.catalog)
+	}
+}
+
 func TestProgressiveDirectActionCalls(t *testing.T) {
 	f := newProgressiveFixture(t, func(c *Config) { c.Mode = modeProgressive })
 	admin := f.headerClient(t, f.admin, nil)

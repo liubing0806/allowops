@@ -1,14 +1,15 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -74,8 +75,8 @@ type actionsSearchResult struct {
 }
 
 type actionsCursor struct {
-	Snapshot string `json:"snapshot"`
-	Offset   int    `json:"offset"`
+	Offset int    `json:"offset"`
+	Tag    string `json:"tag"`
 }
 
 const invalidActionsCursor = "invalid actions_search cursor; restart without next_cursor"
@@ -115,7 +116,7 @@ func (s *Service) searchActions(ctx context.Context, raw json.RawMessage, scope 
 		}
 		matched = slices.DeleteFunc(matched, func(a catalog.Action) bool { return !allowed[a.Name] })
 	}
-	snapshot, err := actionsSnapshot(ctx, scope, q)
+	snapshot, err := actionsSnapshot(ctx, scope, q, matched)
 	if err != nil {
 		return nil, err
 	}
@@ -310,11 +311,16 @@ func actionResult(a catalog.Action, definition ToolDefinition, includeSchema boo
 }
 
 // actionsSnapshot binds a cursor to the caller, the catalog and policy
-// versions, the server mode and toolsets, and the query.
-func actionsSnapshot(ctx context.Context, scope *serverScope, q actionsQuery) (string, error) {
+// versions, the server mode and toolsets, the query, and the ordered matched
+// action names (including the post-host-precheck result).
+func actionsSnapshot(ctx context.Context, scope *serverScope, q actionsQuery, matched []catalog.Action) (string, error) {
 	id, ok := reqctx.FromContext(ctx)
 	if !ok {
 		return "", accessError(connect.CodeUnauthenticated, "authentication required")
+	}
+	names := make([]string, len(matched))
+	for i, a := range matched {
+		names[i] = a.Name
 	}
 	data, err := json.Marshal(struct {
 		Actor    string
@@ -323,7 +329,8 @@ func actionsSnapshot(ctx context.Context, scope *serverScope, q actionsQuery) (s
 		Mode     string
 		Toolsets []string
 		Query    actionsQuery
-	}{reqctx.RequestAuditInfo(ctx).ActorID, id.Subject, scope.versions, scope.mode, scope.toolsets, q})
+		Matched  []string
+	}{reqctx.RequestAuditInfo(ctx).ActorID, id.Subject, scope.versions, scope.mode, scope.toolsets, q, names})
 	if err != nil {
 		return "", err
 	}
@@ -331,8 +338,13 @@ func actionsSnapshot(ctx context.Context, scope *serverScope, q actionsQuery) (s
 	return hex.EncodeToString(sum[:]), nil
 }
 
+func actionsCursorTag(snapshot string, offset int) string {
+	sum := sha256.Sum256([]byte("actions_search_cursor_v1:" + snapshot + ":" + strconv.Itoa(offset)))
+	return hex.EncodeToString(sum[:])
+}
+
 func encodeActionsCursor(snapshot string, offset int) string {
-	data, _ := json.Marshal(actionsCursor{Snapshot: snapshot, Offset: offset})
+	data, _ := json.Marshal(actionsCursor{Offset: offset, Tag: actionsCursorTag(snapshot, offset)})
 	return base64.RawURLEncoding.EncodeToString(data)
 }
 
@@ -341,15 +353,22 @@ func decodeActionsCursor(cursor, snapshot string) (int, error) {
 	if len(cursor) > 256 {
 		return 0, invalid
 	}
-	data, err := base64.RawURLEncoding.DecodeString(cursor)
+	data, err := base64.RawURLEncoding.Strict().DecodeString(cursor)
 	if err != nil {
 		return 0, invalid
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	var c actionsCursor
-	if decoder.Decode(&c) != nil || decoder.More() || c.Snapshot != snapshot || c.Offset < 1 {
+	args, err := argumentObject(data)
+	if err != nil || len(args) != 2 {
 		return 0, invalid
 	}
-	return c.Offset, nil
+	var offset int
+	var tag string
+	if decodeField(args, "offset", &offset, true) != nil || decodeField(args, "tag", &tag, true) != nil {
+		return 0, invalid
+	}
+	want := actionsCursorTag(snapshot, offset)
+	if offset < 1 || subtle.ConstantTimeCompare([]byte(tag), []byte(want)) != 1 {
+		return 0, invalid
+	}
+	return offset, nil
 }

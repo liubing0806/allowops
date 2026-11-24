@@ -75,13 +75,29 @@ type configuration struct {
 	MCP         mcpConfig          `yaml:"mcp"`
 }
 
+// strictInt rejects non-integer YAML scalars (such as 1.5, which yaml.v3
+// would otherwise truncate to 1).
+type strictInt int
+
+func (n *strictInt) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.ScalarNode || value.Tag != "!!int" {
+		return errors.New("integer required")
+	}
+	var parsed int
+	if err := value.Decode(&parsed); err != nil {
+		return err
+	}
+	*n = strictInt(parsed)
+	return nil
+}
+
 // mcpConfig selects how MCP tools/list exposes catalog actions. Fields are
 // omitted when empty, so a marshalled configuration decodes to the defaults.
 type mcpConfig struct {
 	// Mode is flat (default), progressive or auto.
 	Mode string `yaml:"mode,omitempty"`
 	// AutoThreshold is the auto mode action count; omitted means 40.
-	AutoThreshold *int `yaml:"auto_threshold,omitempty"`
+	AutoThreshold *strictInt `yaml:"auto_threshold,omitempty"`
 }
 
 // validate applies the auto_threshold default and checks both values. An
@@ -92,7 +108,7 @@ func (c *mcpConfig) validate() error {
 		return errors.New("mcp.mode allowed: flat, progressive, auto")
 	}
 	if c.AutoThreshold == nil {
-		threshold := 40
+		threshold := strictInt(40)
 		c.AutoThreshold = &threshold
 	}
 	if *c.AutoThreshold < 1 || *c.AutoThreshold > 1000 {
@@ -350,7 +366,7 @@ func newGatewayServer(cfg *configuration, db *store.Store, identity *api.Service
 	// A configuration built without decodeConfig leaves the threshold unset;
 	// zero selects the MCP default.
 	if cfg.MCP.AutoThreshold != nil {
-		mcpConfig.AutoThreshold = *cfg.MCP.AutoThreshold
+		mcpConfig.AutoThreshold = int(*cfg.MCP.AutoThreshold)
 	}
 	mcpService, err := mcp.New(identity, catalogs, job.Client(jobs), mcpConfig)
 	if err != nil {

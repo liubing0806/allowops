@@ -114,36 +114,91 @@ func ParseAction(data []byte) (Action, error) {
 	if len(node.Content) != 1 || node.Content[0].Kind != yaml.MappingNode {
 		return a, fmt.Errorf("action must be a YAML mapping")
 	}
-	content := node.Content[0].Content
-	for i := 0; i < len(content); i += 2 {
-		if content[i].Value == "max_output" {
-			a.maxOutputSet = true
-		}
-		// yaml.v3 truncates 1.5 to 1 and reads an empty value as unset. For a
-		// limit, either would silently loosen what the author wrote.
-		if value := content[i+1]; content[i].Value == "max_targets" && (value.Kind != yaml.ScalarNode || value.Tag != "!!int") {
-			return a, errMaxTargetsRange
-		}
-		if err := checkMetadataNode(content[i].Value, content[i+1]); err != nil {
-			return a, err
+	merged := effectiveMapping(node.Content[0])
+	if _, ok := merged["max_output"]; ok {
+		a.maxOutputSet = true
+	}
+	// yaml.v3 truncates 1.5 to 1 and reads an empty value as unset. For a
+	// limit, either would silently loosen what the author wrote.
+	if value, ok := merged["max_targets"]; ok && (value == nil || value.Kind != yaml.ScalarNode || value.Tag != "!!int") {
+		return a, errMaxTargetsRange
+	}
+	for _, key := range []string{"toolset", "tags", "entity_kinds"} {
+		if value, ok := merged[key]; ok {
+			if err := checkMetadataNode(key, value); err != nil {
+				return a, err
+			}
 		}
 	}
 	return a, nil
+}
+
+// effectiveMapping collects the top-level keys of a YAML mapping after
+// expanding << merge keys and aliases, matching yaml.v3 precedence where
+// explicit keys override merged keys and earlier merge entries win.
+func effectiveMapping(node *yaml.Node) map[string]*yaml.Node {
+	out := map[string]*yaml.Node{}
+	collectMapping(node, out, map[*yaml.Node]bool{})
+	return out
+}
+
+func collectMapping(node *yaml.Node, out map[string]*yaml.Node, seen map[*yaml.Node]bool) {
+	node = resolveAlias(node)
+	if node == nil || node.Kind != yaml.MappingNode || seen[node] {
+		return
+	}
+	seen[node] = true
+	defer delete(seen, node)
+	var merges []*yaml.Node
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		k, v := node.Content[i], node.Content[i+1]
+		if k.Tag == "!!merge" {
+			merges = append(merges, v)
+			continue
+		}
+		if _, exists := out[k.Value]; !exists {
+			out[k.Value] = resolveAlias(v)
+		}
+	}
+	for _, m := range merges {
+		m = resolveAlias(m)
+		if m == nil {
+			continue
+		}
+		switch m.Kind {
+		case yaml.MappingNode:
+			collectMapping(m, out, seen)
+		case yaml.SequenceNode:
+			for _, item := range m.Content {
+				collectMapping(item, out, seen)
+			}
+		}
+	}
+}
+
+func resolveAlias(node *yaml.Node) *yaml.Node {
+	for node != nil && node.Kind == yaml.AliasNode {
+		node = node.Alias
+	}
+	return node
 }
 
 // checkMetadataNode rejects metadata values that yaml.v3 would otherwise
 // accept by conversion: null or empty values, and booleans or numbers decoded
 // into strings.
 func checkMetadataNode(key string, value *yaml.Node) error {
+	value = resolveAlias(value)
 	switch key {
 	case "toolset":
-		if !isStringNode(value) || value.Value == "" {
+		if value == nil || !isStringNode(value) || value.Value == "" {
 			return fmt.Errorf("toolset must be a non-empty string")
 		}
 	case "tags", "entity_kinds":
-		valid := value.Kind == yaml.SequenceNode && len(value.Content) > 0
-		for _, item := range value.Content {
-			valid = valid && isStringNode(item)
+		valid := value != nil && value.Kind == yaml.SequenceNode && len(value.Content) > 0
+		if valid {
+			for _, item := range value.Content {
+				valid = valid && isStringNode(resolveAlias(item))
+			}
 		}
 		if !valid {
 			return fmt.Errorf("%s must be a non-empty list of strings", key)
@@ -153,7 +208,7 @@ func checkMetadataNode(key string, value *yaml.Node) error {
 }
 
 func isStringNode(node *yaml.Node) bool {
-	return node.Kind == yaml.ScalarNode && node.Tag == "!!str"
+	return node != nil && node.Kind == yaml.ScalarNode && node.Tag == "!!str"
 }
 
 func applyDefaults(a Action, c Config) Action {

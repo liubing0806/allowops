@@ -144,7 +144,8 @@ func (s *Service) searchEntities(ctx context.Context, raw json.RawMessage, actio
 // out, which is already within budget as result. Kinds are added in name
 // order as whole groups while the result stays within budget; omitted groups
 // and kinds with more than recommendationsPerKind matches set
-// recommended_actions_truncated. Entities and truncated are not changed.
+// recommended_actions_truncated. If the truncation marker alone exceeds the
+// budget, entities are trimmed and truncated is set so both markers fit.
 func recommendActions(out inventoryResult, result *ToolResult, actions map[string]catalog.Action) (*ToolResult, error) {
 	var kinds []string
 	for _, e := range out.Entities {
@@ -203,10 +204,49 @@ func recommendActions(out inventoryResult, result *ToolResult, actions map[strin
 	if err != nil {
 		return nil, err
 	}
-	if size > resultByteLimit {
-		// Only the truncation marker of an empty recommendation set can
-		// exceed the budget; return the entities alone.
+	if size <= resultByteLimit {
+		return final, nil
+	}
+	// Entities sit right at the 32 KiB limit so even the truncation marker of
+	// an empty recommendation set pushed the response over budget. Trim
+	// entities to keep both truncation markers accurate within budget.
+	out.Truncated = true
+	low, high := 0, len(out.Entities)-1
+	var best *ToolResult
+	kept := 0
+	for low <= high {
+		middle := low + (high-low)/2
+		candidate := out
+		candidate.Entities = out.Entities[:middle]
+		r, s, err := toolResult(candidate)
+		if err != nil {
+			return nil, err
+		}
+		if s <= resultByteLimit {
+			best, kept = r, middle
+			low = middle + 1
+		} else {
+			high = middle - 1
+		}
+	}
+	if best == nil {
 		return result, nil
 	}
-	return final, nil
+	hasRecommendedKind := false
+	for _, e := range out.Entities[:kept] {
+		if _, ok := groups[e.Kind]; ok {
+			hasRecommendedKind = true
+			break
+		}
+	}
+	if hasRecommendedKind {
+		return best, nil
+	}
+	out.Entities = out.Entities[:kept]
+	out.RecommendedActionsTruncated = false
+	trimmed, _, err := toolResult(out)
+	if err != nil {
+		return nil, err
+	}
+	return trimmed, nil
 }

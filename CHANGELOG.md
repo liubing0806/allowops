@@ -20,9 +20,10 @@ Changes on `main` since v0.2.0. They are not in a release yet.
   `actions_invoke_write`, and `actions_invoke_dangerous` are now reserved on
   catalog authoring (`allowops catalog validate` / `build`) and publication
   (`PublishCatalog`). Reading previously stored historical catalogs remains
-  compatible. Before upgrading and publishing new catalog versions, check your
-  published catalog action names (e.g. `allowops actions list`) and rename any
-  action that uses one of these four names.
+  compatible. Before upgrading and publishing new catalog versions, inspect
+  your current catalog's action names on the web console Catalog page (or via
+  `CatalogService.ListActions`) and rename any action that uses one of these
+  four names.
 
 ### New
 

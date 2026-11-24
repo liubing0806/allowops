@@ -9,9 +9,13 @@ import (
 // actionName matches catalog action names.
 var actionName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
-// metaToolNames are the fixed and progressive tool names; actions_invoke_*
-// never treats them as action names.
-var metaToolNames = []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "entities_search", "actions_search", "actions_invoke_read", "actions_invoke_write", "actions_invoke_dangerous"}
+// fixedReservedToolNames are read-reserved catalog names and can never be
+// catalog actions.
+var fixedReservedToolNames = []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "entities_search"}
+
+// progressiveMetaToolNames are authoring/publish-reserved tool names; older
+// signed catalogs may still contain actions with these names.
+var progressiveMetaToolNames = []string{"actions_search", "actions_invoke_read", "actions_invoke_write", "actions_invoke_dangerous"}
 
 // actionRisks lists the risks in actions_search order.
 var actionRisks = []string{"read", "write", "dangerous"}

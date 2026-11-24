@@ -126,8 +126,8 @@ func TestEntitiesSearchRecommendationLimits(t *testing.T) {
 		}
 	}
 
-	// Entities filling the budget keep their own truncation and leave no
-	// room for recommendations.
+	// Entities filling the budget keep their own truncation and also report
+	// recommended_actions_truncated when matching recommendations do not fit.
 	entities = nil
 	for i := range 100 {
 		entities = append(entities, inventory.Entity{Kind: "jvm", Name: fmt.Sprintf("%03d%s", i, strings.Repeat("n", 600)), Selector: "app=jvm"})
@@ -139,8 +139,45 @@ func TestEntitiesSearchRecommendationLimits(t *testing.T) {
 		t.Fatal(err)
 	}
 	out = result.StructuredContent.(inventoryResult)
-	if size := len(mustJSON(t, result)); size > resultByteLimit || !out.Truncated || out.RecommendedActions != nil || len(out.Entities) == 0 {
-		t.Fatalf("size=%d truncated=%v recommended=%v", size, out.Truncated, out.RecommendedActions)
+	if size := len(mustJSON(t, result)); size > resultByteLimit || !out.Truncated || !out.RecommendedActionsTruncated || out.RecommendedActions != nil || len(out.Entities) == 0 {
+		t.Fatalf("size=%d truncated=%v recTrunc=%v recommended=%v", size, out.Truncated, out.RecommendedActionsTruncated, out.RecommendedActions)
+	}
+
+	// Tight boundary: entities fit within 32 KiB on their own with fewer than
+	// 50 bytes to spare, so adding recommended_actions_truncated pushes over
+	// budget. Entities must be trimmed so both truncation markers are kept.
+	base := []inventory.Entity{
+		{Kind: "jvm", Name: "e0", Selector: "app=jvm"},
+		{Kind: "jvm", Name: "e1", Selector: "app=jvm"},
+	}
+	// Grow e1's name until the entities-only response sits within 30 bytes of
+	// resultByteLimit without setting truncated.
+	for pad := 1000; pad < 20000; pad += 10 {
+		base[1].Name = "e1-" + strings.Repeat("x", pad)
+		probeOut := inventoryResult{
+			Entities: []inventoryEntity{
+				{Kind: "jvm", Name: base[0].Name, Hosts: []string{}, Selector: "app=jvm", Source: "static"},
+				{Kind: "jvm", Name: base[1].Name, Hosts: []string{}, Selector: "app=jvm", Source: "static"},
+			},
+			SourceErrors: []pluginhost.SourceError{},
+			OutputTrust:  "untrusted",
+		}
+		_, sz, err := toolResult(probeOut)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if sz > resultByteLimit-30 && sz <= resultByteLimit {
+			break
+		}
+	}
+	s.config.Inventory = entitySource(base...)
+	result, err = s.searchEntities(context.Background(), nil, visible)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out = result.StructuredContent.(inventoryResult)
+	if size := len(mustJSON(t, result)); size > resultByteLimit || !out.Truncated || !out.RecommendedActionsTruncated || out.RecommendedActions != nil || len(out.Entities) != 1 {
+		t.Fatalf("tight boundary: size=%d entities=%d truncated=%v recTrunc=%v recommended=%v", size, len(out.Entities), out.Truncated, out.RecommendedActionsTruncated, out.RecommendedActions)
 	}
 }
 

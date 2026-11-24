@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -12,6 +13,8 @@ import (
 	"connectrpc.com/connect"
 	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/api"
+	"github.com/liubing0806/allowops/internal/store"
+	"github.com/liubing0806/allowops/internal/store/db"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -185,5 +188,103 @@ func TestActionsInvokeArgumentObject(t *testing.T) {
 	_, err := s.invokeAction(context.Background(), &sdk.CallToolRequest{Params: &sdk.CallToolParamsRaw{Name: "actions_invoke_read", Arguments: json.RawMessage(`{"action":"future"}`)}}, scope, "read", state)
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition || err.(*connect.Error).Message() != errUnsupportedActionSchema.Error() || state.operation != "mcp/future" || state.mutating {
 		t.Fatalf("unsupported error=%v state=%+v", err, state)
+	}
+}
+
+// Historical signed catalogs published before progressive tool names were
+// reserved stay runnable in flat mode (directly) and in progressive mode
+// (through actions_invoke_<risk>) without leaking hidden actions.
+func TestHistoricalProgressiveNamedActionsWorkInBothModes(t *testing.T) {
+	f := newProgressiveFixture(t, nil)
+	now := time.Now().UTC().Add(5 * time.Second).Truncate(time.Second)
+	historicalSearch := catalog.Action{Name: "actions_search", Description: "Legacy search action", Risk: "read", Timeout: "1s", MaxOutput: 8192, Exec: []any{"/usr/bin/true"}}
+	historicalInvoke := catalog.Action{Name: "actions_invoke_read", Description: "Legacy write action", Risk: "write", Timeout: "1s", MaxOutput: 8192, Exec: []any{"/usr/bin/true"}}
+	actions := map[string]catalog.Action{
+		"actions_search":      historicalSearch,
+		"actions_invoke_read": historicalInvoke,
+		"logs_read":           progressiveActions()["logs_read"],
+	}
+	pkg := &catalog.Package{
+		SchemaVersion: 1,
+		CatalogID:     "fixture",
+		Version:       20991124000000,
+		CreatedAt:     now,
+		ExpiresAt:     now.Add(time.Hour),
+		Actions:       actions,
+		Digests:       map[string]string{},
+	}
+	names := make([]string, 0, len(actions))
+	for name, a := range actions {
+		d, err := catalog.ActionDigest(a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pkg.Digests[name] = d
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	payload, err := catalog.CanonicalJSON(pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := catalog.Sign(payload, catalog.SigningKey{PrivateKey: f.key})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(raw)
+	if err := f.db.Publish(context.Background(), db.InsertCatalogParams{
+		CatalogID:   pkg.CatalogID,
+		Version:     pkg.Version,
+		Dsse:        raw,
+		Digest:      digest[:],
+		ExpiresAt:   store.Timestamp(pkg.ExpiresAt),
+		ActionNames: names,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	plainArgs := map[string]any{"targets": map[string]any{"hosts": []string{"web-01"}}, "reason": "legacy", "wait_seconds": 0}
+	// Flat mode: calling the historical actions directly runs them as catalog actions, not meta-tools.
+	flatAdmin := f.headerClient(t, f.admin, map[string]string{"X-Allowops-MCP-Mode": "flat"})
+	for _, name := range []string{"actions_search", "actions_invoke_read"} {
+		before := f.jobCount()
+		r := call(t, flatAdmin, name, plainArgs)
+		if r.IsError || content(t, r)["job_id"] == "" || f.jobCount() != before+1 {
+			t.Fatalf("flat %s: isError=%t content=%v jobs=%d->%d", name, r.IsError, content(t, r), before, f.jobCount())
+		}
+	}
+
+	// Progressive mode: actions_search lists the legacy actions, and
+	// actions_invoke_<risk> runs them while keeping hidden ones opaque.
+	progAdmin := f.headerClient(t, f.admin, map[string]string{"X-Allowops-MCP-Mode": "progressive"})
+	progReader := f.headerClient(t, f.reader, map[string]string{"X-Allowops-MCP-Mode": "progressive"})
+	searchRes := call(t, progAdmin, "actions_search", map[string]any{})
+	if searchRes.IsError {
+		t.Fatalf("progressive actions_search=%v", content(t, searchRes))
+	}
+	for _, tc := range []struct {
+		tool   string
+		action string
+	}{
+		{"actions_invoke_read", "actions_search"},
+		{"actions_invoke_write", "actions_invoke_read"},
+	} {
+		before := f.jobCount()
+		args := map[string]any{"action": tc.action, "targets": map[string]any{"hosts": []string{"web-01"}}, "reason": "legacy", "wait_seconds": 0}
+		r := call(t, progAdmin, tc.tool, args)
+		if r.IsError || content(t, r)["job_id"] == "" || f.jobCount() != before+1 {
+			t.Fatalf("progressive %s(%s): isError=%t content=%v", tc.tool, tc.action, r.IsError, content(t, r))
+		}
+	}
+	// Reader cannot see the write-risk legacy action actions_invoke_read and sees
+	// the exact same InvalidArgument error as for an absent meta-tool name.
+	hiddenWrite := mustJSON(t, call(t, progReader, "actions_invoke_read", map[string]any{"action": "actions_invoke_read", "targets": map[string]any{"hosts": []string{"web-01"}}, "reason": "probe"}))
+	absentMeta := mustJSON(t, call(t, progReader, "actions_invoke_read", map[string]any{"action": "actions_invoke_dangerous", "targets": map[string]any{"hosts": []string{"web-01"}}, "reason": "probe"}))
+	if string(hiddenWrite) != string(absentMeta) {
+		t.Fatalf("hidden legacy meta-named action leaked existence: hidden=%s absent=%s", hiddenWrite, absentMeta)
 	}
 }

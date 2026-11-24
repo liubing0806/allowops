@@ -103,4 +103,10 @@ func TestAllowedActionsOnHost(t *testing.T) {
 	if _, err := f.service.AllowedActionsOnHost(context.Background(), "prod-01", candidates); err == nil {
 		t.Fatal("unauthenticated precheck succeeded")
 	}
+	// A cancelled context must surface an error rather than returning an empty allow set.
+	cancelledCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := f.service.AllowedActionsOnHost(cancelledCtx, "prod-01", candidates); err == nil {
+		t.Fatal("cancelled context precheck succeeded")
+	}
 }

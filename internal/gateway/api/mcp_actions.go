@@ -44,9 +44,12 @@ func (s *Service) AllowedActionsOnHost(ctx context.Context, hostname string, act
 	env := authz.Environment{TimeNS: time.Now().UnixNano(), SourceIP: r.ip}
 	for _, action := range actions {
 		result, _, err := evaluate(ctx, current.engine, authz.Input{Subject: id.Subject, Operation: authz.ExecuteAction, Action: action, Host: host, Env: env})
+		if err != nil {
+			return nil, err
+		}
 		r.policyVersion = current.version
 		r.matchedRules = unique(append(r.matchedRules, result.RuleIDs...))
-		if err == nil && result.Decision == "allow" {
+		if result.Decision == "allow" {
 			allowed[action.Name] = true
 		}
 	}

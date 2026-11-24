@@ -85,9 +85,10 @@ type Service struct {
 	lru      *list.List
 	versions string
 	// catalogMu guards the verified catalog snapshot (tier 1) and its loads.
-	catalogMu sync.Mutex
-	catalog   *catalogSnapshot
-	loads     map[string]*catalogLoad
+	catalogMu       sync.Mutex
+	catalog         *catalogSnapshot
+	loads           map[string]*catalogLoad
+	testLoadCatalog func(context.Context, *serverSnapshot) (*catalogSnapshot, error)
 }
 
 type cacheEntry struct {

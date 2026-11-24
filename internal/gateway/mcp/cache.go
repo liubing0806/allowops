@@ -65,11 +65,16 @@ type identityView struct {
 	defaultServer *sdk.Server
 }
 
+const catalogLoadTimeout = 30 * time.Second
+
 // serverScope is the read-only state the tools of one *sdk.Server use. Its
 // action sets are already narrowed by X-Allowops-Toolsets.
 type serverScope struct {
 	// tools are the names registered with the SDK server.
-	tools        map[string]bool
+	tools map[string]bool
+	// metaTools are the progressive discovery/invocation tools registered in
+	// this scope, distinguishing them from historical actions of the same name.
+	metaTools    map[string]bool
 	allAvailable map[string]catalog.Action
 	visible      map[string]catalog.Action
 	unsupported  map[string]bool
@@ -143,7 +148,9 @@ func (s *Service) viewFor(ctx context.Context) (*identityView, string, error) {
 }
 
 // catalogFor returns the tier 1 snapshot for the request versions. Only one
-// request per versions key loads it; the others wait for that result.
+// request per versions key loads it; the others wait for that result. The
+// shared load is decoupled from the initiating caller's cancellation so a
+// disconnecting client does not abort concurrent waiters.
 func (s *Service) catalogFor(ctx context.Context, snap *serverSnapshot) (*catalogSnapshot, error) {
 	s.catalogMu.Lock()
 	if current := s.catalog; current != nil && current.versions == snap.versions {
@@ -163,15 +170,28 @@ func (s *Service) catalogFor(ctx context.Context, snap *serverSnapshot) (*catalo
 	load = &catalogLoad{done: make(chan struct{})}
 	s.loads[snap.versions] = load
 	s.catalogMu.Unlock()
-	load.snapshot, load.err = s.loadCatalog(ctx, snap)
-	s.catalogMu.Lock()
-	delete(s.loads, snap.versions)
-	if load.err == nil {
-		s.catalog = load.snapshot
+	loadFn := s.loadCatalog
+	if s.testLoadCatalog != nil {
+		loadFn = s.testLoadCatalog
 	}
-	s.catalogMu.Unlock()
-	close(load.done)
-	return load.snapshot, load.err
+	go func() {
+		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), catalogLoadTimeout)
+		defer cancel()
+		load.snapshot, load.err = loadFn(loadCtx, snap)
+		s.catalogMu.Lock()
+		delete(s.loads, snap.versions)
+		if load.err == nil {
+			s.catalog = load.snapshot
+		}
+		s.catalogMu.Unlock()
+		close(load.done)
+	}()
+	select {
+	case <-load.done:
+		return load.snapshot, load.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (s *Service) loadCatalog(ctx context.Context, snap *serverSnapshot) (*catalogSnapshot, error) {
@@ -317,7 +337,7 @@ func (s *Service) buildView(ctx context.Context, snapshot *catalogSnapshot, id *
 // effective mode and registers the tools of that mode (design 5.3). It only
 // reads the view, so a request cannot learn about actions outside it.
 func (s *Service) buildServer(view *identityView, versions string, request requestScope) (*sdk.Server, string) {
-	scope := &serverScope{tools: map[string]bool{}, allAvailable: view.allAvailable, visible: view.visible, unsupported: view.unsupported, flatDefs: view.flatDefs, toolsets: request.toolsets, versions: versions}
+	scope := &serverScope{tools: map[string]bool{}, metaTools: map[string]bool{}, allAvailable: view.allAvailable, visible: view.visible, unsupported: view.unsupported, flatDefs: view.flatDefs, toolsets: request.toolsets, versions: versions}
 	if request.toolsets != nil {
 		scope.allAvailable = map[string]catalog.Action{}
 		scope.visible = map[string]catalog.Action{}
@@ -349,10 +369,13 @@ func (s *Service) buildServer(view *identityView, versions string, request reque
 			}
 		} else {
 			definitions = append(definitions, actionsSearchTool())
+			scope.metaTools["actions_search"] = true
 			for _, risk := range actionRisks {
 				for _, a := range scope.visible {
 					if a.Risk == risk {
-						definitions = append(definitions, invokeTool(risk, s.config.Jobs))
+						tool := invokeTool(risk, s.config.Jobs)
+						definitions = append(definitions, tool)
+						scope.metaTools[tool.Name] = true
 						break
 					}
 				}

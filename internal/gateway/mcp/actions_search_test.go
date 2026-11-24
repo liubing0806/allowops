@@ -229,18 +229,52 @@ func TestActionsSearchPaginationAndCursorBinding(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatal(err)
 	}
+	snapshot, err := actionsSnapshot(ctx, scope, actionsQuery{Limit: 3}, matchActions(actionsQuery{Limit: 3}, scope.visible))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tamperedOffset, _ := json.Marshal(actionsCursor{Offset: 1, Tag: decoded.Tag})
+	nonStrict := cursor
+	if last := nonStrict[len(nonStrict)-1]; last == 'A' {
+		nonStrict = nonStrict[:len(nonStrict)-1] + "B"
+	} else {
+		// Force non-zero trailing unused bits on a 2-char remainder payload.
+		nonStrict = base64.RawURLEncoding.EncodeToString(data)
+		for _, ch := range []byte{'B', 'C', 'D'} {
+			cand := nonStrict[:len(nonStrict)-1] + string(ch)
+			if cand != nonStrict {
+				nonStrict = cand
+				break
+			}
+		}
+	}
 	for name, forged := range map[string]string{
-		"offset zero":    encodeActionsCursor(decoded.Snapshot, 0),
-		"offset beyond":  encodeActionsCursor(decoded.Snapshot, 4),
-		"not base64":     "%%%",
-		"unknown field":  base64.RawURLEncoding.EncodeToString([]byte(`{"snapshot":"` + decoded.Snapshot + `","offset":1,"x":1}`)),
-		"trailing value": base64.RawURLEncoding.EncodeToString([]byte(`{"snapshot":"` + decoded.Snapshot + `","offset":1} {}`)),
-		"too long":       cursor + strings.Repeat("A", 257),
+		"tampered offset": base64.RawURLEncoding.EncodeToString(tamperedOffset),
+		"offset zero":     encodeActionsCursor(snapshot, 0),
+		"offset beyond":   encodeActionsCursor(snapshot, 4),
+		"not base64":      "%%%",
+		"non-strict b64":  nonStrict,
+		"unknown field":   base64.RawURLEncoding.EncodeToString([]byte(`{"offset":3,"tag":"` + decoded.Tag + `","x":1}`)),
+		"duplicate key":   base64.RawURLEncoding.EncodeToString([]byte(`{"offset":1,"offset":3,"tag":"` + decoded.Tag + `"}`)),
+		"trailing value":  base64.RawURLEncoding.EncodeToString([]byte(`{"offset":3,"tag":"` + decoded.Tag + `"} {}`)),
+		"too long":        cursor + strings.Repeat("A", 257),
 	} {
 		invalid(name, ctx, scope, fmt.Sprintf(`{"limit":3,"next_cursor":%q}`, forged))
 	}
 	if len(cursor) > 256 {
 		t.Fatalf("cursor has %d bytes", len(cursor))
+	}
+	// Host precheck drift (e.g. host authorization labels changed between pages
+	// without changing catalog or policy versions) invalidates the cursor.
+	hostID := &hostIdentity{allowed: map[string]map[string]bool{"web-01": {"disk_usage": true, "logs_read": true, "svc_restart": true}}}
+	hs := &Service{identity: hostID}
+	page1, err := searchActionsFor(t, hs, ctx, scope, `{"hostname":"web-01","limit":2}`)
+	if err != nil || page1.NextCursor == "" {
+		t.Fatalf("host page1=%+v err=%v", page1, err)
+	}
+	hostID.allowed["web-01"]["data_purge"] = true
+	if _, err := hs.searchActions(ctx, json.RawMessage(fmt.Sprintf(`{"hostname":"web-01","limit":2,"next_cursor":%q}`, page1.NextCursor)), scope); connect.CodeOf(err) != connect.CodeInvalidArgument || err.(*connect.Error).Message() != invalidActionsCursor {
+		t.Fatalf("host precheck drift error=%v", err)
 	}
 }
 

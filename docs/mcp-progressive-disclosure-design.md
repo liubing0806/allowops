@@ -286,9 +286,10 @@ AllowedActionsOnHost(ctx context.Context, hostname string, actions []authz.Actio
 
 - `invoke_tool`：直接标明该动作应使用的调用工具名（`actions_invoke_read` / `actions_invoke_write` / `actions_invoke_dangerous`），消除 LLM 猜测。
 - `toolsets`：仅在第一页（`next_cursor == ""`）返回当前结果集（经过所有筛选条件后的可见匹配集合）中**已标注 `toolset`** 的动作按 `toolset` 聚合计数（按名称升序；**未标注 `toolset` 的动作省略，不生成伪 `"unassigned"` 项**）。
-- **分页游标绑定**：`base64.RawURLEncoding` 编码 `{"snapshot": "<hex>", "offset": <int>}`，长度上限 256 字节；其中：
-  `snapshot = sha256(actor, subject, versions, effectiveMode, effectiveToolsets, canonicalQueryParamsIncludingHostname)`。
-  任意维度变化（包括角色变更但策略版本未变）或游标篡改均返回 `CodeInvalidArgument`（`"invalid actions_search cursor; restart without next_cursor"`）。
+- **分页游标绑定**：`base64.RawURLEncoding` 编码 `{"offset": <int>, "tag": "<hex>"}`，长度上限 256 字节，解码使用严格 Base64（`Strict()`）并复用 `argumentObject` 拒绝重复 JSON 键与尾随数据；其中：
+  `snapshot = sha256(actor, subject, versions, effectiveMode, effectiveToolsets, canonicalQueryParamsIncludingHostname, matchedActionNamesAfterHostPrecheck)`，
+  `tag = sha256("actions_search_cursor_v1:" + snapshot + ":" + offset)`（常量时间比对）。
+  任意维度变化（包括角色变更、主机标签变更导致 `hostname` 预检结果变化，但策略/目录版本未变）或篡改 `offset` 均返回 `CodeInvalidArgument`（`"invalid actions_search cursor; restart without next_cursor"`）。
 - **32 KiB 预算与单条超限降级**（同时覆盖 `include_schema: true` 和 `false`，防超大 `description` 突破预算）：
   1. 逐条装入 `actions[start:end]`（最多 `limit` 条），每次经 `toolResult(out)` 测量完整 MCP 响应字节数（含 `structuredContent`、文本副本与 `_meta`），超出 `resultByteLimit`（32 KiB）则停在上一条并附带 `next_cursor` 无损分页。
   2. 若 `start` 处仅 1 条（无论是否带 `include_schema`）就超过 32 KiB：先尝试省略 `toolsets` 汇总重试；若单条仍超过 32 KiB，返回 `CodeResourceExhausted`（`"action entry exceeds 32KB result limit"`），绝不突破 32 KiB 上限。
@@ -325,7 +326,8 @@ AllowedActionsOnHost(ctx context.Context, hostname string, actions []authz.Actio
 5. 标记 `state.operation = "mcp/" + actionName`、`state.mutating = true`（确保若后续结果审计失败且 `state.jobID != ""`，正确追加 `"; operation may have committed"`）。
 6. 通过 `s.currentAction(ctx, actionName)` 读取最新验签目录中的动作定义，并**强制校验 `action.Risk == expectedRisk`**（与所调用工具 `actions_invoke_<risk>` 一致）：
    - 不一致：返回 `CodeFailedPrecondition`（`"action risk does not match invocation tool; call the matching actions_invoke_<risk> tool"`），不创建 job，不调用 `RunJob`！
-7. 删除顶层 map 中的 `"action"` 键，将剩余字段重新编码后传入 `s.runAction(ctx, r, actionName, remainingRaw, []string{"action"}, state)`：
+7. 删除顶层 map 中的 `"action"` 键，将剩余字段重新编码后，通过 `job.WithExpectedRisk(ctx, expectedRisk)` 传入 `s.runAction(ctx, r, action, remainingRaw, []string{"action"}, state)`：
+   - `job.Service.RunJob` 在其实际用于授权、建单与调度的已验签动作加载完成后、创建作业前再次校验 `a.Risk == expectedRisk`（不一致则返回 `CodeFailedPrecondition` + `ErrorDetail.Reason = "ACTION_RISK_MISMATCH"`），彻底消除目录并发发布时的 TOCTOU 提权窗口；
    - `actionRequest` 校验失败时，未知参数错误提示自动包含 `"action"` 以及该动作允许的公共参数和过滤器名称；
    - 完整复用 `actionRequest` → `s.withProgress` → `s.jobs.RunJob` → `nativeSummaryResult` 全链路。
 
@@ -364,7 +366,7 @@ type inventoryResult struct {
 1. **先完成实体过滤与 32 KiB 截断**：完全保持现有 `VisibleHostnames` → `limit` → 32 KiB 二分截断逻辑不变，确保 `truncated` 的含义始终且唯一表示“实体被截断”，不破坏现有行为。
 2. **仅基于最终保留实体的 `kind` 生成推荐**：收集最终保留的 `out.Entities` 中出现的去重 `kind` 并按字典序排序（绝不泄漏被隐藏或截断实体的 `kind`）。
 3. **仅从当前请求作用域的可见动作 $V_s$ 匹配**：对每个 `kind`，筛选 `slices.Contains(a.EntityKinds, kind)` 的动作，按风险升序（`read` < `write` < `dangerous`）再按 `name` 升序排列，每个 `kind` 最多取前 **10** 条；若某 `kind` 匹配超过 10 条则标记 `RecommendedActionsTruncated = true`。
-4. **确定性顺序装入剩余 32 KiB 预算**：按 `kind` 字典序逐组尝试加入 `out.RecommendedActions` 并用 `toolResult(out)` 校验 `<= resultByteLimit`；放不下的整组省略，置 `RecommendedActionsTruncated = true`，并继续保持 `out.Truncated` 不受影响。
+4. **确定性顺序装入剩余 32 KiB 预算**：按 `kind` 字典序逐组尝试加入 `out.RecommendedActions` 并用 `toolResult(out)` 校验 `<= resultByteLimit`；放不下的整组省略，置 `RecommendedActionsTruncated = true`。仅当实体本身已紧贴 32 KiB 导致连空推荐集合的 `recommended_actions_truncated: true` 标记都放不下时，才二分裁剪实体并置 `out.Truncated = true`，确保两项截断标记在 32 KiB 内同时准确送达。
 5. **无匹配向后兼容**：当无任何匹配动作时（如旧目录无 `entity_kinds`、或 `viewer` 无可执行动作、`catalogs == nil` 的单测夹具），`RecommendedActions` 为 `nil`、`RecommendedActionsTruncated` 为 `false`，因 `omitempty` 均不出现在 JSON 输出中，现有 `inventory_test.go` 全部保持零变更通过。
 
 ---

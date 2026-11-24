@@ -116,6 +116,61 @@ func TestMetadataYAMLTypeRejected(t *testing.T) {
 	}
 }
 
+func TestMetadataYAMLMergeKeysAndAliases(t *testing.T) {
+	// Valid metadata supplied through YAML merge keys and aliases is accepted.
+	validMerged := strings.Join([]string{
+		"name: echo_value",
+		"description: echo a value",
+		"risk: read",
+		"exec: [/usr/bin/echo, ok]",
+		"timeout: 1s",
+		"max_output: 1KB",
+		"x_meta: &meta",
+		"  toolset: jvm",
+		"  tags: [gc, heap]",
+		"  entity_kinds: [jvm]",
+		"<<: *meta",
+	}, "\n")
+	// KnownFields rejects x_meta at top level; place anchor on an allowed field
+	// or inside an unused sequence only when merge keys target an existing map,
+	// or test a document-level merge via a YAML anchor inside params? No:
+	// YAML allows anchoring a merge map inside another merged map, or anchoring
+	// scalar/sequence values directly. Test valid alias + merge rejection below.
+	_ = validMerged
+
+	validAlias := validAction + "toolset: &ts jvm\ntags: [*ts, heap]\nentity_kinds: [*ts]\n"
+	a, err := ParseAction([]byte(validAlias))
+	if err != nil {
+		t.Fatalf("valid alias rejected: %v", err)
+	}
+	if a.Toolset != "jvm" || !slices.Equal(a.Tags, []string{"jvm", "heap"}) || !slices.Equal(a.EntityKinds, []string{"jvm"}) {
+		t.Fatalf("decoded alias metadata: %q %q %q", a.Toolset, a.Tags, a.EntityKinds)
+	}
+
+	// Merge keys and aliases carrying non-string or empty metadata values must
+	// still fail ParseAction's strict YAML checks rather than slipping through.
+	for name, doc := range map[string]string{
+		"merge bool toolset":    validAction + "<<: {toolset: true}\n",
+		"merge null toolset":    validAction + "<<: {toolset: null}\n",
+		"merge empty tags":      validAction + "<<: {tags: []}\n",
+		"merge int tag":         validAction + "<<: {tags: [123]}\n",
+		"merge bool kind":       validAction + "<<: {entity_kinds: [false]}\n",
+		"merge list bad second": validAction + "<<: [{toolset: jvm}, {tags: []}]\n",
+		"alias bool element":    validAction + "idempotent: &flag true\ntags: [*flag]\n",
+	} {
+		if _, err := ParseAction([]byte(doc)); err == nil {
+			t.Errorf("%s: accepted invalid YAML metadata", name)
+		}
+	}
+
+	// Explicit key on the action mapping overrides an invalid merged key,
+	// matching YAML 1.1 merge semantics.
+	override := validAction + "<<: {toolset: true}\ntoolset: jvm\n"
+	if a, err := ParseAction([]byte(override)); err != nil || a.Toolset != "jvm" {
+		t.Fatalf("explicit override over merge key: toolset=%q err=%v", a.Toolset, err)
+	}
+}
+
 func TestMetadataValuesRejected(t *testing.T) {
 	long := "a" + strings.Repeat("b", 32)
 	for _, fields := range []string{
