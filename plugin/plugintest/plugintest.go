@@ -10,6 +10,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"regexp"
 	"slices"
@@ -23,6 +24,7 @@ import (
 	"github.com/liubing0806/allowops/plugin/changes"
 	"github.com/liubing0806/allowops/plugin/inventory"
 	"github.com/liubing0806/allowops/plugin/knowledge"
+	"github.com/liubing0806/allowops/plugin/notifier"
 	"gopkg.in/yaml.v3"
 )
 
@@ -187,6 +189,34 @@ func (c *testCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	clear(c.entries)
+}
+
+// RunNotifierContract checks a notifier with a fixture that accepts
+// approval.requested events.
+func RunNotifierContract(t *testing.T, module plugin.Module, config string, opts ...HostOption) {
+	t.Helper()
+	h, create := contractSetup(t, module, config, "notifier", opts)
+	event := notifier.Event{
+		Type: notifier.EventApprovalRequested, EventID: "approval-fixture:1", At: h.Now(),
+		ApprovalID: "approval-fixture", JobID: "job-fixture", Action: "report", Risk: "read",
+		Requester: "requester-fixture", TargetCount: 1, MinApprovals: 1, ExpiresAt: h.Now().Add(time.Hour),
+		ConsoleURL: "https://console.example/approvals/approval-fixture", Status: "pending",
+	}
+	call := func(m plugin.Module, ctx context.Context) (struct{}, error) {
+		return struct{}{}, m.(notifier.Sender).Send(ctx, event)
+	}
+	m := readyModule(t, h, create)
+	if _, ok := m.(notifier.Sender); !ok {
+		t.Fatal("module must implement notifier.Sender")
+	}
+	checkCanceled(t, h, func(ctx context.Context) (struct{}, error) { return call(m, ctx) })
+	before := h.httpCalls.Load()
+	_, err := call(m, t.Context())
+	requireNoError(t, h, err)
+	if h.expectHTTP && h.httpCalls.Load() == before {
+		t.Fatal("notifier Send did not use Host.HTTPClient")
+	}
+	checkHTTP(t, h, create, call)
 }
 
 // RunResolverContract checks an inventory module with a valid YAML fixture.
@@ -527,8 +557,13 @@ func assertSafeError(t *testing.T, h *TestHost, err error) {
 		return
 	}
 	for _, value := range h.credentials {
-		if len(value) != 0 && strings.Contains(err.Error(), string(value)) {
-			t.Fatal("plugin error exposes a configured credential")
+		if len(value) != 0 {
+			secret := string(value)
+			for _, candidate := range []string{secret, url.QueryEscape(secret), url.PathEscape(secret)} {
+				if strings.Contains(err.Error(), candidate) {
+					t.Fatal("plugin error exposes a configured credential")
+				}
+			}
 		}
 	}
 }

@@ -60,13 +60,14 @@ func (e canonicalEndpoint) sameOrigin(other canonicalEndpoint) bool {
 }
 
 type egressPolicy struct {
-	endpoints []canonicalEndpoint
-	private   bool
-	cross     bool
+	endpoints    []canonicalEndpoint
+	private      bool
+	cross        bool
+	notifierMode bool
 }
 
-func egressConfig(c Config) (egressPolicy, error) {
-	policy := egressPolicy{private: c.AllowPrivateEgress, cross: c.AllowCrossOriginRedirects}
+func egressConfig(c Config, notifierMode bool) (egressPolicy, error) {
+	policy := egressPolicy{private: c.AllowPrivateEgress, cross: c.AllowCrossOriginRedirects, notifierMode: notifierMode}
 	if len(c.Egress) > 16 {
 		return policy, errors.New("plugin egress: too many endpoints")
 	}
@@ -76,8 +77,8 @@ func egressConfig(c Config) (egressPolicy, error) {
 			return policy, errEgress
 		}
 		e, err := endpoint(u)
-		if err != nil {
-			return policy, err
+		if err != nil || notifierMode && e.scheme != "https" {
+			return policy, errEgress
 		}
 		policy.endpoints = append(policy.endpoints, e)
 	}
@@ -100,7 +101,7 @@ func (p egressPolicy) permits(target canonicalEndpoint) bool {
 }
 
 func (p egressPolicy) checkRedirect(req *http.Request, via []*http.Request) error {
-	if len(via) == 0 || len(via) > 3 {
+	if p.notifierMode || len(via) == 0 || len(via) > 3 {
 		return errEgress
 	}
 	target, err := endpoint(req.URL)
@@ -165,7 +166,7 @@ func (p egressPolicy) dialContext(resolver ipResolver, dial dialFunc) dialFunc {
 		}
 		for _, ip := range ips {
 			ip = ip.Unmap()
-			if !allowedIP(ip, e.isIPLiteral, p.private) || network == "tcp4" && !ip.Is4() || network == "tcp6" && !ip.Is6() {
+			if !allowedIP(ip, e.isIPLiteral, p.private, p.notifierMode) || network == "tcp4" && !ip.Is4() || network == "tcp6" && !ip.Is6() {
 				continue
 			}
 			conn, err := dial(ctx, network, net.JoinHostPort(ip.String(), port))
@@ -191,7 +192,7 @@ var (
 	cgnat          = netip.MustParsePrefix("100.64.0.0/10")
 )
 
-func allowedIP(ip netip.Addr, literal, private bool) bool {
+func allowedIP(ip netip.Addr, literal, private, notifierMode bool) bool {
 	ip = ip.Unmap()
 	if !ip.IsValid() || ip.Zone() != "" || ip.IsUnspecified() || ip.IsMulticast() || ip.IsLinkLocalUnicast() ||
 		(ipv4Compatible.Contains(ip) && !ip.IsLoopback()) {
@@ -204,10 +205,13 @@ func allowedIP(ip netip.Addr, literal, private bool) bool {
 		}
 	}
 	if ip.IsLoopback() {
+		if notifierMode {
+			return private
+		}
 		return literal
 	}
 	if ip.IsPrivate() || cgnat.Contains(ip) {
-		return literal || private
+		return private || literal && !notifierMode
 	}
 	return ip.IsGlobalUnicast()
 }
@@ -224,7 +228,7 @@ func (t egressTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		return nil, errEgress
 	}
-	if req.Method != http.MethodGet && req.Method != http.MethodHead {
+	if req.Method != http.MethodGet && req.Method != http.MethodHead && !(t.policy.notifierMode && req.Method == http.MethodPost) {
 		return deny()
 	}
 	e, err := endpoint(req.URL)
@@ -243,8 +247,8 @@ func (t egressTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func (t egressTransport) CloseIdleConnections() { t.base.CloseIdleConnections() }
 
-func newEgressClient(c Config, resolver ipResolver) (*http.Client, error) {
-	policy, err := egressConfig(c)
+func newEgressClient(c Config, notifierMode bool, resolver ipResolver) (*http.Client, error) {
+	policy, err := egressConfig(c, notifierMode)
 	if err != nil {
 		return nil, err
 	}

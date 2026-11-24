@@ -36,6 +36,7 @@ import (
 	"github.com/liubing0806/allowops/internal/store"
 	storedb "github.com/liubing0806/allowops/internal/store/db"
 	"github.com/liubing0806/allowops/plugin"
+	"github.com/liubing0806/allowops/plugin/notifier"
 	"gopkg.in/yaml.v3"
 )
 
@@ -289,7 +290,10 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 	if err != nil {
 		return err
 	}
-	defer jobs.Close()
+	defer closeJobServices(jobs)
+	if len(pluginHost.NotifierSources()) != 0 {
+		jobs.ApprovalNotifier = approvalNotifier(pluginHost)
+	}
 	listener, err := startJobServices(identity, agent, objects, jobs, cfg.Address)
 	if err != nil {
 		return err
@@ -300,7 +304,37 @@ func serve(ctx context.Context, dsn string, args []string, auditor api.Auditor) 
 	}
 	auditErrors, stopAudit, waitUpdateCheck := startBackgroundWorkers(&cfg, db, auditStore)
 	defer func() { stopAudit(); waitUpdateCheck() }()
-	return serveUntilDone(ctx, cfg, srv, agent, listener, auditErrors, stopAudit)
+	return serveUntilDone(ctx, cfg, srv, listener, auditErrors, stopAudit)
+}
+
+func closeJobServices(jobs *job.Service) {
+	drainCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	jobs.DrainNotifications(drainCtx)
+	cancel()
+	jobs.Close()
+}
+
+func approvalNotifier(host *pluginhost.Host) job.ApprovalNotifierFunc {
+	sourceCount := len(host.NotifierSources())
+	return func(ctx context.Context, event job.ApprovalNotification) (string, string) {
+		status := strings.ToLower(strings.TrimPrefix(event.Status.String(), "APPROVAL_STATUS_"))
+		failures := host.Notify(ctx, notifier.Event{
+			Type: notifier.EventType(event.Type), EventID: event.EventID, At: event.At,
+			ApprovalID: event.ApprovalID, JobID: event.JobID, Action: event.Action, Risk: event.Risk,
+			Requester: event.Requester, TargetCount: event.TargetCount, SampleHosts: event.SampleHosts,
+			RequiredApproverRoleSets: event.RequiredApproverRoleSets, MinApprovals: event.MinApprovals,
+			ApprovedCount: event.ApprovedCount, ExpiresAt: event.ExpiresAt, ConsoleURL: event.ConsoleURL,
+			Actor: event.Actor, Status: status,
+		})
+		switch len(failures) {
+		case 0:
+			return "sent", ""
+		case sourceCount:
+			return "failed", "NOTIFY_DELIVERY_FAILED"
+		default:
+			return "partial_failed", "NOTIFY_DELIVERY_FAILED"
+		}
+	}
 }
 
 // startIdentity builds the identity service and starts it. The caller closes it.
@@ -530,28 +564,29 @@ func startBackgroundWorkers(cfg *configuration, db *store.Store, auditStore *aud
 
 // serveUntilDone serves until a signal, an audit worker failure or a listener
 // failure, then shuts the server down.
-func serveUntilDone(ctx context.Context, cfg configuration, srv *server.Server, agent *hostconn.Service, listener net.Listener, auditErrors <-chan error, stopAudit context.CancelFunc) error {
+func serveUntilDone(ctx context.Context, cfg configuration, srv *server.Server, listener net.Listener, auditErrors <-chan error, stopAudit context.CancelFunc) error {
 	finished := make(chan error, 1)
 	go func() { finished <- srv.Serve(listener) }()
 	fmt.Printf("gateway serving %s schema=%d\n", listener.Addr(), store.SchemaVersion)
+	var serveErr error
 	select {
 	case <-ctx.Done():
 	case <-auditErrors:
-		stopAudit()
-		agent.Close()
 		listener.Close()
-		return fmt.Errorf("audit background worker stopped")
+		serveErr = errors.New("audit background worker stopped")
 	case err := <-finished:
 		if err != nil {
-			agent.Close()
-			return fmt.Errorf("gateway listener failed")
+			serveErr = errors.New("gateway listener failed")
 		}
 	}
 	stopAudit()
 	shutdown, done := context.WithTimeout(context.Background(), cfg.Gateway.ShutdownGrace+5*time.Second)
 	defer done()
 	if err := srv.Shutdown(shutdown); err != nil {
-		return fmt.Errorf("gateway shutdown: %w", err)
+		serveErr = errors.Join(serveErr, fmt.Errorf("gateway shutdown: %w", err))
+	}
+	if serveErr != nil {
+		return serveErr
 	}
 	fmt.Println("gateway stopped")
 	return nil

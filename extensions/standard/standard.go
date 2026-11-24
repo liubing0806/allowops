@@ -11,4 +11,5 @@ import (
 	_ "github.com/liubing0806/allowops/extensions/inventory/promtargets"
 	_ "github.com/liubing0806/allowops/extensions/inventory/static"
 	_ "github.com/liubing0806/allowops/extensions/knowledge/gitdocs"
+	_ "github.com/liubing0806/allowops/extensions/notifier/webhook"
 )

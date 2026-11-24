@@ -58,6 +58,7 @@ type Service struct {
 	submitMu                    sync.RWMutex
 	approvals                   ApprovalConfig
 	ApprovalNotifier            ApprovalNotifier
+	notifications               approvalNotifications
 	analysisSem                 chan struct{}
 }
 
@@ -99,7 +100,11 @@ func (s *Service) Close() {
 	s.mu.Lock()
 	s.cancel()
 	s.mu.Unlock()
+	notifications := s.stopNotifications()
 	s.wg.Wait()
+	if notifications != nil {
+		<-notifications
+	}
 }
 
 func (s *Service) clearTasks(jobID string, taskIDs ...string) {
