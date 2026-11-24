@@ -446,15 +446,22 @@ func TestStepDataflowRejectsDuplicateRegexMatches(t *testing.T) {
 		result, err := executor.Run(t.Context(), a, nil, nil)
 		assertProducerRejected(t, result, err, executor.ErrExtractFailed, marker)
 	})
-	t.Run("redacted line hides potential second match", func(t *testing.T) {
-		command, marker := stepCommandFixture(t, "consumer")
-		spec := stepTextExtractor("[a-z]+")
-		spec.Regex = "^id=([a-z]+)$"
-		spec.Match = "exactly_one"
-		a := stepDataflowAction(stepOutput("id=first\npassword=second\n"), spec, command, stepValueArg)
-		result, err := executor.Run(t.Context(), a, nil, nil)
-		assertProducerRejected(t, result, err, executor.ErrExtractFailed, marker)
-	})
+	for _, tc := range []struct {
+		name, stdout string
+	}{
+		{"redacted line after match hides potential second match", "id=first\npassword=second\n"},
+		{"redacted line before match hides potential second match", "password=second\nid=first\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			command, marker := stepCommandFixture(t, "consumer")
+			spec := stepTextExtractor("[a-z]+")
+			spec.Regex = "^id=([a-z]+)$"
+			spec.Match = "exactly_one"
+			a := stepDataflowAction(stepOutput(tc.stdout), spec, command, stepValueArg)
+			result, err := executor.Run(t.Context(), a, nil, nil)
+			assertProducerRejected(t, result, err, executor.ErrExtractFailed, marker)
+		})
+	}
 }
 
 func TestStepDataflowRejectsRedactedValues(t *testing.T) {

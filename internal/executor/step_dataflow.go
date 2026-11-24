@@ -90,21 +90,21 @@ type stepExtractor struct {
 }
 
 type stepExtractSink struct {
-	ctx         context.Context
-	step        string
-	redactor    *redact.Redactor
-	extractors  []stepExtractor
-	bytesSeen   int
-	linesSeen   int
-	maxBytes    int
-	json        bytes.Buffer
-	jsonLimit   int
-	jsonTainted bool
+	ctx           context.Context
+	step          string
+	redactor      *redact.Redactor
+	extractors    []stepExtractor
+	bytesSeen     int
+	linesSeen     int
+	maxBytes      int
+	json          bytes.Buffer
+	jsonLimit     int
+	jsonTaintedAt int
 }
 
 // newStepExtractSink receives a step already validated by catalog.CheckHost.
 func newStepExtractSink(ctx context.Context, step catalog.Step, redactor *redact.Redactor) *stepExtractSink {
-	s := &stepExtractSink{ctx: ctx, step: step.Name, redactor: redactor}
+	s := &stepExtractSink{ctx: ctx, step: step.Name, redactor: redactor, jsonTaintedAt: -1}
 	for _, name := range slices.Sorted(maps.Keys(step.Extract)) {
 		spec := step.Extract[name]
 		limit := catalog.DefaultExtractMaxBytes
@@ -140,8 +140,10 @@ func (s *stepExtractSink) Write(line string, modified bool) error {
 		if s.json.Len() == 0 {
 			s.json.Grow(s.jsonLimit)
 		}
+		if modified && s.jsonTaintedAt < 0 {
+			s.jsonTaintedAt = s.json.Len()
+		}
 		s.json.WriteString(line[:n])
-		s.jsonTainted = s.jsonTainted || modified
 	}
 	text := strings.TrimSuffix(line, "\n")
 	for i := range s.extractors {
@@ -184,7 +186,7 @@ func (s *stepExtractSink) Write(line string, modified bool) error {
 }
 
 func (e *stepExtractor) capture(value string, modified bool) {
-	e.value, e.matched, e.tainted = strings.Clone(value), true, modified
+	e.value, e.matched, e.tainted = strings.Clone(value), true, e.tainted || modified
 }
 
 func (s *stepExtractSink) Finalize(incompleteOutput bool) (map[string]any, error) {
@@ -264,14 +266,14 @@ func parseExtractedValue(e stepExtractor, candidate any) (any, error) {
 }
 
 func (s *stepExtractSink) jsonValue(e stepExtractor) (any, error) {
-	if s.jsonTainted {
-		return nil, ErrExtractFailed
-	}
 	prefix := s.json.Bytes()[:min(s.json.Len(), e.limit)]
 	decoder := json.NewDecoder(bytes.NewReader(prefix))
 	decoder.UseNumber()
 	value, err := readExtractJSON(decoder, 0)
 	if err != nil || !utf8.Valid(prefix[:decoder.InputOffset()]) {
+		return nil, ErrExtractFailed
+	}
+	if s.jsonTaintedAt >= 0 && int64(s.jsonTaintedAt) < decoder.InputOffset() {
 		return nil, ErrExtractFailed
 	}
 	segments, err := catalog.ParseJSONPath(e.spec.JSONPath)

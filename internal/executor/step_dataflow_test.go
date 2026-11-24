@@ -51,7 +51,11 @@ func TestStepDataflowStreamingExtractors(t *testing.T) {
 		{name: "tainted TSV with absent column", stdout: "password=fixture", spec: catalog.StepExtractor{TSV: &catalog.TSVExtractor{Column: 2}, As: text, Optional: true}, err: ErrExtractFailed},
 		{name: "PEM-tainted empty line", stdout: "-----BEGIN PRIVATE KEY-----\n\n-----END PRIVATE KEY-----", spec: catalog.StepExtractor{Regex: "^()$", As: text}, err: ErrExtractFailed},
 		{name: "unrelated tainted line", stdout: "password=fixture\nv=next", spec: catalog.StepExtractor{Regex: "^v=([a-z]+)$", As: text}, want: "next"},
+		{name: "exactly one tainted before match", stdout: "password=fixture\nv=next\n", spec: catalog.StepExtractor{Regex: "^v=([a-z]+)$", Match: "exactly_one", As: text}, err: ErrExtractFailed},
+		{name: "exactly one tainted after match", stdout: "v=next\npassword=fixture\n", spec: catalog.StepExtractor{Regex: "^v=([a-z]+)$", Match: "exactly_one", As: text}, err: ErrExtractFailed},
 		{name: "NDJSON quoted keys", stdout: "{\"a.b/c\":[{\"label\":\"first\"}]}\n{\"a.b/c\":false}", spec: catalog.StepExtractor{JSONPath: `$["a.b/c"][0].label`, As: text}, want: "first"},
+		{name: "NDJSON clean first document before redacted second line", stdout: "{\"v\":\"first\"}\n{\"password\":\"fixture\"}\n", spec: catalog.StepExtractor{JSONPath: "$.v", As: text}, want: "first"},
+		{name: "JSON same-line trailing redaction still taints", stdout: "{\"v\":\"first\"} {\"password\":\"fixture\"}\n", spec: catalog.StepExtractor{JSONPath: "$.v", As: text}, err: ErrExtractFailed},
 		{name: "multiline JSON integer fidelity", stdout: "{\n  \"n\":9007199254740993\n}", spec: catalog.StepExtractor{JSONPath: "$.n", As: number}, want: int64(9007199254740993)},
 		{name: "JSON boolean", stdout: `{"flag":false}`, spec: catalog.StepExtractor{JSONPath: "$.flag", As: boolean}, want: false},
 		{name: "JSON Number is not a string", stdout: `{"n":1}`, spec: catalog.StepExtractor{JSONPath: "$.n", As: text}, err: ErrExtractTypeInvalid},
@@ -119,13 +123,16 @@ func TestStepDataflowSharedJSONBuffer(t *testing.T) {
 	if _, err := sink.Finalize(false); err == nil || err.Error() != "step producer variable first: EXTRACT_FAILED" {
 		t.Fatalf("error=%v, want first variable's extraction failure", err)
 	}
-	delete(step.Extract, "first")
+	step.Extract["first"] = catalog.StepExtractor{JSONPath: "$.second", MaxBytes: 16, As: text}
 	sink = newStepExtractSink(t.Context(), step, &redact.Redactor{})
 	if err := sink.Write("{\"second\":\"ok\"}\n", false); err != nil {
 		t.Fatal(err)
 	}
+	if err := sink.Write("{\"password\":\"[REDACTED:credential]\"}\n", true); err != nil {
+		t.Fatal(err)
+	}
 	values, err := sink.Finalize(false)
-	if err != nil || !maps.Equal(values, map[string]any{"second": "ok"}) {
+	if err != nil || !maps.Equal(values, map[string]any{"first": "ok", "second": "ok"}) {
 		t.Fatalf("values=%v, err=%v", values, err)
 	}
 	if _, err := sink.Finalize(true); !errors.Is(err, ErrExtractFailed) {
