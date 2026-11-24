@@ -40,8 +40,10 @@ installation are outside the protection scope. Audit hash chains need independen
 checkpoints to detect a complete rewrite by a database administrator.
 
 The [repository security policy](https://github.com/liubing0806/allowops/blob/main/SECURITY.md)
-lists all threats T1–T15 and their controls. Those controls are a model, not a
-claim of independent verification of every deployment. [Operations](operations.md)
+lists all threats T1–T16 (including HITL approval request-digest binding,
+person-level separation of duties, second-pass re-evaluation before execution,
+and hardened webhook egress) and their controls. Those controls are a model,
+not a claim of independent verification of every deployment. [Operations](operations.md)
 covers backups, upgrades and rotation.
 
 ## Vulnerability reports

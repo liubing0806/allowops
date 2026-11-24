@@ -49,8 +49,68 @@ Changes on `main` since v0.2.0. They are not in a release yet.
   `Validator`, `Cleaner`, and `ControlPlaneChangeReader` interfaces. Custom
   out-of-tree plugins and test doubles implementing `plugin.Host` must be
   updated to match.
+- **HITL approvals database migration (`00010_approvals.sql`) and least-privilege runtime grants**:
+  run `allowops-gateway migrate` with the maintenance database role before
+  starting the new gateway binary. Provision least-privilege runtime grants on
+  the new tables for the gateway runtime database role:
+  `GRANT SELECT, INSERT, UPDATE ON approval_sequences, approval_requests TO <runtime_role>;`
+  and `GRANT SELECT, INSERT ON approval_decisions TO <runtime_role>;`
+  (`approval_decisions` is append-only; never grant `UPDATE` or `DELETE` on it
+  or on `audit_events`).
+- **New authorization operations (`view_approvals`, `approve_jobs`)**: fresh
+  installations grant both to `admin` by default. Existing database policies
+  are preserved on upgrade without silent mutation. After upgrading all gateway
+  instances, export the policy (`allowops policy get > rules.yaml`), add
+  `view_approvals` / `approve_jobs` and any `effect: require_approval` rules,
+  simulate with `allowops policy test -f rules.yaml`, and apply with
+  `allowops policy apply`. Before rolling back to an older gateway binary,
+  remove `view_approvals`, `approve_jobs`, and any `require_approval` rules
+  from the active policy first.
+- **Optional `approvals.console_base_url`**: configure `approvals.console_base_url`
+  (or rely on `identity.origin`) to populate deep-link `console_url` values in
+  MCP approval receipts and webhook notifications.
 
 ### New
+
+- Human-in-the-Loop (HITL) approval workflow and single-use JIT privilege escalation:
+  - **OPA policy `effect: require_approval`**: rules can now require human
+    approval on `execute_action` with `approver_roles`, `min_approvals`,
+    `ttl_seconds`, and `allow_owner_approve` (default `false`). Evaluation
+    enforces `deny > require_approval > allow > default deny`, aggregates
+    multi-rule and multi-host constraints strictly (max `min_approvals`, min
+    `ttl_seconds`, AND `allow_owner_approve`, AND of OR-sets for
+    `required_approver_role_sets`), and reports approval-constraint diffs in
+    policy simulation (`TestPolicy` / `allowops policy test`).
+  - **Frozen execution plan & anti-TOCTOU state machine**: pending jobs enter
+    `JOB_STATUS_PENDING_APPROVAL` and bind normalized params, filters, exact
+    resolved `target_host_ids`, catalog version, `action_sha256`, `batch_size`,
+    and `max_failures` under a deterministic SHA-256 `request_digest`. Approval
+    requires matching `expected_request_digest`, enforces person-level
+    separation of duties (self-approval, owner self-approval, and multi-account
+    same-person voting), performs atomic single-use consumption across replicas,
+    and re-evaluates requester credentials, catalog digest, active policy, and
+    host authorization labels before dispatching execution.
+  - **MCP & CLI experience**: flat action tools and progressive
+    `actions_invoke_*` tools support `evidence` (`job_ids` and/or `summary`)
+    and `client_request_id` idempotency keys, returning a non-error
+    (`isError: false`) `pending_approval` receipt with `approval_id`,
+    `console_url`, `expires_at`, and polling/withdrawal hints (`jobs_get` with
+    `wait_seconds`, `jobs_cancel`). Added `allowops approvals` (`list`, `get`,
+    `approve`, `reject`, `cancel`) and `allowops run --evidence-job`,
+    `--evidence-summary`, and `--client-request-id`.
+  - **Webhook notifier plugin (`plugin/notifier`, `notifier.webhook`)**: new
+    `plugin/notifier` extension point and official `notifier.webhook` plugin
+    supporting `json`, `slack`, `dingtalk`, `feishu`, and `wecom` payloads plus
+    `hmac_sha256`, `bearer`, `dingtalk_timestamp`, and `feishu_timestamp`
+    signing over hardened HTTPS-only, no-redirect `POST` egress, delivered via
+    a bounded async queue with monotonic `notify_seq` status writebacks and
+    graceful shutdown draining.
+  - **Web Console & full audit chain coverage**: added the `/approvals` queue
+    and detail view (separating gateway-verified execution plans from untrusted
+    plain-text requester context), `require_approval` rule editing and
+    simulation diffs in Policies, `pending_approval` support and plain-text
+    reason rendering in Jobs, and end-to-end PostgreSQL v1 hash-chained audit
+    events for every approval lifecycle transition.
 
 - MCP progressive disclosure and catalog action metadata for large catalogs:
   - Signed catalog actions now support optional `toolset`, `tags`, and

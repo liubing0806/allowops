@@ -133,6 +133,8 @@ mcp:
 | `max_failures` | 非负数；只能调低签名中的有效上限，该上限通常为 5。失败数超过该值时停止。 |
 | `response_format` | `concise`（默认）或 `detailed`。 |
 | `grouping` | `exact`（动作工具与 `jobs_get` 默认；`jobs_diff` 默认为 `normalized`）或 `normalized`（推荐用于高噪多主机命令）。 |
+| `evidence` | 可选审批证据：`{ "job_ids": [...], "summary": "..." }`（最多 5 个调用者可见的历史 job ID 和/或经过脱敏的纯文本摘要）。 |
+| `client_request_id` | 可选审批提交幂等键（`^[a-zA-Z0-9._-]{1,64}$`）；相同执行计划重复提交返回已有审批回执，篡改执行计划复用同键返回 `CLIENT_REQUEST_ID_CONFLICT`。 |
 
 如果动作设置了 `max_targets`，其描述和 `targets` 的 schema 会写明该上限。目标数（选择器按解析后的数量计）超过上限的调用整体被拒绝，返回 `isError: true`、`reason` 为 `MAX_TARGETS_EXCEEDED`、`actual_count`，以及指明上限的 `violations` 条目。该检查在 `expected_count` 检查之后、策略评估之前；不创建 job 和 task。
 
@@ -159,3 +161,20 @@ mcp:
 结果预算为 32 KiB，包含结构化数据、其文本副本和元数据。每个分组预览中 `stdout`、`stderr`、`template_stdout` 与 `template_stderr` 合计共享最多 4 KiB 上限。concise 结果中每个分组最多显示两个示例主机名（检出离群数值时优先选 1 台典型主机 + 1 台极端离群主机）。detailed 结果包含分组的主机名，大分组的主机名可能跨多页。如果汇总快照或 `grouping` 发生变化，请不带 `next_cursor` 重新开始。job 服务可能已经截断了汇总，分页无法找回被省略的分组。请分别检查截断情况和主机输出的存储状态。
 
 使用 `_meta.progressToken` 的长轮询每 10 秒收到一次进度通知。未使用时，SSE 注释保持响应处于活动状态。目录和策略的更新在下一次 `tools/list` 时生效。不支持 `tools/list_changed`。网络故障后不要直接重试动作。请先检查最近的 job，确认原始提交是否已经执行。
+
+## 人工审批（HITL） {#human-in-the-loop-approvals}
+
+仅通过 `effect: require_approval` 授权的动作在平铺 `tools/list` 与渐进式 `actions_search` 中仍然可发现（向 `actions_search` 传入 `hostname` 时，命中审批规则的动作会返回 `requires_approval: true`）。
+
+当动作工具或 `actions_invoke_*` 触发 `require_approval` 时，网关会冻结执行计划，并返回**非错误**（`isError: false`）的结构化 `status: "pending_approval"` 回执，而不会把工具调用标记为失败：
+
+- `job_id`、`status: "pending_approval"`、`output_trust: "untrusted"` 与 `hint`。
+- `approval`：`approval_id`、`status`、`expires_at`、`min_approvals`、`approved_count`、`required_approver_role_sets`（若超出 32 KiB 预算则整体省略并标记 `details_truncated: true`）以及 `console_url`。
+
+请按回执中的 `hint` 协作，不要反复重新提交同一动作：
+
+1. 将 `approval_id` 与 `console_url` 告知人类审批人（通过 Web 控制台或 `allowops approvals approve` 审批）。
+2. 调用 `jobs_get(job_id, wait_seconds=30)` 轮询进度，直至进入执行完成或终态（`rejected`、`expired`、`cancelled` 或 `execution_denied`）。
+3. 如不再需要，可调用 `jobs_cancel(job_id)` 撤回待审批请求。
+
+由于 `/mcp` 采用无状态 Streamable HTTP，且 allowops 审批强约束跨身份多人职责分离，网关不使用服务端发起的 MCP Elicitation 请求。

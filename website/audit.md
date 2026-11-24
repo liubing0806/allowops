@@ -1,6 +1,9 @@
 # Audit
 
-Audit events record authenticated actors, operations, decisions, policy versions,
+Audit events record authenticated actors, operations (including approval
+lifecycle transitions: `run_job` with `require_approval`, `approve_request`,
+`reject_request`, `cancel_approval`, `expire_approval`, `consume_approval`,
+and `recheck_approval`), decisions, policy versions,
 job/task identifiers and output object references with SHA-256 hashes. They do
 not store command output bodies or raw action parameters. Keep reasons free of
 credentials and other sensitive data because reasons are audit metadata.
@@ -16,7 +19,9 @@ necessarily a continuous chain.
 Run migrations with a separate maintenance role. The runtime gateway role must
 not be a superuser, the audit table owner, or a member of the maintenance role.
 Its audit event permissions are INSERT and SELECT, not UPDATE/DELETE. The export
-cursor has separate update privileges. A database administrator provisions the
+cursor has separate update privileges. For HITL approvals, grant `SELECT, INSERT, UPDATE`
+on `approval_sequences` and `approval_requests`, and append-only `SELECT, INSERT`
+on `approval_decisions`. A database administrator provisions the
 required runtime grants after migration.
 
 Monthly partition creation and retention are maintenance responsibilities.

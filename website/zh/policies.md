@@ -1,6 +1,6 @@
 # 策略 {#policies}
 
-网关内嵌 Open Policy Agent（OPA），并使用固定的 Rego 程序。运维人员提供结构化的规则数据，不提供任意 Rego 代码。拒绝优先于允许。没有规则匹配或评估出错时，结果为拒绝。执行动作还要求每台目标主机至少有一个由网关管理的授权标签。
+网关内嵌 Open Policy Agent（OPA），并使用固定的 Rego 程序。运维人员提供结构化的规则数据，不提供任意 Rego 代码。优先级严格遵循 `deny > require_approval > allow > 默认拒绝`。没有规则匹配或评估出错时，结果为拒绝。执行动作还要求每台目标主机至少有一个由网关管理的授权标签。
 
 规则使用以下条件：经过认证的 role/team/owner 属性、操作、动作名称或风险、主机授权标签，以及可选的时间窗口和来源网络。上报标签永远不作为策略属性。同一条件内的列表按 OR 匹配。主体、主机、时间和网络等不同条件按 AND 组合。`actions` 和 `risks` 是二选一的关系：同时提供时，满足其中任意一个即可匹配。如果要限定为一个确切的动作列表，不要在同一条规则中再添加范围更大的 `risks: [read]` 允许条件。
 
@@ -8,7 +8,7 @@
 
 | 角色 | 初始权限 |
 |---|---|
-| `admin` | 管理和读取权限（含资源清单、变更记录和排查知识），以及在带标签主机上执行所有动作的权限，包括危险动作。 |
+| `admin` | 管理和读取权限（含资源清单、变更记录、排查知识、`view_approvals` 与 `approve_jobs`），以及在带标签主机上执行所有动作的权限，包括危险动作。 |
 | `operator` | 主机管理和读取、join token、资源清单、变更记录、排查知识、job 元数据和系统状态。 |
 | `auditor` | 审计、job 元数据和输出。 |
 | `viewer` | 主机、目录和 job 的元数据，以及资源清单、变更记录和排查知识。 |
@@ -31,7 +31,7 @@
 
 ## 规则结构 {#rule-shape}
 
-策略 YAML 包含一个 `rules` 列表。规则使用 `name`、`effect: allow|deny`、必填的 `roles` 和 `operations`，以及可选的 `teams`、`owners`、`actions`、`risks`、`host_labels`、`hours` 和 `source_cidrs`。`roles: ['*']` 匹配任意角色。动作的通配写法只能是确切名称或 `'*'`，不是通用的 glob 模式。
+策略 YAML 包含一个 `rules` 列表。规则使用 `name`、`effect: allow|deny|require_approval`、必填的 `roles` 和 `operations`，以及可选的 `teams`、`owners`、`actions`、`risks`、`host_labels`、`hours`、`source_cidrs` 和（仅限 `require_approval`）`approval`。`roles: ['*']` 匹配任意角色。动作的通配写法只能是确切名称或 `'*'`，不是通用的 glob 模式。
 
 ```yaml
 rules:
@@ -43,11 +43,27 @@ rules:
     host_labels:
       env: test
       team: ops
+  - name: prod-write-needs-approval
+    effect: require_approval
+    roles: [ops-agent]
+    operations: [execute_action]
+    risks: [write]
+    host_labels:
+      env: prod
+    approval:
+      approver_roles: [sre-approver, admin]
+      min_approvals: 1
+      ttl_seconds: 1800
+      allow_owner_approve: false
 ```
+
+`effect: require_approval` 仅允许用于 `operations: [execute_action]`，且必须提供非空的 `approval.approver_roles`。当同一 job 命中多条 `require_approval` 规则或多台目标主机时，网关按最严原则聚合约束：`min_approvals` 取最大值、`ttl_seconds` 取最小值、`allow_owner_approve` 按逻辑与合并、`required_approver_role_sets` 要求同时满足每条命中规则的角色集合（合取 of 析取）。若任一目标主机命中 `deny`，整单直接拒绝且不创建审批单。
+
+包含 `require_approval`、`view_approvals` 与 `approve_jobs` 的完整模板见 [HITL 审批示例策略](https://github.com/liubing0806/allowops/blob/main/examples/policy/hitl-approval.yaml)。首次初始化仅默认向 `admin` 授予 `view_approvals` 和 `approve_jobs`，升级不会静默修改数据库中的已有策略。
 
 仅有这段片段不能替代一套安装所需的管理规则。[示例策略](https://github.com/liubing0806/allowops/blob/main/examples/policy/read-only.yaml)包含管理员恢复权限和一条单独的输出规则。[Java 诊断示例](https://github.com/liubing0806/allowops/blob/main/examples/policy/java-diagnostics.yaml)把会增强类或反编译类的 Arthas L2 动作，在一个时间窗口内单独授予一个角色，与 Arthas L1 动作分开授权。`hours` 使用 `from`、`to`、`timezone`。它表示同一天内的左闭右开区间，要求 `0 <= from < to <= 24`。跨夜的时间窗口需要使用两条规则。请显式提供 IANA 时区。来源网络规则使用 CIDR 表示法。请自行选择网络，不要把部署环境的地址复制到公开的策略仓库中。
 
-操作名称包括 `execute_action`、`modify_policy`、`manage_service_accounts`、`manage_hosts`、`create_join_token`、`manage_user_roles`、`publish_catalog`、`view_hosts`、`view_inventory`、`view_changes`、`view_knowledge`、`view_catalog`、`view_jobs`、`view_output`、`view_audit` 和 `view_system`。
+操作名称包括 `execute_action`、`approve_jobs`、`modify_policy`、`manage_service_accounts`、`manage_hosts`、`create_join_token`、`manage_user_roles`、`publish_catalog`、`view_hosts`、`view_inventory`、`view_changes`、`view_knowledge`、`view_catalog`、`view_jobs`、`view_approvals`、`view_output`、`view_audit` 和 `view_system`。
 
 ## 评审和应用 {#review-and-apply}
 

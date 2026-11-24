@@ -33,7 +33,16 @@ management:
 #   mode: auto
 #   auto_threshold: 40
 
-# Optional context plugins (inventory, changes, knowledge). At most 32 instances; changes require a restart.
+# Optional HITL approval limits and console deep-link origin (for require_approval policies).
+# approvals:
+#   default_ttl: 30m          # 1m..max_ttl
+#   max_ttl: 24h              # default_ttl..168h
+#   max_pending_per_subject: 10   # 1..100
+#   max_pending_global: 1000      # 1..10000
+#   sweep_interval: 15s           # 1s..5m
+#   console_base_url: https://gateway.example.org  # HTTPS origin; defaults to identity.origin
+
+# Optional plugins (inventory, changes, knowledge, notifier). At most 32 instances; changes require a restart.
 # plugins:
 #   - id: inv-static
 #     module: inventory.static
@@ -93,5 +102,26 @@ management:
 #     config:
 #       dir: /var/lib/allowops/runbooks
 #       refresh_ttl: 1m
+#   - id: notify-slack
+#     module: notifier.webhook
+#     egress:
+#       - https://hooks.slack.com
+#     credentials:
+#       webhook_secret: /etc/allowops/secrets/webhook-signing-key
+#     timeout: 5s
+#     config:
+#       url: https://hooks.slack.com/services/T000/B000/XXX
+#       format: slack  # json | slack | dingtalk | feishu | wecom
+#       signing: hmac_sha256  # none | hmac_sha256 | bearer | dingtalk_timestamp | feishu_timestamp
+#       secret_ref: webhook_secret
+#       # For DingTalk (?access_token=) or WeCom (?key=), keep query tokens out of url and use:
+#       # token_query_param: access_token
+#       # token_ref: dingtalk_token
+#       events:
+#         - approval.requested
+#         - approval.approved
+#         - approval.rejected
+#         - approval.expired
+#         - approval.cancelled
 # An optional plugin that fails provisioning appears as UNAVAILABLE in system
 # dependencies and makes overall system status DEGRADED. Readiness is unchanged.

@@ -11,8 +11,13 @@ the example catalog: `java-reader` and `java-diagnostician` may run the twelve
 read their output on those hosts at any hour. Only `java-diagnostician` may run
 the five L2 actions `jvm_arthas_watch`, `jvm_arthas_trace`, `jvm_arthas_stack`,
 `jvm_arthas_monitor` and `jvm_arthas_jad`, which enhance classes or decompile
-them, and only between 09:00 and 17:00 UTC. These are independent full-policy
-examples, not fragments to apply together.
+them, and only between 09:00 and 17:00 UTC.
+[hitl-approval.yaml](hitl-approval.yaml) demonstrates human-in-the-loop (HITL)
+approval (`effect: require_approval`) for write and dangerous actions: service
+accounts or operators request execution, reviewers with `view_approvals` and
+`approve_jobs` inspect the gateway-verified frozen execution plan, and
+single-use approval triggers execution after a second-pass policy recheck.
+These are independent full-policy examples, not fragments to apply together.
 
 In the Java example, the L2 output (method arguments, return values,
 decompiled source) has its own `view_output` rule without a time window, so a

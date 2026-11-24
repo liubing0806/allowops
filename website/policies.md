@@ -1,9 +1,10 @@
 # Policies
 
 The gateway embeds Open Policy Agent (OPA) with a fixed Rego program. Operators
-provide structured rule data, not arbitrary Rego. A deny wins over an allow;
-no match and evaluation errors deny. Execution also requires at least one
-gateway-managed authorization label on every target.
+provide structured rule data, not arbitrary Rego. Precedence is strictly
+`deny > require_approval > allow > default deny`; no match and evaluation errors
+deny. Execution also requires at least one gateway-managed authorization label
+on every target.
 
 Rules use authenticated role/team/owner attributes, operations, action names or
 risks, host authorization labels, optional time windows and source networks.
@@ -17,7 +18,7 @@ to the same rule.
 
 | Role | Initial permissions |
 |---|---|
-| `admin` | Management and reading, including inventory, changes and knowledge, plus all actions on labeled hosts, including dangerous actions. |
+| `admin` | Management and reading (including inventory, changes, knowledge, `view_approvals` and `approve_jobs`), plus all actions on labeled hosts, including dangerous actions. |
 | `operator` | Host management/reading, join tokens, inventory, changes, knowledge, job metadata and system status. |
 | `auditor` | Audit, job metadata and output. |
 | `viewer` | Host/catalog/job metadata, inventory, changes and knowledge. |
@@ -61,10 +62,11 @@ selector to an action checks execution permission on each target.
 
 ## Rule shape
 
-Policy YAML has a `rules` list. Rules use `name`, `effect: allow|deny`, required
-`roles` and `operations`, and optional `teams`, `owners`, `actions`, `risks`,
-`host_labels`, `hours` and `source_cidrs`. `roles: ['*']` matches any role.
-Action wildcard syntax is exact names or `'*'`; it is not a general glob pattern.
+Policy YAML has a `rules` list. Rules use `name`, `effect: allow|deny|require_approval`,
+required `roles` and `operations`, and optional `teams`, `owners`, `actions`,
+`risks`, `host_labels`, `hours`, `source_cidrs` and (for `require_approval`)
+`approval`. `roles: ['*']` matches any role. Action wildcard syntax is exact
+names or `'*'`; it is not a general glob pattern.
 
 ```yaml
 rules:
@@ -76,7 +78,33 @@ rules:
     host_labels:
       env: test
       team: ops
+  - name: prod-write-needs-approval
+    effect: require_approval
+    roles: [ops-agent]
+    operations: [execute_action]
+    risks: [write]
+    host_labels:
+      env: prod
+    approval:
+      approver_roles: [sre-approver, admin]
+      min_approvals: 1
+      ttl_seconds: 1800
+      allow_owner_approve: false
 ```
+
+`effect: require_approval` is allowed only on `operations: [execute_action]`
+and requires non-empty `approval.approver_roles`. When multiple
+`require_approval` rules or hosts match a single job, the gateway aggregates
+constraints strictly: `min_approvals` takes the maximum, `ttl_seconds` takes
+the minimum, `allow_owner_approve` combines by AND, and
+`required_approver_role_sets` requires satisfying every matched rule's role set
+(AND of OR-sets). If any target host matches `deny`, the whole job is denied
+without creating an approval request.
+
+See the [HITL approval policy example](https://github.com/liubing0806/allowops/blob/main/examples/policy/hitl-approval.yaml)
+for a complete policy with `require_approval`, `view_approvals`, and `approve_jobs`.
+New installations grant `view_approvals` and `approve_jobs` only to `admin`;
+upgrades preserve existing database policies without silent mutation.
 
 This fragment alone is not a replacement for an installation's management
 rules. The [example policy](https://github.com/liubing0806/allowops/blob/main/examples/policy/read-only.yaml)
@@ -89,10 +117,11 @@ role in a time window, separately from the Arthas L1 actions.
 IANA timezones. Source-network rules use CIDR notation; choose your own networks
 without copying deployment addresses into a public policy repository.
 
-Operation names are `execute_action`, `modify_policy`, `manage_service_accounts`,
-`manage_hosts`, `create_join_token`, `manage_user_roles`, `publish_catalog`,
-`view_hosts`, `view_inventory`, `view_changes`, `view_knowledge`,
-`view_catalog`, `view_jobs`, `view_output`, `view_audit` and `view_system`.
+Operation names are `execute_action`, `approve_jobs`, `modify_policy`,
+`manage_service_accounts`, `manage_hosts`, `create_join_token`,
+`manage_user_roles`, `publish_catalog`, `view_hosts`, `view_inventory`,
+`view_changes`, `view_knowledge`, `view_catalog`, `view_jobs`, `view_approvals`,
+`view_output`, `view_audit` and `view_system`.
 
 ## Review and apply
 

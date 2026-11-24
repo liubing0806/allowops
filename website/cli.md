@@ -75,12 +75,15 @@ integers/booleans are typed and arrays use JSON. Supplying parameters also requi
 not expose separate output-filter flags; use MCP for top-level output filters.
 
 `run` exits 1 when the returned job is failed, partially failed, cancelled or
-denied. It exits 0 when the returned job succeeded. A queued or running response
-also exits 0 and prints a notice to stderr that the job has not completed. This
-can occur with `--wait-seconds 0` or when the response wait ends before completion;
-exit 0 alone does not establish task success. An unspecified or unknown job
-status, or a response without a job, exits 1 and reports the unknown status
-on stderr. The text or JSON response remains
+denied. It exits 0 when the returned job succeeded. A queued, running or
+`pending_approval` response also exits 0 and prints a notice to stderr (for
+`pending_approval`, it prints the `approval_id` and `console_url`). This
+can occur with `--wait-seconds 0`, when waiting for human approval, or when the
+response wait ends before completion; exit 0 alone does not establish task
+success. Use `--evidence-job` (repeatable), `--evidence-summary`, and
+`--client-request-id` when submitting actions that require approval. An
+unspecified or unknown job status, or a response without a job, exits 1 and
+reports the unknown status on stderr. The text or JSON response remains
 on stdout, including for a failed job. Submission, RPC and output errors remain
 nonzero. These exit rules apply to `run`; use `jobs get` to inspect later progress.
 
@@ -105,6 +108,26 @@ parameters inside `params`; `jobs_get` with `host` reads output and uses
 `step_index` for composite actions. MCP returns `data_base64` and numeric
 `next_offset`; CLI JSON returns ProtoJSON `data` and a string `next_offset`.
 See [MCP tools](mcp.md) for summary fields, output pages and reading hints.
+
+## Approvals
+
+```sh
+allowops approvals list --status pending --actionable --json
+allowops approvals get apr-20261124-0001 --json
+allowops approvals approve apr-20261124-0001 --reason 'verified execution plan'
+allowops approvals reject apr-20261124-0001 --reason 'wrong target window'
+allowops approvals cancel apr-20261124-0001 --yes
+```
+
+`approvals list` supports `--status`, `--action`, `--requester`, `--actionable`,
+`--page-size`, `--page-token` and `--json`. `approvals get` separates the
+gateway-verified frozen execution plan (exact resolved target hosts, normalized
+params, action digest, `request_digest`) from untrusted requester `reason` and
+`evidence`. `approvals approve` fetches the frozen plan first and sends its
+`request_digest` as `expected_request_digest` to prevent TOCTOU mismatches.
+`approvals reject` requires `--reason`. Interactive confirmation is prompted on
+approve/reject/cancel unless `--yes` is supplied (non-terminal stdin requires
+`--yes`).
 
 ## Policy and audit
 

@@ -44,11 +44,15 @@ is refused and must be downgraded on the host.
 Run the release migration with the maintenance database role. Helm uses a
 pre-install/pre-upgrade migration hook; deployments that manage binaries run
 `allowops-gateway migrate` separately. Preserve the runtime role's restricted
-audit privileges. Review migration compatibility before rolling back binaries;
+audit privileges, and grant least-privilege access on the HITL approval tables:
+`SELECT, INSERT, UPDATE` on `approval_sequences` and `approval_requests`, and
+append-only `SELECT, INSERT` on `approval_decisions` (no `UPDATE`/`DELETE`).
+Review migration compatibility before rolling back binaries;
 do not edit migration history or assume a newer schema works with an older gateway.
 
-SIGTERM stops new work, drains in-flight work up to the configured grace period
-and asks hosts to reconnect. Allow sufficient container termination time.
+SIGTERM stops new work, drains in-flight approval notification deliveries (up
+to 5 seconds) and in-flight job work up to the configured grace period, and
+asks hosts to reconnect. Allow sufficient container termination time.
 Disconnects terminate active task process groups and do not replay tasks.
 Cancellation and disconnect do not reverse side effects already made.
 

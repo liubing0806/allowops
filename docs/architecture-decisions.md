@@ -986,3 +986,17 @@ params:
 | SD4 | 防御不可信 stdout 注入（T10） | 提取器（单捕获组 RE2 + `match: first\|exactly_one`、受限 `json_path`、同记录 `tsv`）强制绑定强类型 `as`（`int` 必填 `min`/`max` 且用于 `exec` 时 `min >= 0`；`enum` 禁止 `-` 开头；`string` 必填 `regex` 强制整串锚定 `^(?:...)$` 与 `max_len ≤ 1024`；`path` 经 `ResolvePath` 并在下游步骤执行前做 `CheckPathTrusted`）。`{steps.*}` 仅允许出现在最终命令普通参数位置，静态禁止进入 `exec[0]`、所有包装命令选项/操作数、`docker`/`kubectl` 全局与 `exec` 目标位置，以及 `allow_interpreter: true` 动作；渲染后再次 `CheckCommand` 并统一拒绝前导 `-` |
 | SD5 | 条件分支语义与跳过可见性 | `when` 采用零依赖结构化 YAML AST（最大深度 4、最大 32 节点、Step 0 禁止 `when`），使用 Kleene 强三值逻辑（缺失为 `unknown`，`not unknown = unknown`，仅 `true` 执行），保证 fail-closed。可选参数组仅在产生步干净成功且 `optional: true` 未命中时省略，否则 `EXTRACT_MISSING`。跳过步骤携带固定原因码 `CONDITION_FALSE` / `STOPPED`，网关按原因分别校验，全成功/跳过步骤聚合退出码为 0 |
 | SD6 | 授权边界与风险提示 | `when` 依赖主机输出，不是授权或安全边界；非 `read` 动作使用 `extract`/`when` 时 `catalog validate` 产出评审警告，评审时须保证每步即使无条件执行也安全 |
+
+## 24. 人工审批与单次 JIT 临时提权（HITL1~HITL7）
+
+2026-11-24 确认并实现，设计见 [hitl-approval-design.md](hitl-approval-design.md)，计划见 [hitl-approval-plan.md](hitl-approval-plan.md)。目标：在现有零信任签名目录与 OPA 策略框架内引入 `effect: require_approval`，实现面向 AI Agent / MCP、CLI 与 Web Console 的审批流和单次 JIT 执行门控。
+
+| 编号 | 问题 | 决定 |
+|---|---|---|
+| HITL1 | 策略优先级与约束聚合 | 固定遵循 `deny > require_approval > allow > default deny`。任一目标主机命中 `deny` 直接拒绝且不创建审批单；混合 `allow` 与 `require_approval` 时整单进入审批。多条 `require_approval` 规则与多主机结果按最严原则聚合：`min_approvals` 取最大值、`ttl_seconds` 取最小值、`allow_owner_approve` 按逻辑与、`required_approver_role_sets` 取角色集合的合取（AND of OR-sets） |
+| HITL2 | 冻结执行计划与防 TOCTOU | 创建审批单时将规范化参数、过滤条件、精确解析后的 `target_host_ids`、目录版本与 `action_sha256`、`batch_size`/`max_failures` 冻结为确定性 JSON 并计算 SHA-256 `request_digest`。审批通过须校验 `expected_request_digest`，防止“看 A 批 B” |
+| HITL3 | 自然人级职责分离（SoD） | 审批人不可是发起人本人、不可是服务账号所属 owner（除非策略显式 `allow_owner_approve: true`），且通过身份主体与规范化邮箱防止同一自然人借多账号自批或重复计票；同时对未绑定规范化邮箱的多人审批做安全兜底 |
+| HITL4 | 审批通过前二次重验与原子单次消费 | 达成票数后、真正调度执行前，在同一事务锁序下重验发起人凭据/服务账号状态、当前签名目录与 `action_sha256`、最新策略（防降级或新增 deny/收紧审批约束）及冻结目标主机的授权标签；通过 `consume_nonce` 原子消费确保多实例并发下至多执行一次，不签发可复用的静态权限令牌 |
+| HITL5 | MCP 交互形态（非错误回执 vs Elicitation） | MCP SDK v1.8.0 在无状态 `StreamableHTTPOptions{Stateless: true}` 下直接拒绝服务端发起的 `ServerSession.Elicit`，且 allowops HITL 为跨身份多人职责分离流程。故沿用不增保留工具名的原则，动作工具与 `actions_invoke_*` 在触发审批时返回非错误（`isError: false`）结构化 `status: pending_approval` 回执（含 `approval_id`、`console_url`、`expires_at`、`hint`），配合 `client_request_id` 幂等键、`evidence` 证据与 `jobs_get(wait_seconds)` / `jobs_cancel` 完成闭环 |
+| HITL6 | 审批通知插件与状态回写 | 按 PL5 新增 `plugin/notifier` 扩展点与 `extensions/notifier/webhook` 官方插件（支持 `json`/`slack`/`dingtalk`/`feishu`/`wecom` 格式及 `hmac_sha256`/`bearer`/`dingtalk_timestamp`/`feishu_timestamp` 签名）。网关插件宿主强制 HTTPS-only `POST`、禁止重定向、不透传响应体，通过有界异步队列（256）+ 双 worker 投递，利用单调递增 `notify_seq` 防止旧投递覆盖新审批状态，关机时先停接新请求再排空队列（最长 5s） |
+| HITL7 | 不可信上下文隔离与升级兼容 | 发起人提交的 `reason`、`evidence.summary` 及审批意见在 Web Console 均标注不可信并以纯文本逐字渲染（禁止 HTML/Markdown/i18n 插值）。新增 `view_approvals` 与 `approve_jobs` 操作仅在首次初始化时默认授予 `admin`，升级绝不静默改写数据库已有策略；运行时数据库角色需按最小权限为 `approval_sequences`、`approval_requests`、`approval_decisions` 授权 |

@@ -441,7 +441,7 @@ test/{attack,e2e,scale,vm}/
 
 - [静态审阅后的后续改进计划](roadmap.md)。
 - 网关实例失联后，由其他实例续跑其未下发批次（MVP 当前仅收尾，不自动重放）。
-- 人工审批（`require_approval`、审批流、通知）。
+- ~~人工审批（`require_approval`、审批流、通知）~~ — 已实现，详见 [HITL 审批与单次 JIT 提权设计](hitl-approval-design.md)。
 - 单机模式（本地 YAML、stdio MCP）。
 - 区域中继和区域自治。
 - MCP OAuth 授权（以工程师身份调用，替代长期 token）。
