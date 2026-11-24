@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -71,6 +72,9 @@ type Action struct {
 	MaxFailures      *int                         `json:"max_failures,omitempty" yaml:"max_failures,omitempty"`
 	MaxTargets       *int                         `json:"max_targets,omitempty" yaml:"max_targets,omitempty"`
 	AllowInterpreter bool                         `json:"allow_interpreter,omitempty" yaml:"allow_interpreter,omitempty"`
+	Toolset          string                       `json:"toolset,omitempty" yaml:"toolset,omitempty"`
+	Tags             []string                     `json:"tags,omitempty" yaml:"tags,omitempty"`
+	EntityKinds      []string                     `json:"entity_kinds,omitempty" yaml:"entity_kinds,omitempty"`
 	maxOutputSet     bool
 }
 
@@ -120,8 +124,36 @@ func ParseAction(data []byte) (Action, error) {
 		if value := content[i+1]; content[i].Value == "max_targets" && (value.Kind != yaml.ScalarNode || value.Tag != "!!int") {
 			return a, errMaxTargetsRange
 		}
+		if err := checkMetadataNode(content[i].Value, content[i+1]); err != nil {
+			return a, err
+		}
 	}
 	return a, nil
+}
+
+// checkMetadataNode rejects metadata values that yaml.v3 would otherwise
+// accept by conversion: null or empty values, and booleans or numbers decoded
+// into strings.
+func checkMetadataNode(key string, value *yaml.Node) error {
+	switch key {
+	case "toolset":
+		if !isStringNode(value) || value.Value == "" {
+			return fmt.Errorf("toolset must be a non-empty string")
+		}
+	case "tags", "entity_kinds":
+		valid := value.Kind == yaml.SequenceNode && len(value.Content) > 0
+		for _, item := range value.Content {
+			valid = valid && isStringNode(item)
+		}
+		if !valid {
+			return fmt.Errorf("%s must be a non-empty list of strings", key)
+		}
+	}
+	return nil
+}
+
+func isStringNode(node *yaml.Node) bool {
+	return node.Kind == yaml.ScalarNode && node.Tag == "!!str"
 }
 
 func applyDefaults(a Action, c Config) Action {
@@ -227,6 +259,21 @@ var errMaxTargetsRange = fmt.Errorf("max_targets must be an integer from 1 to %d
 
 var actionName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
+// readReservedActionNames are the gateway's fixed MCP tools. Every path,
+// including reading signed packages, rejects actions with these names.
+var readReservedActionNames = []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "entities_search"}
+
+// progressiveReservedActionNames are the progressive disclosure meta-tools.
+// Only authoring and publication reject them, so packages signed or published
+// before they were reserved stay readable.
+var progressiveReservedActionNames = []string{"actions_search", "actions_invoke_read", "actions_invoke_write", "actions_invoke_dangerous"}
+
+// metadataValue matches toolset, tags and entity_kinds values, as
+// pluginhost.kindPattern matches inventory entity kinds.
+var metadataValue = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+
+const maxMetadataValues = 16
+
 func IsInterpreter(path string) bool {
 	name := strings.ToLower(filepath.Base(path))
 	return strings.HasPrefix(name, "python") || slices.Contains([]string{"sh", "bash", "zsh", "dash", "ash", "ksh", "mksh", "rbash", "csh", "tcsh", "perl", "ruby", "node", "php", "lua", "awk", "gawk", "mawk", "sed"}, name)
@@ -245,7 +292,13 @@ func words(template []any) []string {
 	return result
 }
 
+// ValidateAction is the authoring check used by Load, Build and the CLI. Host
+// support checks skip validateAuthoring, so an action that a package signed
+// before a name was reserved still runs.
 func ValidateAction(a Action) ([]string, error) {
+	if err := validateAuthoring(a); err != nil {
+		return nil, err
+	}
 	return validateAction(a, false)
 }
 
@@ -275,7 +328,7 @@ func validateAction(a Action, allowUnsupported bool) ([]string, error) {
 }
 
 func validateIdentity(a Action) error {
-	if !actionName.MatchString(a.Name) || slices.Contains([]string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "entities_search"}, a.Name) {
+	if !actionName.MatchString(a.Name) || slices.Contains(readReservedActionNames, a.Name) {
 		return fmt.Errorf("invalid or reserved action name %q", a.Name)
 	}
 	if strings.TrimSpace(a.Description) == "" {
@@ -283,6 +336,51 @@ func validateIdentity(a Action) error {
 	}
 	if !slices.Contains([]string{"read", "write", "dangerous"}, a.Risk) {
 		return fmt.Errorf("risk allowed: read, write, dangerous")
+	}
+	return nil
+}
+
+// validateAuthoring holds the checks that readers skip: names reserved after
+// packages could already use them, and metadata limits that a later release
+// may relax.
+func validateAuthoring(a Action) error {
+	if slices.Contains(progressiveReservedActionNames, a.Name) {
+		return fmt.Errorf("invalid or reserved action name %q", a.Name)
+	}
+	return validateMetadata(a)
+}
+
+func validateMetadata(a Action) error {
+	if a.Toolset != "" && !metadataValue.MatchString(a.Toolset) {
+		return fmt.Errorf("invalid toolset %q", a.Toolset)
+	}
+	if err := validateMetadataValues("tags", a.Tags); err != nil {
+		return err
+	}
+	return validateMetadataValues("entity_kinds", a.EntityKinds)
+}
+
+func validateMetadataValues(field string, values []string) error {
+	if len(values) > maxMetadataValues {
+		return fmt.Errorf("%s allows at most %d values", field, maxMetadataValues)
+	}
+	seen := map[string]bool{}
+	for _, value := range values {
+		if !metadataValue.MatchString(value) || seen[value] {
+			return fmt.Errorf("invalid or duplicate %s value %q", field, value)
+		}
+		seen[value] = true
+	}
+	return nil
+}
+
+// ValidateForPublish applies the authoring checks that ParsePackage and Verify
+// skip, so the gateway refuses to publish what Build would refuse to produce.
+func ValidateForPublish(p *Package) error {
+	for _, name := range slices.Sorted(maps.Keys(p.Actions)) {
+		if err := validateAuthoring(p.Actions[name]); err != nil {
+			return fmt.Errorf("action %s: %w", name, err)
+		}
 	}
 	return nil
 }

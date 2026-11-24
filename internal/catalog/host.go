@@ -398,7 +398,7 @@ func inspectExecutable(program, real string, allow, wrapped bool) error {
 }
 
 func CheckHost(a Action) HostSupport {
-	warnings, err := ValidateAction(a)
+	warnings, err := validateAction(a, false)
 	if err == nil {
 		switch {
 		case a.Exec != nil:
