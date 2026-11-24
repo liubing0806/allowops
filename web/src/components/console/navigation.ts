@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  CircleCheck,
   ClipboardList,
   KeyRound,
   LayoutDashboard,
@@ -26,6 +27,7 @@ export const navigationGroups: { key: string; items: NavItem[] }[] = [
       { path: '/', key: 'nav.overview', icon: LayoutDashboard },
       { path: '/hosts', key: 'nav.hosts', icon: Server },
       { path: '/jobs', key: 'nav.jobs', icon: ClipboardList },
+      { path: '/approvals', key: 'nav.approvals', icon: CircleCheck },
       { path: '/audit', key: 'nav.audit', icon: ScrollText },
     ],
   },

@@ -471,12 +471,18 @@ export function ConfirmDialog({
   onClose,
   onConfirm,
   pending = false,
+  confirmDisabled = false,
+  confirmVariant = 'destructive',
+  children,
 }: {
   title: string
   description: string
   onClose: () => void
   onConfirm: () => void
   pending?: boolean
+  confirmDisabled?: boolean
+  confirmVariant?: 'default' | 'destructive'
+  children?: ReactNode
 }) {
   const { t } = useTranslation()
   return (
@@ -492,12 +498,13 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+        {children}
         <DialogNotification />
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={pending}>
+          <Button variant={confirmVariant} onClick={onConfirm} disabled={pending || confirmDisabled}>
             {t('common.confirm')}
           </Button>
         </DialogFooter>

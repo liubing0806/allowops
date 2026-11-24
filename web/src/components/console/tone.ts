@@ -19,9 +19,10 @@ export const softTone: Record<Tone, string> = {
 // Maps API enum names (job, task, health, decision) to a semantic tone.
 export function statusTone(value: string): Tone {
   const upper = value.toUpperCase()
-  if (/(PARTIALLY_FAILED|DEGRADED|EXPIRING)$/.test(upper)) return 'warning'
-  if (/(SUCCEEDED|HEALTHY|ALLOW)$/.test(upper)) return 'success'
-  if (/(FAILED|DENIED|DENY|UNAVAILABLE|TIMEOUT|UNSUPPORTED)$/.test(upper))
+  if (upper === 'PENDING' || /(PARTIALLY_FAILED|DEGRADED|EXPIRING|PENDING_APPROVAL|APPROVAL_STATUS_PENDING|REQUIRE_APPROVAL)$/.test(upper))
+    return 'warning'
+  if (/(SUCCEEDED|HEALTHY|ALLOW|APPROVED|APPROVAL_VOTE_APPROVE)$/.test(upper)) return 'success'
+  if (/(FAILED|DENIED|DENY|UNAVAILABLE|TIMEOUT|UNSUPPORTED|REJECTED|EXPIRED|APPROVAL_VOTE_REJECT)$/.test(upper))
     return 'destructive'
   if (/RUNNING$/.test(upper)) return 'info'
   return 'neutral'

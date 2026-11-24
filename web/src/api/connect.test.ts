@@ -88,6 +88,61 @@ describe('production Connect adapter', () => {
     expect(request.stream).toBe('OUTPUT_STREAM_STDERR')
   })
 
+  it('passes approval filters and returns the opaque cursor without fetching the next page', async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        approvals: [{ approvalId: 'apr-1', status: 'APPROVAL_STATUS_PENDING' }],
+        page: { nextPageToken: 'next' },
+      }), { headers: { 'Content-Type': 'application/json' } }),
+    )
+    vi.stubGlobal('fetch', fetch)
+    const { api } = await vi.importActual<typeof import('./index')>('./index')
+    const request = {
+      page: { pageToken: 'current' },
+      statuses: ['APPROVAL_STATUS_PENDING' as const],
+      action: 'restart',
+      onlyActionable: true,
+    }
+    const result = await api.listApprovals(request)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    const [url, options] = fetch.mock.calls[0]
+    expect(url).toContain('/allowops.v1.ApprovalService/ListApprovals')
+    expect(new Headers(options.headers).has('X-CSRF-Token')).toBe(false)
+    expect(JSON.parse(new TextDecoder().decode(options.body))).toEqual(request)
+    expect(result.page.nextPageToken).toBe('next')
+    expect(result.approvals[0]).toMatchObject({ approvalId: 'apr-1', canApprove: false })
+  })
+
+  it('uses CSRF for all approval writes and preserves the supplied request digest', async () => {
+    const fetch = vi.fn<(url: string, options: RequestInit) => Promise<Response>>(async (url) =>
+      new Response(JSON.stringify(url.endsWith('/GetCurrentSession')
+        ? { csrfToken: 'fixture-csrf' }
+        : { approval: { approvalId: 'apr-1' } }
+      ), { headers: { 'Content-Type': 'application/json' } }),
+    )
+    vi.stubGlobal('fetch', fetch)
+    const { api } = await vi.importActual<typeof import('./index')>('./index')
+    const approvalId = 'apr-1'
+    const expectedRequestDigest = btoa('0123456789abcdef0123456789abcdef')
+    const approveRequest = { approvalId, expectedRequestDigest, reason: 'Reviewed' }
+    const rejectRequest = { approvalId, reason: 'Wrong window' }
+    await api.approveRequest(approveRequest)
+    await api.rejectRequest(rejectRequest)
+    await api.cancelApproval({ approvalId })
+    expect(fetch).toHaveBeenCalledTimes(6)
+    const writes = fetch.mock.calls.filter(([url]) => url.includes('ApprovalService'))
+    expect(writes.map(([url]) => url.split('/').at(-1))).toEqual([
+      'ApproveRequest', 'RejectRequest', 'CancelApproval',
+    ])
+    for (const [, options] of writes) {
+      expect(new Headers(options.headers).get('X-CSRF-Token')).toBe('fixture-csrf')
+      expect(options.credentials).toBe('same-origin')
+    }
+    expect(writes.map(([, options]) =>
+      JSON.parse(new TextDecoder().decode(options.body as Uint8Array<ArrayBuffer>))
+    )).toEqual([approveRequest, rejectRequest, { approvalId }])
+  })
+
   it('reads the remaining server pages with the original host filters', async () => {
     const fetch = vi
       .fn()

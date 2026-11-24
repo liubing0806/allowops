@@ -71,6 +71,20 @@ describe('job list and detail side by side', () => {
     expect(screen.queryByRole('link', { name: FINISHED })).not.toBeInTheDocument()
   })
 
+  it('filters pending jobs and links their approval progress to the request', async () => {
+    const pending = 'job-20261013-0044'
+    open(`/jobs/${pending}`)
+    const status = await screen.findByRole('group', { name: 'Job 状态' })
+    fireEvent.click(within(status).getByRole('button', { name: '等待审批' }))
+    const row = await screen.findByRole('link', { name: pending })
+    expect(row).toHaveTextContent('等待审批 · 1/2')
+    const summary = await screen.findByRole('region', { name: '任务审批' })
+    expect(within(summary).getByText('已批准 1 / 2')).toBeVisible()
+    expect(within(summary).getByRole('link', { name: 'apr-20261013-0001' }))
+      .toHaveAttribute('href', '/approvals/apr-20261013-0001')
+    await waitFor(() => expect(screen.queryByRole('link', { name: RUNNING })).toBeNull())
+  })
+
   it('offers cancel only for an active job', async () => {
     open(`/jobs/${FINISHED}`)
     expect(

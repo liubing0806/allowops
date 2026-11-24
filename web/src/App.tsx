@@ -43,6 +43,7 @@ const Catalog = lazy(() => import('@/pages/Catalog'))
 const Policies = lazy(() => import('@/pages/Policies'))
 const ServiceAccounts = lazy(() => import('@/pages/ServiceAccounts'))
 const Jobs = lazy(() => import('@/pages/Jobs'))
+const Approvals = lazy(() => import('@/pages/Approvals'))
 const Audit = lazy(() => import('@/pages/Audit'))
 const UsersPage = lazy(() => import('@/pages/Users'))
 const System = lazy(() => import('@/pages/System'))
@@ -348,6 +349,7 @@ export default function App() {
                 <Route path="service-accounts" element={<ServiceAccounts />} />
                 {/* The job list stays mounted beside the selected job's detail. */}
                 <Route path="jobs/:jobId?" element={<Jobs />} />
+                <Route path="approvals/:approvalId?" element={<Approvals />} />
                 <Route path="audit" element={<Audit />} />
                 <Route path="users" element={<UsersPage />} />
                 <Route path="system" element={<System />} />

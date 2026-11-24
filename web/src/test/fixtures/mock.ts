@@ -1,6 +1,7 @@
 import type {
   ActionDefinition,
   ActionSummary,
+  ApprovalRequest,
   AuditEvent,
   CatalogVersion,
   ConsoleApi,
@@ -402,7 +403,7 @@ function seed() {
       catalog: catalogs[0].catalog,
       actionSha256: zeros,
       subjectId: 'sa-01',
-      reason: 'job.reason.inspect',
+      reason: 'Inspect service status',
       status: 'JOB_STATUS_PARTIALLY_FAILED',
       createdAt: date(),
       finishedAt: date(),
@@ -419,7 +420,7 @@ function seed() {
       catalog: catalogs[0].catalog,
       actionSha256: zeros,
       subjectId: 'sa-01',
-      reason: 'job.reason.inspect',
+      reason: 'Inspect service status',
       status: 'JOB_STATUS_RUNNING',
       createdAt: date(),
       totalTasks: '2',
@@ -430,6 +431,68 @@ function seed() {
       policyVersion: '2',
     },
   ]
+  const pendingApproval: ApprovalRequest = {
+    approvalId: 'apr-20261013-0001',
+    jobId: 'job-20261013-0044',
+    status: 'APPROVAL_STATUS_PENDING',
+    action: 'systemd_restart_service',
+    actionRisk: 'write',
+    catalog: catalogs[0].catalog,
+    actionSha256: zeros,
+    paramsJson: toBase64('{"service":"api"}'),
+    filtersJson: toBase64('[]'),
+    targetSelector: 'env=prod',
+    targets: hosts.slice(0, 2).map(({ hostId, hostname }) => ({ hostId, hostname })),
+    batchSize: 1,
+    maxFailures: 1,
+    requestDigest: bytesToBase64(new Uint8Array(32).fill(17)),
+    requesterSubjectId: 'sa-01',
+    requesterKind: 'service_account',
+    requesterOwnerId: 'user-02',
+    reason: 'Restart after the deployment window opens.',
+    evidence: { jobIds: [jobs[0].jobId], summary: 'The health check showed a stale service configuration.' },
+    policyVersion: '2',
+    matchedRules: ['prod-restart'],
+    requiredApproverRoleSets: [{ roles: ['admin', 'operator'] }, { roles: ['admin'] }],
+    allowOwnerApprove: false,
+    createdAt: date(),
+    expiresAt: date(30 / 1440),
+    approvedCount: 1,
+    minApprovals: 2,
+    decisions: [{
+      actorId: 'user-previous-approver',
+      actorEmail: 'operator@example.test',
+      vote: 'APPROVAL_VOTE_APPROVE',
+      reason: 'Deployment window confirmed.',
+      decidedAt: date(),
+      policyVersion: '2',
+      matchedRules: ['approve-prod-restart'],
+    }],
+    decidedBy: '',
+    decisionReason: '',
+    recheckError: '',
+    consoleUrl: '/approvals/apr-20261013-0001',
+    contextTrust: 'OUTPUT_TRUST_UNTRUSTED',
+    notifyStatus: 'sent',
+    notifyError: '',
+    canApprove: true,
+    cannotApproveReason: '',
+  }
+  const { approvalId, jobId, action, expiresAt, approvedCount, minApprovals, requiredApproverRoleSets, consoleUrl } = pendingApproval
+  jobs.push({
+    ...jobs[1],
+    jobId,
+    action,
+    status: 'JOB_STATUS_PENDING_APPROVAL',
+    reason: pendingApproval.reason,
+    counts: [{ status: 'TASK_STATUS_PENDING', count: '2' }],
+    approval: {
+      approvalId, expiresAt, approvedCount, minApprovals, requiredApproverRoleSets, consoleUrl,
+      status: pendingApproval.status,
+      decisionReason: '',
+      recheckError: '',
+    },
+  })
   const output: Record<string, string> = {
     'job-20261013-0042/web-01/OUTPUT_STREAM_STDOUT':
       'service=api status=active',
@@ -446,6 +509,7 @@ function seed() {
     tokens,
     tasks,
     jobs,
+    approvals: [pendingApproval],
     output,
     joinTokens: [
       {
@@ -497,7 +561,7 @@ const snapshot = () =>
 
 function evaluate(
   rules: PolicyRule[],
-  host: Host,
+  host: Host | undefined,
   test: PolicyTestCase,
 ): PolicyDecision {
   const user = state.users.find((u) => u.userId === test.subjectId)
@@ -506,8 +570,8 @@ function evaluate(
   const roles = user?.effectiveRoles ?? account?.roles ?? []
   const teams = user?.teams ?? account?.teams ?? []
   const owner = account?.ownerUserId ?? user?.userId ?? ''
-  const action = required(state.actions.find((a) => a.name === test.action))
-  if (!Object.keys(host.authorizationLabels).length)
+  const action = test.action ? required(state.actions.find((a) => a.name === test.action)) : undefined
+  if (host && !Object.keys(host.authorizationLabels).length)
     return { effect: 'POLICY_EFFECT_DENY', matchedRules: [], errorReason: '' }
   const matched = rules.filter((rule) => {
     // CIDR evaluation is deliberately unsupported in the local mock; never claim an allow.
@@ -527,23 +591,38 @@ function evaluate(
       (!rule.owners.length || rule.owners.includes(owner)) &&
       rule.operations.includes(test.operation) &&
       ((!rule.actions.length && !rule.risks.length) ||
-        rule.actions.includes(action.name) ||
-        rule.risks.includes(action.risk)) &&
+        (action && (rule.actions.includes(action.name) || rule.risks.includes(action.risk)))) &&
       Object.entries(rule.hostLabels).every(
-        ([k, v]) => host.authorizationLabels[k] === v,
+        ([k, v]) => host?.authorizationLabels[k] === v,
       ) &&
       (!rule.hours || (hour >= rule.hours.from && hour < rule.hours.to))
     )
   })
-  return {
-    effect: matched.some((r) => r.effect === 'POLICY_EFFECT_DENY')
-      ? 'POLICY_EFFECT_DENY'
-      : matched.length
-        ? 'POLICY_EFFECT_ALLOW'
-        : 'POLICY_EFFECT_DENY',
-    matchedRules: matched.map((r) => r.name),
-    errorReason: '',
+  const matchedRules = matched.map((rule) => rule.name)
+  if (!matched.length || matched.some((rule) => rule.effect === 'POLICY_EFFECT_DENY'))
+    return { effect: 'POLICY_EFFECT_DENY', matchedRules, errorReason: '' }
+  const approvalRules = matched.filter((rule) => rule.effect === 'POLICY_EFFECT_REQUIRE_APPROVAL')
+  if (approvalRules.length) {
+    const configs = approvalRules.flatMap((rule) => rule.approval ? [rule.approval] : [])
+    const ttls = configs.map((config) => config.ttlSeconds).filter(Boolean)
+    const groups = new Map<string, { roles: string[] }>()
+    for (const config of configs) {
+      const roles = [...config.approverRoles].sort()
+      if (roles.length) groups.set(roles.join(','), { roles })
+    }
+    return {
+      effect: 'POLICY_EFFECT_REQUIRE_APPROVAL',
+      matchedRules,
+      errorReason: '',
+      approval: {
+        minApprovals: Math.max(1, ...configs.map((config) => config.minApprovals)),
+        ttlSeconds: ttls.length ? Math.min(...ttls) : 0,
+        allowOwnerApprove: approvalRules.every((rule) => rule.approval?.allowOwnerApprove === true),
+        requiredApproverRoleSets: [...groups.values()],
+      },
+    }
   }
+  return { effect: 'POLICY_EFFECT_ALLOW', matchedRules, errorReason: '' }
 }
 async function auditEvents() {
   auditPromise ??= (async () => {
@@ -628,6 +707,51 @@ function checkTest(testId: string, baseVersion: string, rules: PolicyRules) {
     throw new ApiError('error.stalePolicy')
   if (!test.test.retainsPolicyAdministrator)
     throw new ApiError('error.policyLockout')
+}
+
+function pendingRequest(id: string) {
+  const approval = required(state.approvals.find((a) => a.approvalId === id))
+  if (approval.status !== 'APPROVAL_STATUS_PENDING')
+    throw new ApiError('common.error', undefined, 'APPROVAL_NOT_PENDING')
+  return approval
+}
+
+function recordVote(approval: ApprovalRequest, vote: ApprovalRequest['decisions'][number]['vote'], reason: string) {
+  if (!approval.canApprove)
+    throw new ApiError('error.permissionDenied', undefined, approval.cannotApproveReason)
+  const user = required(state.users.find((u) => u.userId === state.sessionId))
+  approval.decisions.push({
+    actorId: user.userId,
+    actorEmail: user.email,
+    vote,
+    reason,
+    decidedAt: date(),
+    policyVersion: approval.policyVersion,
+    matchedRules: ['approve-prod-restart'],
+  })
+}
+
+function finishApproval(
+  approval: ApprovalRequest,
+  status: ApprovalRequest['status'],
+  jobStatus: Job['status'],
+  reason: string,
+) {
+  approval.status = status
+  approval.canApprove = false
+  approval.cannotApproveReason = 'APPROVAL_NOT_PENDING'
+  approval.decidedBy = state.sessionId
+  approval.decidedAt = date()
+  approval.decisionReason = reason
+  const job = required(state.jobs.find((entry) => entry.jobId === approval.jobId))
+  job.status = jobStatus
+  Object.assign(job.approval!, {
+    status,
+    approvedCount: approval.approvedCount,
+    decidedAt: approval.decidedAt,
+    decisionReason: reason,
+  })
+  return job
 }
 
 export const mockApi: ConsoleApi = {
@@ -957,15 +1081,15 @@ export const mockApi: ConsoleApi = {
           })),
         )
     inputs.forEach((test, caseIndex) => {
-      const hosts = test.targets.hosts
-        ? state.hosts.filter((h) =>
-            test.targets.hosts?.names.includes(h.hostname),
-          )
-        : state.hosts.filter((h) => selected(h, test.targets.selector ?? ''))
+      const hosts = !test.targets
+        ? [undefined]
+        : test.targets.hosts
+          ? state.hosts.filter((h) => test.targets.hosts?.names.includes(h.hostname))
+          : state.hosts.filter((h) => selected(h, test.targets.selector ?? ''))
       for (const host of hosts)
         changes.push({
           caseIndex,
-          host: host.hostname,
+          host: host?.hostname ?? '',
           before: evaluate(state.policies[0].rules.rules, host, test),
           after: evaluate(candidate.rules, host, test),
         })
@@ -978,7 +1102,10 @@ export const mockApi: ConsoleApi = {
       ),
       evaluatedCount: String(changes.length),
       changedCount: String(
-        changes.filter((c) => c.before.effect !== c.after.effect).length,
+        changes.filter((c) =>
+          c.before.effect !== c.after.effect ||
+          JSON.stringify(c.before.approval) !== JSON.stringify(c.after.approval),
+        ).length,
       ),
       retainsPolicyAdministrator: true,
       expiresAt: date(10 / 1440),
@@ -1082,6 +1209,44 @@ export const mockApi: ConsoleApi = {
   },
   async getJob({ jobId }) {
     return { job: copy(required(state.jobs.find((j) => j.jobId === jobId))) }
+  },
+  async listApprovals({ statuses = [], action, requesterSubjectId, onlyActionable, page: requestPage } = {}) {
+    const rows = state.approvals.filter((approval) =>
+      (!statuses.length || statuses.includes(approval.status)) &&
+      (!action || action === approval.action) &&
+      (!requesterSubjectId || requesterSubjectId === approval.requesterSubjectId) &&
+      (!onlyActionable || approval.canApprove),
+    )
+    const offset = Number(requestPage?.pageToken || 0)
+    const next = offset + (requestPage?.pageSize || 10)
+    return {
+      approvals: copy(rows.slice(offset, next)),
+      page: { nextPageToken: next < rows.length ? String(next) : '' },
+    }
+  },
+  async getApproval({ approvalId }) {
+    return { approval: copy(required(state.approvals.find((a) => a.approvalId === approvalId))) }
+  },
+  async approveRequest({ approvalId, expectedRequestDigest, reason = '' }) {
+    const approval = pendingRequest(approvalId)
+    if (approval.requestDigest !== expectedRequestDigest)
+      throw new ApiError('common.error', undefined, 'APPROVAL_DIGEST_MISMATCH')
+    recordVote(approval, 'APPROVAL_VOTE_APPROVE', reason)
+    approval.approvedCount += 1
+    const job = finishApproval(approval, 'APPROVAL_STATUS_APPROVED', 'JOB_STATUS_QUEUED', reason)
+    return { approval: copy(approval), job: copy(job) }
+  },
+  async rejectRequest({ approvalId, reason }) {
+    const approval = pendingRequest(approvalId)
+    if (!reason.trim()) throw new ApiError('error.required')
+    recordVote(approval, 'APPROVAL_VOTE_REJECT', reason)
+    finishApproval(approval, 'APPROVAL_STATUS_REJECTED', 'JOB_STATUS_DENIED', reason)
+    return { approval: copy(approval) }
+  },
+  async cancelApproval({ approvalId }) {
+    const approval = pendingRequest(approvalId)
+    finishApproval(approval, 'APPROVAL_STATUS_CANCELLED', 'JOB_STATUS_CANCELLED', '')
+    return { approval: copy(approval) }
   },
   async listTasks({ jobId }) {
     required(state.jobs.find((j) => j.jobId === jobId))

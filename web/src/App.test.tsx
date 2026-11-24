@@ -255,6 +255,14 @@ describe('console pages', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Hosts' })).toBeInTheDocument()
   })
+  it('opens approvals from the navigation and the command palette', async () => {
+    await open('/')
+    expect(screen.getByRole('link', { name: '审批' })).toHaveAttribute('href', '/approvals')
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    const palette = await screen.findByRole('dialog', { name: '命令面板' })
+    fireEvent.click(within(palette).getByRole('option', { name: /审批/ }))
+    expect(await screen.findByRole('heading', { name: '审批', level: 1 })).toBeVisible()
+  })
   it('logs out and returns to the login page', async () => {
     await open('/')
     fireEvent.click(await screen.findByRole('button', { name: '登出' }))
