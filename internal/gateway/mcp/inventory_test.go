@@ -63,10 +63,10 @@ func (i *inventoryIdentity) VisibleHostnames(context.Context, []string) (map[str
 
 func TestInventoryToolSchema(t *testing.T) {
 	tools := fixedTools(job.DefaultConfig(), "static", "labels")
-	if len(tools) != 5 {
+	if len(tools) != 6 {
 		t.Fatal(tools)
 	}
-	tool := tools[4]
+	tool := tools[5]
 	if tool.Name != "entities_search" || !tool.Annotations.ReadOnlyHint || !strings.HasSuffix(tool.Description, toolInstructions) {
 		t.Fatal(tool)
 	}

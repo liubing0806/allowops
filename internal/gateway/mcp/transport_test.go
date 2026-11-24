@@ -222,7 +222,7 @@ func TestSDKToolFilteringCacheInvalidationAndRevocation(t *testing.T) {
 	admin, _ := f.client(t, f.admin, nil)
 	viewer, _ := f.client(t, f.viewer, nil)
 	list, err := viewer.ListTools(context.Background(), nil)
-	if err != nil || len(list.Tools) != 4 {
+	if err != nil || len(list.Tools) != 5 {
 		t.Fatalf("viewer=%v error=%v", list, err)
 	}
 	if _, err := admin.ListTools(context.Background(), nil); err != nil {
@@ -256,7 +256,7 @@ func TestSDKToolFilteringCacheInvalidationAndRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	list, err = admin.ListTools(context.Background(), nil)
-	if err != nil || len(list.Tools) != 4 {
+	if err != nil || len(list.Tools) != 5 {
 		t.Fatalf("changed identity=%v error=%v", list, err)
 	}
 	f.service.mu.Lock()

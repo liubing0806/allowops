@@ -164,6 +164,8 @@ func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, available
 		return s.getJob(ctx, r, state)
 	case "jobs_list":
 		return s.listJobs(ctx, r.Params.Arguments)
+	case "jobs_diff":
+		return s.diffJobs(ctx, r.Params.Arguments, state)
 	case "jobs_cancel":
 		args, err := fixedArguments(r.Params.Arguments, "job_id")
 		if err != nil {

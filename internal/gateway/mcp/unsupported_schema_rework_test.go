@@ -75,8 +75,8 @@ func TestSDKPublishedUnsupportedSchemaIsolation(t *testing.T) {
 			listed, err := admin.ListTools(ctx, nil)
 			if err != nil {
 				t.Error("tools/list failed after supported publication; want normal tools with unsupported action omitted")
-			} else if len(listed.Tools) != 5 {
-				t.Errorf("admin tool count=%d; want 5", len(listed.Tools))
+			} else if len(listed.Tools) != 6 {
+				t.Errorf("admin tool count=%d; want 6", len(listed.Tools))
 			} else {
 				for _, tool := range listed.Tools {
 					if tool.Name == a.Name {
@@ -84,8 +84,8 @@ func TestSDKPublishedUnsupportedSchemaIsolation(t *testing.T) {
 					}
 				}
 			}
-			if list, err := viewer.ListTools(ctx, nil); err != nil || len(list.Tools) != 4 {
-				t.Error("hidden-action list changed; want four fixed tools")
+			if list, err := viewer.ListTools(ctx, nil); err != nil || len(list.Tools) != 5 {
+				t.Error("hidden-action list changed; want five fixed tools")
 			}
 			f.jobs.mu.Lock()
 			before := f.jobs.sequence
