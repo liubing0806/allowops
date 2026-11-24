@@ -6,6 +6,7 @@ Changes on `main` since v0.2.0. They are not in a release yet.
 
 ### Upgrade notes
 
+- Building from source needs Go 1.27.4 (GO-2026-6859).
 - **Reserved MCP tool names (`changes_list`, `runbooks_search`, `runbooks_read`)**:
   before upgrading gateway binaries, rename, re-sign, and publish any active
   catalog action using these names; otherwise catalog verification rejects the
