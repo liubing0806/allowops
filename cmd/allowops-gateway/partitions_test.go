@@ -65,35 +65,43 @@ func testEnsurePartitionsPostgres(t *testing.T, binary, dsn string) {
 		return count
 	}
 
-	setup(`CREATE FUNCTION tasks_create_partitions(timestamptz, bigint) RETURNS void
-		LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'wrong overload'; END; $$;
-		CREATE SCHEMA unrelated;
-		CREATE FUNCTION unrelated.tasks_create_partitions(timestamptz, integer) RETURNS void
-		LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'wrong schema'; END; $$`)
+	taskPartitionCount := func() int {
+		t.Helper()
+		var count int
+		if err := db.Pool.QueryRow(ctx, "SELECT count(*) FROM pg_inherits WHERE inhparent='tasks'::regclass").Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+
+	// Default migrated schema has both audit_create_partitions and tasks_create_partitions.
 	for range 2 {
 		out, err := invoke("--months", "4")
-		if err != nil || out != "ensured partitions for 4 UTC months in audit_events" {
-			t.Fatalf("audit-only maintenance: exit=%v output=%q", err, out)
+		if err != nil || out != "ensured partitions for 4 UTC months in audit_events and tasks" {
+			t.Fatalf("audit and tasks maintenance: exit=%v output=%q", err, out)
 		}
 	}
 	if count := partitionCount(); count != 4 {
 		t.Fatalf("audit partition count = %d, want 4", count)
 	}
-
-	setup(`CREATE TABLE task_partition_fixture (first_month timestamptz, months integer);
-		CREATE FUNCTION tasks_create_partitions(timestamptz, integer) RETURNS void
-		LANGUAGE sql AS $$ INSERT INTO task_partition_fixture VALUES ($1, $2) $$`)
-	out, err := invoke()
-	if err != nil || out != "ensured partitions for 3 UTC months in audit_events and tasks" {
-		t.Fatalf("audit and tasks maintenance: exit=%v output=%q", err, out)
-	}
-	var called bool
-	err = db.Pool.QueryRow(ctx, "SELECT first_month <= now() AND months = 3 FROM task_partition_fixture").Scan(&called)
-	if err != nil || !called {
-		t.Fatalf("tasks maintenance received the database time and default months = %t, error = %v", called, err)
+	if count := taskPartitionCount(); count != 4 {
+		t.Fatalf("tasks partition count = %d, want 4", count)
 	}
 
-	setup(`CREATE OR REPLACE FUNCTION tasks_create_partitions(timestamptz, integer) RETURNS void
+	// When tasks_create_partitions(timestamptz, integer) is absent on search_path,
+	// unrelated overloads and schemas must not be invoked.
+	setup(`DROP FUNCTION tasks_create_partitions(timestamptz, integer);
+		CREATE FUNCTION tasks_create_partitions(timestamptz, bigint) RETURNS void
+		LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'wrong overload'; END; $$;
+		CREATE SCHEMA unrelated;
+		CREATE FUNCTION unrelated.tasks_create_partitions(timestamptz, integer) RETURNS void
+		LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'wrong schema'; END; $$`)
+	out, err := invoke("--months", "4")
+	if err != nil || out != "ensured partitions for 4 UTC months in audit_events" {
+		t.Fatalf("audit-only maintenance: exit=%v output=%q", err, out)
+	}
+
+	setup(`CREATE FUNCTION tasks_create_partitions(timestamptz, integer) RETURNS void
 		LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'private database error'; END; $$`)
 	out, err = invoke("--months", "5")
 	if err == nil || out != "ensure tasks partitions failed" {
