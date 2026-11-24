@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"slices"
@@ -47,6 +48,7 @@ type StepResult struct {
 	Index            int    `json:"index"`
 	Name             string `json:"name"`
 	Skipped          bool   `json:"skipped,omitempty"`
+	SkipReason       string `json:"skip_reason,omitempty"`
 	ExitCode         *int   `json:"exit_code,omitempty"`
 	DurationMS       int64  `json:"duration_ms"`
 	Stdout           string `json:"stdout"`
@@ -272,7 +274,8 @@ func RunWithCallbacks(parent context.Context, a catalog.Action, actionInput, fil
 		if err := plan.trustPaths(); err != nil {
 			return result, err
 		}
-		return runCommand(ctx, argv, plan.redactor, plan.filters, plan.limit, plan.scan, nil, onStart)
+		result, _, err := runCommand(ctx, argv, plan.redactor, plan.filters, plan.limit, plan.scan, nil, nil, onStart)
+		return result, err
 	default:
 		return runSteps(ctx, plan, callbacks, onStart)
 	}
@@ -358,7 +361,8 @@ func runScript(ctx context.Context, plan *runPlan, onStart func() error) (Result
 	if err := plan.trustPaths(); err != nil {
 		return Result{ExitCode: -1}, err
 	}
-	return runCommand(ctx, argv, plan.redactor, plan.filters, plan.limit, plan.scan, nil, onStart)
+	result, _, err := runCommand(ctx, argv, plan.redactor, plan.filters, plan.limit, plan.scan, nil, nil, onStart)
+	return result, err
 }
 
 // runSteps runs the steps in order. Steps share one output budget. A failed
@@ -371,12 +375,34 @@ func runSteps(ctx context.Context, plan *runPlan, callbacks Callbacks, onStart f
 		return Result{ExitCode: -1}, err
 	}
 	result := Result{ExitCode: 0}
+	states := make([]stepRuntimeState, len(a.Steps))
+	stepDefs := make(map[string]params.Definition, len(plan.defs))
+	maps.Copy(stepDefs, plan.defs)
+	stepValues := maps.Clone(plan.values)
 	var runErr error
 	budget := stepBudget(plan.limit)
 	stopped := false
 	for index, step := range a.Steps {
-		if stopped {
-			sr := StepResult{Index: index, Name: step.Name, Skipped: true}
+		if index > 0 {
+			prior := a.Steps[index-1]
+			for name, extractor := range prior.Extract {
+				def := extractor.As.AsParamDefinition(name)
+				def.Optional = extractor.Optional
+				stepDefs["steps."+prior.Name+"."+name] = def
+			}
+		}
+		state := &states[index]
+		state.name = step.Name
+		skipReason := ""
+		switch {
+		case stopped:
+			skipReason = ReasonSkipStopped
+		case step.When != nil && evalCondition(step.When, index, states) != triTrue:
+			skipReason = ReasonSkipConditionFalse
+		}
+		if skipReason != "" {
+			state.skipped = true
+			sr := StepResult{Index: index, Name: step.Name, Skipped: true, SkipReason: skipReason}
 			result.Steps = append(result.Steps, sr)
 			if callbacks.StepCompleted != nil {
 				if err := callbacks.StepCompleted(sr, nil); err != nil {
@@ -385,16 +411,42 @@ func runSteps(ctx context.Context, plan *runPlan, callbacks Callbacks, onStart f
 			}
 			continue
 		}
-		argv, err := renderCommand(step.Exec, nil, a.AllowInterpreter, plan.defs, plan.values)
+		paths, err := checkStepReferences(index, a.Steps, states)
+		var argv []string
+		if err == nil {
+			argv, err = renderCommand(step.Exec, nil, a.AllowInterpreter, stepDefs, stepValues)
+		}
 		r := Result{ExitCode: -1}
+		var extract *stepExtractSink
+		if err == nil && len(step.Extract) > 0 {
+			extract = newStepExtractSink(ctx, step, plan.redactor)
+		}
 		if err == nil {
 			// A later step starts after earlier steps ran for a while.
 			err = plan.trustPaths()
 		}
 		if err == nil {
-			r, err = runCommand(ctx, argv, plan.redactor, plan.filters, plan.limit, plan.scan, budget, onStart)
+			err = trustStepPaths(step.Name, paths)
+		}
+		if err == nil {
+			var incompleteOutput bool
+			r, incompleteOutput, err = runCommand(ctx, argv, plan.redactor, plan.filters, plan.limit, plan.scan, budget, extract, onStart)
+			if err == nil && r.ExitCode == 0 {
+				if extract != nil {
+					state.values, err = extract.Finalize(incompleteOutput)
+					if err != nil {
+						r.ExitCode = -1
+					} else {
+						for name, value := range state.values {
+							stepValues["steps."+step.Name+"."+name] = value
+						}
+					}
+				}
+				state.cleanSuccess = err == nil && !incompleteOutput
+			}
 		}
 		sr := recordStep(&result, index, step.Name, r, err)
+		state.exitCode = sr.ExitCode
 		if err != nil {
 			runErr = errors.Join(runErr, err)
 		}
@@ -436,7 +488,7 @@ func subset(input map[string]any, defs map[string]params.Definition) map[string]
 }
 
 func renderCommand(template []any, fallbacks []string, allow bool, defs map[string]params.Definition, values map[string]any) ([]string, error) {
-	program, err := catalog.ResolveExecutable(template, fallbacks, allow)
+	program, err := catalog.ResolveExecutableWithDefs(template, fallbacks, allow, defs)
 	if err != nil {
 		return nil, err
 	}
@@ -452,8 +504,20 @@ func renderCommand(template []any, fallbacks []string, allow bool, defs map[stri
 }
 
 func streamStdout(input io.Reader, output *limitedOutput, r *redact.Redactor, filters FilterOptions, scan int64) error {
+	return streamStdoutWithExtract(input, output, r, filters, scan, nil)
+}
+
+func streamStdoutWithExtract(input io.Reader, output *limitedOutput, r *redact.Redactor, filters FilterOptions, scan int64, extract *stepExtractSink) error {
 	writer := newFilterWriter(output, filters)
-	err := r.Stream(&scanReader{reader: input, remaining: scan}, writer, redact.DefaultMaxLine)
+	err := r.StreamTracked(&scanReader{reader: input, remaining: scan}, redact.DefaultMaxLine, func(line string, modified bool) error {
+		if extract != nil {
+			if err := extract.Write(line, modified); err != nil {
+				return err
+			}
+		}
+		_, err := io.WriteString(writer, line)
+		return err
+	})
 	if err == nil || errors.Is(err, errScanLimit) {
 		err = errors.Join(err, writer.finish())
 	}
@@ -472,7 +536,7 @@ func processOutput(stdout, stderr io.Reader, stdoutRedactor, stderrRedactor *red
 	return result, errors.Join(stdoutErr, stderrErr)
 }
 
-func runCommand(parent context.Context, argv []string, r *redact.Redactor, filters FilterOptions, limit, scan int64, budget *outputBudget, onStart func() error) (Result, error) {
+func runCommand(parent context.Context, argv []string, r *redact.Redactor, filters FilterOptions, limit, scan int64, budget *outputBudget, extract *stepExtractSink, onStart func() error) (Result, bool, error) {
 	result := Result{ExitCode: -1}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
@@ -506,9 +570,11 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 	if err := command.Start(); err != nil {
 		_ = stdoutWriter.Close()
 		_ = stderrWriter.Close()
-		return result, err
+		return result, false, err
 	}
-	go readStream(stdoutReader, stdoutDone, func() error { return streamStdout(stdoutReader, stdout, r, filters, scan) })
+	go readStream(stdoutReader, stdoutDone, func() error {
+		return streamStdoutWithExtract(stdoutReader, stdout, r, filters, scan, extract)
+	})
 	go readStream(stderrReader, stderrDone, func() error { return r.Stream(stderrReader, stderr, redact.DefaultMaxLine) })
 	processDone := make(chan struct{})
 	watcherDone := make(chan struct{})
@@ -546,18 +612,19 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 	result.Stderr = stderr.buffer.String()
 	result.Truncated = stdout.truncated || stderr.truncated
 	result.ScanLimitReached = errors.Is(stdoutErr, errScanLimit)
+	incompleteOutput := result.ScanLimitReached || errors.Is(waitErr, exec.ErrWaitDelay)
 	if startErr != nil {
-		return result, startErr
+		return result, incompleteOutput, startErr
 	}
 	if result.ScanLimitReached {
 		stdoutErr = nil
 	}
 	if stdoutErr != nil || stderrErr != nil {
 		result.Truncated = true
-		return result, errors.Join(stdoutErr, stderrErr)
+		return result, incompleteOutput, errors.Join(stdoutErr, stderrErr)
 	}
 	if parent.Err() != nil {
-		return result, parent.Err()
+		return result, incompleteOutput, parent.Err()
 	}
 	if errors.Is(waitErr, exec.ErrWaitDelay) {
 		// Wait returns ErrWaitDelay only after a successful exit: a descendant
@@ -565,11 +632,11 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 		// output pipes. The command succeeded; output after pipeDrainDelay is lost.
 		result.ExitCode = 0
 		result.Truncated = true
-		return result, nil
+		return result, incompleteOutput, nil
 	}
 	if waitErr == nil {
 		result.ExitCode = 0
-		return result, nil
+		return result, incompleteOutput, nil
 	}
 	var exitErr *exec.ExitError
 	if errors.As(waitErr, &exitErr) {
@@ -582,7 +649,7 @@ func runCommand(parent context.Context, argv []string, r *redact.Redactor, filte
 				result.ExitCode = 0
 			}
 		}
-		return result, nil
+		return result, incompleteOutput, nil
 	}
-	return result, waitErr
+	return result, incompleteOutput, waitErr
 }

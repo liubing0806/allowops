@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/internal/catalog"
+	"github.com/liubing0806/allowops/internal/executor"
 	"github.com/liubing0806/allowops/internal/gateway/audit"
 	"github.com/liubing0806/allowops/internal/gateway/hostconn"
 	"github.com/liubing0806/allowops/internal/gateway/output"
@@ -353,7 +354,7 @@ func (s *Service) onStepCompleted(ctx context.Context, sc *taskEventScope, step 
 }
 
 // validateStepCompleted checks a step result against the steps already
-// received: its position, its result fields and, for a skipped step, an earlier failure.
+// received: its position, its result fields and its stated reason for skipping.
 func validateStepCompleted(step *v1.StepCompleted, out *taskOutput, a catalog.Action) error {
 	if int(step.StepIndex) != len(out.Steps) {
 		return errors.New("INVALID_STEP_RESULT")
@@ -362,15 +363,21 @@ func validateStepCompleted(step *v1.StepCompleted, out *taskOutput, a catalog.Ac
 		return err
 	}
 	if step.Result.Status == v1.TaskStatus_TASK_STATUS_SKIPPED {
-		failed := false
-		for _, prior := range out.Steps {
-			if (a.OnError != "continue" && prior.Result.Status != v1.TaskStatus_TASK_STATUS_SUCCEEDED) || prior.Result.Status == v1.TaskStatus_TASK_STATUS_CANCELLED || prior.Result.Status == v1.TaskStatus_TASK_STATUS_TIMEOUT {
-				failed = true
+		switch step.Result.Reason {
+		case executor.ReasonSkipConditionFalse:
+			if a.Steps[step.StepIndex].When != nil {
+				return nil
+			}
+		case executor.ReasonSkipStopped, "":
+			for _, prior := range out.Steps {
+				status := prior.Result.Status
+				if status == v1.TaskStatus_TASK_STATUS_CANCELLED || status == v1.TaskStatus_TASK_STATUS_TIMEOUT ||
+					(a.OnError != "continue" && status != v1.TaskStatus_TASK_STATUS_SUCCEEDED && status != v1.TaskStatus_TASK_STATUS_SKIPPED) {
+					return nil
+				}
 			}
 		}
-		if !failed {
-			return errors.New("INVALID_SKIPPED_STEP")
-		}
+		return errors.New("INVALID_SKIPPED_STEP")
 	}
 	return nil
 }
@@ -484,7 +491,7 @@ func validateStepsAggregate(result *v1.ExecutionResult, out *taskOutput) error {
 	}
 	allOK := true
 	for _, step := range out.Steps {
-		if step.Result.Status != v1.TaskStatus_TASK_STATUS_SUCCEEDED {
+		if step.Result.Status != v1.TaskStatus_TASK_STATUS_SUCCEEDED && step.Result.Status != v1.TaskStatus_TASK_STATUS_SKIPPED {
 			allOK = false
 		}
 	}

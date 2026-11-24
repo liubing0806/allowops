@@ -106,6 +106,7 @@ func (a *Agent) execute(ctx context.Context, task *v1.TaskAssignment, chunkSize 
 			stepResult := executionResult(code, step.DurationMS, step.Truncated, step.ScanLimitReached, err)
 			if step.Skipped {
 				stepResult.Status = v1.TaskStatus_TASK_STATUS_SKIPPED
+				stepResult.Reason = step.SkipReason
 			} else {
 				stepResult.Status, stepResult.Reason = taskStatus(code, err)
 				if err := sendOutput(task, proto.Uint32(uint32(step.Index)), step.Stdout, step.Stderr, stepResult, chunkSize, send); err != nil {
@@ -139,6 +140,10 @@ func taskStatus(code int, err error) (v1.TaskStatus, string) {
 		return v1.TaskStatus_TASK_STATUS_CANCELLED, "CANCELLED"
 	case errors.Is(err, context.DeadlineExceeded):
 		return v1.TaskStatus_TASK_STATUS_TIMEOUT, "TIMEOUT"
+	case errors.Is(err, params.ErrPathNotTrusted):
+		return v1.TaskStatus_TASK_STATUS_FAILED, "PATH_NOT_TRUSTED"
+	case executor.ReasonOf(err) != "":
+		return v1.TaskStatus_TASK_STATUS_FAILED, executor.ReasonOf(err)
 	case builtin.ReasonOf(err) != "":
 		return v1.TaskStatus_TASK_STATUS_FAILED, builtin.ReasonOf(err)
 	case err != nil:
