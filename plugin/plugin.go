@@ -4,8 +4,10 @@ package plugin
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"regexp"
 	"sync"
+	"time"
 )
 
 type ModuleID string
@@ -21,12 +23,51 @@ type Provisioner interface {
 	Provision(ctx context.Context, h Host) error
 }
 
+// Validator checks module configuration without performing I/O.
+type Validator interface {
+	Validate() error
+}
+
+type Cleaner interface {
+	Cleanup(ctx context.Context) error
+}
+
+// Cache stores instance-local values. Get and Set copy values. A nonpositive
+// TTL deletes the entry.
+type Cache interface {
+	Get(key string) ([]byte, bool)
+	Set(key string, value []byte, ttl time.Duration)
+	Delete(key string)
+}
+
+type ControlPlaneChange struct {
+	At             time.Time
+	Kind           string // "catalog" or "policy"
+	CatalogID      string
+	Version        int64
+	ActionCount    int
+	Actor          string
+	Reason         string
+	RolledBackFrom int64
+}
+
+// ControlPlaneChangeReader is an optional capability of the changes.allowops host.
+type ControlPlaneChangeReader interface {
+	ListControlPlaneChanges(ctx context.Context, from, to time.Time, limit int) (items []ControlPlaneChange, hasMore bool, err error)
+}
+
 // Host exposes gateway capabilities to plugins. Hosts returns all active hosts;
 // caller visibility is applied by the gateway after resolving inventory.
 type Host interface {
 	InstanceID() string
 	Logger() *slog.Logger
 	Hosts(ctx context.Context) ([]HostInfo, error)
+	// HTTPClient permits only requests allowed by the instance's egress policy.
+	HTTPClient() *http.Client
+	Credential(ref string) ([]byte, error)
+	Cache() Cache
+	// Now returns the current UTC time.
+	Now() time.Time
 }
 
 type HostInfo struct {

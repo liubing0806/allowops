@@ -28,11 +28,11 @@
 | --- | --- | --- |
 | S1-1 | `plugin`、`plugin/inventory` 包 | `plugin/plugin.go`、`plugin/inventory/inventory.go` |
 | S1-2 | `pluginhost`：配置解码与启动检查、`SearchInventory`、`Health` | `internal/gateway/pluginhost/` |
-| S1-3 | 两个官方插件、`plugins/standard`、`examples/topology.yaml` | `plugins/`、`examples/` |
+| S1-3 | 两个官方插件、`extensions/standard`、`examples/topology.yaml` | `extensions/`、`examples/` |
 | S1-4 | `view_inventory` 操作、默认规则、`consoleOperations`、试算计数 | `internal/gateway/authz/`、`internal/gateway/api/policy.go` 及相关测试 |
 | S1-5 | `api.VisibleHostnames`、`ConfigurePluginHealth`、系统状态追加插件项 | `internal/gateway/api/` |
 | S1-6 | MCP 工具 `entities_search`；`mcp.Identity` 增加 `Require`、`VisibleHostnames`；`mcp.Config` 增加可选的 inventory 依赖；保留名称 | `internal/gateway/mcp/`、`internal/catalog/catalog.go` |
-| S1-7 | 网关装配：`configuration.Plugins`、在 `newJobServices` 之前构造 `pluginhost`、注入 MCP 和 api、空白导入 `plugins/standard` | `cmd/allowops-gateway/main.go` |
+| S1-7 | 网关装配：`configuration.Plugins`、在 `newJobServices` 之前构造 `pluginhost`、注入 MCP 和 api、空白导入 `extensions/standard` | `cmd/allowops-gateway/main.go` |
 | S1-8 | 端到端测试 | `internal/gateway/mcp/` 测试 |
 | S1-9 | 文档、示例与升级说明 | 见本节下方列表 |
 
@@ -66,7 +66,7 @@ go test -race -count=1 ./internal/catalog/... ./internal/agent/... ./internal/ex
 gofmt -l $(git ls-files '*.go' | grep -v '^gen/')
 go vet ./...
 ALLOWOPS_REQUIRE_DOCKER=1 go test -race -count=1 \
-  ./plugin/... ./plugins/... ./internal/gateway/pluginhost/... \
+  ./plugin/... ./extensions/... ./internal/gateway/pluginhost/... \
   ./internal/gateway/authz/... ./internal/gateway/api/... ./internal/gateway/mcp/... \
   ./internal/catalog/... ./cmd/allowops-gateway/...
 make opa-test

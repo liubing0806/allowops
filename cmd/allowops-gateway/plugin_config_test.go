@@ -1,59 +1,39 @@
 package main
 
 import (
-	"context"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
 )
 
-func TestInventoryPluginConfiguration(t *testing.T) {
-	cfg, err := decodeConfig(strings.NewReader(`plugins:
-  - id: static
-    module: inventory.static
-    required: true
-    timeout: 100ms
-    config:
-      file: ../../examples/topology.yaml
-  - id: labels
-    module: inventory.host_labels
-    disabled: true
-    config:
-      label: service
-`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(cfg.Plugins) != 2 || cfg.Plugins[0].Timeout != 100*time.Millisecond || !cfg.Plugins[0].Required || !cfg.Plugins[1].Disabled {
-		t.Fatal(cfg.Plugins)
-	}
-	h, err := pluginhost.New(context.Background(), cfg.Plugins, pluginhost.Deps{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sources := h.InventorySources()
-	if len(sources) != 1 || sources[0] != "static" {
-		t.Fatal(sources)
-	}
-	results, errors := h.SearchInventory(context.Background(), pluginhost.Query{Kind: "service"}, nil)
-	if len(errors) != 0 || len(results) != 1 || results[0].Name != "order-api" {
-		t.Fatalf("%v %v", results, errors)
-	}
-	for _, raw := range []string{
-		"plugins: [{id: a, module: inventory.static, unknown: true}]",
-		"plugins: [{id: a, module: inventory.static, max_concurrency: 4}]",
+func TestPluginConfigErrorsOmitValues(t *testing.T) {
+	const value = "opaque-config-value"
+	for _, input := range []string{
+		"plugins: " + value,
+		"plugins: {" + value + ": true}",
+		"plugins:\n  - " + value,
+		"plugins:\n  - timeout: " + value,
+		"plugins:\n  - max_concurrency: " + value,
+		"plugins:\n  - allow_private_egress: " + value,
+		"plugins:\n  - egress: " + value,
+		"plugins:\n  - " + value + ": true",
+		"plugins:\n  - id: &name " + value + "\n    config: {mode: *name}",
 	} {
-		if _, err := decodeConfig(strings.NewReader(raw)); err == nil {
-			t.Fatalf("unknown plugin field accepted: %s", raw)
+		_, err := decodeConfig(strings.NewReader(input))
+		if err == nil || strings.Contains(err.Error(), value) || !strings.Contains(err.Error(), "at line ") {
+			t.Errorf("unexpected config error: %v", err)
 		}
 	}
-	cfg, err = decodeConfig(strings.NewReader("plugins: [{id: static, module: inventory.static, config: {unknown: true}}]"))
-	if err != nil {
-		t.Fatal(err)
+}
+
+func TestPluginConfigEmptyAndValid(t *testing.T) {
+	for _, input := range []string{"plugins: null", "plugins: []", "{}"} {
+		c, err := decodeConfig(strings.NewReader(input))
+		if err != nil || len(c.Plugins) != 0 {
+			t.Fatalf("%q: %v", input, err)
+		}
 	}
-	if _, err := pluginhost.New(context.Background(), cfg.Plugins, pluginhost.Deps{}); err == nil {
-		t.Fatal("unknown module config field accepted")
+	c, err := decodeConfig(strings.NewReader("plugins:\n  - id: one\n    module: inventory.static\n    max_concurrency: 2\n    egress: [https://example.com]\n    credentials: {api: /safe/token}"))
+	if err != nil || len(c.Plugins) != 1 || c.Plugins[0].MaxConcurrency != 2 || len(c.Plugins[0].Egress) != 1 || c.Plugins[0].Credentials["api"] != "/safe/token" {
+		t.Fatalf("unexpected decoded plugins: %v, %v", c.Plugins, err)
 	}
 }
