@@ -426,7 +426,7 @@ export type AgentCapabilities = Message<"allowops.v1.AgentCapabilities"> & {
   outputFilters: string[];
 
   /**
-   * Additional signed-catalog features, e.g. exec_fallbacks, allow_interpreter and max_targets.
+   * Additional signed-catalog features, e.g. exec_fallbacks, allow_interpreter, max_targets and action_metadata.
    *
    * @generated from field: repeated string features = 6;
    */
@@ -471,7 +471,7 @@ export type AgentCapabilitiesJson = {
   outputFilters?: string[];
 
   /**
-   * Additional signed-catalog features, e.g. exec_fallbacks, allow_interpreter and max_targets.
+   * Additional signed-catalog features, e.g. exec_fallbacks, allow_interpreter, max_targets and action_metadata.
    *
    * @generated from field: repeated string features = 6;
    */
