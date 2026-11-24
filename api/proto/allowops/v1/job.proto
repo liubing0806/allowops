@@ -15,6 +15,7 @@ service JobService {
   rpc ListTaskSteps(ListTaskStepsRequest) returns (ListTaskStepsResponse);
   rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
   rpc GetJobOutput(GetJobOutputRequest) returns (GetJobOutputResponse);
+  rpc DiffJobs(DiffJobsRequest) returns (DiffJobsResponse);
 }
 
 message TaskCount {
@@ -67,6 +68,7 @@ message RunJobRequest {
   optional uint32 max_failures = 8;
   OutputFilters filters = 9;
   string response_format = 10;
+  string grouping = 11;
 }
 
 message RunJobResponse {
@@ -78,11 +80,31 @@ message GetJobRequest {
   string job_id = 1;
   optional uint32 wait_seconds = 2;
   string response_format = 3;
+  string grouping = 4;
 }
 
 message GetJobResponse {
   Job job = 1;
   JobSummary summary = 2;
+}
+
+enum GroupSeverity {
+  GROUP_SEVERITY_UNSPECIFIED = 0;
+  GROUP_SEVERITY_FAILURE = 1;
+  GROUP_SEVERITY_ANOMALY = 2;
+  GROUP_SEVERITY_NORMAL = 3;
+}
+
+message MetricVariance {
+  string label = 1;
+  string unit = 2;
+  double min = 3;
+  double max = 4;
+  double p95 = 5;
+  string min_host = 6;
+  string max_host = 7;
+  repeated string outlier_hosts = 8;
+  double p50 = 9;
 }
 
 // G39: previews require view_output. Concise samples at most two hostnames;
@@ -98,6 +120,12 @@ message OutputGroup {
   bool truncated = 8;
   // ExecutionResult.reason shared by the group; empty for success or old agents.
   string reason = 9;
+  GroupSeverity severity = 10;
+  string anomaly_reason = 11;
+  bytes template_sha256 = 12;
+  string template_stdout = 13;
+  string template_stderr = 14;
+  repeated MetricVariance variances = 15;
 }
 
 message JobSummary {
@@ -106,6 +134,13 @@ message JobSummary {
   OutputTrust output_trust = 3;
   // Indicates omitted groups, hostnames or previews due to the response budget.
   bool truncated = 4;
+  string grouping = 5;
+  string ranking = 6;
+  uint64 total_groups = 7;
+  uint64 omitted_groups = 8;
+  uint64 folded_normal_hosts = 9;
+  uint64 omitted_hosts = 10;
+  uint64 unfinished_hosts_count = 11;
 }
 
 message ListJobsRequest {
@@ -170,4 +205,79 @@ message GetJobOutputResponse {
   bool output_stored = 6;
   OutputTrust output_trust = 7;
   OutputMetadata output = 8;
+}
+
+message DiffJobsRequest {
+  string base_job_id = 1;
+  string target_job_id = 2;
+  string grouping = 3;
+  optional bool only_changed = 4;
+}
+
+message DiffJobsResponse {
+  Job base_job = 1;
+  Job target_job = 2;
+  JobDiff diff = 3;
+}
+
+message StatusTransition {
+  TaskStatus from_status = 1;
+  TaskStatus to_status = 2;
+  optional int32 from_exit_code = 3;
+  optional int32 to_exit_code = 4;
+  string reason = 5;
+  uint64 host_count = 6;
+  repeated string hosts = 7;
+  bool degradation = 8;
+}
+
+message PatternChange {
+  GroupSeverity base_severity = 1;
+  GroupSeverity target_severity = 2;
+  uint64 host_count = 3;
+  repeated string hosts = 4;
+  bool unchanged = 5;
+  string base_preview = 6;
+  string target_preview = 7;
+  repeated string removed_lines = 8;
+  repeated string added_lines = 9;
+  bool diff_computed = 10;
+  bool base_truncated = 11;
+  bool target_truncated = 12;
+}
+
+message MetricDrift {
+  string label = 1;
+  string unit = 2;
+  double base_p50 = 3;
+  double target_p50 = 4;
+  double base_max = 5;
+  double target_max = 6;
+  double max_delta = 7;
+  double max_delta_base = 8;
+  double max_delta_target = 9;
+  optional double max_delta_pct = 10;
+  string max_host = 11;
+  uint64 affected_hosts = 12;
+  uint64 host_count = 13;
+}
+
+message JobDiff {
+  OutputTrust output_trust = 1;
+  bool truncated = 2;
+  bool preview_truncated = 3;
+  bool action_definition_changed = 4;
+  string grouping = 5;
+  uint64 unchanged_hosts_count = 6;
+  uint64 added_hosts_count = 7;
+  repeated string added_hosts = 8;
+  uint64 removed_hosts_count = 9;
+  repeated string removed_hosts = 10;
+  uint64 replaced_hosts_count = 11;
+  repeated string replaced_hosts = 12;
+  repeated StatusTransition status_transitions = 13;
+  uint64 total_pattern_changes = 14;
+  uint64 omitted_pattern_changes = 15;
+  repeated PatternChange pattern_changes = 16;
+  repeated MetricDrift metric_drifts = 17;
 }

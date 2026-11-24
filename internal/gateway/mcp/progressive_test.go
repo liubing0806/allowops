@@ -166,7 +166,7 @@ func toolList(t *testing.T, c *sdk.ClientSession) map[string]*sdk.Tool {
 }
 
 // fixedToolNames and withFixed are sorted, as the SDK lists tools by name.
-var fixedToolNames = []string{"hosts_search", "jobs_cancel", "jobs_get", "jobs_list"}
+var fixedToolNames = []string{"hosts_search", "jobs_cancel", "jobs_diff", "jobs_get", "jobs_list"}
 
 func withFixed(names ...string) []string {
 	return slices.Sorted(slices.Values(append(slices.Clone(fixedToolNames), names...)))
@@ -223,7 +223,7 @@ func TestAutoModeThreshold(t *testing.T) {
 	if got := toolNames(t, f.headerClient(t, f.admin, map[string]string{"X-Allowops-Toolsets": "system,logs"})); !slices.Equal(got, withFixed("disk_usage", "logs_read", "svc_restart")) {
 		t.Fatalf("admin narrowed=%v", got)
 	}
-	if got := toolNames(t, f.headerClient(t, f.admin, map[string]string{"X-Allowops-MCP-Mode": "flat"})); len(got) != 8 {
+	if got := toolNames(t, f.headerClient(t, f.admin, map[string]string{"X-Allowops-MCP-Mode": "flat"})); len(got) != 9 {
 		t.Fatalf("header override=%v", got)
 	}
 }
@@ -301,7 +301,7 @@ func TestScopeHeaderValidation(t *testing.T) {
 // or reload the verified catalog.
 func TestScopedServersBypassIdentityCache(t *testing.T) {
 	f := newProgressiveFixture(t, nil)
-	if got := toolNames(t, f.headerClient(t, f.admin, nil)); len(got) != 8 {
+	if got := toolNames(t, f.headerClient(t, f.admin, nil)); len(got) != 9 {
 		t.Fatal(got)
 	}
 	f.service.mu.Lock()

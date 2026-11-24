@@ -63,10 +63,38 @@ offline hosts. Detailed MCP summaries list hostnames within each group. Use
 ## Output and audit
 
 Output is redacted on the host before it leaves the host. stdout can then be
-filtered and both streams are bounded. Summaries group matching exit codes and
-output hashes. Full output is stored asynchronously in S3-compatible storage;
-storage failure does not turn a successful action into a failed action.
-Reading previews or full output requires separate output authorization.
+filtered and both streams are bounded. Full output is stored asynchronously in
+S3-compatible storage; storage failure does not turn a successful action into a
+failed action. Reading previews or full output requires separate output
+authorization.
+
+Summaries are built from bounded, already-redacted previews in two modes:
+
+- **Exact grouping (`exact`, default for action calls and `jobs_get`)**: groups
+  matching exit codes, reasons and output hashes.
+- **Normalized clustering (`normalized`)**: denoises volatile tokens such as
+  timestamps, PIDs, IP addresses, hostnames, durations and numbers into shared
+  templates while preserving version numbers and semantic status/exit codes, and
+  extracts per-cluster numeric distributions (`min`, `p50`, `p95`, `max`, and
+  MAD outlier hosts).
+
+Both modes apply deterministic **Anomaly-First ranking** before applying the
+32 KiB response budget: `failure` groups (including terminal tasks without
+output hashes such as `skipped`, `cancelled` or dispatch failures) come first,
+followed by `anomaly` groups (`stderr_present`, `minority_cluster`,
+`metric_outlier`), and finally `normal` majority groups. Summary counters
+(`total_groups`, `omitted_groups`, `omitted_hosts`, `folded_normal_hosts` and
+`unfinished_hosts_count`) maintain strict host conservation across the job even
+when low-priority groups are omitted to fit the budget.
+
+For baseline comparison across time (for example before and after a release),
+`jobs_diff` / `allowops jobs diff` compares two finished, non-denied jobs of the
+same action. Tasks are aligned by immutable `host_id` so re-registered hosts
+with the same hostname are reported under `replaced_hosts` rather than merged.
+The diff defaults to `normalized` grouping and highlights degradation-first
+status transitions, anomaly-first pattern changes with bounded line diffs, and
+significant numeric metric drifts, while enforcing `view_jobs` and `view_output`
+authorization on every host in both jobs.
 
 A composite action has ordered, named steps with separate output streams.
 Read stored output one step at a time: MCP `jobs_get` requires `step_index` with
@@ -75,7 +103,8 @@ Omitting the index for composite output is an `INVALID_OUTPUT_STEP` parameter
 error; MCP also returns a hint to read each step separately. Omit the index for
 single-step actions. Summary requests do not select an output step.
 
-Output remains untrusted data and may contain prompt injection. Redaction can
-miss sensitive data. Audit events contain decisions, identifiers and output
-references/hashes rather than output bodies. See [audit](audit.md) and
-[security](security.md) for the limits of those guarantees.
+Output—including host-derived labels and units in `variances` and
+`metric_drifts`—remains untrusted data and may contain prompt injection.
+Redaction can miss sensitive data. Audit events contain decisions, identifiers
+and output references/hashes rather than output bodies. See [audit](audit.md)
+and [security](security.md) for the limits of those guarantees.

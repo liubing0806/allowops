@@ -26,7 +26,12 @@ Changes on `main` since v0.2.0. They are not in a release yet.
   catalog's action names on the web console Catalog page (or via
   `CatalogService.ListActions`) and rename any action that uses one of these
   four names.
-- **Reserved MCP tool names (`changes_list`, `runbooks_search`, `runbooks_read`)**:
+- `exact` mode job summaries now default to deterministic Anomaly-First ranking
+  (`failure` → `anomaly` → `normal`) instead of task insertion order, and
+  terminal tasks without output hashes (such as `skipped`, `cancelled`, or
+  dispatch-failure tasks) are included as Tier 0 failure groups rather than
+  omitted.
+- **Reserved MCP tool names (`jobs_diff`, `changes_list`, `runbooks_search`, `runbooks_read`)**:
   before upgrading gateway binaries, rename, re-sign, and publish any active
   catalog action using these names; otherwise catalog verification rejects the
   catalog and `/mcp` returns HTTP 503.
@@ -74,6 +79,27 @@ Changes on `main` since v0.2.0. They are not in a release yet.
     are shared across identities, the per-identity LRU holds one slot per
     identity, and header-narrowed servers are built per request without
     evicting cached identities.
+- Fleet output normalized clustering, Anomaly-First ranking, and cross-job
+  baseline comparison:
+  - Action tools, `jobs_get`, `allowops run`, and `allowops jobs get` accept
+    `grouping` (`exact` by default, or `normalized`). Normalized mode clusters
+    volatile output noise (timestamps, PIDs, IP addresses, hostnames, and
+    numbers) into shared templates while preserving version numbers and semantic
+    status/exit codes, and computes per-cluster numeric distributions
+    (`min`/`p50`/`p95`/`max` and MAD outlier hosts).
+  - Job summaries expose severity (`failure`/`anomaly`/`normal`),
+    `anomaly_reason`, template metadata, `variances`, and strict
+    host-conservation counters (`total_groups`, `omitted_groups`,
+    `omitted_hosts`, `folded_normal_hosts`, `unfinished_hosts_count`), using
+    linear `O(G)` 32 KiB budget trimming.
+  - Added read-only MCP tool `jobs_diff`, `JobService.DiffJobs` RPC, and
+    `allowops jobs diff <base-job-id> <target-job-id>` CLI subcommand
+    (defaulting to `grouping=normalized`). Aligns two finished, non-denied jobs
+    of the same action by immutable `host_id`, reporting added/removed/replaced
+    hosts, degradation-first status transitions, anomaly-first pattern changes
+    with bounded line diffs, and significant numeric metric drifts under a
+    strict 32 KiB response budget with per-host `view_jobs` and `view_output`
+    authorization and dual-job audit attribution.
 - Composite `steps` actions now support controlled output extraction
   (`steps[].extract`), whole-element step variable references
   (`{steps.<step_name>.<var>}`), and declarative conditional branching

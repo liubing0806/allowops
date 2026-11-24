@@ -253,22 +253,23 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 | `<action>` | `flat` 模式下每个受支持的可见 action 一个工具，只列出该身份可能被允许的 action |
 | `actions_search` | `progressive` 模式下存在受支持的可见 action 时列出；按关键词、`names`、`toolset`、`tag`、`risk`、`entity_kind`、`hostname` 检索当前身份可见的 action，支持 `include_schema` 展开完整输入 schema 与分页 |
 | `actions_invoke_read` / `actions_invoke_write` / `actions_invoke_dangerous` | `progressive` 模式下按当前身份可见动作实际存在的风险等级分别列出；调用指定 action，服务端按最新已验签目录强校验 `action.risk` 与工具风险等级一致，复用完整的参数校验、`expected_count`、`max_targets`、逐主机 OPA ABAC 与审计管线 |
-| `jobs_get` | job 汇总；传 `host` 时分页返回该主机完整输出；支持 `wait_seconds` |
+| `jobs_get` | job 汇总（支持 `grouping=exact\|normalized`）；传 `host` 时分页返回该主机完整输出；支持 `wait_seconds` |
 | `jobs_list` | 当前服务账号最近的 job |
+| `jobs_diff` | 对比同一 action 的两次已结束非拒绝 job；按不可变 `host_id` 对齐，默认 `grouping=normalized`，受 32KB 预算限制且不分页 |
 | `jobs_cancel` | 取消 job |
 
 - MCP 暴露模式与请求头裁剪（设计见 [mcp-progressive-disclosure-design.md](mcp-progressive-disclosure-design.md)）：
   - 网关配置 `mcp.mode` 支持 `flat`（默认，保持存量工具名兼容）、`progressive` 和 `auto`（可见受支持动作数超过 `mcp.auto_threshold`（默认 40，范围 1~1000）时切换为 `progressive`）。
   - 客户端可通过请求头 `X-Allowops-Toolsets`（最多 16 个逗号分隔的 toolset 名）按需裁剪上下文工具面，或通过 `X-Allowops-MCP-Mode`（`flat` | `progressive`）选择展示模式；两者均为视图裁剪提示，不是授权边界。URL 仍拒绝一切 query 参数。
 - `entities_search`、`changes_list`、`runbooks_search`、`runbooks_read` 均在调用前后写入审计，结果经 `secrets` 规则脱敏、受 32KB 上限裁剪并标记 `output_trust: untrusted`。存在可用 Knowledge 实例时，网关同时通过 MCP Resources（`allowops://runbooks/{source}/{+id}`）提供 `resources/list`、`resources/templates/list` 和 `resources/read`，同样受 `view_knowledge` 鉴权、脱敏与 32KB 预算约束。`entities_search` 先逐源按主机可见性过滤再合并多源实体，并按 `limit`（默认 20，范围 1~100）和 32KB 上限截断（`truncated` 仅表示实体被截断）；在剩余 32KB 预算内，按保留实体的 `kind` 字典序附带每类最多 10 条策略预检可见的 `recommended_actions`（放不下或超限时单独标记 `recommended_actions_truncated`）。返回的 selector 和推荐动作作为 action 目标时仍逐台检查权限。
-- action 工具公共参数：`targets`（`hosts` 或 `selector`）、`expected_count`、`reason`、`wait_seconds`、`batch_size`、`max_failures`、`response_format`。
+- action 工具公共参数：`targets`（`hosts` 或 `selector`）、`expected_count`、`reason`、`wait_seconds`、`batch_size`、`max_failures`、`response_format`、`grouping`（默认 `exact`，高噪多主机命令可传 `normalized`）。
 - 用 `selector` 时必须带 `expected_count`，与实际数量不符时拒绝并返回实际数量。
 - action 设置了 `max_targets` 时，目标数（`selector` 为解析后的主机数）超过该值则拒绝整个 job：返回 `isError: true`、原因 `MAX_TARGETS_EXCEEDED`、实际数量和上限；不创建 job，不下发 task。工具描述和 `targets` 的 schema 写明上限。
 - 任一主机被 deny 时整个 job 拒绝，返回被拒主机和规则。
 - 工具注解：read → `readOnlyHint: true`；write → `destructiveHint: false`；dangerous → `destructiveHint: true`。
 - 参数错误返回 `isError: true` 并给出合法值。
 - 返回给 agent 的主机标识为主机名；job ID 为短格式（如 `job-20261013-0042`）。
-- 返回中用 `"output_trust": "untrusted"` 标明 stdout、stderr 为不可信主机数据，工具描述中写明同样说明。
+- 返回中用 `"output_trust": "untrusted"` 标明 stdout、stderr 以及从主机输出派生的 `variances`/`metric_drifts` 中 `label`/`unit` 均为不可信主机数据，工具描述中写明同样说明。
 
 ### 执行流程和状态
 
@@ -280,7 +281,7 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 
 - job 状态：`queued`、`running`、`succeeded`、`partially_failed`、`failed`、`cancelled`、`denied`。
 - task 状态：`pending`、`running`、`succeeded`、`failed`、`timeout`、`offline`、`skipped`、`cancelled`、`unsupported`。
-- 返回结果按退出码和输出哈希完全相同合并为组，示例见决定记录第 7 节。
+- 返回汇总支持 `grouping=exact`（默认，按退出码和输出哈希精确分组）和 `grouping=normalized`（去噪归一化模板聚类与数值分布统计）；两种模式统一按 Anomaly-First 三层优先级（`failure` → `anomaly` → `normal`）排序，无输出哈希的终态任务纳入 Tier 0 分组，并通过 `total_groups`/`omitted_groups`/`omitted_hosts`/`folded_normal_hosts`/`unfinished_hosts_count` 保持主机守恒，详见 [fleet-output-clustering-design.md](fleet-output-clustering-design.md)。
 
 ### 默认值（可在网关配置中修改）
 
@@ -288,8 +289,9 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 |---|---|
 | `wait_seconds` | 默认 30，最大 120 |
 | 单次返回上限 | 32KB |
-| 每组输出 | 前 4KB |
+| 每组输出 | 前 4KB（与模板共享上限） |
 | `response_format` | `concise` |
+| `grouping` | action / `jobs_get` 默认 `exact`；`jobs_diff` 默认 `normalized` |
 | `batch_size` / `max_failures` | 20 / 5 |
 | `reason` | 必填 |
 | 每个服务账号并发 job | 5 |
@@ -322,8 +324,8 @@ allowops ALL=(root) NOPASSWD: /usr/libexec/allowops/allowops-exec ""
 allowops login
 allowops catalog keygen|validate|build|sign|publish|try
 allowops actions list|describe <action>
-allowops run <action> --selector env=prod --expected-count 12 --param k=v --reason "..."
-allowops jobs list|get|output|cancel
+allowops run <action> --selector env=prod --expected-count 12 --param k=v --reason "..." [--grouping exact|normalized]
+allowops jobs list|get|diff|output|cancel
 allowops hosts list|label|delete
 allowops jointoken create --uses 500 --ttl 24h
 allowops policy get|apply -f rules.yaml|test

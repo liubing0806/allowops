@@ -42,7 +42,7 @@ func TestSDKCLIAndHostSearch(t *testing.T) {
 	cli := mintSession("cli", "aops_cli_")
 	console := mintSession("console", "aops_web_")
 	c, _ := f.client(t, cli, nil)
-	if tools, err := c.ListTools(context.Background(), nil); err != nil || len(tools.Tools) != 5 {
+	if tools, err := c.ListTools(context.Background(), nil); err != nil || len(tools.Tools) != 6 {
 		t.Fatalf("CLI tools=%v error=%v", tools, err)
 	}
 	hosts := call(t, c, "hosts_search", map[string]any{"selector": "env=test"})
@@ -110,7 +110,7 @@ func TestSDKDiscoveryIgnoresIPButExecutionAndDenyRemainAuthoritative(t *testing.
 		}
 	}
 	save(2)
-	if list, err := c.ListTools(context.Background(), nil); err != nil || len(list.Tools) != 5 {
+	if list, err := c.ListTools(context.Background(), nil); err != nil || len(list.Tools) != 6 {
 		t.Fatalf("IP display precheck tools=%v error=%v", list, err)
 	}
 	if !call(t, c, "logs_read", actionArgs()).IsError {
@@ -118,7 +118,7 @@ func TestSDKDiscoveryIgnoresIPButExecutionAndDenyRemainAuthoritative(t *testing.
 	}
 	rules.Rules = append(rules.Rules, &v1.PolicyRule{Name: "deny-viewer-every-host", Roles: []string{"viewer"}, Operations: []string{"execute_action"}, Actions: []string{"logs_read"}, Effect: v1.PolicyEffect_POLICY_EFFECT_DENY})
 	save(3)
-	if list, err := c.ListTools(context.Background(), nil); err != nil || len(list.Tools) != 4 {
+	if list, err := c.ListTools(context.Background(), nil); err != nil || len(list.Tools) != 5 {
 		t.Fatalf("unconstrained deny tools=%v error=%v", list, err)
 	}
 }
@@ -172,7 +172,7 @@ func TestSDKP4GatewayMCPALPN(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer session.Close()
-	if list, err := session.ListTools(context.Background(), nil); err != nil || len(list.Tools) != 5 {
+	if list, err := session.ListTools(context.Background(), nil); err != nil || len(list.Tools) != 6 {
 		t.Fatalf("P4 ALPN tools=%v error=%v", list, err)
 	}
 	if result := call(t, session, "logs_read", actionArgs()); result.IsError {

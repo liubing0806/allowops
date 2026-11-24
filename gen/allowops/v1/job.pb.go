@@ -22,6 +22,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type GroupSeverity int32
+
+const (
+	GroupSeverity_GROUP_SEVERITY_UNSPECIFIED GroupSeverity = 0
+	GroupSeverity_GROUP_SEVERITY_FAILURE     GroupSeverity = 1
+	GroupSeverity_GROUP_SEVERITY_ANOMALY     GroupSeverity = 2
+	GroupSeverity_GROUP_SEVERITY_NORMAL      GroupSeverity = 3
+)
+
+// Enum value maps for GroupSeverity.
+var (
+	GroupSeverity_name = map[int32]string{
+		0: "GROUP_SEVERITY_UNSPECIFIED",
+		1: "GROUP_SEVERITY_FAILURE",
+		2: "GROUP_SEVERITY_ANOMALY",
+		3: "GROUP_SEVERITY_NORMAL",
+	}
+	GroupSeverity_value = map[string]int32{
+		"GROUP_SEVERITY_UNSPECIFIED": 0,
+		"GROUP_SEVERITY_FAILURE":     1,
+		"GROUP_SEVERITY_ANOMALY":     2,
+		"GROUP_SEVERITY_NORMAL":      3,
+	}
+)
+
+func (x GroupSeverity) Enum() *GroupSeverity {
+	p := new(GroupSeverity)
+	*p = x
+	return p
+}
+
+func (x GroupSeverity) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (GroupSeverity) Descriptor() protoreflect.EnumDescriptor {
+	return file_allowops_v1_job_proto_enumTypes[0].Descriptor()
+}
+
+func (GroupSeverity) Type() protoreflect.EnumType {
+	return &file_allowops_v1_job_proto_enumTypes[0]
+}
+
+func (x GroupSeverity) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use GroupSeverity.Descriptor instead.
+func (GroupSeverity) EnumDescriptor() ([]byte, []int) {
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{0}
+}
+
 type TaskCount struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Status        TaskStatus             `protobuf:"varint,1,opt,name=status,proto3,enum=allowops.v1.TaskStatus" json:"status,omitempty"`
@@ -387,6 +439,7 @@ type RunJobRequest struct {
 	MaxFailures    *uint32                `protobuf:"varint,8,opt,name=max_failures,json=maxFailures,proto3,oneof" json:"max_failures,omitempty"`
 	Filters        *OutputFilters         `protobuf:"bytes,9,opt,name=filters,proto3" json:"filters,omitempty"`
 	ResponseFormat string                 `protobuf:"bytes,10,opt,name=response_format,json=responseFormat,proto3" json:"response_format,omitempty"`
+	Grouping       string                 `protobuf:"bytes,11,opt,name=grouping,proto3" json:"grouping,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -491,6 +544,13 @@ func (x *RunJobRequest) GetResponseFormat() string {
 	return ""
 }
 
+func (x *RunJobRequest) GetGrouping() string {
+	if x != nil {
+		return x.Grouping
+	}
+	return ""
+}
+
 type RunJobResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Job           *Job                   `protobuf:"bytes,1,opt,name=job,proto3" json:"job,omitempty"`
@@ -548,6 +608,7 @@ type GetJobRequest struct {
 	JobId          string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
 	WaitSeconds    *uint32                `protobuf:"varint,2,opt,name=wait_seconds,json=waitSeconds,proto3,oneof" json:"wait_seconds,omitempty"`
 	ResponseFormat string                 `protobuf:"bytes,3,opt,name=response_format,json=responseFormat,proto3" json:"response_format,omitempty"`
+	Grouping       string                 `protobuf:"bytes,4,opt,name=grouping,proto3" json:"grouping,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -599,6 +660,13 @@ func (x *GetJobRequest) GetWaitSeconds() uint32 {
 func (x *GetJobRequest) GetResponseFormat() string {
 	if x != nil {
 		return x.ResponseFormat
+	}
+	return ""
+}
+
+func (x *GetJobRequest) GetGrouping() string {
+	if x != nil {
+		return x.Grouping
 	}
 	return ""
 }
@@ -655,6 +723,114 @@ func (x *GetJobResponse) GetSummary() *JobSummary {
 	return nil
 }
 
+type MetricVariance struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Label         string                 `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	Unit          string                 `protobuf:"bytes,2,opt,name=unit,proto3" json:"unit,omitempty"`
+	Min           float64                `protobuf:"fixed64,3,opt,name=min,proto3" json:"min,omitempty"`
+	Max           float64                `protobuf:"fixed64,4,opt,name=max,proto3" json:"max,omitempty"`
+	P95           float64                `protobuf:"fixed64,5,opt,name=p95,proto3" json:"p95,omitempty"`
+	MinHost       string                 `protobuf:"bytes,6,opt,name=min_host,json=minHost,proto3" json:"min_host,omitempty"`
+	MaxHost       string                 `protobuf:"bytes,7,opt,name=max_host,json=maxHost,proto3" json:"max_host,omitempty"`
+	OutlierHosts  []string               `protobuf:"bytes,8,rep,name=outlier_hosts,json=outlierHosts,proto3" json:"outlier_hosts,omitempty"`
+	P50           float64                `protobuf:"fixed64,9,opt,name=p50,proto3" json:"p50,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MetricVariance) Reset() {
+	*x = MetricVariance{}
+	mi := &file_allowops_v1_job_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MetricVariance) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MetricVariance) ProtoMessage() {}
+
+func (x *MetricVariance) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_job_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MetricVariance.ProtoReflect.Descriptor instead.
+func (*MetricVariance) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *MetricVariance) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *MetricVariance) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
+func (x *MetricVariance) GetMin() float64 {
+	if x != nil {
+		return x.Min
+	}
+	return 0
+}
+
+func (x *MetricVariance) GetMax() float64 {
+	if x != nil {
+		return x.Max
+	}
+	return 0
+}
+
+func (x *MetricVariance) GetP95() float64 {
+	if x != nil {
+		return x.P95
+	}
+	return 0
+}
+
+func (x *MetricVariance) GetMinHost() string {
+	if x != nil {
+		return x.MinHost
+	}
+	return ""
+}
+
+func (x *MetricVariance) GetMaxHost() string {
+	if x != nil {
+		return x.MaxHost
+	}
+	return ""
+}
+
+func (x *MetricVariance) GetOutlierHosts() []string {
+	if x != nil {
+		return x.OutlierHosts
+	}
+	return nil
+}
+
+func (x *MetricVariance) GetP50() float64 {
+	if x != nil {
+		return x.P50
+	}
+	return 0
+}
+
 // G39: previews require view_output. Concise samples at most two hostnames;
 // detailed includes as many as the response byte budget permits.
 type OutputGroup struct {
@@ -668,14 +844,20 @@ type OutputGroup struct {
 	Stderr       string                 `protobuf:"bytes,7,opt,name=stderr,proto3" json:"stderr,omitempty"`
 	Truncated    bool                   `protobuf:"varint,8,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	// ExecutionResult.reason shared by the group; empty for success or old agents.
-	Reason        string `protobuf:"bytes,9,opt,name=reason,proto3" json:"reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Reason         string            `protobuf:"bytes,9,opt,name=reason,proto3" json:"reason,omitempty"`
+	Severity       GroupSeverity     `protobuf:"varint,10,opt,name=severity,proto3,enum=allowops.v1.GroupSeverity" json:"severity,omitempty"`
+	AnomalyReason  string            `protobuf:"bytes,11,opt,name=anomaly_reason,json=anomalyReason,proto3" json:"anomaly_reason,omitempty"`
+	TemplateSha256 []byte            `protobuf:"bytes,12,opt,name=template_sha256,json=templateSha256,proto3" json:"template_sha256,omitempty"`
+	TemplateStdout string            `protobuf:"bytes,13,opt,name=template_stdout,json=templateStdout,proto3" json:"template_stdout,omitempty"`
+	TemplateStderr string            `protobuf:"bytes,14,opt,name=template_stderr,json=templateStderr,proto3" json:"template_stderr,omitempty"`
+	Variances      []*MetricVariance `protobuf:"bytes,15,rep,name=variances,proto3" json:"variances,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *OutputGroup) Reset() {
 	*x = OutputGroup{}
-	mi := &file_allowops_v1_job_proto_msgTypes[8]
+	mi := &file_allowops_v1_job_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -687,7 +869,7 @@ func (x *OutputGroup) String() string {
 func (*OutputGroup) ProtoMessage() {}
 
 func (x *OutputGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_job_proto_msgTypes[8]
+	mi := &file_allowops_v1_job_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -700,7 +882,7 @@ func (x *OutputGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OutputGroup.ProtoReflect.Descriptor instead.
 func (*OutputGroup) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_job_proto_rawDescGZIP(), []int{8}
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *OutputGroup) GetExitCode() int32 {
@@ -766,20 +948,69 @@ func (x *OutputGroup) GetReason() string {
 	return ""
 }
 
+func (x *OutputGroup) GetSeverity() GroupSeverity {
+	if x != nil {
+		return x.Severity
+	}
+	return GroupSeverity_GROUP_SEVERITY_UNSPECIFIED
+}
+
+func (x *OutputGroup) GetAnomalyReason() string {
+	if x != nil {
+		return x.AnomalyReason
+	}
+	return ""
+}
+
+func (x *OutputGroup) GetTemplateSha256() []byte {
+	if x != nil {
+		return x.TemplateSha256
+	}
+	return nil
+}
+
+func (x *OutputGroup) GetTemplateStdout() string {
+	if x != nil {
+		return x.TemplateStdout
+	}
+	return ""
+}
+
+func (x *OutputGroup) GetTemplateStderr() string {
+	if x != nil {
+		return x.TemplateStderr
+	}
+	return ""
+}
+
+func (x *OutputGroup) GetVariances() []*MetricVariance {
+	if x != nil {
+		return x.Variances
+	}
+	return nil
+}
+
 type JobSummary struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	Groups       []*OutputGroup         `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
 	OfflineHosts []string               `protobuf:"bytes,2,rep,name=offline_hosts,json=offlineHosts,proto3" json:"offline_hosts,omitempty"`
 	OutputTrust  OutputTrust            `protobuf:"varint,3,opt,name=output_trust,json=outputTrust,proto3,enum=allowops.v1.OutputTrust" json:"output_trust,omitempty"`
 	// Indicates omitted groups, hostnames or previews due to the response budget.
-	Truncated     bool `protobuf:"varint,4,opt,name=truncated,proto3" json:"truncated,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Truncated            bool   `protobuf:"varint,4,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	Grouping             string `protobuf:"bytes,5,opt,name=grouping,proto3" json:"grouping,omitempty"`
+	Ranking              string `protobuf:"bytes,6,opt,name=ranking,proto3" json:"ranking,omitempty"`
+	TotalGroups          uint64 `protobuf:"varint,7,opt,name=total_groups,json=totalGroups,proto3" json:"total_groups,omitempty"`
+	OmittedGroups        uint64 `protobuf:"varint,8,opt,name=omitted_groups,json=omittedGroups,proto3" json:"omitted_groups,omitempty"`
+	FoldedNormalHosts    uint64 `protobuf:"varint,9,opt,name=folded_normal_hosts,json=foldedNormalHosts,proto3" json:"folded_normal_hosts,omitempty"`
+	OmittedHosts         uint64 `protobuf:"varint,10,opt,name=omitted_hosts,json=omittedHosts,proto3" json:"omitted_hosts,omitempty"`
+	UnfinishedHostsCount uint64 `protobuf:"varint,11,opt,name=unfinished_hosts_count,json=unfinishedHostsCount,proto3" json:"unfinished_hosts_count,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *JobSummary) Reset() {
 	*x = JobSummary{}
-	mi := &file_allowops_v1_job_proto_msgTypes[9]
+	mi := &file_allowops_v1_job_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +1022,7 @@ func (x *JobSummary) String() string {
 func (*JobSummary) ProtoMessage() {}
 
 func (x *JobSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_job_proto_msgTypes[9]
+	mi := &file_allowops_v1_job_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +1035,7 @@ func (x *JobSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobSummary.ProtoReflect.Descriptor instead.
 func (*JobSummary) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_job_proto_rawDescGZIP(), []int{9}
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *JobSummary) GetGroups() []*OutputGroup {
@@ -835,6 +1066,55 @@ func (x *JobSummary) GetTruncated() bool {
 	return false
 }
 
+func (x *JobSummary) GetGrouping() string {
+	if x != nil {
+		return x.Grouping
+	}
+	return ""
+}
+
+func (x *JobSummary) GetRanking() string {
+	if x != nil {
+		return x.Ranking
+	}
+	return ""
+}
+
+func (x *JobSummary) GetTotalGroups() uint64 {
+	if x != nil {
+		return x.TotalGroups
+	}
+	return 0
+}
+
+func (x *JobSummary) GetOmittedGroups() uint64 {
+	if x != nil {
+		return x.OmittedGroups
+	}
+	return 0
+}
+
+func (x *JobSummary) GetFoldedNormalHosts() uint64 {
+	if x != nil {
+		return x.FoldedNormalHosts
+	}
+	return 0
+}
+
+func (x *JobSummary) GetOmittedHosts() uint64 {
+	if x != nil {
+		return x.OmittedHosts
+	}
+	return 0
+}
+
+func (x *JobSummary) GetUnfinishedHostsCount() uint64 {
+	if x != nil {
+		return x.UnfinishedHostsCount
+	}
+	return 0
+}
+
 type ListJobsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Page          *PageRequest           `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
@@ -848,7 +1128,7 @@ type ListJobsRequest struct {
 
 func (x *ListJobsRequest) Reset() {
 	*x = ListJobsRequest{}
-	mi := &file_allowops_v1_job_proto_msgTypes[10]
+	mi := &file_allowops_v1_job_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -860,7 +1140,7 @@ func (x *ListJobsRequest) String() string {
 func (*ListJobsRequest) ProtoMessage() {}
 
 func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_job_proto_msgTypes[10]
+	mi := &file_allowops_v1_job_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -873,7 +1153,7 @@ func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsRequest.ProtoReflect.Descriptor instead.
 func (*ListJobsRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_job_proto_rawDescGZIP(), []int{10}
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ListJobsRequest) GetPage() *PageRequest {
@@ -921,7 +1201,7 @@ type ListJobsResponse struct {
 
 func (x *ListJobsResponse) Reset() {
 	*x = ListJobsResponse{}
-	mi := &file_allowops_v1_job_proto_msgTypes[11]
+	mi := &file_allowops_v1_job_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -933,7 +1213,7 @@ func (x *ListJobsResponse) String() string {
 func (*ListJobsResponse) ProtoMessage() {}
 
 func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_job_proto_msgTypes[11]
+	mi := &file_allowops_v1_job_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -946,7 +1226,7 @@ func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsResponse.ProtoReflect.Descriptor instead.
 func (*ListJobsResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_job_proto_rawDescGZIP(), []int{11}
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ListJobsResponse) GetJobs() []*Job {
@@ -975,7 +1255,7 @@ type ListTasksRequest struct {
 
 func (x *ListTasksRequest) Reset() {
 	*x = ListTasksRequest{}
-	mi := &file_allowops_v1_job_proto_msgTypes[12]
+	mi := &file_allowops_v1_job_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -987,7 +1267,7 @@ func (x *ListTasksRequest) String() string {
 func (*ListTasksRequest) ProtoMessage() {}
 
 func (x *ListTasksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_job_proto_msgTypes[12]
+	mi := &file_allowops_v1_job_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1000,7 +1280,7 @@ func (x *ListTasksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTasksRequest.ProtoReflect.Descriptor instead.
 func (*ListTasksRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_job_proto_rawDescGZIP(), []int{12}
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListTasksRequest) GetJobId() string {
@@ -1041,7 +1321,7 @@ type ListTasksResponse struct {
 
 func (x *ListTasksResponse) Reset() {
 	*x = ListTasksResponse{}
-	mi := &file_allowops_v1_job_proto_msgTypes[13]
+	mi := &file_allowops_v1_job_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1053,7 +1333,7 @@ func (x *ListTasksResponse) String() string {
 func (*ListTasksResponse) ProtoMessage() {}
 
 func (x *ListTasksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_job_proto_msgTypes[13]
+	mi := &file_allowops_v1_job_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1066,7 +1346,7 @@ func (x *ListTasksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTasksResponse.ProtoReflect.Descriptor instead.
 func (*ListTasksResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_job_proto_rawDescGZIP(), []int{13}
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListTasksResponse) GetTasks() []*Task {
@@ -1094,7 +1374,7 @@ type ListTaskStepsRequest struct {
 
 func (x *ListTaskStepsRequest) Reset() {
 	*x = ListTaskStepsRequest{}
-	mi := &file_allowops_v1_job_proto_msgTypes[14]
+	mi := &file_allowops_v1_job_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1106,7 +1386,7 @@ func (x *ListTaskStepsRequest) String() string {
 func (*ListTaskStepsRequest) ProtoMessage() {}
 
 func (x *ListTaskStepsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_job_proto_msgTypes[14]
+	mi := &file_allowops_v1_job_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1119,7 +1399,7 @@ func (x *ListTaskStepsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTaskStepsRequest.ProtoReflect.Descriptor instead.
 func (*ListTaskStepsRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_job_proto_rawDescGZIP(), []int{14}
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListTaskStepsRequest) GetJobId() string {
@@ -1153,7 +1433,7 @@ type ListTaskStepsResponse struct {
 
 func (x *ListTaskStepsResponse) Reset() {
 	*x = ListTaskStepsResponse{}
-	mi := &file_allowops_v1_job_proto_msgTypes[15]
+	mi := &file_allowops_v1_job_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1165,7 +1445,7 @@ func (x *ListTaskStepsResponse) String() string {
 func (*ListTaskStepsResponse) ProtoMessage() {}
 
 func (x *ListTaskStepsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_job_proto_msgTypes[15]
+	mi := &file_allowops_v1_job_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1178,7 +1458,7 @@ func (x *ListTaskStepsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTaskStepsResponse.ProtoReflect.Descriptor instead.
 func (*ListTaskStepsResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_job_proto_rawDescGZIP(), []int{15}
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListTaskStepsResponse) GetSteps() []*TaskStep {
@@ -1204,7 +1484,7 @@ type CancelJobRequest struct {
 
 func (x *CancelJobRequest) Reset() {
 	*x = CancelJobRequest{}
-	mi := &file_allowops_v1_job_proto_msgTypes[16]
+	mi := &file_allowops_v1_job_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1216,7 +1496,7 @@ func (x *CancelJobRequest) String() string {
 func (*CancelJobRequest) ProtoMessage() {}
 
 func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_job_proto_msgTypes[16]
+	mi := &file_allowops_v1_job_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1229,7 +1509,7 @@ func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobRequest.ProtoReflect.Descriptor instead.
 func (*CancelJobRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_job_proto_rawDescGZIP(), []int{16}
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CancelJobRequest) GetJobId() string {
@@ -1248,7 +1528,7 @@ type CancelJobResponse struct {
 
 func (x *CancelJobResponse) Reset() {
 	*x = CancelJobResponse{}
-	mi := &file_allowops_v1_job_proto_msgTypes[17]
+	mi := &file_allowops_v1_job_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1260,7 +1540,7 @@ func (x *CancelJobResponse) String() string {
 func (*CancelJobResponse) ProtoMessage() {}
 
 func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_job_proto_msgTypes[17]
+	mi := &file_allowops_v1_job_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1273,7 +1553,7 @@ func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobResponse.ProtoReflect.Descriptor instead.
 func (*CancelJobResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_job_proto_rawDescGZIP(), []int{17}
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CancelJobResponse) GetJob() *Job {
@@ -1297,7 +1577,7 @@ type GetJobOutputRequest struct {
 
 func (x *GetJobOutputRequest) Reset() {
 	*x = GetJobOutputRequest{}
-	mi := &file_allowops_v1_job_proto_msgTypes[18]
+	mi := &file_allowops_v1_job_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1309,7 +1589,7 @@ func (x *GetJobOutputRequest) String() string {
 func (*GetJobOutputRequest) ProtoMessage() {}
 
 func (x *GetJobOutputRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_job_proto_msgTypes[18]
+	mi := &file_allowops_v1_job_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1322,7 +1602,7 @@ func (x *GetJobOutputRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobOutputRequest.ProtoReflect.Descriptor instead.
 func (*GetJobOutputRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_job_proto_rawDescGZIP(), []int{18}
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetJobOutputRequest) GetJobId() string {
@@ -1383,7 +1663,7 @@ type GetJobOutputResponse struct {
 
 func (x *GetJobOutputResponse) Reset() {
 	*x = GetJobOutputResponse{}
-	mi := &file_allowops_v1_job_proto_msgTypes[19]
+	mi := &file_allowops_v1_job_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1395,7 +1675,7 @@ func (x *GetJobOutputResponse) String() string {
 func (*GetJobOutputResponse) ProtoMessage() {}
 
 func (x *GetJobOutputResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_job_proto_msgTypes[19]
+	mi := &file_allowops_v1_job_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1408,7 +1688,7 @@ func (x *GetJobOutputResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobOutputResponse.ProtoReflect.Descriptor instead.
 func (*GetJobOutputResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_job_proto_rawDescGZIP(), []int{19}
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetJobOutputResponse) GetData() []byte {
@@ -1467,6 +1747,678 @@ func (x *GetJobOutputResponse) GetOutput() *OutputMetadata {
 	return nil
 }
 
+type DiffJobsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BaseJobId     string                 `protobuf:"bytes,1,opt,name=base_job_id,json=baseJobId,proto3" json:"base_job_id,omitempty"`
+	TargetJobId   string                 `protobuf:"bytes,2,opt,name=target_job_id,json=targetJobId,proto3" json:"target_job_id,omitempty"`
+	Grouping      string                 `protobuf:"bytes,3,opt,name=grouping,proto3" json:"grouping,omitempty"`
+	OnlyChanged   *bool                  `protobuf:"varint,4,opt,name=only_changed,json=onlyChanged,proto3,oneof" json:"only_changed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiffJobsRequest) Reset() {
+	*x = DiffJobsRequest{}
+	mi := &file_allowops_v1_job_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiffJobsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiffJobsRequest) ProtoMessage() {}
+
+func (x *DiffJobsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_job_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiffJobsRequest.ProtoReflect.Descriptor instead.
+func (*DiffJobsRequest) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *DiffJobsRequest) GetBaseJobId() string {
+	if x != nil {
+		return x.BaseJobId
+	}
+	return ""
+}
+
+func (x *DiffJobsRequest) GetTargetJobId() string {
+	if x != nil {
+		return x.TargetJobId
+	}
+	return ""
+}
+
+func (x *DiffJobsRequest) GetGrouping() string {
+	if x != nil {
+		return x.Grouping
+	}
+	return ""
+}
+
+func (x *DiffJobsRequest) GetOnlyChanged() bool {
+	if x != nil && x.OnlyChanged != nil {
+		return *x.OnlyChanged
+	}
+	return false
+}
+
+type DiffJobsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BaseJob       *Job                   `protobuf:"bytes,1,opt,name=base_job,json=baseJob,proto3" json:"base_job,omitempty"`
+	TargetJob     *Job                   `protobuf:"bytes,2,opt,name=target_job,json=targetJob,proto3" json:"target_job,omitempty"`
+	Diff          *JobDiff               `protobuf:"bytes,3,opt,name=diff,proto3" json:"diff,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiffJobsResponse) Reset() {
+	*x = DiffJobsResponse{}
+	mi := &file_allowops_v1_job_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiffJobsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiffJobsResponse) ProtoMessage() {}
+
+func (x *DiffJobsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_job_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiffJobsResponse.ProtoReflect.Descriptor instead.
+func (*DiffJobsResponse) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *DiffJobsResponse) GetBaseJob() *Job {
+	if x != nil {
+		return x.BaseJob
+	}
+	return nil
+}
+
+func (x *DiffJobsResponse) GetTargetJob() *Job {
+	if x != nil {
+		return x.TargetJob
+	}
+	return nil
+}
+
+func (x *DiffJobsResponse) GetDiff() *JobDiff {
+	if x != nil {
+		return x.Diff
+	}
+	return nil
+}
+
+type StatusTransition struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FromStatus    TaskStatus             `protobuf:"varint,1,opt,name=from_status,json=fromStatus,proto3,enum=allowops.v1.TaskStatus" json:"from_status,omitempty"`
+	ToStatus      TaskStatus             `protobuf:"varint,2,opt,name=to_status,json=toStatus,proto3,enum=allowops.v1.TaskStatus" json:"to_status,omitempty"`
+	FromExitCode  *int32                 `protobuf:"varint,3,opt,name=from_exit_code,json=fromExitCode,proto3,oneof" json:"from_exit_code,omitempty"`
+	ToExitCode    *int32                 `protobuf:"varint,4,opt,name=to_exit_code,json=toExitCode,proto3,oneof" json:"to_exit_code,omitempty"`
+	Reason        string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	HostCount     uint64                 `protobuf:"varint,6,opt,name=host_count,json=hostCount,proto3" json:"host_count,omitempty"`
+	Hosts         []string               `protobuf:"bytes,7,rep,name=hosts,proto3" json:"hosts,omitempty"`
+	Degradation   bool                   `protobuf:"varint,8,opt,name=degradation,proto3" json:"degradation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StatusTransition) Reset() {
+	*x = StatusTransition{}
+	mi := &file_allowops_v1_job_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StatusTransition) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StatusTransition) ProtoMessage() {}
+
+func (x *StatusTransition) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_job_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StatusTransition.ProtoReflect.Descriptor instead.
+func (*StatusTransition) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *StatusTransition) GetFromStatus() TaskStatus {
+	if x != nil {
+		return x.FromStatus
+	}
+	return TaskStatus_TASK_STATUS_UNSPECIFIED
+}
+
+func (x *StatusTransition) GetToStatus() TaskStatus {
+	if x != nil {
+		return x.ToStatus
+	}
+	return TaskStatus_TASK_STATUS_UNSPECIFIED
+}
+
+func (x *StatusTransition) GetFromExitCode() int32 {
+	if x != nil && x.FromExitCode != nil {
+		return *x.FromExitCode
+	}
+	return 0
+}
+
+func (x *StatusTransition) GetToExitCode() int32 {
+	if x != nil && x.ToExitCode != nil {
+		return *x.ToExitCode
+	}
+	return 0
+}
+
+func (x *StatusTransition) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *StatusTransition) GetHostCount() uint64 {
+	if x != nil {
+		return x.HostCount
+	}
+	return 0
+}
+
+func (x *StatusTransition) GetHosts() []string {
+	if x != nil {
+		return x.Hosts
+	}
+	return nil
+}
+
+func (x *StatusTransition) GetDegradation() bool {
+	if x != nil {
+		return x.Degradation
+	}
+	return false
+}
+
+type PatternChange struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	BaseSeverity    GroupSeverity          `protobuf:"varint,1,opt,name=base_severity,json=baseSeverity,proto3,enum=allowops.v1.GroupSeverity" json:"base_severity,omitempty"`
+	TargetSeverity  GroupSeverity          `protobuf:"varint,2,opt,name=target_severity,json=targetSeverity,proto3,enum=allowops.v1.GroupSeverity" json:"target_severity,omitempty"`
+	HostCount       uint64                 `protobuf:"varint,3,opt,name=host_count,json=hostCount,proto3" json:"host_count,omitempty"`
+	Hosts           []string               `protobuf:"bytes,4,rep,name=hosts,proto3" json:"hosts,omitempty"`
+	Unchanged       bool                   `protobuf:"varint,5,opt,name=unchanged,proto3" json:"unchanged,omitempty"`
+	BasePreview     string                 `protobuf:"bytes,6,opt,name=base_preview,json=basePreview,proto3" json:"base_preview,omitempty"`
+	TargetPreview   string                 `protobuf:"bytes,7,opt,name=target_preview,json=targetPreview,proto3" json:"target_preview,omitempty"`
+	RemovedLines    []string               `protobuf:"bytes,8,rep,name=removed_lines,json=removedLines,proto3" json:"removed_lines,omitempty"`
+	AddedLines      []string               `protobuf:"bytes,9,rep,name=added_lines,json=addedLines,proto3" json:"added_lines,omitempty"`
+	DiffComputed    bool                   `protobuf:"varint,10,opt,name=diff_computed,json=diffComputed,proto3" json:"diff_computed,omitempty"`
+	BaseTruncated   bool                   `protobuf:"varint,11,opt,name=base_truncated,json=baseTruncated,proto3" json:"base_truncated,omitempty"`
+	TargetTruncated bool                   `protobuf:"varint,12,opt,name=target_truncated,json=targetTruncated,proto3" json:"target_truncated,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PatternChange) Reset() {
+	*x = PatternChange{}
+	mi := &file_allowops_v1_job_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PatternChange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PatternChange) ProtoMessage() {}
+
+func (x *PatternChange) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_job_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PatternChange.ProtoReflect.Descriptor instead.
+func (*PatternChange) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *PatternChange) GetBaseSeverity() GroupSeverity {
+	if x != nil {
+		return x.BaseSeverity
+	}
+	return GroupSeverity_GROUP_SEVERITY_UNSPECIFIED
+}
+
+func (x *PatternChange) GetTargetSeverity() GroupSeverity {
+	if x != nil {
+		return x.TargetSeverity
+	}
+	return GroupSeverity_GROUP_SEVERITY_UNSPECIFIED
+}
+
+func (x *PatternChange) GetHostCount() uint64 {
+	if x != nil {
+		return x.HostCount
+	}
+	return 0
+}
+
+func (x *PatternChange) GetHosts() []string {
+	if x != nil {
+		return x.Hosts
+	}
+	return nil
+}
+
+func (x *PatternChange) GetUnchanged() bool {
+	if x != nil {
+		return x.Unchanged
+	}
+	return false
+}
+
+func (x *PatternChange) GetBasePreview() string {
+	if x != nil {
+		return x.BasePreview
+	}
+	return ""
+}
+
+func (x *PatternChange) GetTargetPreview() string {
+	if x != nil {
+		return x.TargetPreview
+	}
+	return ""
+}
+
+func (x *PatternChange) GetRemovedLines() []string {
+	if x != nil {
+		return x.RemovedLines
+	}
+	return nil
+}
+
+func (x *PatternChange) GetAddedLines() []string {
+	if x != nil {
+		return x.AddedLines
+	}
+	return nil
+}
+
+func (x *PatternChange) GetDiffComputed() bool {
+	if x != nil {
+		return x.DiffComputed
+	}
+	return false
+}
+
+func (x *PatternChange) GetBaseTruncated() bool {
+	if x != nil {
+		return x.BaseTruncated
+	}
+	return false
+}
+
+func (x *PatternChange) GetTargetTruncated() bool {
+	if x != nil {
+		return x.TargetTruncated
+	}
+	return false
+}
+
+type MetricDrift struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Label          string                 `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	Unit           string                 `protobuf:"bytes,2,opt,name=unit,proto3" json:"unit,omitempty"`
+	BaseP50        float64                `protobuf:"fixed64,3,opt,name=base_p50,json=baseP50,proto3" json:"base_p50,omitempty"`
+	TargetP50      float64                `protobuf:"fixed64,4,opt,name=target_p50,json=targetP50,proto3" json:"target_p50,omitempty"`
+	BaseMax        float64                `protobuf:"fixed64,5,opt,name=base_max,json=baseMax,proto3" json:"base_max,omitempty"`
+	TargetMax      float64                `protobuf:"fixed64,6,opt,name=target_max,json=targetMax,proto3" json:"target_max,omitempty"`
+	MaxDelta       float64                `protobuf:"fixed64,7,opt,name=max_delta,json=maxDelta,proto3" json:"max_delta,omitempty"`
+	MaxDeltaBase   float64                `protobuf:"fixed64,8,opt,name=max_delta_base,json=maxDeltaBase,proto3" json:"max_delta_base,omitempty"`
+	MaxDeltaTarget float64                `protobuf:"fixed64,9,opt,name=max_delta_target,json=maxDeltaTarget,proto3" json:"max_delta_target,omitempty"`
+	MaxDeltaPct    *float64               `protobuf:"fixed64,10,opt,name=max_delta_pct,json=maxDeltaPct,proto3,oneof" json:"max_delta_pct,omitempty"`
+	MaxHost        string                 `protobuf:"bytes,11,opt,name=max_host,json=maxHost,proto3" json:"max_host,omitempty"`
+	AffectedHosts  uint64                 `protobuf:"varint,12,opt,name=affected_hosts,json=affectedHosts,proto3" json:"affected_hosts,omitempty"`
+	HostCount      uint64                 `protobuf:"varint,13,opt,name=host_count,json=hostCount,proto3" json:"host_count,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *MetricDrift) Reset() {
+	*x = MetricDrift{}
+	mi := &file_allowops_v1_job_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MetricDrift) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MetricDrift) ProtoMessage() {}
+
+func (x *MetricDrift) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_job_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MetricDrift.ProtoReflect.Descriptor instead.
+func (*MetricDrift) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *MetricDrift) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *MetricDrift) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
+func (x *MetricDrift) GetBaseP50() float64 {
+	if x != nil {
+		return x.BaseP50
+	}
+	return 0
+}
+
+func (x *MetricDrift) GetTargetP50() float64 {
+	if x != nil {
+		return x.TargetP50
+	}
+	return 0
+}
+
+func (x *MetricDrift) GetBaseMax() float64 {
+	if x != nil {
+		return x.BaseMax
+	}
+	return 0
+}
+
+func (x *MetricDrift) GetTargetMax() float64 {
+	if x != nil {
+		return x.TargetMax
+	}
+	return 0
+}
+
+func (x *MetricDrift) GetMaxDelta() float64 {
+	if x != nil {
+		return x.MaxDelta
+	}
+	return 0
+}
+
+func (x *MetricDrift) GetMaxDeltaBase() float64 {
+	if x != nil {
+		return x.MaxDeltaBase
+	}
+	return 0
+}
+
+func (x *MetricDrift) GetMaxDeltaTarget() float64 {
+	if x != nil {
+		return x.MaxDeltaTarget
+	}
+	return 0
+}
+
+func (x *MetricDrift) GetMaxDeltaPct() float64 {
+	if x != nil && x.MaxDeltaPct != nil {
+		return *x.MaxDeltaPct
+	}
+	return 0
+}
+
+func (x *MetricDrift) GetMaxHost() string {
+	if x != nil {
+		return x.MaxHost
+	}
+	return ""
+}
+
+func (x *MetricDrift) GetAffectedHosts() uint64 {
+	if x != nil {
+		return x.AffectedHosts
+	}
+	return 0
+}
+
+func (x *MetricDrift) GetHostCount() uint64 {
+	if x != nil {
+		return x.HostCount
+	}
+	return 0
+}
+
+type JobDiff struct {
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	OutputTrust             OutputTrust            `protobuf:"varint,1,opt,name=output_trust,json=outputTrust,proto3,enum=allowops.v1.OutputTrust" json:"output_trust,omitempty"`
+	Truncated               bool                   `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	PreviewTruncated        bool                   `protobuf:"varint,3,opt,name=preview_truncated,json=previewTruncated,proto3" json:"preview_truncated,omitempty"`
+	ActionDefinitionChanged bool                   `protobuf:"varint,4,opt,name=action_definition_changed,json=actionDefinitionChanged,proto3" json:"action_definition_changed,omitempty"`
+	Grouping                string                 `protobuf:"bytes,5,opt,name=grouping,proto3" json:"grouping,omitempty"`
+	UnchangedHostsCount     uint64                 `protobuf:"varint,6,opt,name=unchanged_hosts_count,json=unchangedHostsCount,proto3" json:"unchanged_hosts_count,omitempty"`
+	AddedHostsCount         uint64                 `protobuf:"varint,7,opt,name=added_hosts_count,json=addedHostsCount,proto3" json:"added_hosts_count,omitempty"`
+	AddedHosts              []string               `protobuf:"bytes,8,rep,name=added_hosts,json=addedHosts,proto3" json:"added_hosts,omitempty"`
+	RemovedHostsCount       uint64                 `protobuf:"varint,9,opt,name=removed_hosts_count,json=removedHostsCount,proto3" json:"removed_hosts_count,omitempty"`
+	RemovedHosts            []string               `protobuf:"bytes,10,rep,name=removed_hosts,json=removedHosts,proto3" json:"removed_hosts,omitempty"`
+	ReplacedHostsCount      uint64                 `protobuf:"varint,11,opt,name=replaced_hosts_count,json=replacedHostsCount,proto3" json:"replaced_hosts_count,omitempty"`
+	ReplacedHosts           []string               `protobuf:"bytes,12,rep,name=replaced_hosts,json=replacedHosts,proto3" json:"replaced_hosts,omitempty"`
+	StatusTransitions       []*StatusTransition    `protobuf:"bytes,13,rep,name=status_transitions,json=statusTransitions,proto3" json:"status_transitions,omitempty"`
+	TotalPatternChanges     uint64                 `protobuf:"varint,14,opt,name=total_pattern_changes,json=totalPatternChanges,proto3" json:"total_pattern_changes,omitempty"`
+	OmittedPatternChanges   uint64                 `protobuf:"varint,15,opt,name=omitted_pattern_changes,json=omittedPatternChanges,proto3" json:"omitted_pattern_changes,omitempty"`
+	PatternChanges          []*PatternChange       `protobuf:"bytes,16,rep,name=pattern_changes,json=patternChanges,proto3" json:"pattern_changes,omitempty"`
+	MetricDrifts            []*MetricDrift         `protobuf:"bytes,17,rep,name=metric_drifts,json=metricDrifts,proto3" json:"metric_drifts,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *JobDiff) Reset() {
+	*x = JobDiff{}
+	mi := &file_allowops_v1_job_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JobDiff) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobDiff) ProtoMessage() {}
+
+func (x *JobDiff) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_job_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobDiff.ProtoReflect.Descriptor instead.
+func (*JobDiff) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_job_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *JobDiff) GetOutputTrust() OutputTrust {
+	if x != nil {
+		return x.OutputTrust
+	}
+	return OutputTrust_OUTPUT_TRUST_UNSPECIFIED
+}
+
+func (x *JobDiff) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *JobDiff) GetPreviewTruncated() bool {
+	if x != nil {
+		return x.PreviewTruncated
+	}
+	return false
+}
+
+func (x *JobDiff) GetActionDefinitionChanged() bool {
+	if x != nil {
+		return x.ActionDefinitionChanged
+	}
+	return false
+}
+
+func (x *JobDiff) GetGrouping() string {
+	if x != nil {
+		return x.Grouping
+	}
+	return ""
+}
+
+func (x *JobDiff) GetUnchangedHostsCount() uint64 {
+	if x != nil {
+		return x.UnchangedHostsCount
+	}
+	return 0
+}
+
+func (x *JobDiff) GetAddedHostsCount() uint64 {
+	if x != nil {
+		return x.AddedHostsCount
+	}
+	return 0
+}
+
+func (x *JobDiff) GetAddedHosts() []string {
+	if x != nil {
+		return x.AddedHosts
+	}
+	return nil
+}
+
+func (x *JobDiff) GetRemovedHostsCount() uint64 {
+	if x != nil {
+		return x.RemovedHostsCount
+	}
+	return 0
+}
+
+func (x *JobDiff) GetRemovedHosts() []string {
+	if x != nil {
+		return x.RemovedHosts
+	}
+	return nil
+}
+
+func (x *JobDiff) GetReplacedHostsCount() uint64 {
+	if x != nil {
+		return x.ReplacedHostsCount
+	}
+	return 0
+}
+
+func (x *JobDiff) GetReplacedHosts() []string {
+	if x != nil {
+		return x.ReplacedHosts
+	}
+	return nil
+}
+
+func (x *JobDiff) GetStatusTransitions() []*StatusTransition {
+	if x != nil {
+		return x.StatusTransitions
+	}
+	return nil
+}
+
+func (x *JobDiff) GetTotalPatternChanges() uint64 {
+	if x != nil {
+		return x.TotalPatternChanges
+	}
+	return 0
+}
+
+func (x *JobDiff) GetOmittedPatternChanges() uint64 {
+	if x != nil {
+		return x.OmittedPatternChanges
+	}
+	return 0
+}
+
+func (x *JobDiff) GetPatternChanges() []*PatternChange {
+	if x != nil {
+		return x.PatternChanges
+	}
+	return nil
+}
+
+func (x *JobDiff) GetMetricDrifts() []*MetricDrift {
+	if x != nil {
+		return x.MetricDrifts
+	}
+	return nil
+}
+
 var File_allowops_v1_job_proto protoreflect.FileDescriptor
 
 const file_allowops_v1_job_proto_rawDesc = "" +
@@ -1509,7 +2461,7 @@ const file_allowops_v1_job_proto_rawDesc = "" +
 	"\bTaskStep\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\rR\x05index\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x124\n" +
-	"\x06result\x18\x03 \x01(\v2\x1c.allowops.v1.ExecutionResultR\x06result\"\xe7\x03\n" +
+	"\x06result\x18\x03 \x01(\v2\x1c.allowops.v1.ExecutionResultR\x06result\"\x83\x04\n" +
 	"\rRunJobRequest\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x122\n" +
 	"\atargets\x18\x02 \x01(\v2\x18.allowops.v1.HostTargetsR\atargets\x12*\n" +
@@ -1522,22 +2474,34 @@ const file_allowops_v1_job_proto_rawDesc = "" +
 	"\fmax_failures\x18\b \x01(\rH\x03R\vmaxFailures\x88\x01\x01\x124\n" +
 	"\afilters\x18\t \x01(\v2\x1a.allowops.v1.OutputFiltersR\afilters\x12'\n" +
 	"\x0fresponse_format\x18\n" +
-	" \x01(\tR\x0eresponseFormatB\x11\n" +
+	" \x01(\tR\x0eresponseFormat\x12\x1a\n" +
+	"\bgrouping\x18\v \x01(\tR\bgroupingB\x11\n" +
 	"\x0f_expected_countB\x0f\n" +
 	"\r_wait_secondsB\r\n" +
 	"\v_batch_sizeB\x0f\n" +
 	"\r_max_failures\"g\n" +
 	"\x0eRunJobResponse\x12\"\n" +
 	"\x03job\x18\x01 \x01(\v2\x10.allowops.v1.JobR\x03job\x121\n" +
-	"\asummary\x18\x02 \x01(\v2\x17.allowops.v1.JobSummaryR\asummary\"\x88\x01\n" +
+	"\asummary\x18\x02 \x01(\v2\x17.allowops.v1.JobSummaryR\asummary\"\xa4\x01\n" +
 	"\rGetJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12&\n" +
 	"\fwait_seconds\x18\x02 \x01(\rH\x00R\vwaitSeconds\x88\x01\x01\x12'\n" +
-	"\x0fresponse_format\x18\x03 \x01(\tR\x0eresponseFormatB\x0f\n" +
+	"\x0fresponse_format\x18\x03 \x01(\tR\x0eresponseFormat\x12\x1a\n" +
+	"\bgrouping\x18\x04 \x01(\tR\bgroupingB\x0f\n" +
 	"\r_wait_seconds\"g\n" +
 	"\x0eGetJobResponse\x12\"\n" +
 	"\x03job\x18\x01 \x01(\v2\x10.allowops.v1.JobR\x03job\x121\n" +
-	"\asummary\x18\x02 \x01(\v2\x17.allowops.v1.JobSummaryR\asummary\"\xa2\x02\n" +
+	"\asummary\x18\x02 \x01(\v2\x17.allowops.v1.JobSummaryR\asummary\"\xdd\x01\n" +
+	"\x0eMetricVariance\x12\x14\n" +
+	"\x05label\x18\x01 \x01(\tR\x05label\x12\x12\n" +
+	"\x04unit\x18\x02 \x01(\tR\x04unit\x12\x10\n" +
+	"\x03min\x18\x03 \x01(\x01R\x03min\x12\x10\n" +
+	"\x03max\x18\x04 \x01(\x01R\x03max\x12\x10\n" +
+	"\x03p95\x18\x05 \x01(\x01R\x03p95\x12\x19\n" +
+	"\bmin_host\x18\x06 \x01(\tR\aminHost\x12\x19\n" +
+	"\bmax_host\x18\a \x01(\tR\amaxHost\x12#\n" +
+	"\routlier_hosts\x18\b \x03(\tR\foutlierHosts\x12\x10\n" +
+	"\x03p50\x18\t \x01(\x01R\x03p50\"\xb7\x04\n" +
 	"\vOutputGroup\x12 \n" +
 	"\texit_code\x18\x01 \x01(\x05H\x00R\bexitCode\x88\x01\x01\x12#\n" +
 	"\rstdout_sha256\x18\x02 \x01(\fR\fstdoutSha256\x12#\n" +
@@ -1548,15 +2512,30 @@ const file_allowops_v1_job_proto_rawDesc = "" +
 	"\x06stdout\x18\x06 \x01(\tR\x06stdout\x12\x16\n" +
 	"\x06stderr\x18\a \x01(\tR\x06stderr\x12\x1c\n" +
 	"\ttruncated\x18\b \x01(\bR\ttruncated\x12\x16\n" +
-	"\x06reason\x18\t \x01(\tR\x06reasonB\f\n" +
+	"\x06reason\x18\t \x01(\tR\x06reason\x126\n" +
+	"\bseverity\x18\n" +
+	" \x01(\x0e2\x1a.allowops.v1.GroupSeverityR\bseverity\x12%\n" +
+	"\x0eanomaly_reason\x18\v \x01(\tR\ranomalyReason\x12'\n" +
+	"\x0ftemplate_sha256\x18\f \x01(\fR\x0etemplateSha256\x12'\n" +
+	"\x0ftemplate_stdout\x18\r \x01(\tR\x0etemplateStdout\x12'\n" +
+	"\x0ftemplate_stderr\x18\x0e \x01(\tR\x0etemplateStderr\x129\n" +
+	"\tvariances\x18\x0f \x03(\v2\x1b.allowops.v1.MetricVarianceR\tvariancesB\f\n" +
 	"\n" +
-	"_exit_code\"\xbe\x01\n" +
+	"_exit_code\"\xc9\x03\n" +
 	"\n" +
 	"JobSummary\x120\n" +
 	"\x06groups\x18\x01 \x03(\v2\x18.allowops.v1.OutputGroupR\x06groups\x12#\n" +
 	"\roffline_hosts\x18\x02 \x03(\tR\fofflineHosts\x12;\n" +
 	"\foutput_trust\x18\x03 \x01(\x0e2\x18.allowops.v1.OutputTrustR\voutputTrust\x12\x1c\n" +
-	"\ttruncated\x18\x04 \x01(\bR\ttruncated\"\xdc\x01\n" +
+	"\ttruncated\x18\x04 \x01(\bR\ttruncated\x12\x1a\n" +
+	"\bgrouping\x18\x05 \x01(\tR\bgrouping\x12\x18\n" +
+	"\aranking\x18\x06 \x01(\tR\aranking\x12!\n" +
+	"\ftotal_groups\x18\a \x01(\x04R\vtotalGroups\x12%\n" +
+	"\x0eomitted_groups\x18\b \x01(\x04R\romittedGroups\x12.\n" +
+	"\x13folded_normal_hosts\x18\t \x01(\x04R\x11foldedNormalHosts\x12#\n" +
+	"\romitted_hosts\x18\n" +
+	" \x01(\x04R\fomittedHosts\x124\n" +
+	"\x16unfinished_hosts_count\x18\v \x01(\x04R\x14unfinishedHostsCount\"\xdc\x01\n" +
 	"\x0fListJobsRequest\x12,\n" +
 	"\x04page\x18\x01 \x01(\v2\x18.allowops.v1.PageRequestR\x04page\x120\n" +
 	"\acreated\x18\x02 \x01(\v2\x16.allowops.v1.TimeRangeR\acreated\x122\n" +
@@ -1605,7 +2584,92 @@ const file_allowops_v1_job_proto_rawDesc = "" +
 	"\x12scan_limit_reached\x18\x05 \x01(\bR\x10scanLimitReached\x12#\n" +
 	"\routput_stored\x18\x06 \x01(\bR\foutputStored\x12;\n" +
 	"\foutput_trust\x18\a \x01(\x0e2\x18.allowops.v1.OutputTrustR\voutputTrust\x123\n" +
-	"\x06output\x18\b \x01(\v2\x1b.allowops.v1.OutputMetadataR\x06output2\xa0\x04\n" +
+	"\x06output\x18\b \x01(\v2\x1b.allowops.v1.OutputMetadataR\x06output\"\xaa\x01\n" +
+	"\x0fDiffJobsRequest\x12\x1e\n" +
+	"\vbase_job_id\x18\x01 \x01(\tR\tbaseJobId\x12\"\n" +
+	"\rtarget_job_id\x18\x02 \x01(\tR\vtargetJobId\x12\x1a\n" +
+	"\bgrouping\x18\x03 \x01(\tR\bgrouping\x12&\n" +
+	"\fonly_changed\x18\x04 \x01(\bH\x00R\vonlyChanged\x88\x01\x01B\x0f\n" +
+	"\r_only_changed\"\x9a\x01\n" +
+	"\x10DiffJobsResponse\x12+\n" +
+	"\bbase_job\x18\x01 \x01(\v2\x10.allowops.v1.JobR\abaseJob\x12/\n" +
+	"\n" +
+	"target_job\x18\x02 \x01(\v2\x10.allowops.v1.JobR\ttargetJob\x12(\n" +
+	"\x04diff\x18\x03 \x01(\v2\x14.allowops.v1.JobDiffR\x04diff\"\xe7\x02\n" +
+	"\x10StatusTransition\x128\n" +
+	"\vfrom_status\x18\x01 \x01(\x0e2\x17.allowops.v1.TaskStatusR\n" +
+	"fromStatus\x124\n" +
+	"\tto_status\x18\x02 \x01(\x0e2\x17.allowops.v1.TaskStatusR\btoStatus\x12)\n" +
+	"\x0efrom_exit_code\x18\x03 \x01(\x05H\x00R\ffromExitCode\x88\x01\x01\x12%\n" +
+	"\fto_exit_code\x18\x04 \x01(\x05H\x01R\n" +
+	"toExitCode\x88\x01\x01\x12\x16\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reason\x12\x1d\n" +
+	"\n" +
+	"host_count\x18\x06 \x01(\x04R\thostCount\x12\x14\n" +
+	"\x05hosts\x18\a \x03(\tR\x05hosts\x12 \n" +
+	"\vdegradation\x18\b \x01(\bR\vdegradationB\x11\n" +
+	"\x0f_from_exit_codeB\x0f\n" +
+	"\r_to_exit_code\"\xef\x03\n" +
+	"\rPatternChange\x12?\n" +
+	"\rbase_severity\x18\x01 \x01(\x0e2\x1a.allowops.v1.GroupSeverityR\fbaseSeverity\x12C\n" +
+	"\x0ftarget_severity\x18\x02 \x01(\x0e2\x1a.allowops.v1.GroupSeverityR\x0etargetSeverity\x12\x1d\n" +
+	"\n" +
+	"host_count\x18\x03 \x01(\x04R\thostCount\x12\x14\n" +
+	"\x05hosts\x18\x04 \x03(\tR\x05hosts\x12\x1c\n" +
+	"\tunchanged\x18\x05 \x01(\bR\tunchanged\x12!\n" +
+	"\fbase_preview\x18\x06 \x01(\tR\vbasePreview\x12%\n" +
+	"\x0etarget_preview\x18\a \x01(\tR\rtargetPreview\x12#\n" +
+	"\rremoved_lines\x18\b \x03(\tR\fremovedLines\x12\x1f\n" +
+	"\vadded_lines\x18\t \x03(\tR\n" +
+	"addedLines\x12#\n" +
+	"\rdiff_computed\x18\n" +
+	" \x01(\bR\fdiffComputed\x12%\n" +
+	"\x0ebase_truncated\x18\v \x01(\bR\rbaseTruncated\x12)\n" +
+	"\x10target_truncated\x18\f \x01(\bR\x0ftargetTruncated\"\xb4\x03\n" +
+	"\vMetricDrift\x12\x14\n" +
+	"\x05label\x18\x01 \x01(\tR\x05label\x12\x12\n" +
+	"\x04unit\x18\x02 \x01(\tR\x04unit\x12\x19\n" +
+	"\bbase_p50\x18\x03 \x01(\x01R\abaseP50\x12\x1d\n" +
+	"\n" +
+	"target_p50\x18\x04 \x01(\x01R\ttargetP50\x12\x19\n" +
+	"\bbase_max\x18\x05 \x01(\x01R\abaseMax\x12\x1d\n" +
+	"\n" +
+	"target_max\x18\x06 \x01(\x01R\ttargetMax\x12\x1b\n" +
+	"\tmax_delta\x18\a \x01(\x01R\bmaxDelta\x12$\n" +
+	"\x0emax_delta_base\x18\b \x01(\x01R\fmaxDeltaBase\x12(\n" +
+	"\x10max_delta_target\x18\t \x01(\x01R\x0emaxDeltaTarget\x12'\n" +
+	"\rmax_delta_pct\x18\n" +
+	" \x01(\x01H\x00R\vmaxDeltaPct\x88\x01\x01\x12\x19\n" +
+	"\bmax_host\x18\v \x01(\tR\amaxHost\x12%\n" +
+	"\x0eaffected_hosts\x18\f \x01(\x04R\raffectedHosts\x12\x1d\n" +
+	"\n" +
+	"host_count\x18\r \x01(\x04R\thostCountB\x10\n" +
+	"\x0e_max_delta_pct\"\xd6\x06\n" +
+	"\aJobDiff\x12;\n" +
+	"\foutput_trust\x18\x01 \x01(\x0e2\x18.allowops.v1.OutputTrustR\voutputTrust\x12\x1c\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12+\n" +
+	"\x11preview_truncated\x18\x03 \x01(\bR\x10previewTruncated\x12:\n" +
+	"\x19action_definition_changed\x18\x04 \x01(\bR\x17actionDefinitionChanged\x12\x1a\n" +
+	"\bgrouping\x18\x05 \x01(\tR\bgrouping\x122\n" +
+	"\x15unchanged_hosts_count\x18\x06 \x01(\x04R\x13unchangedHostsCount\x12*\n" +
+	"\x11added_hosts_count\x18\a \x01(\x04R\x0faddedHostsCount\x12\x1f\n" +
+	"\vadded_hosts\x18\b \x03(\tR\n" +
+	"addedHosts\x12.\n" +
+	"\x13removed_hosts_count\x18\t \x01(\x04R\x11removedHostsCount\x12#\n" +
+	"\rremoved_hosts\x18\n" +
+	" \x03(\tR\fremovedHosts\x120\n" +
+	"\x14replaced_hosts_count\x18\v \x01(\x04R\x12replacedHostsCount\x12%\n" +
+	"\x0ereplaced_hosts\x18\f \x03(\tR\rreplacedHosts\x12L\n" +
+	"\x12status_transitions\x18\r \x03(\v2\x1d.allowops.v1.StatusTransitionR\x11statusTransitions\x122\n" +
+	"\x15total_pattern_changes\x18\x0e \x01(\x04R\x13totalPatternChanges\x126\n" +
+	"\x17omitted_pattern_changes\x18\x0f \x01(\x04R\x15omittedPatternChanges\x12C\n" +
+	"\x0fpattern_changes\x18\x10 \x03(\v2\x1a.allowops.v1.PatternChangeR\x0epatternChanges\x12=\n" +
+	"\rmetric_drifts\x18\x11 \x03(\v2\x18.allowops.v1.MetricDriftR\fmetricDrifts*\x82\x01\n" +
+	"\rGroupSeverity\x12\x1e\n" +
+	"\x1aGROUP_SEVERITY_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16GROUP_SEVERITY_FAILURE\x10\x01\x12\x1a\n" +
+	"\x16GROUP_SEVERITY_ANOMALY\x10\x02\x12\x19\n" +
+	"\x15GROUP_SEVERITY_NORMAL\x10\x032\xe9\x04\n" +
 	"\n" +
 	"JobService\x12A\n" +
 	"\x06RunJob\x12\x1a.allowops.v1.RunJobRequest\x1a\x1b.allowops.v1.RunJobResponse\x12A\n" +
@@ -1614,7 +2678,8 @@ const file_allowops_v1_job_proto_rawDesc = "" +
 	"\tListTasks\x12\x1d.allowops.v1.ListTasksRequest\x1a\x1e.allowops.v1.ListTasksResponse\x12V\n" +
 	"\rListTaskSteps\x12!.allowops.v1.ListTaskStepsRequest\x1a\".allowops.v1.ListTaskStepsResponse\x12J\n" +
 	"\tCancelJob\x12\x1d.allowops.v1.CancelJobRequest\x1a\x1e.allowops.v1.CancelJobResponse\x12S\n" +
-	"\fGetJobOutput\x12 .allowops.v1.GetJobOutputRequest\x1a!.allowops.v1.GetJobOutputResponseB<Z:github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1b\x06proto3"
+	"\fGetJobOutput\x12 .allowops.v1.GetJobOutputRequest\x1a!.allowops.v1.GetJobOutputResponse\x12G\n" +
+	"\bDiffJobs\x12\x1c.allowops.v1.DiffJobsRequest\x1a\x1d.allowops.v1.DiffJobsResponseB<Z:github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1b\x06proto3"
 
 var (
 	file_allowops_v1_job_proto_rawDescOnce sync.Once
@@ -1628,98 +2693,122 @@ func file_allowops_v1_job_proto_rawDescGZIP() []byte {
 	return file_allowops_v1_job_proto_rawDescData
 }
 
-var file_allowops_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_allowops_v1_job_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_allowops_v1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_allowops_v1_job_proto_goTypes = []any{
-	(*TaskCount)(nil),             // 0: allowops.v1.TaskCount
-	(*Job)(nil),                   // 1: allowops.v1.Job
-	(*Task)(nil),                  // 2: allowops.v1.Task
-	(*TaskStep)(nil),              // 3: allowops.v1.TaskStep
-	(*RunJobRequest)(nil),         // 4: allowops.v1.RunJobRequest
-	(*RunJobResponse)(nil),        // 5: allowops.v1.RunJobResponse
-	(*GetJobRequest)(nil),         // 6: allowops.v1.GetJobRequest
-	(*GetJobResponse)(nil),        // 7: allowops.v1.GetJobResponse
-	(*OutputGroup)(nil),           // 8: allowops.v1.OutputGroup
-	(*JobSummary)(nil),            // 9: allowops.v1.JobSummary
-	(*ListJobsRequest)(nil),       // 10: allowops.v1.ListJobsRequest
-	(*ListJobsResponse)(nil),      // 11: allowops.v1.ListJobsResponse
-	(*ListTasksRequest)(nil),      // 12: allowops.v1.ListTasksRequest
-	(*ListTasksResponse)(nil),     // 13: allowops.v1.ListTasksResponse
-	(*ListTaskStepsRequest)(nil),  // 14: allowops.v1.ListTaskStepsRequest
-	(*ListTaskStepsResponse)(nil), // 15: allowops.v1.ListTaskStepsResponse
-	(*CancelJobRequest)(nil),      // 16: allowops.v1.CancelJobRequest
-	(*CancelJobResponse)(nil),     // 17: allowops.v1.CancelJobResponse
-	(*GetJobOutputRequest)(nil),   // 18: allowops.v1.GetJobOutputRequest
-	(*GetJobOutputResponse)(nil),  // 19: allowops.v1.GetJobOutputResponse
-	(TaskStatus)(0),               // 20: allowops.v1.TaskStatus
-	(*CatalogRef)(nil),            // 21: allowops.v1.CatalogRef
-	(JobStatus)(0),                // 22: allowops.v1.JobStatus
-	(*timestamppb.Timestamp)(nil), // 23: google.protobuf.Timestamp
-	(*ExecutionResult)(nil),       // 24: allowops.v1.ExecutionResult
-	(*HostTargets)(nil),           // 25: allowops.v1.HostTargets
-	(*Parameters)(nil),            // 26: allowops.v1.Parameters
-	(*OutputFilters)(nil),         // 27: allowops.v1.OutputFilters
-	(OutputTrust)(0),              // 28: allowops.v1.OutputTrust
-	(*PageRequest)(nil),           // 29: allowops.v1.PageRequest
-	(*TimeRange)(nil),             // 30: allowops.v1.TimeRange
-	(*PageResponse)(nil),          // 31: allowops.v1.PageResponse
-	(OutputStream)(0),             // 32: allowops.v1.OutputStream
-	(*OutputMetadata)(nil),        // 33: allowops.v1.OutputMetadata
+	(GroupSeverity)(0),            // 0: allowops.v1.GroupSeverity
+	(*TaskCount)(nil),             // 1: allowops.v1.TaskCount
+	(*Job)(nil),                   // 2: allowops.v1.Job
+	(*Task)(nil),                  // 3: allowops.v1.Task
+	(*TaskStep)(nil),              // 4: allowops.v1.TaskStep
+	(*RunJobRequest)(nil),         // 5: allowops.v1.RunJobRequest
+	(*RunJobResponse)(nil),        // 6: allowops.v1.RunJobResponse
+	(*GetJobRequest)(nil),         // 7: allowops.v1.GetJobRequest
+	(*GetJobResponse)(nil),        // 8: allowops.v1.GetJobResponse
+	(*MetricVariance)(nil),        // 9: allowops.v1.MetricVariance
+	(*OutputGroup)(nil),           // 10: allowops.v1.OutputGroup
+	(*JobSummary)(nil),            // 11: allowops.v1.JobSummary
+	(*ListJobsRequest)(nil),       // 12: allowops.v1.ListJobsRequest
+	(*ListJobsResponse)(nil),      // 13: allowops.v1.ListJobsResponse
+	(*ListTasksRequest)(nil),      // 14: allowops.v1.ListTasksRequest
+	(*ListTasksResponse)(nil),     // 15: allowops.v1.ListTasksResponse
+	(*ListTaskStepsRequest)(nil),  // 16: allowops.v1.ListTaskStepsRequest
+	(*ListTaskStepsResponse)(nil), // 17: allowops.v1.ListTaskStepsResponse
+	(*CancelJobRequest)(nil),      // 18: allowops.v1.CancelJobRequest
+	(*CancelJobResponse)(nil),     // 19: allowops.v1.CancelJobResponse
+	(*GetJobOutputRequest)(nil),   // 20: allowops.v1.GetJobOutputRequest
+	(*GetJobOutputResponse)(nil),  // 21: allowops.v1.GetJobOutputResponse
+	(*DiffJobsRequest)(nil),       // 22: allowops.v1.DiffJobsRequest
+	(*DiffJobsResponse)(nil),      // 23: allowops.v1.DiffJobsResponse
+	(*StatusTransition)(nil),      // 24: allowops.v1.StatusTransition
+	(*PatternChange)(nil),         // 25: allowops.v1.PatternChange
+	(*MetricDrift)(nil),           // 26: allowops.v1.MetricDrift
+	(*JobDiff)(nil),               // 27: allowops.v1.JobDiff
+	(TaskStatus)(0),               // 28: allowops.v1.TaskStatus
+	(*CatalogRef)(nil),            // 29: allowops.v1.CatalogRef
+	(JobStatus)(0),                // 30: allowops.v1.JobStatus
+	(*timestamppb.Timestamp)(nil), // 31: google.protobuf.Timestamp
+	(*ExecutionResult)(nil),       // 32: allowops.v1.ExecutionResult
+	(*HostTargets)(nil),           // 33: allowops.v1.HostTargets
+	(*Parameters)(nil),            // 34: allowops.v1.Parameters
+	(*OutputFilters)(nil),         // 35: allowops.v1.OutputFilters
+	(OutputTrust)(0),              // 36: allowops.v1.OutputTrust
+	(*PageRequest)(nil),           // 37: allowops.v1.PageRequest
+	(*TimeRange)(nil),             // 38: allowops.v1.TimeRange
+	(*PageResponse)(nil),          // 39: allowops.v1.PageResponse
+	(OutputStream)(0),             // 40: allowops.v1.OutputStream
+	(*OutputMetadata)(nil),        // 41: allowops.v1.OutputMetadata
 }
 var file_allowops_v1_job_proto_depIdxs = []int32{
-	20, // 0: allowops.v1.TaskCount.status:type_name -> allowops.v1.TaskStatus
-	21, // 1: allowops.v1.Job.catalog:type_name -> allowops.v1.CatalogRef
-	22, // 2: allowops.v1.Job.status:type_name -> allowops.v1.JobStatus
-	23, // 3: allowops.v1.Job.created_at:type_name -> google.protobuf.Timestamp
-	23, // 4: allowops.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
-	0,  // 5: allowops.v1.Job.counts:type_name -> allowops.v1.TaskCount
-	24, // 6: allowops.v1.Task.result:type_name -> allowops.v1.ExecutionResult
-	23, // 7: allowops.v1.Task.started_at:type_name -> google.protobuf.Timestamp
-	23, // 8: allowops.v1.Task.finished_at:type_name -> google.protobuf.Timestamp
-	24, // 9: allowops.v1.TaskStep.result:type_name -> allowops.v1.ExecutionResult
-	25, // 10: allowops.v1.RunJobRequest.targets:type_name -> allowops.v1.HostTargets
-	26, // 11: allowops.v1.RunJobRequest.params:type_name -> allowops.v1.Parameters
-	27, // 12: allowops.v1.RunJobRequest.filters:type_name -> allowops.v1.OutputFilters
-	1,  // 13: allowops.v1.RunJobResponse.job:type_name -> allowops.v1.Job
-	9,  // 14: allowops.v1.RunJobResponse.summary:type_name -> allowops.v1.JobSummary
-	1,  // 15: allowops.v1.GetJobResponse.job:type_name -> allowops.v1.Job
-	9,  // 16: allowops.v1.GetJobResponse.summary:type_name -> allowops.v1.JobSummary
-	8,  // 17: allowops.v1.JobSummary.groups:type_name -> allowops.v1.OutputGroup
-	28, // 18: allowops.v1.JobSummary.output_trust:type_name -> allowops.v1.OutputTrust
-	29, // 19: allowops.v1.ListJobsRequest.page:type_name -> allowops.v1.PageRequest
-	30, // 20: allowops.v1.ListJobsRequest.created:type_name -> allowops.v1.TimeRange
-	22, // 21: allowops.v1.ListJobsRequest.statuses:type_name -> allowops.v1.JobStatus
-	1,  // 22: allowops.v1.ListJobsResponse.jobs:type_name -> allowops.v1.Job
-	31, // 23: allowops.v1.ListJobsResponse.page:type_name -> allowops.v1.PageResponse
-	29, // 24: allowops.v1.ListTasksRequest.page:type_name -> allowops.v1.PageRequest
-	20, // 25: allowops.v1.ListTasksRequest.statuses:type_name -> allowops.v1.TaskStatus
-	2,  // 26: allowops.v1.ListTasksResponse.tasks:type_name -> allowops.v1.Task
-	31, // 27: allowops.v1.ListTasksResponse.page:type_name -> allowops.v1.PageResponse
-	29, // 28: allowops.v1.ListTaskStepsRequest.page:type_name -> allowops.v1.PageRequest
-	3,  // 29: allowops.v1.ListTaskStepsResponse.steps:type_name -> allowops.v1.TaskStep
-	31, // 30: allowops.v1.ListTaskStepsResponse.page:type_name -> allowops.v1.PageResponse
-	1,  // 31: allowops.v1.CancelJobResponse.job:type_name -> allowops.v1.Job
-	32, // 32: allowops.v1.GetJobOutputRequest.stream:type_name -> allowops.v1.OutputStream
-	28, // 33: allowops.v1.GetJobOutputResponse.output_trust:type_name -> allowops.v1.OutputTrust
-	33, // 34: allowops.v1.GetJobOutputResponse.output:type_name -> allowops.v1.OutputMetadata
-	4,  // 35: allowops.v1.JobService.RunJob:input_type -> allowops.v1.RunJobRequest
-	6,  // 36: allowops.v1.JobService.GetJob:input_type -> allowops.v1.GetJobRequest
-	10, // 37: allowops.v1.JobService.ListJobs:input_type -> allowops.v1.ListJobsRequest
-	12, // 38: allowops.v1.JobService.ListTasks:input_type -> allowops.v1.ListTasksRequest
-	14, // 39: allowops.v1.JobService.ListTaskSteps:input_type -> allowops.v1.ListTaskStepsRequest
-	16, // 40: allowops.v1.JobService.CancelJob:input_type -> allowops.v1.CancelJobRequest
-	18, // 41: allowops.v1.JobService.GetJobOutput:input_type -> allowops.v1.GetJobOutputRequest
-	5,  // 42: allowops.v1.JobService.RunJob:output_type -> allowops.v1.RunJobResponse
-	7,  // 43: allowops.v1.JobService.GetJob:output_type -> allowops.v1.GetJobResponse
-	11, // 44: allowops.v1.JobService.ListJobs:output_type -> allowops.v1.ListJobsResponse
-	13, // 45: allowops.v1.JobService.ListTasks:output_type -> allowops.v1.ListTasksResponse
-	15, // 46: allowops.v1.JobService.ListTaskSteps:output_type -> allowops.v1.ListTaskStepsResponse
-	17, // 47: allowops.v1.JobService.CancelJob:output_type -> allowops.v1.CancelJobResponse
-	19, // 48: allowops.v1.JobService.GetJobOutput:output_type -> allowops.v1.GetJobOutputResponse
-	42, // [42:49] is the sub-list for method output_type
-	35, // [35:42] is the sub-list for method input_type
-	35, // [35:35] is the sub-list for extension type_name
-	35, // [35:35] is the sub-list for extension extendee
-	0,  // [0:35] is the sub-list for field type_name
+	28, // 0: allowops.v1.TaskCount.status:type_name -> allowops.v1.TaskStatus
+	29, // 1: allowops.v1.Job.catalog:type_name -> allowops.v1.CatalogRef
+	30, // 2: allowops.v1.Job.status:type_name -> allowops.v1.JobStatus
+	31, // 3: allowops.v1.Job.created_at:type_name -> google.protobuf.Timestamp
+	31, // 4: allowops.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
+	1,  // 5: allowops.v1.Job.counts:type_name -> allowops.v1.TaskCount
+	32, // 6: allowops.v1.Task.result:type_name -> allowops.v1.ExecutionResult
+	31, // 7: allowops.v1.Task.started_at:type_name -> google.protobuf.Timestamp
+	31, // 8: allowops.v1.Task.finished_at:type_name -> google.protobuf.Timestamp
+	32, // 9: allowops.v1.TaskStep.result:type_name -> allowops.v1.ExecutionResult
+	33, // 10: allowops.v1.RunJobRequest.targets:type_name -> allowops.v1.HostTargets
+	34, // 11: allowops.v1.RunJobRequest.params:type_name -> allowops.v1.Parameters
+	35, // 12: allowops.v1.RunJobRequest.filters:type_name -> allowops.v1.OutputFilters
+	2,  // 13: allowops.v1.RunJobResponse.job:type_name -> allowops.v1.Job
+	11, // 14: allowops.v1.RunJobResponse.summary:type_name -> allowops.v1.JobSummary
+	2,  // 15: allowops.v1.GetJobResponse.job:type_name -> allowops.v1.Job
+	11, // 16: allowops.v1.GetJobResponse.summary:type_name -> allowops.v1.JobSummary
+	0,  // 17: allowops.v1.OutputGroup.severity:type_name -> allowops.v1.GroupSeverity
+	9,  // 18: allowops.v1.OutputGroup.variances:type_name -> allowops.v1.MetricVariance
+	10, // 19: allowops.v1.JobSummary.groups:type_name -> allowops.v1.OutputGroup
+	36, // 20: allowops.v1.JobSummary.output_trust:type_name -> allowops.v1.OutputTrust
+	37, // 21: allowops.v1.ListJobsRequest.page:type_name -> allowops.v1.PageRequest
+	38, // 22: allowops.v1.ListJobsRequest.created:type_name -> allowops.v1.TimeRange
+	30, // 23: allowops.v1.ListJobsRequest.statuses:type_name -> allowops.v1.JobStatus
+	2,  // 24: allowops.v1.ListJobsResponse.jobs:type_name -> allowops.v1.Job
+	39, // 25: allowops.v1.ListJobsResponse.page:type_name -> allowops.v1.PageResponse
+	37, // 26: allowops.v1.ListTasksRequest.page:type_name -> allowops.v1.PageRequest
+	28, // 27: allowops.v1.ListTasksRequest.statuses:type_name -> allowops.v1.TaskStatus
+	3,  // 28: allowops.v1.ListTasksResponse.tasks:type_name -> allowops.v1.Task
+	39, // 29: allowops.v1.ListTasksResponse.page:type_name -> allowops.v1.PageResponse
+	37, // 30: allowops.v1.ListTaskStepsRequest.page:type_name -> allowops.v1.PageRequest
+	4,  // 31: allowops.v1.ListTaskStepsResponse.steps:type_name -> allowops.v1.TaskStep
+	39, // 32: allowops.v1.ListTaskStepsResponse.page:type_name -> allowops.v1.PageResponse
+	2,  // 33: allowops.v1.CancelJobResponse.job:type_name -> allowops.v1.Job
+	40, // 34: allowops.v1.GetJobOutputRequest.stream:type_name -> allowops.v1.OutputStream
+	36, // 35: allowops.v1.GetJobOutputResponse.output_trust:type_name -> allowops.v1.OutputTrust
+	41, // 36: allowops.v1.GetJobOutputResponse.output:type_name -> allowops.v1.OutputMetadata
+	2,  // 37: allowops.v1.DiffJobsResponse.base_job:type_name -> allowops.v1.Job
+	2,  // 38: allowops.v1.DiffJobsResponse.target_job:type_name -> allowops.v1.Job
+	27, // 39: allowops.v1.DiffJobsResponse.diff:type_name -> allowops.v1.JobDiff
+	28, // 40: allowops.v1.StatusTransition.from_status:type_name -> allowops.v1.TaskStatus
+	28, // 41: allowops.v1.StatusTransition.to_status:type_name -> allowops.v1.TaskStatus
+	0,  // 42: allowops.v1.PatternChange.base_severity:type_name -> allowops.v1.GroupSeverity
+	0,  // 43: allowops.v1.PatternChange.target_severity:type_name -> allowops.v1.GroupSeverity
+	36, // 44: allowops.v1.JobDiff.output_trust:type_name -> allowops.v1.OutputTrust
+	24, // 45: allowops.v1.JobDiff.status_transitions:type_name -> allowops.v1.StatusTransition
+	25, // 46: allowops.v1.JobDiff.pattern_changes:type_name -> allowops.v1.PatternChange
+	26, // 47: allowops.v1.JobDiff.metric_drifts:type_name -> allowops.v1.MetricDrift
+	5,  // 48: allowops.v1.JobService.RunJob:input_type -> allowops.v1.RunJobRequest
+	7,  // 49: allowops.v1.JobService.GetJob:input_type -> allowops.v1.GetJobRequest
+	12, // 50: allowops.v1.JobService.ListJobs:input_type -> allowops.v1.ListJobsRequest
+	14, // 51: allowops.v1.JobService.ListTasks:input_type -> allowops.v1.ListTasksRequest
+	16, // 52: allowops.v1.JobService.ListTaskSteps:input_type -> allowops.v1.ListTaskStepsRequest
+	18, // 53: allowops.v1.JobService.CancelJob:input_type -> allowops.v1.CancelJobRequest
+	20, // 54: allowops.v1.JobService.GetJobOutput:input_type -> allowops.v1.GetJobOutputRequest
+	22, // 55: allowops.v1.JobService.DiffJobs:input_type -> allowops.v1.DiffJobsRequest
+	6,  // 56: allowops.v1.JobService.RunJob:output_type -> allowops.v1.RunJobResponse
+	8,  // 57: allowops.v1.JobService.GetJob:output_type -> allowops.v1.GetJobResponse
+	13, // 58: allowops.v1.JobService.ListJobs:output_type -> allowops.v1.ListJobsResponse
+	15, // 59: allowops.v1.JobService.ListTasks:output_type -> allowops.v1.ListTasksResponse
+	17, // 60: allowops.v1.JobService.ListTaskSteps:output_type -> allowops.v1.ListTaskStepsResponse
+	19, // 61: allowops.v1.JobService.CancelJob:output_type -> allowops.v1.CancelJobResponse
+	21, // 62: allowops.v1.JobService.GetJobOutput:output_type -> allowops.v1.GetJobOutputResponse
+	23, // 63: allowops.v1.JobService.DiffJobs:output_type -> allowops.v1.DiffJobsResponse
+	56, // [56:64] is the sub-list for method output_type
+	48, // [48:56] is the sub-list for method input_type
+	48, // [48:48] is the sub-list for extension type_name
+	48, // [48:48] is the sub-list for extension extendee
+	0,  // [0:48] is the sub-list for field type_name
 }
 
 func init() { file_allowops_v1_job_proto_init() }
@@ -1730,20 +2819,24 @@ func file_allowops_v1_job_proto_init() {
 	file_allowops_v1_common_proto_init()
 	file_allowops_v1_job_proto_msgTypes[4].OneofWrappers = []any{}
 	file_allowops_v1_job_proto_msgTypes[6].OneofWrappers = []any{}
-	file_allowops_v1_job_proto_msgTypes[8].OneofWrappers = []any{}
-	file_allowops_v1_job_proto_msgTypes[18].OneofWrappers = []any{}
+	file_allowops_v1_job_proto_msgTypes[9].OneofWrappers = []any{}
+	file_allowops_v1_job_proto_msgTypes[19].OneofWrappers = []any{}
+	file_allowops_v1_job_proto_msgTypes[21].OneofWrappers = []any{}
+	file_allowops_v1_job_proto_msgTypes[23].OneofWrappers = []any{}
+	file_allowops_v1_job_proto_msgTypes[25].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_allowops_v1_job_proto_rawDesc), len(file_allowops_v1_job_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   20,
+			NumEnums:      1,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_allowops_v1_job_proto_goTypes,
 		DependencyIndexes: file_allowops_v1_job_proto_depIdxs,
+		EnumInfos:         file_allowops_v1_job_proto_enumTypes,
 		MessageInfos:      file_allowops_v1_job_proto_msgTypes,
 	}.Build()
 	File_allowops_v1_job_proto = out.File

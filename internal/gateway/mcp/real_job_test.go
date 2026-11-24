@@ -29,6 +29,7 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/job"
 	"github.com/liubing0806/allowops/internal/gateway/pluginhost"
 	"github.com/liubing0806/allowops/internal/gateway/server"
+	"github.com/liubing0806/allowops/internal/params"
 	"github.com/liubing0806/allowops/internal/testseaweedfs"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"gopkg.in/yaml.v3"
@@ -148,7 +149,12 @@ func TestSDKRealJobBackendAgentsAndSeaweedFS(t *testing.T) {
 	steps.Name = "steps_read"
 	steps.Exec = nil
 	steps.Steps = []catalog.Step{{Name: "first", Exec: []any{"/usr/bin/printf", "step-zero"}}, {Name: "second", Exec: []any{"/usr/bin/printf", "step-one"}}}
-	pkg, err := catalog.Build(&catalog.Catalog{Config: catalog.Config{SchemaVersion: 1, CatalogID: "fixture"}, Actions: map[string]catalog.Action{"logs_read": action, "slow_read": slow, "steps_read": steps}}, catalog.BuildOptions{Now: time.Now().Add(time.Second)})
+	metric := testAction()
+	metric.Name = "metric_read"
+	metric.Filters = nil
+	metric.Params = map[string]params.Definition{"val": {Type: params.String, Description: "Metric value", Regex: "^[0-9]+$"}}
+	metric.Exec = []any{"/usr/bin/printf", `ts=2026-11-24T12:00:00Z latency=%sms status=ok\n`, "{val}"}
+	pkg, err := catalog.Build(&catalog.Catalog{Config: catalog.Config{SchemaVersion: 1, CatalogID: "fixture"}, Actions: map[string]catalog.Action{"logs_read": action, "slow_read": slow, "steps_read": steps, "metric_read": metric}}, catalog.BuildOptions{Now: time.Now().Add(time.Second)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +231,7 @@ func TestSDKRealJobBackendAgentsAndSeaweedFS(t *testing.T) {
 	}
 	defer session.Close()
 	tools, err := session.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 7 {
+	if err != nil || len(tools.Tools) != 9 {
 		t.Fatalf("tools=%v error=%v", tools, err)
 	}
 	args := actionArgs()
@@ -367,6 +373,74 @@ func TestSDKRealJobBackendAgentsAndSeaweedFS(t *testing.T) {
 	if terminal.IsError || content(t, terminal)["status"] != "cancelled" || content(t, terminal)["counts"].(map[string]any)["cancelled"] != float64(2) {
 		t.Fatalf("cancelled job=%v", content(t, terminal))
 	}
+	t.Run("normalized grouping and jobs_diff over real agents", func(t *testing.T) {
+		runMetric := func(val string) string {
+			t.Helper()
+			res := call(t, session, "metric_read", map[string]any{
+				"targets":      map[string]any{"hosts": []string{"web-01", "web-02"}},
+				"params":       map[string]any{"val": val},
+				"reason":       "baseline diff test",
+				"wait_seconds": 5,
+				"grouping":     "normalized",
+			})
+			m := content(t, res)
+			if res.IsError || m["status"] != "succeeded" || m["grouping"] != "normalized" || m["ranking"] != "anomaly_first" {
+				t.Fatalf("metric_read(%s)=%v", val, m)
+			}
+			return m["job_id"].(string)
+		}
+		baseJobID := runMetric("10")
+		targetJobID := runMetric("50")
+
+		normGet := call(t, session, "jobs_get", map[string]any{"job_id": baseJobID, "wait_seconds": 0, "grouping": "normalized"})
+		normData := content(t, normGet)
+		if normGet.IsError || normData["grouping"] != "normalized" || normData["ranking"] != "anomaly_first" || normData["total_groups"] != float64(1) {
+			t.Fatalf("normalized jobs_get=%v", normData)
+		}
+		g0 := normData["groups"].([]any)[0].(map[string]any)
+		tmplOut, _ := g0["template_stdout"].(string)
+		if g0["severity"] != "normal" || g0["template_sha256"] == "" || !strings.Contains(tmplOut, "<TS>") || !strings.Contains(tmplOut, "<DUR>") {
+			t.Fatalf("normalized group=%v", g0)
+		}
+
+		hostWithGrouping := call(t, session, "jobs_get", map[string]any{"job_id": baseJobID, "host": "web-01", "grouping": "normalized"})
+		if !hostWithGrouping.IsError || !strings.Contains(content(t, hostWithGrouping)["error"].(string), "grouping applies to job summaries") {
+			t.Fatalf("host+grouping=%v", content(t, hostWithGrouping))
+		}
+
+		diffNorm := call(t, session, "jobs_diff", map[string]any{"base_job_id": baseJobID, "target_job_id": targetJobID})
+		diffData := content(t, diffNorm)
+		if diffNorm.IsError || diffData["output_trust"] != "untrusted" || diffData["grouping"] != "normalized" {
+			t.Fatalf("jobs_diff normalized=%v", diffData)
+		}
+		drifts := diffData["metric_drifts"].([]any)
+		if len(drifts) == 0 {
+			t.Fatalf("expected metric_drifts between 10ms and 50ms: %v", diffData)
+		}
+		drift0 := drifts[0].(map[string]any)
+		if drift0["max_delta"] != float64(40) || drift0["unit"] != "ms" {
+			t.Fatalf("unexpected drift=%v", drift0)
+		}
+
+		diffExact := call(t, session, "jobs_diff", map[string]any{"base_job_id": baseJobID, "target_job_id": targetJobID, "grouping": "exact"})
+		diffExactData := content(t, diffExact)
+		if diffExact.IsError || diffExactData["grouping"] != "exact" || diffExactData["total_pattern_changes"] != float64(1) {
+			t.Fatalf("jobs_diff exact=%v", diffExactData)
+		}
+
+		deniedDiff := call(t, other, "jobs_diff", map[string]any{"base_job_id": baseJobID, "target_job_id": targetJobID})
+		if !deniedDiff.IsError || content(t, deniedDiff)["reason"] != "JOB_OWNER_REQUIRED" {
+			t.Fatalf("other account jobs_diff=%v", content(t, deniedDiff))
+		}
+
+		var diffAudits int
+		if err := f.db.Pool.QueryRow(ctx, `SELECT count(*) FROM audit_events WHERE operation='mcp/jobs_diff' AND job_id=$1 AND decision='allow'`, targetJobID).Scan(&diffAudits); err != nil {
+			t.Fatal(err)
+		}
+		if diffAudits < 2 {
+			t.Fatalf("expected mcp/jobs_diff audits for target %s, got %d", targetJobID, diffAudits)
+		}
+	})
 	t.Run("inventory selector executes a read-only action", func(t *testing.T) {
 		if _, err := f.db.Pool.Exec(ctx, `UPDATE hosts SET authorization_labels=authorization_labels || '{"inventory":"s1"}'::jsonb WHERE hostname='web-01'`); err != nil {
 			t.Fatal(err)

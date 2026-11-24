@@ -102,7 +102,7 @@ func TestUnsupportedFeaturesAndStrictYAML(t *testing.T) {
 			t.Fatal("accepted ambiguous YAML")
 		}
 	}
-	for _, name := range []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "entities_search", "changes_list", "runbooks_search", "runbooks_read", "actions_search", "actions_invoke_read", "actions_invoke_write", "actions_invoke_dangerous", "Bad-name"} {
+	for _, name := range []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "jobs_diff", "entities_search", "changes_list", "runbooks_search", "runbooks_read", "actions_search", "actions_invoke_read", "actions_invoke_write", "actions_invoke_dangerous", "Bad-name"} {
 		a, _ := ParseAction([]byte(validAction))
 		a.Name = name
 		if _, err := ValidateAction(a); err == nil {

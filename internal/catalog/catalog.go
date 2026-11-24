@@ -293,7 +293,7 @@ var actionName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 // readReservedActionNames are the gateway's fixed MCP tools. Every path,
 // including reading signed packages, rejects actions with these names.
-var readReservedActionNames = []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "entities_search", "changes_list", "runbooks_search", "runbooks_read"}
+var readReservedActionNames = []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "jobs_diff", "entities_search", "changes_list", "runbooks_search", "runbooks_read"}
 
 // progressiveReservedActionNames are the progressive disclosure meta-tools.
 // Only authoring and publication reject them, so packages signed or published

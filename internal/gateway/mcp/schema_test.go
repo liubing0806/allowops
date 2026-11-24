@@ -82,8 +82,8 @@ func TestActionValidation(t *testing.T) {
 
 func TestFixedToolSchemas(t *testing.T) {
 	tools := fixedTools(job.DefaultConfig())
-	if len(tools) != 4 {
-		t.Fatalf("tools=%d want=4", len(tools))
+	if len(tools) != 5 {
+		t.Fatalf("tools=%d want=5", len(tools))
 	}
 	seen := map[string]bool{}
 	for _, tool := range tools {
@@ -101,7 +101,7 @@ func TestFixedToolSchemas(t *testing.T) {
 			t.Fatalf("description=%s", tool.Description)
 		}
 	}
-	for _, name := range []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel"} {
+	for _, name := range []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "jobs_diff"} {
 		if !seen[name] {
 			t.Fatalf("missing %s", name)
 		}

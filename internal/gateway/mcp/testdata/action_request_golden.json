@@ -7,10 +7,10 @@
    "Error": "arguments allowed: JSON object"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format match exclude tail head count]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping match exclude tail head count]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format match exclude tail head count]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping match exclude tail head count]"
   },
   {
    "Error": "reason required"
@@ -192,10 +192,10 @@
    "Error": "arguments allowed: JSON object"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format match exclude tail head count]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping match exclude tail head count]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format match exclude tail head count]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping match exclude tail head count]"
   },
   {
    "Error": "reason required"
@@ -533,10 +533,10 @@
    "Error": "arguments allowed: JSON object"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format match exclude tail head count]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping match exclude tail head count]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format match exclude tail head count]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping match exclude tail head count]"
   },
   {
    "Error": "reason required"
@@ -874,10 +874,10 @@
    "Error": "arguments allowed: JSON object"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
    "Error": "reason required"
@@ -1074,7 +1074,7 @@
    "Error": "params allowed: JSON object"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
    "Error": "unknown parameter \"nope\"; allowed names: [lines mode reason]"
@@ -1106,46 +1106,46 @@
    "Error": "parameter reason: does not match regex; allowed: string without leading '-' or CR/LF/NUL, max_len=0 (0=unbounded), regex=\"^[a-z]+$\""
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
-   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format]"
+   "Error": "unknown argument; allowed names: [params targets expected_count reason wait_seconds batch_size max_failures response_format grouping]"
   },
   {
    "Request": {

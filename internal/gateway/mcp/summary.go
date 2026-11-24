@@ -6,10 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"math"
 	"slices"
 
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 type summaryCursor struct {
@@ -44,6 +46,7 @@ func nativeSummaryResult(scope string, j *v1.Job, summary *v1.JobSummary, format
 	if !slices.Contains([]string{"concise", "detailed"}, format) {
 		return nil, accessError(connect.CodeInvalidArgument, "response_format allowed: concise, detailed")
 	}
+	summary = sanitizeSummaryForJSON(summary)
 	binding, err := json.Marshal(struct {
 		Scope, Format string
 		Job           *v1.Job
@@ -112,10 +115,11 @@ func (p *summaryPage) startOffset(cursor string) (int, error) {
 }
 
 // fit renders the longest page that stays within resultByteLimit. When even one
-// item is too large, it halves the stdout/stderr preview until it fits.
+// item is too large, it halves the stdout/stderr/template preview until it fits,
+// and drops variances on the final fallback round if needed.
 func (p *summaryPage) fit() (*ToolResult, error) {
 	if len(p.items) == 0 {
-		result, size, err := p.render(0, groupByteLimit)
+		result, size, err := p.render(0, groupByteLimit, true)
 		if size > resultByteLimit {
 			return nil, accessError(connect.CodeResourceExhausted, "job metadata exceeds 32KB")
 		}
@@ -123,7 +127,7 @@ func (p *summaryPage) fit() (*ToolResult, error) {
 	}
 	var best *ToolResult
 	for end := p.start + 1; end <= len(p.items); end++ {
-		result, size, err := p.render(end, groupByteLimit)
+		result, size, err := p.render(end, groupByteLimit, true)
 		if err != nil {
 			return nil, err
 		}
@@ -135,7 +139,7 @@ func (p *summaryPage) fit() (*ToolResult, error) {
 			return best, nil
 		}
 		for limit := groupByteLimit / 2; ; limit /= 2 {
-			result, size, err = p.render(end, limit)
+			result, size, err = p.render(end, limit, true)
 			if err != nil {
 				return nil, err
 			}
@@ -143,6 +147,13 @@ func (p *summaryPage) fit() (*ToolResult, error) {
 				return result, nil
 			}
 			if limit == 0 {
+				result, size, err = p.render(end, 0, false)
+				if err != nil {
+					return nil, err
+				}
+				if size <= resultByteLimit {
+					return result, nil
+				}
 				return nil, accessError(connect.CodeResourceExhausted, "job metadata exceeds 32KB")
 			}
 		}
@@ -151,12 +162,33 @@ func (p *summaryPage) fit() (*ToolResult, error) {
 }
 
 // render builds the result for items[start:end] and returns its encoded size.
-func (p *summaryPage) render(end, previewLimit int) (*ToolResult, int, error) {
+func (p *summaryPage) render(end, previewLimit int, includeVariances bool) (*ToolResult, int, error) {
 	data := jobMetadata(p.job)
 	data["groups"] = []map[string]any{}
 	data["offline_hosts"] = []string{}
 	data["truncated"] = p.summary.Truncated
 	data["hint"] = "Use jobs_get(job_id, host) for complete output; use next_cursor for remaining supplied groups. P6 may already have truncated the source summary."
+	if p.summary.Grouping != "" {
+		data["grouping"] = p.summary.Grouping
+	}
+	if p.summary.Ranking != "" {
+		data["ranking"] = p.summary.Ranking
+	}
+	if p.summary.TotalGroups > 0 {
+		data["total_groups"] = p.summary.TotalGroups
+	}
+	if p.summary.OmittedGroups > 0 {
+		data["omitted_groups"] = p.summary.OmittedGroups
+	}
+	if p.summary.OmittedHosts > 0 {
+		data["omitted_hosts"] = p.summary.OmittedHosts
+	}
+	if p.summary.FoldedNormalHosts > 0 {
+		data["folded_normal_hosts"] = p.summary.FoldedNormalHosts
+	}
+	if p.summary.UnfinishedHostsCount > 0 {
+		data["unfinished_hosts_count"] = p.summary.UnfinishedHostsCount
+	}
 	groups := []map[string]any{}
 	lastGroup := -1
 	for _, item := range p.items[p.start:end] {
@@ -166,7 +198,7 @@ func (p *summaryPage) render(end, previewLimit int) (*ToolResult, int, error) {
 		}
 		source := p.summary.Groups[item.group]
 		if item.group != lastGroup {
-			g, shortened := p.groupPreview(source, previewLimit)
+			g, shortened := p.groupPreview(source, previewLimit, includeVariances)
 			if shortened {
 				data["truncated"] = true
 			}
@@ -186,12 +218,114 @@ func (p *summaryPage) render(end, previewLimit int) (*ToolResult, int, error) {
 	return toolResult(data)
 }
 
-// groupPreview maps one backend group, cutting stdout then stderr to previewLimit
-// bytes in total. The bool reports whether the preview cut any output.
-func (p *summaryPage) groupPreview(source *v1.OutputGroup, previewLimit int) (map[string]any, bool) {
-	stdout := textPrefix(source.Stdout, previewLimit)
-	stderr := textPrefix(source.Stderr, previewLimit-len(stdout))
-	shortened := len(stdout) < len(source.Stdout) || len(stderr) < len(source.Stderr)
+type mcpMetricVariance struct {
+	Label        string   `json:"label"`
+	Unit         string   `json:"unit,omitempty"`
+	Min          float64  `json:"min"`
+	P50          float64  `json:"p50"`
+	P95          float64  `json:"p95"`
+	Max          float64  `json:"max"`
+	MinHost      string   `json:"min_host"`
+	MaxHost      string   `json:"max_host"`
+	OutlierHosts []string `json:"outlier_hosts,omitempty"`
+}
+
+func groupSeverity(s v1.GroupSeverity) string {
+	switch s {
+	case v1.GroupSeverity_GROUP_SEVERITY_FAILURE:
+		return "failure"
+	case v1.GroupSeverity_GROUP_SEVERITY_ANOMALY:
+		return "anomaly"
+	case v1.GroupSeverity_GROUP_SEVERITY_NORMAL:
+		return "normal"
+	default:
+		return ""
+	}
+}
+
+func isFiniteFloat(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0)
+}
+
+func isFiniteVariance(mv *v1.MetricVariance) bool {
+	return mv != nil && isFiniteFloat(mv.Min) && isFiniteFloat(mv.P50) && isFiniteFloat(mv.P95) && isFiniteFloat(mv.Max)
+}
+
+func sanitizeSummaryForJSON(summary *v1.JobSummary) *v1.JobSummary {
+	needsFilter := false
+	for _, g := range summary.Groups {
+		if g == nil {
+			continue
+		}
+		for _, mv := range g.Variances {
+			if !isFiniteVariance(mv) {
+				needsFilter = true
+				break
+			}
+		}
+		if needsFilter {
+			break
+		}
+	}
+	if !needsFilter {
+		return summary
+	}
+	cloned := proto.Clone(summary).(*v1.JobSummary)
+	for _, g := range cloned.Groups {
+		if g == nil || len(g.Variances) == 0 {
+			continue
+		}
+		kept := make([]*v1.MetricVariance, 0, len(g.Variances))
+		for _, mv := range g.Variances {
+			if !isFiniteVariance(mv) {
+				continue
+			}
+			kept = append(kept, mv)
+		}
+		g.Variances = kept
+	}
+	return cloned
+}
+
+// groupPreview maps one backend group, sharing previewLimit bytes across
+// stdout, stderr, template_stdout and template_stderr. The bool reports whether
+// the preview cut any output or dropped variances.
+func (p *summaryPage) groupPreview(source *v1.OutputGroup, previewLimit int, includeVariances bool) (map[string]any, bool) {
+	rawBudget := previewLimit
+	tmplBudget := 0
+	if source.TemplateStdout != "" || source.TemplateStderr != "" {
+		rawLen := len(source.Stdout) + len(source.Stderr)
+		tmplLen := len(source.TemplateStdout) + len(source.TemplateStderr)
+		if rawLen+tmplLen <= previewLimit {
+			rawBudget = rawLen
+			tmplBudget = tmplLen
+		} else {
+			half := previewLimit / 2
+			rawBudget = min(rawLen, half)
+			tmplBudget = min(tmplLen, half)
+			if rem := previewLimit - rawBudget - tmplBudget; rem > 0 {
+				if rawLen > rawBudget {
+					add := min(rem, rawLen-rawBudget)
+					rawBudget += add
+					rem -= add
+				}
+				if rem > 0 && tmplLen > tmplBudget {
+					tmplBudget += min(rem, tmplLen-tmplBudget)
+				}
+			}
+		}
+	}
+	stdout := textPrefix(source.Stdout, rawBudget)
+	stderr := textPrefix(source.Stderr, max(0, rawBudget-len(stdout)))
+	tmplStdout := textPrefix(source.TemplateStdout, tmplBudget)
+	tmplStderr := textPrefix(source.TemplateStderr, max(0, tmplBudget-len(tmplStdout)))
+	shortened := len(stdout) < len(source.Stdout) ||
+		len(stderr) < len(source.Stderr) ||
+		len(tmplStdout) < len(source.TemplateStdout) ||
+		len(tmplStderr) < len(source.TemplateStderr)
+	if !includeVariances && len(source.Variances) > 0 {
+		shortened = true
+	}
 	g := map[string]any{"host_count": source.HostCount, "stdout": stdout, "stderr": stderr, "truncated": source.Truncated || shortened}
 	if source.ExitCode != nil {
 		g["exit_code"] = *source.ExitCode
@@ -201,6 +335,38 @@ func (p *summaryPage) groupPreview(source *v1.OutputGroup, previewLimit int) (ma
 		if hint := reasonHints[source.Reason]; hint != "" {
 			g["hint"] = hint
 		}
+	}
+	if sev := groupSeverity(source.Severity); sev != "" {
+		g["severity"] = sev
+	}
+	if source.AnomalyReason != "" {
+		g["anomaly_reason"] = source.AnomalyReason
+	}
+	if len(source.TemplateSha256) > 0 {
+		g["template_sha256"] = hex.EncodeToString(source.TemplateSha256)
+	}
+	if tmplStdout != "" {
+		g["template_stdout"] = tmplStdout
+	}
+	if tmplStderr != "" {
+		g["template_stderr"] = tmplStderr
+	}
+	if includeVariances && len(source.Variances) > 0 {
+		variances := make([]mcpMetricVariance, len(source.Variances))
+		for i, mv := range source.Variances {
+			variances[i] = mcpMetricVariance{
+				Label:        mv.Label,
+				Unit:         mv.Unit,
+				Min:          mv.Min,
+				P50:          mv.P50,
+				P95:          mv.P95,
+				Max:          mv.Max,
+				MinHost:      mv.MinHost,
+				MaxHost:      mv.MaxHost,
+				OutlierHosts: slices.Clone(mv.OutlierHosts),
+			}
+		}
+		g["variances"] = variances
 	}
 	if p.format == "detailed" {
 		g["hosts"] = []string{}

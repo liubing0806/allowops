@@ -553,7 +553,7 @@ func listJobTaskPreviews(ctx context.Context, d db.DBTX, jobID string) ([]Previe
 	}
 	out := []Preview{}
 	for _, r := range rows {
-		v := Preview{Task: &v1.Task{Result: &v1.ExecutionResult{}, TaskId: r.TaskID, Hostname: r.Hostname}, Stdout: r.StdoutPreview, Stderr: r.StderrPreview, StdoutHash: r.StdoutSha256, StderrHash: r.StderrSha256, StdoutSize: uint64(r.StdoutSize), StderrSize: uint64(r.StderrSize)}
+		v := Preview{Task: &v1.Task{Result: &v1.ExecutionResult{}, TaskId: r.TaskID, HostId: r.HostID, Hostname: r.Hostname}, Stdout: r.StdoutPreview, Stderr: r.StderrPreview, StdoutHash: r.StdoutSha256, StderrHash: r.StderrSha256, StdoutSize: uint64(r.StdoutSize), StderrSize: uint64(r.StderrSize)}
 		if err := proto.Unmarshal(r.Result, v.Task.Result); err != nil {
 			return nil, err
 		}

@@ -48,6 +48,8 @@ const (
 	JobServiceCancelJobProcedure = "/allowops.v1.JobService/CancelJob"
 	// JobServiceGetJobOutputProcedure is the fully-qualified name of the JobService's GetJobOutput RPC.
 	JobServiceGetJobOutputProcedure = "/allowops.v1.JobService/GetJobOutput"
+	// JobServiceDiffJobsProcedure is the fully-qualified name of the JobService's DiffJobs RPC.
+	JobServiceDiffJobsProcedure = "/allowops.v1.JobService/DiffJobs"
 )
 
 // JobServiceClient is a client for the allowops.v1.JobService service.
@@ -59,6 +61,7 @@ type JobServiceClient interface {
 	ListTaskSteps(context.Context, *connect.Request[v1.ListTaskStepsRequest]) (*connect.Response[v1.ListTaskStepsResponse], error)
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
 	GetJobOutput(context.Context, *connect.Request[v1.GetJobOutputRequest]) (*connect.Response[v1.GetJobOutputResponse], error)
+	DiffJobs(context.Context, *connect.Request[v1.DiffJobsRequest]) (*connect.Response[v1.DiffJobsResponse], error)
 }
 
 // NewJobServiceClient constructs a client for the allowops.v1.JobService service. By default, it
@@ -114,6 +117,12 @@ func NewJobServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(jobServiceMethods.ByName("GetJobOutput")),
 			connect.WithClientOptions(opts...),
 		),
+		diffJobs: connect.NewClient[v1.DiffJobsRequest, v1.DiffJobsResponse](
+			httpClient,
+			baseURL+JobServiceDiffJobsProcedure,
+			connect.WithSchema(jobServiceMethods.ByName("DiffJobs")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -126,6 +135,7 @@ type jobServiceClient struct {
 	listTaskSteps *connect.Client[v1.ListTaskStepsRequest, v1.ListTaskStepsResponse]
 	cancelJob     *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
 	getJobOutput  *connect.Client[v1.GetJobOutputRequest, v1.GetJobOutputResponse]
+	diffJobs      *connect.Client[v1.DiffJobsRequest, v1.DiffJobsResponse]
 }
 
 // RunJob calls allowops.v1.JobService.RunJob.
@@ -163,6 +173,11 @@ func (c *jobServiceClient) GetJobOutput(ctx context.Context, req *connect.Reques
 	return c.getJobOutput.CallUnary(ctx, req)
 }
 
+// DiffJobs calls allowops.v1.JobService.DiffJobs.
+func (c *jobServiceClient) DiffJobs(ctx context.Context, req *connect.Request[v1.DiffJobsRequest]) (*connect.Response[v1.DiffJobsResponse], error) {
+	return c.diffJobs.CallUnary(ctx, req)
+}
+
 // JobServiceHandler is an implementation of the allowops.v1.JobService service.
 type JobServiceHandler interface {
 	RunJob(context.Context, *connect.Request[v1.RunJobRequest]) (*connect.Response[v1.RunJobResponse], error)
@@ -172,6 +187,7 @@ type JobServiceHandler interface {
 	ListTaskSteps(context.Context, *connect.Request[v1.ListTaskStepsRequest]) (*connect.Response[v1.ListTaskStepsResponse], error)
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
 	GetJobOutput(context.Context, *connect.Request[v1.GetJobOutputRequest]) (*connect.Response[v1.GetJobOutputResponse], error)
+	DiffJobs(context.Context, *connect.Request[v1.DiffJobsRequest]) (*connect.Response[v1.DiffJobsResponse], error)
 }
 
 // NewJobServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -223,6 +239,12 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(jobServiceMethods.ByName("GetJobOutput")),
 		connect.WithHandlerOptions(opts...),
 	)
+	jobServiceDiffJobsHandler := connect.NewUnaryHandler(
+		JobServiceDiffJobsProcedure,
+		svc.DiffJobs,
+		connect.WithSchema(jobServiceMethods.ByName("DiffJobs")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/allowops.v1.JobService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case JobServiceRunJobProcedure:
@@ -239,6 +261,8 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 			jobServiceCancelJobHandler.ServeHTTP(w, r)
 		case JobServiceGetJobOutputProcedure:
 			jobServiceGetJobOutputHandler.ServeHTTP(w, r)
+		case JobServiceDiffJobsProcedure:
+			jobServiceDiffJobsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -274,4 +298,8 @@ func (UnimplementedJobServiceHandler) CancelJob(context.Context, *connect.Reques
 
 func (UnimplementedJobServiceHandler) GetJobOutput(context.Context, *connect.Request[v1.GetJobOutputRequest]) (*connect.Response[v1.GetJobOutputResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("allowops.v1.JobService.GetJobOutput is not implemented"))
+}
+
+func (UnimplementedJobServiceHandler) DiffJobs(context.Context, *connect.Request[v1.DiffJobsRequest]) (*connect.Response[v1.DiffJobsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("allowops.v1.JobService.DiffJobs is not implemented"))
 }
