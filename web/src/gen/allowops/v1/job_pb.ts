@@ -2,8 +2,8 @@
 // @generated from file allowops/v1/job.proto (package allowops.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { CatalogRef, CatalogRefJson, ExecutionResult, ExecutionResultJson, HostTargets, HostTargetsJson, JobStatus, JobStatusJson, OutputFilters, OutputFiltersJson, OutputMetadata, OutputMetadataJson, OutputStream, OutputStreamJson, OutputTrust, OutputTrustJson, PageRequest, PageRequestJson, PageResponse, PageResponseJson, Parameters, ParametersJson, TaskStatus, TaskStatusJson, TimeRange, TimeRangeJson } from "./common_pb";
 import { file_allowops_v1_common } from "./common_pb";
 import type { Timestamp, TimestampJson } from "@bufbuild/protobuf/wkt";
@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file allowops/v1/job.proto.
  */
 export const file_allowops_v1_job: GenFile = /*@__PURE__*/
-  fileDesc("ChVhbGxvd29wcy92MS9qb2IucHJvdG8SC2FsbG93b3BzLnYxIkMKCVRhc2tDb3VudBInCgZzdGF0dXMYASABKA4yFy5hbGxvd29wcy52MS5UYXNrU3RhdHVzEg0KBWNvdW50GAIgASgEIugCCgNKb2ISDgoGam9iX2lkGAEgASgJEg4KBmFjdGlvbhgCIAEoCRIoCgdjYXRhbG9nGAMgASgLMhcuYWxsb3dvcHMudjEuQ2F0YWxvZ1JlZhIVCg1hY3Rpb25fc2hhMjU2GAQgASgMEhIKCnN1YmplY3RfaWQYBSABKAkSDgoGcmVhc29uGAYgASgJEiYKBnN0YXR1cxgHIAEoDjIWLmFsbG93b3BzLnYxLkpvYlN0YXR1cxIuCgpjcmVhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtmaW5pc2hlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLdG90YWxfdGFza3MYCiABKAQSJgoGY291bnRzGAsgAygLMhYuYWxsb3dvcHMudjEuVGFza0NvdW50EhYKDnBvbGljeV92ZXJzaW9uGAwgASgEIoQCCgRUYXNrEg4KBmpvYl9pZBgBIAEoCRIPCgd0YXNrX2lkGAIgASgJEg8KB2hvc3RfaWQYAyABKAkSEAoIaG9zdG5hbWUYBCABKAkSLAoGcmVzdWx0GAUgASgLMhwuYWxsb3dvcHMudjEuRXhlY3V0aW9uUmVzdWx0Ei4KCnN0YXJ0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2ZpbmlzaGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1vdXRwdXRfc3RvcmVkGAggASgIEhIKCnN0ZXBfY291bnQYCSABKA0iVQoIVGFza1N0ZXASDQoFaW5kZXgYASABKA0SDAoEbmFtZRgCIAEoCRIsCgZyZXN1bHQYAyABKAsyHC5hbGxvd29wcy52MS5FeGVjdXRpb25SZXN1bHQi+QIKDVJ1bkpvYlJlcXVlc3QSDgoGYWN0aW9uGAEgASgJEikKB3RhcmdldHMYAiABKAsyGC5hbGxvd29wcy52MS5Ib3N0VGFyZ2V0cxIbCg5leHBlY3RlZF9jb3VudBgDIAEoBEgAiAEBEicKBnBhcmFtcxgEIAEoCzIXLmFsbG93b3BzLnYxLlBhcmFtZXRlcnMSDgoGcmVhc29uGAUgASgJEhkKDHdhaXRfc2Vjb25kcxgGIAEoDUgBiAEBEhcKCmJhdGNoX3NpemUYByABKA1IAogBARIZCgxtYXhfZmFpbHVyZXMYCCABKA1IA4gBARIrCgdmaWx0ZXJzGAkgASgLMhouYWxsb3dvcHMudjEuT3V0cHV0RmlsdGVycxIXCg9yZXNwb25zZV9mb3JtYXQYCiABKAlCEQoPX2V4cGVjdGVkX2NvdW50Qg8KDV93YWl0X3NlY29uZHNCDQoLX2JhdGNoX3NpemVCDwoNX21heF9mYWlsdXJlcyJZCg5SdW5Kb2JSZXNwb25zZRIdCgNqb2IYASABKAsyEC5hbGxvd29wcy52MS5Kb2ISKAoHc3VtbWFyeRgCIAEoCzIXLmFsbG93b3BzLnYxLkpvYlN1bW1hcnkiZAoNR2V0Sm9iUmVxdWVzdBIOCgZqb2JfaWQYASABKAkSGQoMd2FpdF9zZWNvbmRzGAIgASgNSACIAQESFwoPcmVzcG9uc2VfZm9ybWF0GAMgASgJQg8KDV93YWl0X3NlY29uZHMiWQoOR2V0Sm9iUmVzcG9uc2USHQoDam9iGAEgASgLMhAuYWxsb3dvcHMudjEuSm9iEigKB3N1bW1hcnkYAiABKAsyFy5hbGxvd29wcy52MS5Kb2JTdW1tYXJ5IscBCgtPdXRwdXRHcm91cBIWCglleGl0X2NvZGUYASABKAVIAIgBARIVCg1zdGRvdXRfc2hhMjU2GAIgASgMEhUKDXN0ZGVycl9zaGEyNTYYAyABKAwSEgoKaG9zdF9jb3VudBgEIAEoBBINCgVob3N0cxgFIAMoCRIOCgZzdGRvdXQYBiABKAkSDgoGc3RkZXJyGAcgASgJEhEKCXRydW5jYXRlZBgIIAEoCBIOCgZyZWFzb24YCSABKAlCDAoKX2V4aXRfY29kZSKQAQoKSm9iU3VtbWFyeRIoCgZncm91cHMYASADKAsyGC5hbGxvd29wcy52MS5PdXRwdXRHcm91cBIVCg1vZmZsaW5lX2hvc3RzGAIgAygJEi4KDG91dHB1dF90cnVzdBgDIAEoDjIYLmFsbG93b3BzLnYxLk91dHB1dFRydXN0EhEKCXRydW5jYXRlZBgEIAEoCCKwAQoPTGlzdEpvYnNSZXF1ZXN0EiYKBHBhZ2UYASABKAsyGC5hbGxvd29wcy52MS5QYWdlUmVxdWVzdBInCgdjcmVhdGVkGAIgASgLMhYuYWxsb3dvcHMudjEuVGltZVJhbmdlEigKCHN0YXR1c2VzGAMgAygOMhYuYWxsb3dvcHMudjEuSm9iU3RhdHVzEg4KBmFjdGlvbhgEIAEoCRISCgpzdWJqZWN0X2lkGAUgASgJIlsKEExpc3RKb2JzUmVzcG9uc2USHgoEam9icxgBIAMoCzIQLmFsbG93b3BzLnYxLkpvYhInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlIocBChBMaXN0VGFza3NSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCRImCgRwYWdlGAIgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QSKQoIc3RhdHVzZXMYAyADKA4yFy5hbGxvd29wcy52MS5UYXNrU3RhdHVzEhAKCGhvc3RuYW1lGAQgASgJIl4KEUxpc3RUYXNrc1Jlc3BvbnNlEiAKBXRhc2tzGAEgAygLMhEuYWxsb3dvcHMudjEuVGFzaxInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlIl8KFExpc3RUYXNrU3RlcHNSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCRIPCgd0YXNrX2lkGAIgASgJEiYKBHBhZ2UYAyABKAsyGC5hbGxvd29wcy52MS5QYWdlUmVxdWVzdCJmChVMaXN0VGFza1N0ZXBzUmVzcG9uc2USJAoFc3RlcHMYASADKAsyFS5hbGxvd29wcy52MS5UYXNrU3RlcBInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlIiIKEENhbmNlbEpvYlJlcXVlc3QSDgoGam9iX2lkGAEgASgJIjIKEUNhbmNlbEpvYlJlc3BvbnNlEh0KA2pvYhgBIAEoCzIQLmFsbG93b3BzLnYxLkpvYiKvAQoTR2V0Sm9iT3V0cHV0UmVxdWVzdBIOCgZqb2JfaWQYASABKAkSEAoIaG9zdG5hbWUYAiABKAkSFwoKc3RlcF9pbmRleBgDIAEoDUgAiAEBEikKBnN0cmVhbRgEIAEoDjIZLmFsbG93b3BzLnYxLk91dHB1dFN0cmVhbRIOCgZvZmZzZXQYBSABKAQSEwoLbGltaXRfYnl0ZXMYBiABKA1CDQoLX3N0ZXBfaW5kZXgi6QEKFEdldEpvYk91dHB1dFJlc3BvbnNlEgwKBGRhdGEYASABKAwSEwoLbmV4dF9vZmZzZXQYAiABKAQSCwoDZW9mGAMgASgIEhEKCXRydW5jYXRlZBgEIAEoCBIaChJzY2FuX2xpbWl0X3JlYWNoZWQYBSABKAgSFQoNb3V0cHV0X3N0b3JlZBgGIAEoCBIuCgxvdXRwdXRfdHJ1c3QYByABKA4yGC5hbGxvd29wcy52MS5PdXRwdXRUcnVzdBIrCgZvdXRwdXQYCCABKAsyGy5hbGxvd29wcy52MS5PdXRwdXRNZXRhZGF0YTKgBAoKSm9iU2VydmljZRJBCgZSdW5Kb2ISGi5hbGxvd29wcy52MS5SdW5Kb2JSZXF1ZXN0GhsuYWxsb3dvcHMudjEuUnVuSm9iUmVzcG9uc2USQQoGR2V0Sm9iEhouYWxsb3dvcHMudjEuR2V0Sm9iUmVxdWVzdBobLmFsbG93b3BzLnYxLkdldEpvYlJlc3BvbnNlEkcKCExpc3RKb2JzEhwuYWxsb3dvcHMudjEuTGlzdEpvYnNSZXF1ZXN0Gh0uYWxsb3dvcHMudjEuTGlzdEpvYnNSZXNwb25zZRJKCglMaXN0VGFza3MSHS5hbGxvd29wcy52MS5MaXN0VGFza3NSZXF1ZXN0Gh4uYWxsb3dvcHMudjEuTGlzdFRhc2tzUmVzcG9uc2USVgoNTGlzdFRhc2tTdGVwcxIhLmFsbG93b3BzLnYxLkxpc3RUYXNrU3RlcHNSZXF1ZXN0GiIuYWxsb3dvcHMudjEuTGlzdFRhc2tTdGVwc1Jlc3BvbnNlEkoKCUNhbmNlbEpvYhIdLmFsbG93b3BzLnYxLkNhbmNlbEpvYlJlcXVlc3QaHi5hbGxvd29wcy52MS5DYW5jZWxKb2JSZXNwb25zZRJTCgxHZXRKb2JPdXRwdXQSIC5hbGxvd29wcy52MS5HZXRKb2JPdXRwdXRSZXF1ZXN0GiEuYWxsb3dvcHMudjEuR2V0Sm9iT3V0cHV0UmVzcG9uc2VCPFo6Z2l0aHViLmNvbS9saXViaW5nMDgwNi9hbGxvd29wcy9nZW4vYWxsb3dvcHMvdjE7YWxsb3dvcHN2MWIGcHJvdG8z", [file_allowops_v1_common, file_google_protobuf_timestamp]);
+  fileDesc("ChVhbGxvd29wcy92MS9qb2IucHJvdG8SC2FsbG93b3BzLnYxIkMKCVRhc2tDb3VudBInCgZzdGF0dXMYASABKA4yFy5hbGxvd29wcy52MS5UYXNrU3RhdHVzEg0KBWNvdW50GAIgASgEIugCCgNKb2ISDgoGam9iX2lkGAEgASgJEg4KBmFjdGlvbhgCIAEoCRIoCgdjYXRhbG9nGAMgASgLMhcuYWxsb3dvcHMudjEuQ2F0YWxvZ1JlZhIVCg1hY3Rpb25fc2hhMjU2GAQgASgMEhIKCnN1YmplY3RfaWQYBSABKAkSDgoGcmVhc29uGAYgASgJEiYKBnN0YXR1cxgHIAEoDjIWLmFsbG93b3BzLnYxLkpvYlN0YXR1cxIuCgpjcmVhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtmaW5pc2hlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLdG90YWxfdGFza3MYCiABKAQSJgoGY291bnRzGAsgAygLMhYuYWxsb3dvcHMudjEuVGFza0NvdW50EhYKDnBvbGljeV92ZXJzaW9uGAwgASgEIoQCCgRUYXNrEg4KBmpvYl9pZBgBIAEoCRIPCgd0YXNrX2lkGAIgASgJEg8KB2hvc3RfaWQYAyABKAkSEAoIaG9zdG5hbWUYBCABKAkSLAoGcmVzdWx0GAUgASgLMhwuYWxsb3dvcHMudjEuRXhlY3V0aW9uUmVzdWx0Ei4KCnN0YXJ0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2ZpbmlzaGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1vdXRwdXRfc3RvcmVkGAggASgIEhIKCnN0ZXBfY291bnQYCSABKA0iVQoIVGFza1N0ZXASDQoFaW5kZXgYASABKA0SDAoEbmFtZRgCIAEoCRIsCgZyZXN1bHQYAyABKAsyHC5hbGxvd29wcy52MS5FeGVjdXRpb25SZXN1bHQiiwMKDVJ1bkpvYlJlcXVlc3QSDgoGYWN0aW9uGAEgASgJEikKB3RhcmdldHMYAiABKAsyGC5hbGxvd29wcy52MS5Ib3N0VGFyZ2V0cxIbCg5leHBlY3RlZF9jb3VudBgDIAEoBEgAiAEBEicKBnBhcmFtcxgEIAEoCzIXLmFsbG93b3BzLnYxLlBhcmFtZXRlcnMSDgoGcmVhc29uGAUgASgJEhkKDHdhaXRfc2Vjb25kcxgGIAEoDUgBiAEBEhcKCmJhdGNoX3NpemUYByABKA1IAogBARIZCgxtYXhfZmFpbHVyZXMYCCABKA1IA4gBARIrCgdmaWx0ZXJzGAkgASgLMhouYWxsb3dvcHMudjEuT3V0cHV0RmlsdGVycxIXCg9yZXNwb25zZV9mb3JtYXQYCiABKAkSEAoIZ3JvdXBpbmcYCyABKAlCEQoPX2V4cGVjdGVkX2NvdW50Qg8KDV93YWl0X3NlY29uZHNCDQoLX2JhdGNoX3NpemVCDwoNX21heF9mYWlsdXJlcyJZCg5SdW5Kb2JSZXNwb25zZRIdCgNqb2IYASABKAsyEC5hbGxvd29wcy52MS5Kb2ISKAoHc3VtbWFyeRgCIAEoCzIXLmFsbG93b3BzLnYxLkpvYlN1bW1hcnkidgoNR2V0Sm9iUmVxdWVzdBIOCgZqb2JfaWQYASABKAkSGQoMd2FpdF9zZWNvbmRzGAIgASgNSACIAQESFwoPcmVzcG9uc2VfZm9ybWF0GAMgASgJEhAKCGdyb3VwaW5nGAQgASgJQg8KDV93YWl0X3NlY29uZHMiWQoOR2V0Sm9iUmVzcG9uc2USHQoDam9iGAEgASgLMhAuYWxsb3dvcHMudjEuSm9iEigKB3N1bW1hcnkYAiABKAsyFy5hbGxvd29wcy52MS5Kb2JTdW1tYXJ5IpwBCg5NZXRyaWNWYXJpYW5jZRINCgVsYWJlbBgBIAEoCRIMCgR1bml0GAIgASgJEgsKA21pbhgDIAEoARILCgNtYXgYBCABKAESCwoDcDk1GAUgASgBEhAKCG1pbl9ob3N0GAYgASgJEhAKCG1heF9ob3N0GAcgASgJEhUKDW91dGxpZXJfaG9zdHMYCCADKAkSCwoDcDUwGAkgASgBIogDCgtPdXRwdXRHcm91cBIWCglleGl0X2NvZGUYASABKAVIAIgBARIVCg1zdGRvdXRfc2hhMjU2GAIgASgMEhUKDXN0ZGVycl9zaGEyNTYYAyABKAwSEgoKaG9zdF9jb3VudBgEIAEoBBINCgVob3N0cxgFIAMoCRIOCgZzdGRvdXQYBiABKAkSDgoGc3RkZXJyGAcgASgJEhEKCXRydW5jYXRlZBgIIAEoCBIOCgZyZWFzb24YCSABKAkSLAoIc2V2ZXJpdHkYCiABKA4yGi5hbGxvd29wcy52MS5Hcm91cFNldmVyaXR5EhYKDmFub21hbHlfcmVhc29uGAsgASgJEhcKD3RlbXBsYXRlX3NoYTI1NhgMIAEoDBIXCg90ZW1wbGF0ZV9zdGRvdXQYDSABKAkSFwoPdGVtcGxhdGVfc3RkZXJyGA4gASgJEi4KCXZhcmlhbmNlcxgPIAMoCzIbLmFsbG93b3BzLnYxLk1ldHJpY1ZhcmlhbmNlQgwKCl9leGl0X2NvZGUitQIKCkpvYlN1bW1hcnkSKAoGZ3JvdXBzGAEgAygLMhguYWxsb3dvcHMudjEuT3V0cHV0R3JvdXASFQoNb2ZmbGluZV9ob3N0cxgCIAMoCRIuCgxvdXRwdXRfdHJ1c3QYAyABKA4yGC5hbGxvd29wcy52MS5PdXRwdXRUcnVzdBIRCgl0cnVuY2F0ZWQYBCABKAgSEAoIZ3JvdXBpbmcYBSABKAkSDwoHcmFua2luZxgGIAEoCRIUCgx0b3RhbF9ncm91cHMYByABKAQSFgoOb21pdHRlZF9ncm91cHMYCCABKAQSGwoTZm9sZGVkX25vcm1hbF9ob3N0cxgJIAEoBBIVCg1vbWl0dGVkX2hvc3RzGAogASgEEh4KFnVuZmluaXNoZWRfaG9zdHNfY291bnQYCyABKAQisAEKD0xpc3RKb2JzUmVxdWVzdBImCgRwYWdlGAEgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QSJwoHY3JlYXRlZBgCIAEoCzIWLmFsbG93b3BzLnYxLlRpbWVSYW5nZRIoCghzdGF0dXNlcxgDIAMoDjIWLmFsbG93b3BzLnYxLkpvYlN0YXR1cxIOCgZhY3Rpb24YBCABKAkSEgoKc3ViamVjdF9pZBgFIAEoCSJbChBMaXN0Sm9ic1Jlc3BvbnNlEh4KBGpvYnMYASADKAsyEC5hbGxvd29wcy52MS5Kb2ISJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSKHAQoQTGlzdFRhc2tzUmVxdWVzdBIOCgZqb2JfaWQYASABKAkSJgoEcGFnZRgCIAEoCzIYLmFsbG93b3BzLnYxLlBhZ2VSZXF1ZXN0EikKCHN0YXR1c2VzGAMgAygOMhcuYWxsb3dvcHMudjEuVGFza1N0YXR1cxIQCghob3N0bmFtZRgEIAEoCSJeChFMaXN0VGFza3NSZXNwb25zZRIgCgV0YXNrcxgBIAMoCzIRLmFsbG93b3BzLnYxLlRhc2sSJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSJfChRMaXN0VGFza1N0ZXBzUmVxdWVzdBIOCgZqb2JfaWQYASABKAkSDwoHdGFza19pZBgCIAEoCRImCgRwYWdlGAMgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QiZgoVTGlzdFRhc2tTdGVwc1Jlc3BvbnNlEiQKBXN0ZXBzGAEgAygLMhUuYWxsb3dvcHMudjEuVGFza1N0ZXASJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSIiChBDYW5jZWxKb2JSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSIyChFDYW5jZWxKb2JSZXNwb25zZRIdCgNqb2IYASABKAsyEC5hbGxvd29wcy52MS5Kb2IirwEKE0dldEpvYk91dHB1dFJlcXVlc3QSDgoGam9iX2lkGAEgASgJEhAKCGhvc3RuYW1lGAIgASgJEhcKCnN0ZXBfaW5kZXgYAyABKA1IAIgBARIpCgZzdHJlYW0YBCABKA4yGS5hbGxvd29wcy52MS5PdXRwdXRTdHJlYW0SDgoGb2Zmc2V0GAUgASgEEhMKC2xpbWl0X2J5dGVzGAYgASgNQg0KC19zdGVwX2luZGV4IukBChRHZXRKb2JPdXRwdXRSZXNwb25zZRIMCgRkYXRhGAEgASgMEhMKC25leHRfb2Zmc2V0GAIgASgEEgsKA2VvZhgDIAEoCBIRCgl0cnVuY2F0ZWQYBCABKAgSGgoSc2Nhbl9saW1pdF9yZWFjaGVkGAUgASgIEhUKDW91dHB1dF9zdG9yZWQYBiABKAgSLgoMb3V0cHV0X3RydXN0GAcgASgOMhguYWxsb3dvcHMudjEuT3V0cHV0VHJ1c3QSKwoGb3V0cHV0GAggASgLMhsuYWxsb3dvcHMudjEuT3V0cHV0TWV0YWRhdGEiewoPRGlmZkpvYnNSZXF1ZXN0EhMKC2Jhc2Vfam9iX2lkGAEgASgJEhUKDXRhcmdldF9qb2JfaWQYAiABKAkSEAoIZ3JvdXBpbmcYAyABKAkSGQoMb25seV9jaGFuZ2VkGAQgASgISACIAQFCDwoNX29ubHlfY2hhbmdlZCKAAQoQRGlmZkpvYnNSZXNwb25zZRIiCghiYXNlX2pvYhgBIAEoCzIQLmFsbG93b3BzLnYxLkpvYhIkCgp0YXJnZXRfam9iGAIgASgLMhAuYWxsb3dvcHMudjEuSm9iEiIKBGRpZmYYAyABKAsyFC5hbGxvd29wcy52MS5Kb2JEaWZmIpACChBTdGF0dXNUcmFuc2l0aW9uEiwKC2Zyb21fc3RhdHVzGAEgASgOMhcuYWxsb3dvcHMudjEuVGFza1N0YXR1cxIqCgl0b19zdGF0dXMYAiABKA4yFy5hbGxvd29wcy52MS5UYXNrU3RhdHVzEhsKDmZyb21fZXhpdF9jb2RlGAMgASgFSACIAQESGQoMdG9fZXhpdF9jb2RlGAQgASgFSAGIAQESDgoGcmVhc29uGAUgASgJEhIKCmhvc3RfY291bnQYBiABKAQSDQoFaG9zdHMYByADKAkSEwoLZGVncmFkYXRpb24YCCABKAhCEQoPX2Zyb21fZXhpdF9jb2RlQg8KDV90b19leGl0X2NvZGUi0AIKDVBhdHRlcm5DaGFuZ2USMQoNYmFzZV9zZXZlcml0eRgBIAEoDjIaLmFsbG93b3BzLnYxLkdyb3VwU2V2ZXJpdHkSMwoPdGFyZ2V0X3NldmVyaXR5GAIgASgOMhouYWxsb3dvcHMudjEuR3JvdXBTZXZlcml0eRISCgpob3N0X2NvdW50GAMgASgEEg0KBWhvc3RzGAQgAygJEhEKCXVuY2hhbmdlZBgFIAEoCBIUCgxiYXNlX3ByZXZpZXcYBiABKAkSFgoOdGFyZ2V0X3ByZXZpZXcYByABKAkSFQoNcmVtb3ZlZF9saW5lcxgIIAMoCRITCgthZGRlZF9saW5lcxgJIAMoCRIVCg1kaWZmX2NvbXB1dGVkGAogASgIEhYKDmJhc2VfdHJ1bmNhdGVkGAsgASgIEhgKEHRhcmdldF90cnVuY2F0ZWQYDCABKAgipwIKC01ldHJpY0RyaWZ0Eg0KBWxhYmVsGAEgASgJEgwKBHVuaXQYAiABKAkSEAoIYmFzZV9wNTAYAyABKAESEgoKdGFyZ2V0X3A1MBgEIAEoARIQCghiYXNlX21heBgFIAEoARISCgp0YXJnZXRfbWF4GAYgASgBEhEKCW1heF9kZWx0YRgHIAEoARIWCg5tYXhfZGVsdGFfYmFzZRgIIAEoARIYChBtYXhfZGVsdGFfdGFyZ2V0GAkgASgBEhoKDW1heF9kZWx0YV9wY3QYCiABKAFIAIgBARIQCghtYXhfaG9zdBgLIAEoCRIWCg5hZmZlY3RlZF9ob3N0cxgMIAEoBBISCgpob3N0X2NvdW50GA0gASgEQhAKDl9tYXhfZGVsdGFfcGN0IrYECgdKb2JEaWZmEi4KDG91dHB1dF90cnVzdBgBIAEoDjIYLmFsbG93b3BzLnYxLk91dHB1dFRydXN0EhEKCXRydW5jYXRlZBgCIAEoCBIZChFwcmV2aWV3X3RydW5jYXRlZBgDIAEoCBIhChlhY3Rpb25fZGVmaW5pdGlvbl9jaGFuZ2VkGAQgASgIEhAKCGdyb3VwaW5nGAUgASgJEh0KFXVuY2hhbmdlZF9ob3N0c19jb3VudBgGIAEoBBIZChFhZGRlZF9ob3N0c19jb3VudBgHIAEoBBITCgthZGRlZF9ob3N0cxgIIAMoCRIbChNyZW1vdmVkX2hvc3RzX2NvdW50GAkgASgEEhUKDXJlbW92ZWRfaG9zdHMYCiADKAkSHAoUcmVwbGFjZWRfaG9zdHNfY291bnQYCyABKAQSFgoOcmVwbGFjZWRfaG9zdHMYDCADKAkSOQoSc3RhdHVzX3RyYW5zaXRpb25zGA0gAygLMh0uYWxsb3dvcHMudjEuU3RhdHVzVHJhbnNpdGlvbhIdChV0b3RhbF9wYXR0ZXJuX2NoYW5nZXMYDiABKAQSHwoXb21pdHRlZF9wYXR0ZXJuX2NoYW5nZXMYDyABKAQSMwoPcGF0dGVybl9jaGFuZ2VzGBAgAygLMhouYWxsb3dvcHMudjEuUGF0dGVybkNoYW5nZRIvCg1tZXRyaWNfZHJpZnRzGBEgAygLMhguYWxsb3dvcHMudjEuTWV0cmljRHJpZnQqggEKDUdyb3VwU2V2ZXJpdHkSHgoaR1JPVVBfU0VWRVJJVFlfVU5TUEVDSUZJRUQQABIaChZHUk9VUF9TRVZFUklUWV9GQUlMVVJFEAESGgoWR1JPVVBfU0VWRVJJVFlfQU5PTUFMWRACEhkKFUdST1VQX1NFVkVSSVRZX05PUk1BTBADMukECgpKb2JTZXJ2aWNlEkEKBlJ1bkpvYhIaLmFsbG93b3BzLnYxLlJ1bkpvYlJlcXVlc3QaGy5hbGxvd29wcy52MS5SdW5Kb2JSZXNwb25zZRJBCgZHZXRKb2ISGi5hbGxvd29wcy52MS5HZXRKb2JSZXF1ZXN0GhsuYWxsb3dvcHMudjEuR2V0Sm9iUmVzcG9uc2USRwoITGlzdEpvYnMSHC5hbGxvd29wcy52MS5MaXN0Sm9ic1JlcXVlc3QaHS5hbGxvd29wcy52MS5MaXN0Sm9ic1Jlc3BvbnNlEkoKCUxpc3RUYXNrcxIdLmFsbG93b3BzLnYxLkxpc3RUYXNrc1JlcXVlc3QaHi5hbGxvd29wcy52MS5MaXN0VGFza3NSZXNwb25zZRJWCg1MaXN0VGFza1N0ZXBzEiEuYWxsb3dvcHMudjEuTGlzdFRhc2tTdGVwc1JlcXVlc3QaIi5hbGxvd29wcy52MS5MaXN0VGFza1N0ZXBzUmVzcG9uc2USSgoJQ2FuY2VsSm9iEh0uYWxsb3dvcHMudjEuQ2FuY2VsSm9iUmVxdWVzdBoeLmFsbG93b3BzLnYxLkNhbmNlbEpvYlJlc3BvbnNlElMKDEdldEpvYk91dHB1dBIgLmFsbG93b3BzLnYxLkdldEpvYk91dHB1dFJlcXVlc3QaIS5hbGxvd29wcy52MS5HZXRKb2JPdXRwdXRSZXNwb25zZRJHCghEaWZmSm9icxIcLmFsbG93b3BzLnYxLkRpZmZKb2JzUmVxdWVzdBodLmFsbG93b3BzLnYxLkRpZmZKb2JzUmVzcG9uc2VCPFo6Z2l0aHViLmNvbS9saXViaW5nMDgwNi9hbGxvd29wcy9nZW4vYWxsb3dvcHMvdjE7YWxsb3dvcHN2MWIGcHJvdG8z", [file_allowops_v1_common, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message allowops.v1.TaskCount
@@ -401,6 +401,11 @@ export type RunJobRequest = Message<"allowops.v1.RunJobRequest"> & {
    * @generated from field: string response_format = 10;
    */
   responseFormat: string;
+
+  /**
+   * @generated from field: string grouping = 11;
+   */
+  grouping: string;
 };
 
 /**
@@ -456,6 +461,11 @@ export type RunJobRequestJson = {
    * @generated from field: string response_format = 10;
    */
   responseFormat?: string;
+
+  /**
+   * @generated from field: string grouping = 11;
+   */
+  grouping?: string;
 };
 
 /**
@@ -520,6 +530,11 @@ export type GetJobRequest = Message<"allowops.v1.GetJobRequest"> & {
    * @generated from field: string response_format = 3;
    */
   responseFormat: string;
+
+  /**
+   * @generated from field: string grouping = 4;
+   */
+  grouping: string;
 };
 
 /**
@@ -540,6 +555,11 @@ export type GetJobRequestJson = {
    * @generated from field: string response_format = 3;
    */
   responseFormat?: string;
+
+  /**
+   * @generated from field: string grouping = 4;
+   */
+  grouping?: string;
 };
 
 /**
@@ -585,6 +605,113 @@ export type GetJobResponseJson = {
  */
 export const GetJobResponseSchema: GenMessage<GetJobResponse, {jsonType: GetJobResponseJson}> = /*@__PURE__*/
   messageDesc(file_allowops_v1_job, 7);
+
+/**
+ * @generated from message allowops.v1.MetricVariance
+ */
+export type MetricVariance = Message<"allowops.v1.MetricVariance"> & {
+  /**
+   * @generated from field: string label = 1;
+   */
+  label: string;
+
+  /**
+   * @generated from field: string unit = 2;
+   */
+  unit: string;
+
+  /**
+   * @generated from field: double min = 3;
+   */
+  min: number;
+
+  /**
+   * @generated from field: double max = 4;
+   */
+  max: number;
+
+  /**
+   * @generated from field: double p95 = 5;
+   */
+  p95: number;
+
+  /**
+   * @generated from field: string min_host = 6;
+   */
+  minHost: string;
+
+  /**
+   * @generated from field: string max_host = 7;
+   */
+  maxHost: string;
+
+  /**
+   * @generated from field: repeated string outlier_hosts = 8;
+   */
+  outlierHosts: string[];
+
+  /**
+   * @generated from field: double p50 = 9;
+   */
+  p50: number;
+};
+
+/**
+ * @generated from message allowops.v1.MetricVariance
+ */
+export type MetricVarianceJson = {
+  /**
+   * @generated from field: string label = 1;
+   */
+  label?: string;
+
+  /**
+   * @generated from field: string unit = 2;
+   */
+  unit?: string;
+
+  /**
+   * @generated from field: double min = 3;
+   */
+  min?: number | "NaN" | "Infinity" | "-Infinity";
+
+  /**
+   * @generated from field: double max = 4;
+   */
+  max?: number | "NaN" | "Infinity" | "-Infinity";
+
+  /**
+   * @generated from field: double p95 = 5;
+   */
+  p95?: number | "NaN" | "Infinity" | "-Infinity";
+
+  /**
+   * @generated from field: string min_host = 6;
+   */
+  minHost?: string;
+
+  /**
+   * @generated from field: string max_host = 7;
+   */
+  maxHost?: string;
+
+  /**
+   * @generated from field: repeated string outlier_hosts = 8;
+   */
+  outlierHosts?: string[];
+
+  /**
+   * @generated from field: double p50 = 9;
+   */
+  p50?: number | "NaN" | "Infinity" | "-Infinity";
+};
+
+/**
+ * Describes the message allowops.v1.MetricVariance.
+ * Use `create(MetricVarianceSchema)` to create a new message.
+ */
+export const MetricVarianceSchema: GenMessage<MetricVariance, {jsonType: MetricVarianceJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_job, 8);
 
 /**
  * G39: previews require view_output. Concise samples at most two hostnames;
@@ -639,6 +766,36 @@ export type OutputGroup = Message<"allowops.v1.OutputGroup"> & {
    * @generated from field: string reason = 9;
    */
   reason: string;
+
+  /**
+   * @generated from field: allowops.v1.GroupSeverity severity = 10;
+   */
+  severity: GroupSeverity;
+
+  /**
+   * @generated from field: string anomaly_reason = 11;
+   */
+  anomalyReason: string;
+
+  /**
+   * @generated from field: bytes template_sha256 = 12;
+   */
+  templateSha256: Uint8Array;
+
+  /**
+   * @generated from field: string template_stdout = 13;
+   */
+  templateStdout: string;
+
+  /**
+   * @generated from field: string template_stderr = 14;
+   */
+  templateStderr: string;
+
+  /**
+   * @generated from field: repeated allowops.v1.MetricVariance variances = 15;
+   */
+  variances: MetricVariance[];
 };
 
 /**
@@ -694,6 +851,36 @@ export type OutputGroupJson = {
    * @generated from field: string reason = 9;
    */
   reason?: string;
+
+  /**
+   * @generated from field: allowops.v1.GroupSeverity severity = 10;
+   */
+  severity?: GroupSeverityJson;
+
+  /**
+   * @generated from field: string anomaly_reason = 11;
+   */
+  anomalyReason?: string;
+
+  /**
+   * @generated from field: bytes template_sha256 = 12;
+   */
+  templateSha256?: string;
+
+  /**
+   * @generated from field: string template_stdout = 13;
+   */
+  templateStdout?: string;
+
+  /**
+   * @generated from field: string template_stderr = 14;
+   */
+  templateStderr?: string;
+
+  /**
+   * @generated from field: repeated allowops.v1.MetricVariance variances = 15;
+   */
+  variances?: MetricVarianceJson[];
 };
 
 /**
@@ -701,7 +888,7 @@ export type OutputGroupJson = {
  * Use `create(OutputGroupSchema)` to create a new message.
  */
 export const OutputGroupSchema: GenMessage<OutputGroup, {jsonType: OutputGroupJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 8);
+  messageDesc(file_allowops_v1_job, 9);
 
 /**
  * @generated from message allowops.v1.JobSummary
@@ -728,6 +915,41 @@ export type JobSummary = Message<"allowops.v1.JobSummary"> & {
    * @generated from field: bool truncated = 4;
    */
   truncated: boolean;
+
+  /**
+   * @generated from field: string grouping = 5;
+   */
+  grouping: string;
+
+  /**
+   * @generated from field: string ranking = 6;
+   */
+  ranking: string;
+
+  /**
+   * @generated from field: uint64 total_groups = 7;
+   */
+  totalGroups: bigint;
+
+  /**
+   * @generated from field: uint64 omitted_groups = 8;
+   */
+  omittedGroups: bigint;
+
+  /**
+   * @generated from field: uint64 folded_normal_hosts = 9;
+   */
+  foldedNormalHosts: bigint;
+
+  /**
+   * @generated from field: uint64 omitted_hosts = 10;
+   */
+  omittedHosts: bigint;
+
+  /**
+   * @generated from field: uint64 unfinished_hosts_count = 11;
+   */
+  unfinishedHostsCount: bigint;
 };
 
 /**
@@ -755,6 +977,41 @@ export type JobSummaryJson = {
    * @generated from field: bool truncated = 4;
    */
   truncated?: boolean;
+
+  /**
+   * @generated from field: string grouping = 5;
+   */
+  grouping?: string;
+
+  /**
+   * @generated from field: string ranking = 6;
+   */
+  ranking?: string;
+
+  /**
+   * @generated from field: uint64 total_groups = 7;
+   */
+  totalGroups?: string;
+
+  /**
+   * @generated from field: uint64 omitted_groups = 8;
+   */
+  omittedGroups?: string;
+
+  /**
+   * @generated from field: uint64 folded_normal_hosts = 9;
+   */
+  foldedNormalHosts?: string;
+
+  /**
+   * @generated from field: uint64 omitted_hosts = 10;
+   */
+  omittedHosts?: string;
+
+  /**
+   * @generated from field: uint64 unfinished_hosts_count = 11;
+   */
+  unfinishedHostsCount?: string;
 };
 
 /**
@@ -762,7 +1019,7 @@ export type JobSummaryJson = {
  * Use `create(JobSummarySchema)` to create a new message.
  */
 export const JobSummarySchema: GenMessage<JobSummary, {jsonType: JobSummaryJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 9);
+  messageDesc(file_allowops_v1_job, 10);
 
 /**
  * @generated from message allowops.v1.ListJobsRequest
@@ -829,7 +1086,7 @@ export type ListJobsRequestJson = {
  * Use `create(ListJobsRequestSchema)` to create a new message.
  */
 export const ListJobsRequestSchema: GenMessage<ListJobsRequest, {jsonType: ListJobsRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 10);
+  messageDesc(file_allowops_v1_job, 11);
 
 /**
  * @generated from message allowops.v1.ListJobsResponse
@@ -866,7 +1123,7 @@ export type ListJobsResponseJson = {
  * Use `create(ListJobsResponseSchema)` to create a new message.
  */
 export const ListJobsResponseSchema: GenMessage<ListJobsResponse, {jsonType: ListJobsResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 11);
+  messageDesc(file_allowops_v1_job, 12);
 
 /**
  * @generated from message allowops.v1.ListTasksRequest
@@ -923,7 +1180,7 @@ export type ListTasksRequestJson = {
  * Use `create(ListTasksRequestSchema)` to create a new message.
  */
 export const ListTasksRequestSchema: GenMessage<ListTasksRequest, {jsonType: ListTasksRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 12);
+  messageDesc(file_allowops_v1_job, 13);
 
 /**
  * @generated from message allowops.v1.ListTasksResponse
@@ -960,7 +1217,7 @@ export type ListTasksResponseJson = {
  * Use `create(ListTasksResponseSchema)` to create a new message.
  */
 export const ListTasksResponseSchema: GenMessage<ListTasksResponse, {jsonType: ListTasksResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 13);
+  messageDesc(file_allowops_v1_job, 14);
 
 /**
  * @generated from message allowops.v1.ListTaskStepsRequest
@@ -1007,7 +1264,7 @@ export type ListTaskStepsRequestJson = {
  * Use `create(ListTaskStepsRequestSchema)` to create a new message.
  */
 export const ListTaskStepsRequestSchema: GenMessage<ListTaskStepsRequest, {jsonType: ListTaskStepsRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 14);
+  messageDesc(file_allowops_v1_job, 15);
 
 /**
  * @generated from message allowops.v1.ListTaskStepsResponse
@@ -1044,7 +1301,7 @@ export type ListTaskStepsResponseJson = {
  * Use `create(ListTaskStepsResponseSchema)` to create a new message.
  */
 export const ListTaskStepsResponseSchema: GenMessage<ListTaskStepsResponse, {jsonType: ListTaskStepsResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 15);
+  messageDesc(file_allowops_v1_job, 16);
 
 /**
  * @generated from message allowops.v1.CancelJobRequest
@@ -1071,7 +1328,7 @@ export type CancelJobRequestJson = {
  * Use `create(CancelJobRequestSchema)` to create a new message.
  */
 export const CancelJobRequestSchema: GenMessage<CancelJobRequest, {jsonType: CancelJobRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 16);
+  messageDesc(file_allowops_v1_job, 17);
 
 /**
  * @generated from message allowops.v1.CancelJobResponse
@@ -1098,7 +1355,7 @@ export type CancelJobResponseJson = {
  * Use `create(CancelJobResponseSchema)` to create a new message.
  */
 export const CancelJobResponseSchema: GenMessage<CancelJobResponse, {jsonType: CancelJobResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 17);
+  messageDesc(file_allowops_v1_job, 18);
 
 /**
  * @generated from message allowops.v1.GetJobOutputRequest
@@ -1175,7 +1432,7 @@ export type GetJobOutputRequestJson = {
  * Use `create(GetJobOutputRequestSchema)` to create a new message.
  */
 export const GetJobOutputRequestSchema: GenMessage<GetJobOutputRequest, {jsonType: GetJobOutputRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 18);
+  messageDesc(file_allowops_v1_job, 19);
 
 /**
  * @generated from message allowops.v1.GetJobOutputResponse
@@ -1272,7 +1529,715 @@ export type GetJobOutputResponseJson = {
  * Use `create(GetJobOutputResponseSchema)` to create a new message.
  */
 export const GetJobOutputResponseSchema: GenMessage<GetJobOutputResponse, {jsonType: GetJobOutputResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 19);
+  messageDesc(file_allowops_v1_job, 20);
+
+/**
+ * @generated from message allowops.v1.DiffJobsRequest
+ */
+export type DiffJobsRequest = Message<"allowops.v1.DiffJobsRequest"> & {
+  /**
+   * @generated from field: string base_job_id = 1;
+   */
+  baseJobId: string;
+
+  /**
+   * @generated from field: string target_job_id = 2;
+   */
+  targetJobId: string;
+
+  /**
+   * @generated from field: string grouping = 3;
+   */
+  grouping: string;
+
+  /**
+   * @generated from field: optional bool only_changed = 4;
+   */
+  onlyChanged?: boolean | undefined;
+};
+
+/**
+ * @generated from message allowops.v1.DiffJobsRequest
+ */
+export type DiffJobsRequestJson = {
+  /**
+   * @generated from field: string base_job_id = 1;
+   */
+  baseJobId?: string;
+
+  /**
+   * @generated from field: string target_job_id = 2;
+   */
+  targetJobId?: string;
+
+  /**
+   * @generated from field: string grouping = 3;
+   */
+  grouping?: string;
+
+  /**
+   * @generated from field: optional bool only_changed = 4;
+   */
+  onlyChanged?: boolean;
+};
+
+/**
+ * Describes the message allowops.v1.DiffJobsRequest.
+ * Use `create(DiffJobsRequestSchema)` to create a new message.
+ */
+export const DiffJobsRequestSchema: GenMessage<DiffJobsRequest, {jsonType: DiffJobsRequestJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_job, 21);
+
+/**
+ * @generated from message allowops.v1.DiffJobsResponse
+ */
+export type DiffJobsResponse = Message<"allowops.v1.DiffJobsResponse"> & {
+  /**
+   * @generated from field: allowops.v1.Job base_job = 1;
+   */
+  baseJob?: Job | undefined;
+
+  /**
+   * @generated from field: allowops.v1.Job target_job = 2;
+   */
+  targetJob?: Job | undefined;
+
+  /**
+   * @generated from field: allowops.v1.JobDiff diff = 3;
+   */
+  diff?: JobDiff | undefined;
+};
+
+/**
+ * @generated from message allowops.v1.DiffJobsResponse
+ */
+export type DiffJobsResponseJson = {
+  /**
+   * @generated from field: allowops.v1.Job base_job = 1;
+   */
+  baseJob?: JobJson;
+
+  /**
+   * @generated from field: allowops.v1.Job target_job = 2;
+   */
+  targetJob?: JobJson;
+
+  /**
+   * @generated from field: allowops.v1.JobDiff diff = 3;
+   */
+  diff?: JobDiffJson;
+};
+
+/**
+ * Describes the message allowops.v1.DiffJobsResponse.
+ * Use `create(DiffJobsResponseSchema)` to create a new message.
+ */
+export const DiffJobsResponseSchema: GenMessage<DiffJobsResponse, {jsonType: DiffJobsResponseJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_job, 22);
+
+/**
+ * @generated from message allowops.v1.StatusTransition
+ */
+export type StatusTransition = Message<"allowops.v1.StatusTransition"> & {
+  /**
+   * @generated from field: allowops.v1.TaskStatus from_status = 1;
+   */
+  fromStatus: TaskStatus;
+
+  /**
+   * @generated from field: allowops.v1.TaskStatus to_status = 2;
+   */
+  toStatus: TaskStatus;
+
+  /**
+   * @generated from field: optional int32 from_exit_code = 3;
+   */
+  fromExitCode?: number | undefined;
+
+  /**
+   * @generated from field: optional int32 to_exit_code = 4;
+   */
+  toExitCode?: number | undefined;
+
+  /**
+   * @generated from field: string reason = 5;
+   */
+  reason: string;
+
+  /**
+   * @generated from field: uint64 host_count = 6;
+   */
+  hostCount: bigint;
+
+  /**
+   * @generated from field: repeated string hosts = 7;
+   */
+  hosts: string[];
+
+  /**
+   * @generated from field: bool degradation = 8;
+   */
+  degradation: boolean;
+};
+
+/**
+ * @generated from message allowops.v1.StatusTransition
+ */
+export type StatusTransitionJson = {
+  /**
+   * @generated from field: allowops.v1.TaskStatus from_status = 1;
+   */
+  fromStatus?: TaskStatusJson;
+
+  /**
+   * @generated from field: allowops.v1.TaskStatus to_status = 2;
+   */
+  toStatus?: TaskStatusJson;
+
+  /**
+   * @generated from field: optional int32 from_exit_code = 3;
+   */
+  fromExitCode?: number;
+
+  /**
+   * @generated from field: optional int32 to_exit_code = 4;
+   */
+  toExitCode?: number;
+
+  /**
+   * @generated from field: string reason = 5;
+   */
+  reason?: string;
+
+  /**
+   * @generated from field: uint64 host_count = 6;
+   */
+  hostCount?: string;
+
+  /**
+   * @generated from field: repeated string hosts = 7;
+   */
+  hosts?: string[];
+
+  /**
+   * @generated from field: bool degradation = 8;
+   */
+  degradation?: boolean;
+};
+
+/**
+ * Describes the message allowops.v1.StatusTransition.
+ * Use `create(StatusTransitionSchema)` to create a new message.
+ */
+export const StatusTransitionSchema: GenMessage<StatusTransition, {jsonType: StatusTransitionJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_job, 23);
+
+/**
+ * @generated from message allowops.v1.PatternChange
+ */
+export type PatternChange = Message<"allowops.v1.PatternChange"> & {
+  /**
+   * @generated from field: allowops.v1.GroupSeverity base_severity = 1;
+   */
+  baseSeverity: GroupSeverity;
+
+  /**
+   * @generated from field: allowops.v1.GroupSeverity target_severity = 2;
+   */
+  targetSeverity: GroupSeverity;
+
+  /**
+   * @generated from field: uint64 host_count = 3;
+   */
+  hostCount: bigint;
+
+  /**
+   * @generated from field: repeated string hosts = 4;
+   */
+  hosts: string[];
+
+  /**
+   * @generated from field: bool unchanged = 5;
+   */
+  unchanged: boolean;
+
+  /**
+   * @generated from field: string base_preview = 6;
+   */
+  basePreview: string;
+
+  /**
+   * @generated from field: string target_preview = 7;
+   */
+  targetPreview: string;
+
+  /**
+   * @generated from field: repeated string removed_lines = 8;
+   */
+  removedLines: string[];
+
+  /**
+   * @generated from field: repeated string added_lines = 9;
+   */
+  addedLines: string[];
+
+  /**
+   * @generated from field: bool diff_computed = 10;
+   */
+  diffComputed: boolean;
+
+  /**
+   * @generated from field: bool base_truncated = 11;
+   */
+  baseTruncated: boolean;
+
+  /**
+   * @generated from field: bool target_truncated = 12;
+   */
+  targetTruncated: boolean;
+};
+
+/**
+ * @generated from message allowops.v1.PatternChange
+ */
+export type PatternChangeJson = {
+  /**
+   * @generated from field: allowops.v1.GroupSeverity base_severity = 1;
+   */
+  baseSeverity?: GroupSeverityJson;
+
+  /**
+   * @generated from field: allowops.v1.GroupSeverity target_severity = 2;
+   */
+  targetSeverity?: GroupSeverityJson;
+
+  /**
+   * @generated from field: uint64 host_count = 3;
+   */
+  hostCount?: string;
+
+  /**
+   * @generated from field: repeated string hosts = 4;
+   */
+  hosts?: string[];
+
+  /**
+   * @generated from field: bool unchanged = 5;
+   */
+  unchanged?: boolean;
+
+  /**
+   * @generated from field: string base_preview = 6;
+   */
+  basePreview?: string;
+
+  /**
+   * @generated from field: string target_preview = 7;
+   */
+  targetPreview?: string;
+
+  /**
+   * @generated from field: repeated string removed_lines = 8;
+   */
+  removedLines?: string[];
+
+  /**
+   * @generated from field: repeated string added_lines = 9;
+   */
+  addedLines?: string[];
+
+  /**
+   * @generated from field: bool diff_computed = 10;
+   */
+  diffComputed?: boolean;
+
+  /**
+   * @generated from field: bool base_truncated = 11;
+   */
+  baseTruncated?: boolean;
+
+  /**
+   * @generated from field: bool target_truncated = 12;
+   */
+  targetTruncated?: boolean;
+};
+
+/**
+ * Describes the message allowops.v1.PatternChange.
+ * Use `create(PatternChangeSchema)` to create a new message.
+ */
+export const PatternChangeSchema: GenMessage<PatternChange, {jsonType: PatternChangeJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_job, 24);
+
+/**
+ * @generated from message allowops.v1.MetricDrift
+ */
+export type MetricDrift = Message<"allowops.v1.MetricDrift"> & {
+  /**
+   * @generated from field: string label = 1;
+   */
+  label: string;
+
+  /**
+   * @generated from field: string unit = 2;
+   */
+  unit: string;
+
+  /**
+   * @generated from field: double base_p50 = 3;
+   */
+  baseP50: number;
+
+  /**
+   * @generated from field: double target_p50 = 4;
+   */
+  targetP50: number;
+
+  /**
+   * @generated from field: double base_max = 5;
+   */
+  baseMax: number;
+
+  /**
+   * @generated from field: double target_max = 6;
+   */
+  targetMax: number;
+
+  /**
+   * @generated from field: double max_delta = 7;
+   */
+  maxDelta: number;
+
+  /**
+   * @generated from field: double max_delta_base = 8;
+   */
+  maxDeltaBase: number;
+
+  /**
+   * @generated from field: double max_delta_target = 9;
+   */
+  maxDeltaTarget: number;
+
+  /**
+   * @generated from field: optional double max_delta_pct = 10;
+   */
+  maxDeltaPct?: number | undefined;
+
+  /**
+   * @generated from field: string max_host = 11;
+   */
+  maxHost: string;
+
+  /**
+   * @generated from field: uint64 affected_hosts = 12;
+   */
+  affectedHosts: bigint;
+
+  /**
+   * @generated from field: uint64 host_count = 13;
+   */
+  hostCount: bigint;
+};
+
+/**
+ * @generated from message allowops.v1.MetricDrift
+ */
+export type MetricDriftJson = {
+  /**
+   * @generated from field: string label = 1;
+   */
+  label?: string;
+
+  /**
+   * @generated from field: string unit = 2;
+   */
+  unit?: string;
+
+  /**
+   * @generated from field: double base_p50 = 3;
+   */
+  baseP50?: number | "NaN" | "Infinity" | "-Infinity";
+
+  /**
+   * @generated from field: double target_p50 = 4;
+   */
+  targetP50?: number | "NaN" | "Infinity" | "-Infinity";
+
+  /**
+   * @generated from field: double base_max = 5;
+   */
+  baseMax?: number | "NaN" | "Infinity" | "-Infinity";
+
+  /**
+   * @generated from field: double target_max = 6;
+   */
+  targetMax?: number | "NaN" | "Infinity" | "-Infinity";
+
+  /**
+   * @generated from field: double max_delta = 7;
+   */
+  maxDelta?: number | "NaN" | "Infinity" | "-Infinity";
+
+  /**
+   * @generated from field: double max_delta_base = 8;
+   */
+  maxDeltaBase?: number | "NaN" | "Infinity" | "-Infinity";
+
+  /**
+   * @generated from field: double max_delta_target = 9;
+   */
+  maxDeltaTarget?: number | "NaN" | "Infinity" | "-Infinity";
+
+  /**
+   * @generated from field: optional double max_delta_pct = 10;
+   */
+  maxDeltaPct?: number | "NaN" | "Infinity" | "-Infinity";
+
+  /**
+   * @generated from field: string max_host = 11;
+   */
+  maxHost?: string;
+
+  /**
+   * @generated from field: uint64 affected_hosts = 12;
+   */
+  affectedHosts?: string;
+
+  /**
+   * @generated from field: uint64 host_count = 13;
+   */
+  hostCount?: string;
+};
+
+/**
+ * Describes the message allowops.v1.MetricDrift.
+ * Use `create(MetricDriftSchema)` to create a new message.
+ */
+export const MetricDriftSchema: GenMessage<MetricDrift, {jsonType: MetricDriftJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_job, 25);
+
+/**
+ * @generated from message allowops.v1.JobDiff
+ */
+export type JobDiff = Message<"allowops.v1.JobDiff"> & {
+  /**
+   * @generated from field: allowops.v1.OutputTrust output_trust = 1;
+   */
+  outputTrust: OutputTrust;
+
+  /**
+   * @generated from field: bool truncated = 2;
+   */
+  truncated: boolean;
+
+  /**
+   * @generated from field: bool preview_truncated = 3;
+   */
+  previewTruncated: boolean;
+
+  /**
+   * @generated from field: bool action_definition_changed = 4;
+   */
+  actionDefinitionChanged: boolean;
+
+  /**
+   * @generated from field: string grouping = 5;
+   */
+  grouping: string;
+
+  /**
+   * @generated from field: uint64 unchanged_hosts_count = 6;
+   */
+  unchangedHostsCount: bigint;
+
+  /**
+   * @generated from field: uint64 added_hosts_count = 7;
+   */
+  addedHostsCount: bigint;
+
+  /**
+   * @generated from field: repeated string added_hosts = 8;
+   */
+  addedHosts: string[];
+
+  /**
+   * @generated from field: uint64 removed_hosts_count = 9;
+   */
+  removedHostsCount: bigint;
+
+  /**
+   * @generated from field: repeated string removed_hosts = 10;
+   */
+  removedHosts: string[];
+
+  /**
+   * @generated from field: uint64 replaced_hosts_count = 11;
+   */
+  replacedHostsCount: bigint;
+
+  /**
+   * @generated from field: repeated string replaced_hosts = 12;
+   */
+  replacedHosts: string[];
+
+  /**
+   * @generated from field: repeated allowops.v1.StatusTransition status_transitions = 13;
+   */
+  statusTransitions: StatusTransition[];
+
+  /**
+   * @generated from field: uint64 total_pattern_changes = 14;
+   */
+  totalPatternChanges: bigint;
+
+  /**
+   * @generated from field: uint64 omitted_pattern_changes = 15;
+   */
+  omittedPatternChanges: bigint;
+
+  /**
+   * @generated from field: repeated allowops.v1.PatternChange pattern_changes = 16;
+   */
+  patternChanges: PatternChange[];
+
+  /**
+   * @generated from field: repeated allowops.v1.MetricDrift metric_drifts = 17;
+   */
+  metricDrifts: MetricDrift[];
+};
+
+/**
+ * @generated from message allowops.v1.JobDiff
+ */
+export type JobDiffJson = {
+  /**
+   * @generated from field: allowops.v1.OutputTrust output_trust = 1;
+   */
+  outputTrust?: OutputTrustJson;
+
+  /**
+   * @generated from field: bool truncated = 2;
+   */
+  truncated?: boolean;
+
+  /**
+   * @generated from field: bool preview_truncated = 3;
+   */
+  previewTruncated?: boolean;
+
+  /**
+   * @generated from field: bool action_definition_changed = 4;
+   */
+  actionDefinitionChanged?: boolean;
+
+  /**
+   * @generated from field: string grouping = 5;
+   */
+  grouping?: string;
+
+  /**
+   * @generated from field: uint64 unchanged_hosts_count = 6;
+   */
+  unchangedHostsCount?: string;
+
+  /**
+   * @generated from field: uint64 added_hosts_count = 7;
+   */
+  addedHostsCount?: string;
+
+  /**
+   * @generated from field: repeated string added_hosts = 8;
+   */
+  addedHosts?: string[];
+
+  /**
+   * @generated from field: uint64 removed_hosts_count = 9;
+   */
+  removedHostsCount?: string;
+
+  /**
+   * @generated from field: repeated string removed_hosts = 10;
+   */
+  removedHosts?: string[];
+
+  /**
+   * @generated from field: uint64 replaced_hosts_count = 11;
+   */
+  replacedHostsCount?: string;
+
+  /**
+   * @generated from field: repeated string replaced_hosts = 12;
+   */
+  replacedHosts?: string[];
+
+  /**
+   * @generated from field: repeated allowops.v1.StatusTransition status_transitions = 13;
+   */
+  statusTransitions?: StatusTransitionJson[];
+
+  /**
+   * @generated from field: uint64 total_pattern_changes = 14;
+   */
+  totalPatternChanges?: string;
+
+  /**
+   * @generated from field: uint64 omitted_pattern_changes = 15;
+   */
+  omittedPatternChanges?: string;
+
+  /**
+   * @generated from field: repeated allowops.v1.PatternChange pattern_changes = 16;
+   */
+  patternChanges?: PatternChangeJson[];
+
+  /**
+   * @generated from field: repeated allowops.v1.MetricDrift metric_drifts = 17;
+   */
+  metricDrifts?: MetricDriftJson[];
+};
+
+/**
+ * Describes the message allowops.v1.JobDiff.
+ * Use `create(JobDiffSchema)` to create a new message.
+ */
+export const JobDiffSchema: GenMessage<JobDiff, {jsonType: JobDiffJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_job, 26);
+
+/**
+ * @generated from enum allowops.v1.GroupSeverity
+ */
+export enum GroupSeverity {
+  /**
+   * @generated from enum value: GROUP_SEVERITY_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: GROUP_SEVERITY_FAILURE = 1;
+   */
+  FAILURE = 1,
+
+  /**
+   * @generated from enum value: GROUP_SEVERITY_ANOMALY = 2;
+   */
+  ANOMALY = 2,
+
+  /**
+   * @generated from enum value: GROUP_SEVERITY_NORMAL = 3;
+   */
+  NORMAL = 3,
+}
+
+/**
+ * @generated from enum allowops.v1.GroupSeverity
+ */
+export type GroupSeverityJson = "GROUP_SEVERITY_UNSPECIFIED" | "GROUP_SEVERITY_FAILURE" | "GROUP_SEVERITY_ANOMALY" | "GROUP_SEVERITY_NORMAL";
+
+/**
+ * Describes the enum allowops.v1.GroupSeverity.
+ */
+export const GroupSeveritySchema: GenEnum<GroupSeverity, GroupSeverityJson> = /*@__PURE__*/
+  enumDesc(file_allowops_v1_job, 0);
 
 /**
  * @generated from service allowops.v1.JobService
@@ -1333,6 +2298,14 @@ export const JobService: GenService<{
     methodKind: "unary";
     input: typeof GetJobOutputRequestSchema;
     output: typeof GetJobOutputResponseSchema;
+  },
+  /**
+   * @generated from rpc allowops.v1.JobService.DiffJobs
+   */
+  diffJobs: {
+    methodKind: "unary";
+    input: typeof DiffJobsRequestSchema;
+    output: typeof DiffJobsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_allowops_v1_job, 0);

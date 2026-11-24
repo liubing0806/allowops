@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"connectrpc.com/connect"
@@ -70,4 +71,8 @@ func (c *ConnectService) GetJobOutput(ctx context.Context, r *connect.Request[v1
 		return nil, e
 	}
 	return connect.NewResponse(v), nil
+}
+
+func (c *ConnectService) DiffJobs(context.Context, *connect.Request[v1.DiffJobsRequest]) (*connect.Response[v1.DiffJobsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("DiffJobs not implemented"))
 }
