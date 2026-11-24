@@ -34,7 +34,7 @@ allowops catalog publish -f catalog.dsse.json \
 
 agent 严格解析目录包。只要某个动作含有 agent 不认识的字段，agent 就拒绝整个目录包（`CATALOG_REJECTED`）并保留已加载的旧版本。此后在 agent 升级之前，新版本的每个动作在该主机上都返回 `unsupported`；主机保持连接，之后它认识的版本可以正常加载。
 
-agent 连接时在 `features` 中上报它认识的可选动作字段，`max_targets` 是其中之一。发布使用新字段的目录之前，先升级 agent，并确认目标主机的 `features` 包含该字段。网关接受发布时不做这项检查。
+agent 连接时在 `features` 中上报它认识的可选动作字段，`max_targets` 和 `action_metadata`（对应 `toolset`、`tags`、`entity_kinds`）位列其中。发布使用新字段的目录之前，先升级网关、agent（含 `allowops-exec`）和 CLI，并确认目标主机的 `features` 包含对应字段。网关接受发布时不做这项检查。
 
 ## CI 边界 {#ci-boundary}
 

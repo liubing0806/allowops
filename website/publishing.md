@@ -54,9 +54,11 @@ returns `unsupported` on that host until the agent is upgraded; the host stays
 connected and later versions that it understands load normally.
 
 An agent reports the optional action fields it understands in `features` when
-it connects. `max_targets` is one of them. Before publishing a catalog that uses
-a new field, upgrade the agents and confirm that `features` of the target hosts
-contains it. The gateway does not check this when it accepts a publication.
+it connects. `max_targets` and `action_metadata` (`toolset`, `tags` and
+`entity_kinds`) are among them. Before publishing a catalog that uses
+a new field, upgrade the gateway, agents (including `allowops-exec`) and CLI,
+and confirm that `features` of the target hosts contains it. The gateway does
+not check this when it accepts a publication.
 
 ## CI boundary
 

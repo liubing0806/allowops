@@ -26,6 +26,28 @@ Claude Code 会展开该文件中的环境变量引用。不要把 token 写入�
 
 选择远程 Streamable HTTP 服务器，填写网关的 `/mcp` URL 和 Bearer 请求头。使用客户端的密钥存储或文档中说明的环境变量替换方式。上面的 JSON 专用于 Claude Code 配置。请在客户端文档中确认 HTTP 传输方式和请求头的配置方法。隔离的 Compose 网络不提供桌面客户端可访问的端点。
 
+## 暴露模式与工具集裁剪 {#exposure-modes-and-toolset-scoping}
+
+网关默认采用平铺模式（`gateway.yaml` 中 `mcp.mode: flat`），每个可见的签名动作都会在 `tools/list` 中直接暴露为独立工具，确保已有客户端的工具允许列表无需调整。面对大规模目录（100+ 动作），可将 `mcp.mode` 配置为 `progressive` 或 `auto`：
+
+```yaml
+mcp:
+  mode: auto          # flat（默认）| progressive | auto
+  auto_threshold: 40  # auto 模式下可见受支持动作超过该值时切换为 progressive（1-1000）
+```
+
+客户端也可以按连接通过 HTTP 请求头收窄上下文工具面（`/mcp` 仍然拒绝一切 URL 查询参数）：
+
+- `X-Allowops-Toolsets`：以逗号分隔、最多 16 个 `toolset` 名称（每项匹配 `^[a-z][a-z0-9_]{0,31}$`），例如 `X-Allowops-Toolsets: jvm,k8s`。仅暴露标注了这些 `toolset` 且当前身份可见的动作。
+- `X-Allowops-MCP-Mode`：`flat` 或 `progressive`，用于覆盖网关的默认展示模式。
+
+这两个请求头仅用于裁剪上下文视图，不是授权边界；每次调用仍由策略逐动作、逐主机判定。格式错误或重复同名请求头返回 HTTP `400`，并在审计链中记录 `mcp/request` 拒绝事件。
+
+在 `progressive` 模式下（当当前作用域存在至少一个受支持的可见动作时），`tools/list` 不再平铺全部动作，而是暴露按需发现与按风险分层的调用元工具：
+
+- `actions_search`：按关键词 `query`、精确 `names`、`toolset`、`tag`、`risk`、`entity_kind` 或 `hostname` 检索当前身份可见的动作，按 `read`、`write`、`dangerous` 再按 `name` 排序，支持 `next_cursor` 分页与 32 KiB 结果预算。传入 `include_schema: true` 可获取签名参数 `input_schema` 与有效上限；第一页附带按 `toolset` 聚合的匹配计数。传入 `hostname` 时由网关执行单主机 ABAC 预检；不存在、不可见或无授权标签的主机统一返回空动作列表。
+- `actions_invoke_read`、`actions_invoke_write`、`actions_invoke_dangerous`：仅列出当前身份可见动作中实际存在的风险等级。按风险拆分工具可保留客户端分风险的人工确认边界（`actions_invoke_read` 带 `readOnlyHint: true`，`actions_invoke_dangerous` 带 `destructiveHint: true`）。每次调用都会重新核对最新已验签动作的 `risk`，若与工具风险等级不匹配则直接拒绝。
+
 ## 固定工具 {#fixed-tools}
 
 以下输入使用 snake_case。未知输入会被拒绝。
@@ -33,6 +55,7 @@ Claude Code 会展开该文件中的环境变量引用。不要把 token 写入�
 | 工具 | 输入 |
 |---|---|
 | `hosts_search` | 可选 `selector` 或 `hostname`（二者互斥），以及 `next_cursor`。两者都不提供时，列出所有可见主机。 |
+| `entities_search` | 存在可用 Inventory 插件时列出；可选 `kind`、`name`、`sources`、`limit`。同时按返回实体的 `kind` 附带 `recommended_actions`（每类最多 10 条策略预检可见的推荐动作；省略或超限时标记 `recommended_actions_truncated`，不改变 `truncated` 的实体截断语义）。 |
 | `jobs_get` | 必填 `job_id`；可选 `host`、`wait_seconds`、`response_format`、`next_cursor`、`stream`、`offset`、`step_index`。 |
 | `jobs_list` | 可选 `next_cursor`；返回当前身份的最近 job。 |
 | `jobs_cancel` | 必填 `job_id`；停止后续批次，并请求终止正在运行的 task 进程组。 |

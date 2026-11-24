@@ -83,7 +83,7 @@ entity_kinds: [jvm]
 
 **读取路径校验规则**（`ParsePackage` / `validateAction(a, true)` / `Verify`）：
 - **宽松保留未来扩展性**：不在读取路径执行 `tags`/`entity_kinds` 数量上限与正则拦截（避免未来放宽上限如 16 → 32 时导致旧网关验签整包失败返回 503）。
-- **JSON `null` / 空数组 / 空串防护**：`Verify`（[internal/catalog/dsse.go:239-245](../internal/catalog/dsse.go#L239-L245)）已校验 `bytes.Equal(payload, CanonicalJSON(p))`。因三个字段均带 `omitempty`，签名 payload 中若含 `"toolset":""`、`"tags":null`、`"tags":[]`、`"entity_kinds":null`、`"entity_kinds":[]`，均会因非规范 JSON 被 `Verify` 拒绝。
+- **JSON `null` / 空数组 / 空串防护**：`Verify`（[internal/catalog/dsse.go](../internal/catalog/dsse.go) 第 239-245 行）已校验 `bytes.Equal(payload, CanonicalJSON(p))`。因三个字段均带 `omitempty`，签名 payload 中若含 `"toolset":""`、`"tags":null`、`"tags":[]`、`"entity_kinds":null`、`"entity_kinds":[]`，均会因非规范 JSON 被 `Verify` 拒绝。
 - 不在 `catalog.yaml` 的 `defaults` 中提供默认 `toolset`，避免单目录跨多领域动作被误标注。
 
 ### 3.2 签名摘要、主机特性与升级顺序
@@ -146,7 +146,7 @@ mcp:
 
 ### 5.2 客户端请求头（保留零 URL Query 安全不变量）
 
-- **仅支持 HTTP Request Headers，不放宽 `/mcp` 拒绝 URL Query 参数的规则**（[internal/gateway/mcp/service.go:154](../internal/gateway/mcp/service.go#L154) 保持 `if r.URL.RawQuery != ""` → HTTP 400）。理由：`allowops` MCP 已强制使用 `Authorization: Bearer` 头，支持配置自定义请求头的客户端覆盖全部主流 MCP 客户端；保留零 Query 参数规则可根绝凭证或配置泄漏进 URL 与代理日志。
+- **仅支持 HTTP Request Headers，不放宽 `/mcp` 拒绝 URL Query 参数的规则**（[internal/gateway/mcp/service.go](../internal/gateway/mcp/service.go) 保持 `if r.URL.RawQuery != ""` → HTTP 400）。理由：`allowops` MCP 已强制使用 `Authorization: Bearer` 头，支持配置自定义请求头的客户端覆盖全部主流 MCP 客户端；保留零 Query 参数规则可根绝凭证或配置泄漏进 URL 与代理日志。
 - 支持两个可选自定义请求头（均在认证与 `Origin` 检查**之后**解析；**非授权边界**，仅用于上下文视图裁剪）：
   1. `X-Allowops-Toolsets`：
      - 超过 1 个同名头直接返回 HTTP 400（与 `Authorization` 同原则，防止代理多行头合并歧义）。
@@ -239,7 +239,7 @@ AllowedActionsOnHost(ctx context.Context, hostname string, actions []authz.Actio
 2. 调用一次 `s.pinPolicy(ctx)` 固定当前策略快照（不重复查库）。
 3. 若主机不存在，或 `s.can(ctx, authz.ViewHosts, authz.Action{}, hostAttributes(h))` 返回 `false`：直接返回空 map `map[string]bool{}, nil`（不区分主机不存在、无权查看或无标签，彻底防止主机存在性枚举）。
 4. 对每个候选 `authz.Action`，使用当前固定策略引擎调用 `evaluate(ctx, engine, authz.Input{Subject, Operation: authz.ExecuteAction, Action, Host: hostAttributes(h), Env: {TimeNS, SourceIP}})`：
-   - 自动复用 [internal/gateway/api/service.go:274-280](../internal/gateway/api/service.go#L274-L280) 的 `HOST_UNLABELED` 不变量（无授权标签的主机对包括 admin 在内的所有身份均返回空集合）；
+   - 自动复用 [internal/gateway/api/service.go](../internal/gateway/api/service.go) 的 `HOST_UNLABELED` 不变量（无授权标签的主机对含 admin 在内的所有身份均返回空集合）；
    - 仅累加匹配的规则 ID（同 `s.can` 方式，不覆盖 `transport.matchedRules`），并记录 `policyVersion`；
    - 仅将 `Decision == "allow"` 的动作写入返回 map。
 
