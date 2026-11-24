@@ -9,6 +9,19 @@ included: mutual TLS and Application-Layer Protocol Negotiation (ALPN) must
 reach the gateway process unchanged. Set the cloud-specific Service
 annotations for an L4 TCP load balancer.
 
+To preserve the client source IP, the L4 load balancer must preserve the
+source address on the TCP connection and the Service must use
+`externalTrafficPolicy: Local`. The chart defaults `service.externalTrafficPolicy`
+to `Local` for `LoadBalancer` and `NodePort` Services. With `Local`, direct
+external traffic to nodes with ready gateway pods.
+
+Setting `service.externalTrafficPolicy: Cluster` allows Kubernetes to forward
+traffic across nodes, where it can replace the client IP with a node IP. The
+gateway uses the TCP peer address, so audit `source_ip` can record the node IP
+and `source_cidrs` authorization rules can match against it. Lightweight Directory
+Access Protocol (LDAP) login attempts for the same username from different clients
+can share a rate-limit counter when the gateway sees the same node IP.
+
 Supply an image tag in `image.repository` / `image.tag`. Build locally with:
 
 ```sh

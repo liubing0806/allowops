@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 import yaml
 
 
-def verify(rendered, values=None, catalog_keys=(), partitions_disabled=False):
+def verify(rendered, values=None, catalog_keys=(), partitions_disabled=False, external_traffic_policy="Local"):
     documents = [item for item in yaml.safe_load_all(rendered) if item]
     config = next(item for item in documents if item["kind"] == "ConfigMap")["data"]
     gateway = yaml.safe_load(config["gateway.yaml"])
@@ -29,10 +29,21 @@ def verify(rendered, values=None, catalog_keys=(), partitions_disabled=False):
         assert len(states) == 1
         assert states[0]["spec"]["replicas"] == 1
         assert states[0]["spec"]["volumeClaimTemplates"][0]["spec"]["accessModes"] == ["ReadWriteOnce"]
-    service = next(item for item in documents if item["kind"] == "Service" and item["spec"].get("type"))
-    assert service["spec"]["selector"]["app.kubernetes.io/component"] == "gateway"
-    assert service["spec"]["ports"][0]["port"] == 443
-    assert service["spec"]["ports"][0]["protocol"] == "TCP"
+    service = next(item["spec"] for item in documents if item["kind"] == "Service" and item["spec"].get("type"))
+    assert service["selector"]["app.kubernetes.io/component"] == "gateway"
+    assert service["ports"][0]["port"] == 443
+    assert service["ports"][0]["protocol"] == "TCP"
+    service_type = service["type"]
+    policy = service.get("externalTrafficPolicy")
+    if service_type in ("LoadBalancer", "NodePort"):
+        assert policy == external_traffic_policy, (
+            f"{service_type} externalTrafficPolicy: expected {external_traffic_policy!r}, actual {policy!r}"
+        )
+    elif service_type == "ClusterIP":
+        assert "externalTrafficPolicy" not in service, (
+            f"ClusterIP externalTrafficPolicy: expected absent, actual {policy!r}"
+        )
+
     job = next(item for item in documents if item["kind"] == "Job")
     assert job["metadata"]["annotations"]["helm.sh/hook"] == "pre-install,pre-upgrade"
     migration_pod = job["spec"]["template"]["spec"]
@@ -202,16 +213,19 @@ def verify_chart():
             ],
         },
     }
-    for name, values, keys, disabled in (
-        ("Default", {}, ["catalog.pub.pem"], False),
-        ("Production", production, ["catalog.pub.pem", "catalog-next.pub.pem"], False),
-        ("PartitionsDisabled", {"partitions": {"enabled": False}}, ["catalog.pub.pem"], True),
+    for name, values, keys, disabled, etp in (
+        ("Default", {}, ["catalog.pub.pem"], False, "Local"),
+        ("Production", production, ["catalog.pub.pem", "catalog-next.pub.pem"], False, "Local"),
+        ("PartitionsDisabled", {"partitions": {"enabled": False}}, ["catalog.pub.pem"], True, "Local"),
+        ("ClusterPolicy", {"service": {"externalTrafficPolicy": "Cluster"}}, ["catalog.pub.pem"], False, "Cluster"),
+        ("ClusterIP", {"service": {"type": "ClusterIP"}}, ["catalog.pub.pem"], False, "Local"),
+        ("NodePort", {"service": {"type": "NodePort"}}, ["catalog.pub.pem"], False, "Local"),
     ):
         rendered = subprocess.run(
             ["helm", "template", "allowops", str(chart), "--values", "-"],
             input=yaml.safe_dump(values), stdout=subprocess.PIPE, text=True, check=True,
         ).stdout
-        verify(rendered, values, keys, partitions_disabled=disabled)
+        verify(rendered, values, keys, partitions_disabled=disabled, external_traffic_policy=etp)
         print(f"{name} chart verification passed.")
 
 
@@ -219,9 +233,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", nargs="?", type=Path)
     parser.add_argument("--partitions-disabled", action="store_true")
+    parser.add_argument("--external-traffic-policy", default="Local", choices=("Local", "Cluster"))
     args = parser.parse_args()
     if args.manifest is not None:
-        verify(args.manifest.read_text(), partitions_disabled=args.partitions_disabled)
+        verify(args.manifest.read_text(), partitions_disabled=args.partitions_disabled, external_traffic_policy=args.external_traffic_policy)
         print("Rendered chart verification passed.")
     else:
         verify_chart()

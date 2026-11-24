@@ -12,6 +12,7 @@ extraVolumes: []
 extraVolumeMounts: []
 service:
   type: LoadBalancer
+  externalTrafficPolicy: Local
   annotations: {}
 # ALPN and TLS terminate in the gateway. Only use an L4 TCP load balancer.
 gateway:

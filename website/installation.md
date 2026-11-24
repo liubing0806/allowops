@@ -90,6 +90,15 @@ object storage independently. The chart uses a Layer 4 TCP Service on port 443.
 TLS and Application-Layer Protocol Negotiation (ALPN) must reach the gateway
 unchanged. An HTTP Ingress that terminates TLS cannot serve the host protocol.
 
+To preserve the client source IP, use a Layer 4 load balancer that preserves
+the source address on the TCP connection and keep `service.externalTrafficPolicy`
+set to `Local`, the chart default for `LoadBalancer` and `NodePort` Services.
+Direct external traffic to nodes with ready gateway pods. If you switch to
+`Cluster`, Kubernetes can replace the client source IP with a node IP. The
+gateway uses that address for audit `source_ip` and `source_cidrs` authorization
+rules. Lightweight Directory Access Protocol (LDAP) login attempts for the same
+username from different clients can then share a rate-limit counter.
+
 Provision gateway TLS certificates including the full CA chain, the separate
 host CA, catalog public keys, runtime database credentials and a separate
 migration database credential through existing Kubernetes Secrets. Also provision

@@ -34,6 +34,12 @@
       "items": {"type": "object", "required": ["name", "mountPath"]}
     },
     "replicaCount": {"type": "integer", "minimum": 2},
+    "service": {
+      "type": "object",
+      "properties": {
+        "externalTrafficPolicy": {"type": "string", "enum": ["Local", "Cluster"]}
+      }
+    },
     "gateway": {
       "type": "object",
       "properties": {
