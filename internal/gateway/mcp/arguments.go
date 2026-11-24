@@ -22,13 +22,15 @@ import (
 
 // actionRequest validates in a fixed order, which decides which error a caller
 // sees first: argument object and names, reason, targets, expected_count,
-// run limits, response_format, params, then output filters.
-func actionRequest(a catalog.Action, raw json.RawMessage, cfg job.Config) (*v1.RunJobRequest, string, error) {
+// run limits, response_format, params, then output filters. extraAllowed are
+// names the calling tool consumed before; they are listed in unknown argument
+// errors.
+func actionRequest(a catalog.Action, raw json.RawMessage, cfg job.Config, extraAllowed ...string) (*v1.RunJobRequest, string, error) {
 	args, err := argumentObject(raw)
 	if err != nil {
 		return nil, "", err
 	}
-	allowed := []string{"params", "targets", "expected_count", "reason", "wait_seconds", "batch_size", "max_failures", "response_format"}
+	allowed := append(slices.Clone(extraAllowed), "params", "targets", "expected_count", "reason", "wait_seconds", "batch_size", "max_failures", "response_format")
 	allowed = append(allowed, a.Filters...)
 	for name := range args {
 		if !slices.Contains(allowed, name) {

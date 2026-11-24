@@ -535,7 +535,7 @@ func (j *testJobs) GetJobOutput(ctx context.Context, r *v1.GetJobOutputRequest) 
 func (f *transportFixture) latestServer() *sdk.Server {
 	f.service.mu.Lock()
 	defer f.service.mu.Unlock()
-	return f.service.lru.Front().Value.(*cacheEntry).server
+	return f.service.lru.Front().Value.(*cacheEntry).view.defaultServer
 }
 
 // Protocol-boundary and timer tests keep deterministic responses; real scheduling

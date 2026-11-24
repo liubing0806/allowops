@@ -109,7 +109,7 @@ func TestInventoryArgumentErrorsAndPermission(t *testing.T) {
 	source := &inventoryStub{sources: []string{"static"}}
 	id := &inventoryIdentity{denied: true}
 	s := &Service{identity: id, config: Config{Inventory: source}}
-	_, err := s.execute(context.Background(), &sdk.CallToolRequest{Params: &sdk.CallToolParamsRaw{Name: "entities_search", Arguments: json.RawMessage(`{}`)}}, map[string]bool{"entities_search": true}, &callState{})
+	_, err := s.execute(context.Background(), &sdk.CallToolRequest{Params: &sdk.CallToolParamsRaw{Name: "entities_search", Arguments: json.RawMessage(`{}`)}}, &serverScope{tools: map[string]bool{"entities_search": true}}, &callState{})
 	if connect.CodeOf(err) != connect.CodePermissionDenied || source.called {
 		t.Fatalf("error=%v called=%v", err, source.called)
 	}

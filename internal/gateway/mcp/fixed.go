@@ -1,6 +1,24 @@
 package mcp
 
-import "github.com/liubing0806/allowops/internal/gateway/job"
+import (
+	"regexp"
+
+	"github.com/liubing0806/allowops/internal/gateway/job"
+)
+
+// actionName matches catalog action names.
+var actionName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+
+// metaToolNames are the fixed and progressive tool names; actions_invoke_*
+// never treats them as action names.
+var metaToolNames = []string{"hosts_search", "jobs_get", "jobs_list", "jobs_cancel", "entities_search", "actions_search", "actions_invoke_read", "actions_invoke_write", "actions_invoke_dangerous"}
+
+// actionRisks lists the risks in actions_search order.
+var actionRisks = []string{"read", "write", "dangerous"}
+
+func invokeToolName(risk string) string {
+	return "actions_invoke_" + risk
+}
 
 func fixedTools(cfg job.Config, sources ...string) []ToolDefinition {
 	text := func(description string) map[string]any {
@@ -37,4 +55,49 @@ func fixedTools(cfg job.Config, sources ...string) []ToolDefinition {
 		tools[i].Description += toolInstructions
 	}
 	return tools
+}
+
+func actionsSearchTool() ToolDefinition {
+	metadata := func(description string) map[string]any {
+		return map[string]any{"type": "string", "description": description, "pattern": metadataName.String()}
+	}
+	return ToolDefinition{Name: "actions_search", Description: "Find catalog actions this identity may run. Filter by query words, exact names, toolset, tag, risk, entity_kind or hostname; all filters combine. Each result names its invoke_tool (actions_invoke_read, actions_invoke_write or actions_invoke_dangerous); include_schema adds input_schema with the signed params schema and effective limits. Results are ordered read, write, dangerous, then by name, and paginated with next_cursor; the first page counts matches per toolset. A hostname keeps actions policy allows on that host now; this is a precheck and every call is still authorized." + toolInstructions, Annotations: ToolAnnotations{ReadOnlyHint: true}, InputSchema: map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{
+		"query":          map[string]any{"type": "string", "description": "Whitespace-separated words; every word must match name, description, toolset, tags or entity_kinds, ignoring case.", "minLength": 1, "maxLength": 200},
+		"names":          map[string]any{"type": "array", "description": "Exact action names.", "items": map[string]any{"type": "string", "pattern": actionName.String()}, "minItems": 1, "maxItems": 20, "uniqueItems": true},
+		"toolset":        metadata("Exact toolset."),
+		"tag":            metadata("Keep actions with this tag."),
+		"entity_kind":    metadata("Keep actions for this inventory entity kind."),
+		"risk":           map[string]any{"type": "string", "enum": actionRisks},
+		"hostname":       map[string]any{"type": "string", "description": "Keep actions policy allows on this host; unknown or hidden hosts return no actions.", "minLength": 1},
+		"include_schema": map[string]any{"type": "boolean", "description": "Add input_schema to each result.", "default": false},
+		"limit":          map[string]any{"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+		"next_cursor":    map[string]any{"type": "string", "description": "Opaque next_cursor from the previous page. Restart without this field if the snapshot changes.", "minLength": 1},
+	}}}
+}
+
+// invokeTool is actions_invoke_<risk>. Each risk has its own tool, so that a
+// client can approve read actions without approving write or dangerous ones.
+func invokeTool(risk string, cfg job.Config) ToolDefinition {
+	annotations := ToolAnnotations{ReadOnlyHint: risk == "read"}
+	if risk != "read" {
+		destructive := risk == "dangerous"
+		annotations.DestructiveHint = &destructive
+	}
+	props := map[string]any{
+		"action":          map[string]any{"type": "string", "description": "Action name from actions_search whose invoke_tool is " + invokeToolName(risk) + ".", "pattern": actionName.String()},
+		"targets":         targetsSchema(" The action's max_targets, if any, applies; a job with more targets is rejected."),
+		"expected_count":  expectedCountSchema(),
+		"reason":          reasonSchema(),
+		"params":          map[string]any{"type": "object", "description": "Signed action parameters, as input_schema.params from actions_search with include_schema."},
+		"wait_seconds":    waitSchema(cfg),
+		"batch_size":      map[string]any{"type": "integer", "description": "Hosts per batch; may only lower the action's effective_batch_size.", "minimum": 1, "maximum": cfg.BatchSize},
+		"max_failures":    map[string]any{"type": "integer", "description": "Stop after failures exceed this limit; may only lower the action's effective_max_failures.", "minimum": 0, "maximum": cfg.MaxFailures},
+		"response_format": formatSchema(),
+	}
+	for _, name := range []string{"match", "exclude", "tail", "head", "count"} {
+		props[name], _ = filterSchema(name)
+	}
+	return ToolDefinition{Name: invokeToolName(risk), Description: "Run one " + risk + "-risk catalog action found with actions_search. Pass its name in action, with the arguments the action takes: targets, reason, params, and optionally expected_count, wait_seconds, batch_size, max_failures, response_format and the output filters listed in its filters. The call is refused unless the action's current risk is " + risk + "." + toolInstructions, Annotations: annotations, InputSchema: map[string]any{
+		"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": props, "required": []string{"action", "targets", "reason"}, "additionalProperties": false,
+	}}
 }

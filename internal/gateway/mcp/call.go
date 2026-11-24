@@ -11,17 +11,25 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
+	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 var shortJobID = regexp.MustCompile(`^job-[0-9]{8}-[0-9]{1,20}$`)
 
-type callState struct{ jobID string }
+// callState collects what the result audit needs. operation, when set,
+// replaces the audited tool name with the validated action name; mutating
+// marks calls that may have changed hosts once a job ID is known.
+type callState struct {
+	jobID     string
+	operation string
+	mutating  bool
+}
 
-func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, available map[string]bool) (*sdk.CallToolResult, error) {
+func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, scope *serverScope) (*sdk.CallToolResult, error) {
 	state := &callState{}
-	result, err := s.execute(ctx, r, available, state)
+	result, err := s.execute(ctx, r, scope, state)
 	var ce *connect.Error
 	if errors.As(err, &ce) {
 		for _, detail := range ce.Details() {
@@ -34,8 +42,11 @@ func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, available ma
 		}
 	}
 	event := reqctx.RequestAuditInfo(ctx)
+	// Only registered tools and visible actions are audited by name (design G49).
 	event.Operation = "mcp/unknown_tool"
-	if available[r.Params.Name] {
+	if state.operation != "" {
+		event.Operation = state.operation
+	} else if scope.known(r.Params.Name) {
 		event.Operation = "mcp/" + r.Params.Name
 	}
 	event.Phase = "result"
@@ -48,7 +59,7 @@ func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, available ma
 	// failures and unknown/denied tools without duplicating the authorized event (design G49).
 	if auditErr := s.identity.AppendResultAudit(ctx, event); auditErr != nil {
 		message := "result audit unavailable"
-		if state.jobID != "" && (r.Params.Name == "jobs_cancel" || !strings.HasPrefix(r.Params.Name, "jobs_") && r.Params.Name != "hosts_search" && r.Params.Name != "entities_search") {
+		if state.jobID != "" && state.mutating {
 			message += "; operation may have committed"
 		}
 		err = accessError(connect.CodeUnavailable, message)
@@ -76,6 +87,9 @@ func toolError(err error, state *callState) *sdk.CallToolResult {
 		// reasons only. No request values, output or provider errors are copied.
 		switch ce.Code() {
 		case connect.CodeInvalidArgument, connect.CodeFailedPrecondition, connect.CodePermissionDenied, connect.CodeNotFound, connect.CodeUnavailable:
+			data["error"] = ce.Message()
+		}
+		if errors.Is(err, errActionEntryTooLarge) {
 			data["error"] = ce.Message()
 		}
 		for _, detail := range ce.Details() {
@@ -146,20 +160,30 @@ func toolError(err error, state *callState) *sdk.CallToolResult {
 	return sdkResult(result)
 }
 
-func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, available map[string]bool, state *callState) (*ToolResult, error) {
-	if !available[r.Params.Name] {
-		return nil, accessError(connect.CodeNotFound, "tool removed or unavailable for this identity; call tools/list to refresh")
+func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, scope *serverScope, state *callState) (*ToolResult, error) {
+	name := r.Params.Name
+	if !scope.tools[name] {
+		if _, visible := scope.allAvailable[name]; !visible {
+			return nil, accessError(connect.CodeNotFound, "tool removed or unavailable for this identity; call tools/list to refresh")
+		}
+		if scope.unsupported[name] {
+			return nil, accessError(connect.CodeFailedPrecondition, errUnsupportedActionSchema.Error())
+		}
+		// A visible action that is not registered: progressive mode (design 6.3).
+		return nil, accessError(connect.CodeFailedPrecondition, "action is not directly exposed in progressive mode; call the matching "+invokeToolName(scope.allAvailable[name].Risk)+" tool")
 	}
-	if r.Params.Name == "hosts_search" {
+	switch name {
+	case "hosts_search":
 		return s.searchHosts(ctx, r.Params.Arguments)
-	}
-	if r.Params.Name == "entities_search" {
+	case "entities_search":
 		return s.searchEntities(ctx, r.Params.Arguments)
+	case "actions_search":
+		return s.searchActions(ctx, r.Params.Arguments, scope)
 	}
 	if s.jobs == nil {
 		return nil, accessError(connect.CodeUnavailable, "job service unavailable")
 	}
-	switch r.Params.Name {
+	switch name {
 	case "jobs_get":
 		return s.getJob(ctx, r, state)
 	case "jobs_list":
@@ -174,6 +198,7 @@ func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, available
 			return nil, err
 		}
 		state.jobID = id
+		state.mutating = true
 		response, err := s.jobs.CancelJob(ctx, &v1.CancelJobRequest{JobId: id})
 		if err != nil {
 			return nil, err
@@ -182,32 +207,85 @@ func (s *Service) execute(ctx context.Context, r *sdk.CallToolRequest, available
 			return nil, accessError(connect.CodeUnavailable, "job response unavailable")
 		}
 		return jobMetadataResult(response.Job)
+	case "actions_invoke_read":
+		return s.invokeAction(ctx, r, scope, "read", state)
+	case "actions_invoke_write":
+		return s.invokeAction(ctx, r, scope, "write", state)
+	case "actions_invoke_dangerous":
+		return s.invokeAction(ctx, r, scope, "dangerous", state)
 	default:
-		action, err := s.currentAction(ctx, r.Params.Name)
+		state.mutating = true
+		action, err := s.currentAction(ctx, name)
 		if err != nil {
 			return nil, err
 		}
-		if unsupportedActionSchema(action) {
-			return nil, accessError(connect.CodeFailedPrecondition, errUnsupportedActionSchema.Error())
-		}
-		request, format, err := actionRequest(action, r.Params.Arguments, s.config.Jobs)
-		if err != nil {
-			return nil, invalidArguments(err)
-		}
-		request.ResponseFormat = format
-		var response *v1.RunJobResponse
-		err = s.withProgress(ctx, r, func() error { var e error; response, e = s.jobs.RunJob(ctx, request); return e })
-		if response != nil && response.Job != nil && shortJobID.MatchString(response.Job.JobId) {
-			state.jobID = response.Job.JobId
-		}
-		if err != nil {
-			return nil, err
-		}
-		if state.jobID == "" {
-			return nil, accessError(connect.CodeUnavailable, "invalid job response")
-		}
-		return nativeSummaryResult(reqctx.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, "")
+		return s.runAction(ctx, r, action, r.Params.Arguments, nil, state)
 	}
+}
+
+// runAction validates the arguments against the verified action and runs the
+// job. extraAllowed names arguments the calling tool already consumed, so
+// that unknown argument errors list them too.
+func (s *Service) runAction(ctx context.Context, r *sdk.CallToolRequest, action catalog.Action, raw json.RawMessage, extraAllowed []string, state *callState) (*ToolResult, error) {
+	if unsupportedActionSchema(action) {
+		return nil, accessError(connect.CodeFailedPrecondition, errUnsupportedActionSchema.Error())
+	}
+	request, format, err := actionRequest(action, raw, s.config.Jobs, extraAllowed...)
+	if err != nil {
+		return nil, invalidArguments(err)
+	}
+	request.ResponseFormat = format
+	var response *v1.RunJobResponse
+	err = s.withProgress(ctx, r, func() error { var e error; response, e = s.jobs.RunJob(ctx, request); return e })
+	if response != nil && response.Job != nil && shortJobID.MatchString(response.Job.JobId) {
+		state.jobID = response.Job.JobId
+	}
+	if err != nil {
+		return nil, err
+	}
+	if state.jobID == "" {
+		return nil, accessError(connect.CodeUnavailable, "invalid job response")
+	}
+	return nativeSummaryResult(reqctx.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, "")
+}
+
+// invokeAction runs one visible action through actions_invoke_<risk>. The
+// action's current signed risk must equal the tool's risk, so a client that
+// approves one risk level never runs another (design 6.2).
+func (s *Service) invokeAction(ctx context.Context, r *sdk.CallToolRequest, scope *serverScope, risk string, state *callState) (*ToolResult, error) {
+	raw := r.Params.Arguments
+	if len(raw) == 0 {
+		raw = json.RawMessage(`{}`)
+	}
+	args, err := argumentObject(raw)
+	if err != nil {
+		return nil, invalidArguments(err)
+	}
+	var name string
+	if decodeField(args, "action", &name, true) != nil || !actionName.MatchString(name) || slices.Contains(metaToolNames, name) {
+		return nil, accessError(connect.CodeInvalidArgument, "action required; allowed: action name returned by actions_search")
+	}
+	if _, visible := scope.allAvailable[name]; !visible {
+		return nil, accessError(connect.CodeNotFound, "tool removed or unavailable for this identity; call actions_search to refresh")
+	}
+	state.operation = "mcp/" + name
+	if scope.unsupported[name] {
+		return nil, accessError(connect.CodeFailedPrecondition, errUnsupportedActionSchema.Error())
+	}
+	state.mutating = true
+	action, err := s.currentAction(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if action.Risk != risk {
+		return nil, accessError(connect.CodeFailedPrecondition, "action risk does not match invocation tool; call the matching "+invokeToolName(action.Risk)+" tool")
+	}
+	delete(args, "action")
+	rest, err := json.Marshal(args)
+	if err != nil {
+		return nil, invalidArguments(err)
+	}
+	return s.runAction(ctx, r, action, rest, []string{"action"}, state)
 }
 
 func fixedArguments(raw json.RawMessage, allowed ...string) (map[string]json.RawMessage, error) {
