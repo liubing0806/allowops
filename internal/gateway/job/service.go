@@ -293,8 +293,7 @@ func (s *Service) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobRe
 func (s *Service) wait(ctx context.Context, id string, seconds uint32) (*v1.Job, error) {
 	deadline := time.NewTimer(time.Duration(seconds) * time.Second)
 	defer deadline.Stop()
-	tick := time.NewTicker(pollInterval)
-	defer tick.Stop()
+	interval := pollInterval
 	for {
 		j, err := s.get(ctx, id)
 		if err != nil {
@@ -308,7 +307,8 @@ func (s *Service) wait(ctx context.Context, id string, seconds uint32) (*v1.Job,
 			return nil, ctx.Err()
 		case <-deadline.C:
 			return s.get(ctx, id)
-		case <-tick.C:
+		case <-time.After(interval):
+			interval = min(interval*2, maxWaitPollInterval)
 		}
 	}
 }

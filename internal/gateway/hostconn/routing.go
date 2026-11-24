@@ -146,16 +146,17 @@ func (s *Service) reserveMailbox(ctx context.Context, host, expectedConnection s
 // The origin reads the small final metadata using a bounded poll, so a missed
 // completion notification cannot lose a result.
 func (s *Service) awaitMailboxResult(ctx context.Context, id string, expires time.Time) (*v1.TaskCompleted, error) {
-	ticker := time.NewTicker(20 * time.Millisecond)
-	defer ticker.Stop()
+	interval := 20 * time.Millisecond
+	poll := time.NewTimer(min(interval, time.Until(expires)))
+	defer poll.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-s.ctx.Done():
 			return nil, store.ErrOffline
-		case <-ticker.C:
-			if time.Now().After(expires) {
+		case <-poll.C:
+			if !time.Now().Before(expires) {
 				// A mailbox that expires with the caller's own deadline is the
 				// caller's timeout, not evidence that the host is offline.
 				if deadline, ok := ctx.Deadline(); ok && !deadline.After(expires) {
@@ -170,6 +171,8 @@ func (s *Service) awaitMailboxResult(ctx context.Context, id string, expires tim
 			if done || err != nil {
 				return completed, err
 			}
+			interval = min(interval*2, 250*time.Millisecond)
+			poll.Reset(min(interval, time.Until(expires)))
 		}
 	}
 }

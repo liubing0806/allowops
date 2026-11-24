@@ -172,7 +172,8 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	s.cancel = cancel
-	s.wg.Add(1)
+	s.wg.Add(2)
+	go s.maintainExpiry(run)
 	go func() {
 		defer s.wg.Done()
 		defer func() {
