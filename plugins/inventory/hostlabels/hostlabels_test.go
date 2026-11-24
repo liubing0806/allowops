@@ -11,6 +11,7 @@ import (
 
 	"github.com/liubing0806/allowops/plugin"
 	"github.com/liubing0806/allowops/plugin/inventory"
+	"github.com/liubing0806/allowops/plugin/plugintest"
 )
 
 type testHost struct {
@@ -92,4 +93,12 @@ func TestProvisionAndHostErrors(t *testing.T) {
 	if _, err := m.Resolve(context.Background(), inventory.Query{}); err == nil {
 		t.Fatal("host error lost")
 	}
+}
+
+func TestResolverContract(t *testing.T) {
+	plugintest.RunResolverContract(t, Module{}, "label: service", plugintest.WithHosts([]plugin.HostInfo{
+		{Hostname: "one", Labels: map[string]string{"service": "api"}},
+		{Hostname: "two", Labels: map[string]string{"service": "worker"}},
+		{Hostname: "three", Labels: map[string]string{"service": "api"}},
+	}))
 }

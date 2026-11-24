@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/liubing0806/allowops/plugin/inventory"
+	"github.com/liubing0806/allowops/plugin/plugintest"
 )
 
 func TestExampleAndQuery(t *testing.T) {
@@ -120,4 +121,8 @@ func TestErrorsOmitEntityContent(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolverContract(t *testing.T) {
+	plugintest.RunResolverContract(t, Module{}, "file: ../../../examples/topology.yaml")
 }
