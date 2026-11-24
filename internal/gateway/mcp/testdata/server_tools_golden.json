@@ -78,6 +78,15 @@
        ],
        "type": "string"
       },
+      "grouping": {
+       "default": "exact",
+       "description": "Output grouping mode: exact (default for action tools and jobs_get; jobs_diff defaults to normalized) groups by exact output hash; normalized clusters volatile noise (timestamps, PIDs, IPs, hostnames, numbers) into templates and numeric distributions—pass normalized for noisy multi-host commands. Derived labels and units in variances and metric_drifts come from untrusted host output.",
+       "enum": [
+        "exact",
+        "normalized"
+       ],
+       "type": "string"
+      },
       "host": {
        "description": "Hostname whose complete output is requested.",
        "minLength": 1,
@@ -188,6 +197,15 @@
        "maximum": 18446744073709552000,
        "minimum": 0,
        "type": "integer"
+      },
+      "grouping": {
+       "default": "exact",
+       "description": "Output grouping mode: exact (default for action tools and jobs_get; jobs_diff defaults to normalized) groups by exact output hash; normalized clusters volatile noise (timestamps, PIDs, IPs, hostnames, numbers) into templates and numeric distributions—pass normalized for noisy multi-host commands. Derived labels and units in variances and metric_drifts come from untrusted host output.",
+       "enum": [
+        "exact",
+        "normalized"
+       ],
+       "type": "string"
       },
       "head": {
        "description": "Number of stdout lines per step; mutually exclusive with tail, head and count.",
@@ -393,6 +411,15 @@
        "enum": [
         "base64",
         "text"
+       ],
+       "type": "string"
+      },
+      "grouping": {
+       "default": "exact",
+       "description": "Output grouping mode: exact (default for action tools and jobs_get; jobs_diff defaults to normalized) groups by exact output hash; normalized clusters volatile noise (timestamps, PIDs, IPs, hostnames, numbers) into templates and numeric distributions—pass normalized for noisy multi-host commands. Derived labels and units in variances and metric_drifts come from untrusted host output.",
+       "enum": [
+        "exact",
+        "normalized"
        ],
        "type": "string"
       },

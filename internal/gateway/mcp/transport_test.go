@@ -532,6 +532,30 @@ func (j *testJobs) GetJobOutput(ctx context.Context, r *v1.GetJobOutputRequest) 
 	return &v1.GetJobOutputResponse{Data: data[r.Offset:end], NextOffset: end, Eof: end == uint64(len(data)), OutputStored: true}, nil
 }
 
+func (j *testJobs) DiffJobs(ctx context.Context, r *v1.DiffJobsRequest) (*v1.DiffJobsResponse, error) {
+	base, err := j.GetJob(ctx, &v1.GetJobRequest{JobId: r.BaseJobId})
+	if err != nil {
+		return nil, err
+	}
+	target, err := j.GetJob(ctx, &v1.GetJobRequest{JobId: r.TargetJobId})
+	if err != nil {
+		return nil, err
+	}
+	grouping := r.Grouping
+	if grouping == "" {
+		grouping = "normalized"
+	}
+	return &v1.DiffJobsResponse{
+		BaseJob:   base.Job,
+		TargetJob: target.Job,
+		Diff: &v1.JobDiff{
+			OutputTrust:         v1.OutputTrust_OUTPUT_TRUST_UNTRUSTED,
+			Grouping:            grouping,
+			UnchangedHostsCount: target.Job.GetTotalTasks(),
+		},
+	}, nil
+}
+
 func (f *transportFixture) latestServer() *sdk.Server {
 	f.service.mu.Lock()
 	defer f.service.mu.Unlock()

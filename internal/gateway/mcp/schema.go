@@ -103,6 +103,7 @@ func actionTool(a catalog.Action, cfg job.Config) (*ToolDefinition, error) {
 		"batch_size":      map[string]any{"type": "integer", "description": "Hosts per batch; may only lower the action's effective limit.", "minimum": 1, "maximum": batch, "default": batch},
 		"max_failures":    map[string]any{"type": "integer", "description": "Stop after failures exceed this limit; may only lower the action's effective limit.", "minimum": 0, "maximum": failures, "default": failures},
 		"response_format": formatSchema(),
+		"grouping":        groupingSchema("exact"),
 	}
 	for _, name := range a.Filters {
 		switch name {
@@ -163,4 +164,21 @@ func waitSchema(cfg job.Config) map[string]any {
 
 func formatSchema() map[string]any {
 	return map[string]any{"type": "string", "description": "concise shows two sample hostnames per group; detailed includes paginated hostnames from P6 groups; P6 may already have truncated its source summary.", "enum": []string{"concise", "detailed"}, "default": "concise"}
+}
+
+func groupingSchema(defaultMode string) map[string]any {
+	if defaultMode == "normalized" {
+		return map[string]any{
+			"type":        "string",
+			"description": "Output grouping mode: normalized (default for jobs_diff; jobs_get and action tools default to exact) clusters volatile noise such as timestamps, PIDs, IPs, hostnames and numbers before comparing; exact compares raw output hashes. Derived labels and units in variances and metric_drifts come from untrusted host output.",
+			"enum":        []string{"normalized", "exact"},
+			"default":     "normalized",
+		}
+	}
+	return map[string]any{
+		"type":        "string",
+		"description": "Output grouping mode: exact (default for action tools and jobs_get; jobs_diff defaults to normalized) groups by exact output hash; normalized clusters volatile noise (timestamps, PIDs, IPs, hostnames, numbers) into templates and numeric distributions—pass normalized for noisy multi-host commands. Derived labels and units in variances and metric_drifts come from untrusted host output.",
+		"enum":        []string{"exact", "normalized"},
+		"default":     "exact",
+	}
 }

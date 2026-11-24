@@ -241,7 +241,7 @@ func jobArgument(args map[string]json.RawMessage) (string, error) {
 }
 
 func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *callState) (*ToolResult, error) {
-	args, err := fixedArguments(r.Params.Arguments, "job_id", "host", "wait_seconds", "response_format", "next_cursor", "stream", "offset", "step_index", "encoding")
+	args, err := fixedArguments(r.Params.Arguments, "job_id", "host", "wait_seconds", "response_format", "grouping", "next_cursor", "stream", "offset", "step_index", "encoding")
 	if err != nil {
 		return nil, err
 	}
@@ -276,6 +276,15 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 	if host != "" && cursor != "" {
 		return nil, accessError(connect.CodeInvalidArgument, "host output uses offset; next_cursor is for summary pages")
 	}
+	if host != "" && args["grouping"] != nil {
+		return nil, accessError(connect.CodeInvalidArgument, "grouping applies to job summaries, not host output")
+	}
+	var grouping string
+	if _, present := args["grouping"]; present {
+		if decodeField(args, "grouping", &grouping, false) != nil || !slices.Contains([]string{"exact", "normalized"}, grouping) {
+			return nil, accessError(connect.CodeInvalidArgument, "grouping allowed: exact, normalized")
+		}
+	}
 	stream := "stdout"
 	if decodeField(args, "stream", &stream, false) != nil || !slices.Contains([]string{"stdout", "stderr"}, stream) {
 		return nil, accessError(connect.CodeInvalidArgument, "stream allowed: stdout, stderr")
@@ -295,7 +304,7 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 	var response *v1.GetJobResponse
 	err = s.withProgress(ctx, r, func() error {
 		var e error
-		response, e = s.jobs.GetJob(ctx, &v1.GetJobRequest{JobId: id, WaitSeconds: waitSeconds, ResponseFormat: format})
+		response, e = s.jobs.GetJob(ctx, &v1.GetJobRequest{JobId: id, WaitSeconds: waitSeconds, ResponseFormat: format, Grouping: grouping})
 		return e
 	})
 	if err != nil {

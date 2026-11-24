@@ -22,13 +22,13 @@ import (
 
 // actionRequest validates in a fixed order, which decides which error a caller
 // sees first: argument object and names, reason, targets, expected_count,
-// run limits, response_format, params, then output filters.
+// run limits, response_format, grouping, params, then output filters.
 func actionRequest(a catalog.Action, raw json.RawMessage, cfg job.Config) (*v1.RunJobRequest, string, error) {
 	args, err := argumentObject(raw)
 	if err != nil {
 		return nil, "", err
 	}
-	allowed := []string{"params", "targets", "expected_count", "reason", "wait_seconds", "batch_size", "max_failures", "response_format"}
+	allowed := []string{"params", "targets", "expected_count", "reason", "wait_seconds", "batch_size", "max_failures", "response_format", "grouping"}
 	allowed = append(allowed, a.Filters...)
 	for name := range args {
 		if !slices.Contains(allowed, name) {
@@ -55,6 +55,11 @@ func actionRequest(a catalog.Action, raw json.RawMessage, cfg job.Config) (*v1.R
 	if err != nil {
 		return nil, "", err
 	}
+	grouping, err := parseGrouping(args, "")
+	if err != nil {
+		return nil, "", err
+	}
+	req.Grouping = grouping
 	if err := parseActionParams(a, args, req); err != nil {
 		return nil, "", err
 	}
@@ -167,6 +172,20 @@ func parseResponseFormat(args map[string]json.RawMessage) (string, error) {
 		return "", errors.New("response_format allowed: concise, detailed")
 	}
 	return format, nil
+}
+
+func parseGrouping(args map[string]json.RawMessage, defaultMode string) (string, error) {
+	if _, present := args["grouping"]; !present {
+		return defaultMode, nil
+	}
+	var grouping string
+	if err := decodeField(args, "grouping", &grouping, false); err != nil {
+		return "", err
+	}
+	if grouping != "exact" && grouping != "normalized" {
+		return "", errors.New("grouping allowed: exact, normalized")
+	}
+	return grouping, nil
 }
 
 func parseActionParams(a catalog.Action, args map[string]json.RawMessage, req *v1.RunJobRequest) error {
