@@ -31,6 +31,23 @@ async function openOutput(host = 'web-01') {
 }
 
 describe('job list and detail side by side', () => {
+  it('renders the requester reason literally in the list and detail', async () => {
+    const reason = '<img src=x onerror=alert(1)> [click](javascript:alert(1)) {{status}} $t(app.name)'
+    const { job } = await api.getJob({ jobId: FINISHED })
+    vi.spyOn(api, 'listJobs').mockResolvedValue({
+      jobs: [{ ...job, reason }],
+      page: { nextPageToken: '' },
+    })
+    vi.spyOn(api, 'getJob').mockResolvedValue({ job: { ...job, reason } })
+    open(`/jobs/${FINISHED}`)
+    const row = await screen.findByRole('link', { name: FINISHED })
+    const detail = await screen.findByRole('article', { name: FINISHED })
+    expect(row).toHaveTextContent(reason)
+    expect(within(detail).getByText(reason)).toBeVisible()
+    expect(row.querySelector('img, a')).toBeNull()
+    expect(detail.querySelector('img, a')).toBeNull()
+  })
+
   it('keeps the list filter while a job is opened', async () => {
     open('/jobs')
     expect(await screen.findByText('从列表中选择一个 job 查看详情')).toBeInTheDocument()
