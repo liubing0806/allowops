@@ -27,9 +27,9 @@ import (
 type Identity interface {
 	Require(context.Context, authz.Operation, authz.Action, authz.Host) (authz.Result, error)
 	VisibleHostnames(context.Context, []string) (map[string]bool, error)
-	// AllowedActionsOnHost returns the candidate actions the caller may execute
-	// on one host; a missing, hidden or unlabeled host returns an empty map.
-	AllowedActionsOnHost(context.Context, string, []authz.Action) (map[string]bool, error)
+	// AllowedActionsOnHost maps candidate actions to allow or require_approval.
+	// A missing, hidden or unlabeled host returns an empty map.
+	AllowedActionsOnHost(context.Context, string, []authz.Action) (map[string]string, error)
 	// Middleware authenticates requests and stores the caller in the context.
 	Middleware(http.Handler) http.Handler
 	// PolicySnapshot returns the current policy rules for display prechecks.

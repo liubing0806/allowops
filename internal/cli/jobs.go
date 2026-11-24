@@ -79,7 +79,7 @@ func validateCLIGrouping(grouping string) error {
 func printJob(c *cobra.Command, j *v1.Job, summary *v1.JobSummary) error {
 	w := tabwriter.NewWriter(c.OutOrStdout(), 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "JOB\tACTION\tSTATUS\tTASKS")
-	fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", j.GetJobId(), j.GetAction(), strings.ToLower(strings.TrimPrefix(j.GetStatus().String(), "JOB_STATUS_")), j.GetTotalTasks())
+	fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", terminalText(j.GetJobId()), terminalText(j.GetAction()), strings.ToLower(strings.TrimPrefix(j.GetStatus().String(), "JOB_STATUS_")), j.GetTotalTasks())
 	if summary != nil {
 		hasSeverity := false
 		for _, g := range summary.Groups {
@@ -99,7 +99,7 @@ func printJob(c *cobra.Command, j *v1.Job, summary *v1.JobSummary) error {
 				if anomaly == "" {
 					anomaly = "-"
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s (%d)\t%s\t%q\t%q\t%t\n", cliGroupSeverity(g.Severity), anomaly, strings.Join(g.Hosts, ","), g.HostCount, exit, g.Stdout, g.Stderr, g.Truncated)
+				fmt.Fprintf(w, "%s\t%s\t%s (%d)\t%s\t%q\t%q\t%t\n", cliGroupSeverity(g.Severity), terminalText(anomaly), terminalText(strings.Join(g.Hosts, ",")), g.HostCount, exit, g.Stdout, g.Stderr, g.Truncated)
 			}
 		} else {
 			fmt.Fprintln(w, "HOSTS\tEXIT\tSTDOUT\tSTDERR\tTRUNCATED")
@@ -108,7 +108,7 @@ func printJob(c *cobra.Command, j *v1.Job, summary *v1.JobSummary) error {
 				if g.ExitCode != nil {
 					exit = strconv.FormatInt(int64(*g.ExitCode), 10)
 				}
-				fmt.Fprintf(w, "%s (%d)\t%s\t%q\t%q\t%t\n", strings.Join(g.Hosts, ","), g.HostCount, exit, g.Stdout, g.Stderr, g.Truncated)
+				fmt.Fprintf(w, "%s (%d)\t%s\t%q\t%q\t%t\n", terminalText(strings.Join(g.Hosts, ",")), g.HostCount, exit, g.Stdout, g.Stderr, g.Truncated)
 			}
 		}
 		if summary.Grouping != "" || summary.OmittedGroups > 0 || summary.OmittedHosts > 0 || summary.FoldedNormalHosts > 0 || summary.UnfinishedHostsCount > 0 || len(summary.OfflineHosts) > 0 {
@@ -137,10 +137,18 @@ func printJob(c *cobra.Command, j *v1.Job, summary *v1.JobSummary) error {
 			if len(summary.OfflineHosts) > 0 {
 				parts = append(parts, "offline="+strings.Join(summary.OfflineHosts, ","))
 			}
-			fmt.Fprintln(w, strings.Join(parts, " "))
+			fmt.Fprintln(w, terminalText(strings.Join(parts, " ")))
 		}
 	}
-	return w.Flush()
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	if a := j.GetApproval(); a != nil {
+		_, err := fmt.Fprintf(c.OutOrStdout(), "approval_id: %s\napproval_status: %s\nexpires_at: %s\nconsole_url: %s\n",
+			terminalText(a.ApprovalId), approvalStatus(a.Status), cliTimestamp(a.ExpiresAt), terminalText(a.ConsoleUrl))
+		return err
+	}
+	return nil
 }
 
 func formatMetricValue(v float64, unit string) string {
@@ -319,7 +327,8 @@ func typedParameters(raw []string, a catalog.Action) ([]byte, error) {
 
 func NewRunCmd() *cobra.Command {
 	var selector, reason, responseFormat, grouping string
-	var names, raw []string
+	var evidenceSummary, clientRequestID string
+	var names, raw, evidenceJobs []string
 	var expected uint64
 	var wait, batch, failures uint32
 	var jsonOutput bool
@@ -341,6 +350,10 @@ func NewRunCmd() *cobra.Command {
 			return err
 		}
 		r := &v1.RunJobRequest{Action: args[0], Reason: reason, ResponseFormat: responseFormat, Grouping: grouping, Params: &v1.Parameters{Json: []byte("{}")}, Targets: &v1.HostTargets{}}
+		r.ClientRequestId = clientRequestID
+		if c.Flags().Changed("evidence-job") || c.Flags().Changed("evidence-summary") {
+			r.Evidence = &v1.JobEvidence{JobIds: evidenceJobs, Summary: evidenceSummary}
+		}
 		if selector != "" {
 			r.Targets.Selection = &v1.HostTargets_Selector{Selector: selector}
 		} else {
@@ -397,13 +410,18 @@ func NewRunCmd() *cobra.Command {
 		case v1.JobStatus_JOB_STATUS_SUCCEEDED:
 			return nil
 		case v1.JobStatus_JOB_STATUS_FAILED, v1.JobStatus_JOB_STATUS_PARTIALLY_FAILED, v1.JobStatus_JOB_STATUS_CANCELLED, v1.JobStatus_JOB_STATUS_DENIED:
-			return fmt.Errorf("job %s completed with status %s", job.GetJobId(), status)
+			return fmt.Errorf("job %s completed with status %s", terminalText(job.GetJobId()), status)
+		case v1.JobStatus_JOB_STATUS_PENDING_APPROVAL:
+			a := job.GetApproval()
+			_, err = fmt.Fprintf(c.ErrOrStderr(), "Job %s is pending approval (approval_id: %s, console_url: %s).\n",
+				terminalText(job.GetJobId()), terminalText(a.GetApprovalId()), terminalText(a.GetConsoleUrl()))
+			return err
 		case v1.JobStatus_JOB_STATUS_QUEUED, v1.JobStatus_JOB_STATUS_RUNNING:
-			_, err = fmt.Fprintf(c.ErrOrStderr(), "Job %s has not completed (status: %s).\n", job.GetJobId(), status)
+			_, err = fmt.Fprintf(c.ErrOrStderr(), "Job %s has not completed (status: %s).\n", terminalText(job.GetJobId()), status)
 			return err
 		default:
 			// UNSPECIFIED, statuses newer than this CLI and a response without a Job.
-			return fmt.Errorf("job %s has unknown status: %s", job.GetJobId(), status)
+			return fmt.Errorf("job %s has unknown status: %s", terminalText(job.GetJobId()), status)
 		}
 	}}
 	c.Flags().StringVar(&selector, "selector", "", "Comma-separated key=value conjunctions")
@@ -411,6 +429,9 @@ func NewRunCmd() *cobra.Command {
 	c.Flags().Uint64Var(&expected, "expected-count", 0, "Required selector match count")
 	c.Flags().StringArrayVar(&raw, "param", nil, "Action parameter name=value (arrays use JSON)")
 	c.Flags().StringVar(&reason, "reason", "", "Required audit reason")
+	c.Flags().StringArrayVar(&evidenceJobs, "evidence-job", nil, "Evidence job ID (repeatable)")
+	c.Flags().StringVar(&evidenceSummary, "evidence-summary", "", "Evidence summary for approvers")
+	c.Flags().StringVar(&clientRequestID, "client-request-id", "", "Idempotency key for an approval submission")
 	c.Flags().Uint32Var(&wait, "wait-seconds", 30, "Response wait; 0 returns immediately")
 	c.Flags().Uint32Var(&batch, "batch-size", 20, "Tighten the signed/default batch size")
 	c.Flags().Uint32Var(&failures, "max-failures", 5, "Tighten the signed/default failure threshold")

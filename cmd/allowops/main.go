@@ -21,7 +21,7 @@ func main() {
 	command.SetVersionTemplate("{{.Version}}\n")
 	command.AddCommand(cli.NewCatalogCmd(), cli.NewAuditCmd())
 	command.AddCommand(cli.NewLoginCmd(), cli.NewPolicyCmd(), cli.NewHostsCmd(), cli.NewJoinTokenCmd())
-	command.AddCommand(cli.NewRunCmd(), cli.NewJobsCmd())
+	command.AddCommand(cli.NewRunCmd(), cli.NewJobsCmd(), cli.NewApprovalsCmd())
 	// Actions run in their own process group and are killed only when the
 	// command context ends, so SIGINT/SIGTERM must cancel it instead of
 	// terminating the CLI and orphaning the group.

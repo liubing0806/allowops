@@ -22,7 +22,8 @@ import (
 
 // actionRequest validates in a fixed order, which decides which error a caller
 // sees first: argument object and names, reason, targets, expected_count,
-// run limits, response_format, grouping, params, then output filters.
+// run limits, response_format, grouping, params, output filters, then
+// approval evidence and the client request ID.
 // extraAllowed are names the calling tool consumed before; they are listed in
 // unknown argument errors.
 func actionRequest(a catalog.Action, raw json.RawMessage, cfg job.Config, extraAllowed ...string) (*v1.RunJobRequest, string, error) {
@@ -30,7 +31,7 @@ func actionRequest(a catalog.Action, raw json.RawMessage, cfg job.Config, extraA
 	if err != nil {
 		return nil, "", err
 	}
-	allowed := append(slices.Clone(extraAllowed), "params", "targets", "expected_count", "reason", "wait_seconds", "batch_size", "max_failures", "response_format", "grouping")
+	allowed := append(slices.Clone(extraAllowed), "params", "targets", "expected_count", "reason", "wait_seconds", "batch_size", "max_failures", "response_format", "grouping", "evidence", "client_request_id")
 	allowed = append(allowed, a.Filters...)
 	for name := range args {
 		if !slices.Contains(allowed, name) {
@@ -68,7 +69,54 @@ func actionRequest(a catalog.Action, raw json.RawMessage, cfg job.Config, extraA
 	if err := parseOutputFilters(a, args, req); err != nil {
 		return nil, "", err
 	}
+	if err := parseApprovalArguments(args, req); err != nil {
+		return nil, "", err
+	}
 	return req, format, nil
+}
+
+var (
+	clientRequestID = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,64}$`)
+	evidenceJobID   = regexp.MustCompile(`^job-[0-9]{8}-[0-9]{4,20}$`)
+)
+
+func parseApprovalArguments(args map[string]json.RawMessage, req *v1.RunJobRequest) error {
+	if raw := args["evidence"]; raw != nil {
+		evidence, err := argumentObject(raw)
+		if err != nil {
+			return errors.New("evidence allowed: an object with job_ids and/or summary")
+		}
+		for name := range evidence {
+			if name != "job_ids" && name != "summary" {
+				return errors.New("evidence allowed fields: job_ids, summary")
+			}
+		}
+		ev := &v1.JobEvidence{}
+		if evidence["job_ids"] != nil {
+			invalidIDs := errors.New("evidence.job_ids allowed: 1 to 5 unique short job IDs")
+			if decodeField(evidence, "job_ids", &ev.JobIds, false) != nil || len(ev.JobIds) < 1 || len(ev.JobIds) > 5 {
+				return invalidIDs
+			}
+			seen := map[string]bool{}
+			for _, id := range ev.JobIds {
+				if !evidenceJobID.MatchString(id) || seen[id] {
+					return invalidIDs
+				}
+				seen[id] = true
+			}
+		}
+		if evidence["summary"] != nil {
+			if decodeField(evidence, "summary", &ev.Summary, false) != nil ||
+				ev.Summary == "" || utf8.RuneCountInString(ev.Summary) > 1024 || strings.ContainsRune(ev.Summary, 0) {
+				return errors.New("evidence.summary allowed: string of 1 to 1024 characters without NUL")
+			}
+		}
+		req.Evidence = ev
+	}
+	if args["client_request_id"] != nil && (decodeField(args, "client_request_id", &req.ClientRequestId, false) != nil || !clientRequestID.MatchString(req.ClientRequestId)) {
+		return errors.New("client_request_id allowed: string matching " + clientRequestID.String())
+	}
+	return nil
 }
 
 // parseTargets selects hosts or selector. A selector also requires expected_count.

@@ -20,6 +20,10 @@ func TestActionApprovalArguments(t *testing.T) {
 		len(request.GetEvidence().GetJobIds()) != 1 || request.GetEvidence().GetJobIds()[0] != "job-20261124-0001" {
 		t.Fatalf("unexpected request: %v", request)
 	}
+	request, _, err = actionRequest(action, json.RawMessage(`{`+base+`,"evidence":{"summary":"Context only"}}`), cfg)
+	if err != nil || request.GetEvidence().GetSummary() != "Context only" || len(request.GetEvidence().GetJobIds()) != 0 {
+		t.Fatalf("summary-only evidence was not forwarded: request=%v err=%v", request, err)
+	}
 	for _, input := range []string{
 		`"evidence":null`, `"evidence":[]`, `"evidence":{"other":true}`,
 		`"evidence":{"summary":"a","summary":"b"}`,
