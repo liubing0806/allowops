@@ -9,7 +9,10 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"io"
+	"log"
+	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
@@ -23,6 +26,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/jackc/pgx/v5/pgconn"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
 	"github.com/liubing0806/allowops/gen/allowops/v1/allowopsv1connect"
 	"github.com/liubing0806/allowops/internal/gateway/api"
@@ -30,6 +34,7 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/hostconn"
 	"github.com/liubing0806/allowops/internal/gateway/job"
 	"github.com/liubing0806/allowops/internal/gateway/output"
+	"github.com/liubing0806/allowops/internal/gateway/server"
 	"github.com/liubing0806/allowops/internal/store"
 	"github.com/liubing0806/allowops/internal/testpg"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -48,6 +53,83 @@ func (b *safeBuffer) Write(p []byte) (int, error) {
 }
 
 func (b *safeBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return b.b.String() }
+
+func TestServeDrainsAfterAuditWorkerFailure(t *testing.T) {
+	dsn := testpg.Start(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := store.Migrate(ctx, dsn); err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var logs safeBuffer
+	original, originalOutput, originalFlags := slog.Default(), log.Writer(), log.Flags()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	defer func() { slog.SetDefault(original); log.SetOutput(originalOutput); log.SetFlags(originalFlags) }()
+
+	cfg := configuration{Gateway: hostconn.DefaultConfig()}
+	draining, release := make(chan struct{}), make(chan struct{})
+	agent, err := hostconn.New(db, &hostconn.CA{}, cfg.Gateway, hostconn.Hooks{Drain: func(shutdown context.Context) error {
+		close(draining)
+		select {
+		case <-release:
+			return nil
+		case <-shutdown.Done():
+			return shutdown.Err()
+		}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := server.New(agent, tls.Certificate{})
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	auditCtx, stopAudit := context.WithCancel(context.Background())
+	defer stopAudit()
+	const privateDetail = "fixture-credential-in-sql"
+	workerErr := fmt.Errorf("exporter: %w", &pgconn.PgError{Code: "57P01", Message: privateDetail})
+	auditErrors := make(chan error, 1)
+	auditErrors <- workerErr
+	done := make(chan error, 1)
+	go func() { done <- serveUntilDone(ctx, cfg, srv, agent, listener, auditErrors, stopAudit) }()
+	select {
+	case <-draining:
+	case err := <-done:
+		t.Fatalf("serve returned %v before draining", err)
+	case <-ctx.Done():
+		t.Fatal("audit worker failure did not start draining")
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("serve returned %v while drain hook was blocked", err)
+	default:
+	}
+	if auditCtx.Err() != context.Canceled {
+		t.Error("serve started draining before canceling audit workers")
+	}
+	close(release)
+	select {
+	case err := <-done:
+		if err == nil || err.Error() != "audit background worker stopped" {
+			t.Fatalf("serve error = %v, want sanitized worker failure", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("serve did not exit after drain hook finished")
+	}
+	got := logs.String()
+	if !strings.Contains(got, "level=ERROR") || !strings.Contains(got, "sqlstate=57P01") || !strings.Contains(got, "error_type=") || strings.Contains(got, privateDetail) {
+		t.Fatalf("audit worker logs = %q, want safe error classification", got)
+	}
+}
 
 func TestGatewayCommands(t *testing.T) {
 	dsn := testpg.Start(t)

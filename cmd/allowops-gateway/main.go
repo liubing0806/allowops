@@ -363,18 +363,27 @@ func serveUntilDone(ctx context.Context, cfg configuration, srv *server.Server, 
 	finished := make(chan error, 1)
 	go func() { finished <- srv.Serve(listener) }()
 	fmt.Printf("gateway serving %s schema=%d\n", listener.Addr(), store.SchemaVersion)
-	select {
-	case <-ctx.Done():
-	case <-auditErrors:
-		stopAudit()
-		agent.Close()
-		listener.Close()
-		return fmt.Errorf("audit background worker stopped")
-	case err := <-finished:
-		if err != nil {
-			agent.Close()
-			return fmt.Errorf("gateway listener failed")
+	var serveErr error
+	for {
+		select {
+		case <-ctx.Done():
+		case err, ok := <-auditErrors:
+			if !ok {
+				auditErrors = nil
+				continue
+			}
+			if err == nil {
+				continue
+			}
+			audit.LogWorkerError(ctx, "audit background worker stopped", err)
+			serveErr = fmt.Errorf("audit background worker stopped")
+		case err := <-finished:
+			if err != nil {
+				agent.Close()
+				return fmt.Errorf("gateway listener failed")
+			}
 		}
+		break
 	}
 	stopAudit()
 	shutdown, done := context.WithTimeout(context.Background(), cfg.Gateway.ShutdownGrace+5*time.Second)
@@ -383,7 +392,7 @@ func serveUntilDone(ctx context.Context, cfg configuration, srv *server.Server, 
 		return fmt.Errorf("gateway shutdown: %w", err)
 	}
 	fmt.Println("gateway stopped")
-	return nil
+	return serveErr
 }
 
 func loadCatalogKeys(path string) (map[string]ed25519.PublicKey, error) {
