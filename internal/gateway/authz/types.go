@@ -19,6 +19,8 @@ const (
 	ViewCatalog           Operation = "view_catalog"
 	ViewJobs              Operation = "view_jobs"
 	ViewOutput            Operation = "view_output"
+	ViewApprovals         Operation = "view_approvals"
+	ApproveJobs           Operation = "approve_jobs"
 	ViewAudit             Operation = "view_audit"
 	ViewSystem            Operation = "view_system"
 )
@@ -79,6 +81,7 @@ type Rule struct {
 	Teams       []string          `json:"teams,omitempty"`
 	Owners      []string          `json:"owners,omitempty"`
 	SourceCIDRs []string          `json:"source_cidrs,omitempty"`
+	Approval    *ApprovalConfig   `json:"approval,omitempty"`
 }
 
 // RuleSource is the boundary for a future persistent store. New takes an immutable snapshot.
@@ -87,8 +90,9 @@ type RuleSource interface {
 }
 
 type Result struct {
-	Decision string   `json:"decision"`
-	RuleIDs  []string `json:"rules"`
+	Decision string             `json:"decision"`
+	RuleIDs  []string           `json:"rules"`
+	Approval *EffectiveApproval `json:"approval,omitempty"`
 }
 
 type HostChange struct {

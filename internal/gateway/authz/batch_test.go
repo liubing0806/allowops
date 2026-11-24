@@ -41,6 +41,28 @@ func TestBatchMatchesIndividualDecisions(t *testing.T) {
 	}
 }
 
+func TestBatchApprovalResultsOwnTheirRoleSets(t *testing.T) {
+	rule := executionRule("approval", "require_approval")
+	rule.Approval = &ApprovalConfig{ApproverRoles: []string{"lead", "ops"}, MinApprovals: 2}
+	e := engineFor(t, []Rule{rule}, nil)
+	input := executionInput()
+	hosts := []Host{input.Host, {ID: "same-labels", Labels: input.Host.Labels}}
+	results := e.EvaluateBatch(context.Background(), input, hosts)
+	for _, result := range results {
+		if result.Err != nil || result.Result.Approval == nil {
+			t.Fatalf("expected approval result for %s, got %+v", result.HostID, result)
+		}
+	}
+	first := results[0].Result.Approval
+	first.MinApprovals = 3
+	first.RequiredApproverRoleSets[0][0] = "changed"
+	first.RequiredApproverRoleSets[0] = []string{"replaced"}
+	want := &EffectiveApproval{RequiredApproverRoleSets: [][]string{{"lead", "ops"}}, MinApprovals: 2}
+	if got := results[1].Result.Approval; !reflect.DeepEqual(got, want) {
+		t.Errorf("second result changed to %+v, want %+v", got, want)
+	}
+}
+
 func TestBatchEvaluationErrorsDeny(t *testing.T) {
 	rule := executionRule("allow", "allow")
 	rule.SourceCIDRs = []string{"192.0.2.0/24"}

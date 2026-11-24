@@ -245,8 +245,9 @@ type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
     ? true
     : false
-// The status lists used by the filters must list every non-zero enum value.
+// The status lists must cover every status supported by the list RPCs.
+// ListJobs accepts pending approval once the gateway persists approval jobs.
 export const statusListsMatchProtoJson: Equal<
   (typeof jobStatuses)[number] | (typeof taskStatuses)[number],
-  Exclude<JobStatusJson | TaskStatusJson, `${string}_UNSPECIFIED`>
+  Exclude<JobStatusJson | TaskStatusJson, `${string}_UNSPECIFIED` | 'JOB_STATUS_PENDING_APPROVAL'>
 > = true

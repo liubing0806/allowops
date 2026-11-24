@@ -5,7 +5,7 @@ func DefaultRules() []Rule {
 	// Only admin receives default execution permissions for all hosts and actions (design A7).
 	const defaultAdminCanExecute = true
 	rules := []Rule{
-		{ID: "default:admin", Effect: "allow", Roles: []string{"admin"}, Operations: []Operation{ModifyPolicy, ManageServiceAccounts, ManageHosts, CreateJoinToken, ManageUserRoles, PublishCatalog, ViewHosts, ViewInventory, ViewChanges, ViewKnowledge, ViewCatalog, ViewJobs, ViewOutput, ViewAudit, ViewSystem}},
+		{ID: "default:admin", Effect: "allow", Roles: []string{"admin"}, Operations: []Operation{ModifyPolicy, ManageServiceAccounts, ManageHosts, CreateJoinToken, ManageUserRoles, PublishCatalog, ViewHosts, ViewInventory, ViewChanges, ViewKnowledge, ViewCatalog, ViewJobs, ViewOutput, ViewApprovals, ApproveJobs, ViewAudit, ViewSystem}},
 		{ID: "default:operator", Effect: "allow", Roles: []string{"operator"}, Operations: []Operation{ManageHosts, CreateJoinToken, ViewHosts, ViewInventory, ViewChanges, ViewKnowledge, ViewJobs, ViewSystem}},
 		{ID: "default:auditor", Effect: "allow", Roles: []string{"auditor"}, Operations: []Operation{ViewAudit, ViewJobs, ViewOutput}},
 		{ID: "default:viewer", Effect: "allow", Roles: []string{"viewer"}, Operations: []Operation{ViewHosts, ViewInventory, ViewChanges, ViewKnowledge, ViewCatalog, ViewJobs}},

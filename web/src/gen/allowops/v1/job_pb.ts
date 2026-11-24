@@ -4,8 +4,10 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { CatalogRef, CatalogRefJson, ExecutionResult, ExecutionResultJson, HostTargets, HostTargetsJson, JobStatus, JobStatusJson, OutputFilters, OutputFiltersJson, OutputMetadata, OutputMetadataJson, OutputStream, OutputStreamJson, OutputTrust, OutputTrustJson, PageRequest, PageRequestJson, PageResponse, PageResponseJson, Parameters, ParametersJson, TaskStatus, TaskStatusJson, TimeRange, TimeRangeJson } from "./common_pb";
+import type { ApprovalStatus, ApprovalStatusJson, CatalogRef, CatalogRefJson, ExecutionResult, ExecutionResultJson, HostTargets, HostTargetsJson, JobStatus, JobStatusJson, OutputFilters, OutputFiltersJson, OutputMetadata, OutputMetadataJson, OutputStream, OutputStreamJson, OutputTrust, OutputTrustJson, PageRequest, PageRequestJson, PageResponse, PageResponseJson, Parameters, ParametersJson, TaskStatus, TaskStatusJson, TimeRange, TimeRangeJson } from "./common_pb";
 import { file_allowops_v1_common } from "./common_pb";
+import type { PolicyApprovalRoleSet, PolicyApprovalRoleSetJson } from "./policy_pb";
+import { file_allowops_v1_policy } from "./policy_pb";
 import type { Timestamp, TimestampJson } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
@@ -14,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file allowops/v1/job.proto.
  */
 export const file_allowops_v1_job: GenFile = /*@__PURE__*/
-  fileDesc("ChVhbGxvd29wcy92MS9qb2IucHJvdG8SC2FsbG93b3BzLnYxIkMKCVRhc2tDb3VudBInCgZzdGF0dXMYASABKA4yFy5hbGxvd29wcy52MS5UYXNrU3RhdHVzEg0KBWNvdW50GAIgASgEIugCCgNKb2ISDgoGam9iX2lkGAEgASgJEg4KBmFjdGlvbhgCIAEoCRIoCgdjYXRhbG9nGAMgASgLMhcuYWxsb3dvcHMudjEuQ2F0YWxvZ1JlZhIVCg1hY3Rpb25fc2hhMjU2GAQgASgMEhIKCnN1YmplY3RfaWQYBSABKAkSDgoGcmVhc29uGAYgASgJEiYKBnN0YXR1cxgHIAEoDjIWLmFsbG93b3BzLnYxLkpvYlN0YXR1cxIuCgpjcmVhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtmaW5pc2hlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLdG90YWxfdGFza3MYCiABKAQSJgoGY291bnRzGAsgAygLMhYuYWxsb3dvcHMudjEuVGFza0NvdW50EhYKDnBvbGljeV92ZXJzaW9uGAwgASgEIoQCCgRUYXNrEg4KBmpvYl9pZBgBIAEoCRIPCgd0YXNrX2lkGAIgASgJEg8KB2hvc3RfaWQYAyABKAkSEAoIaG9zdG5hbWUYBCABKAkSLAoGcmVzdWx0GAUgASgLMhwuYWxsb3dvcHMudjEuRXhlY3V0aW9uUmVzdWx0Ei4KCnN0YXJ0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2ZpbmlzaGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1vdXRwdXRfc3RvcmVkGAggASgIEhIKCnN0ZXBfY291bnQYCSABKA0iVQoIVGFza1N0ZXASDQoFaW5kZXgYASABKA0SDAoEbmFtZRgCIAEoCRIsCgZyZXN1bHQYAyABKAsyHC5hbGxvd29wcy52MS5FeGVjdXRpb25SZXN1bHQiiwMKDVJ1bkpvYlJlcXVlc3QSDgoGYWN0aW9uGAEgASgJEikKB3RhcmdldHMYAiABKAsyGC5hbGxvd29wcy52MS5Ib3N0VGFyZ2V0cxIbCg5leHBlY3RlZF9jb3VudBgDIAEoBEgAiAEBEicKBnBhcmFtcxgEIAEoCzIXLmFsbG93b3BzLnYxLlBhcmFtZXRlcnMSDgoGcmVhc29uGAUgASgJEhkKDHdhaXRfc2Vjb25kcxgGIAEoDUgBiAEBEhcKCmJhdGNoX3NpemUYByABKA1IAogBARIZCgxtYXhfZmFpbHVyZXMYCCABKA1IA4gBARIrCgdmaWx0ZXJzGAkgASgLMhouYWxsb3dvcHMudjEuT3V0cHV0RmlsdGVycxIXCg9yZXNwb25zZV9mb3JtYXQYCiABKAkSEAoIZ3JvdXBpbmcYCyABKAlCEQoPX2V4cGVjdGVkX2NvdW50Qg8KDV93YWl0X3NlY29uZHNCDQoLX2JhdGNoX3NpemVCDwoNX21heF9mYWlsdXJlcyJZCg5SdW5Kb2JSZXNwb25zZRIdCgNqb2IYASABKAsyEC5hbGxvd29wcy52MS5Kb2ISKAoHc3VtbWFyeRgCIAEoCzIXLmFsbG93b3BzLnYxLkpvYlN1bW1hcnkidgoNR2V0Sm9iUmVxdWVzdBIOCgZqb2JfaWQYASABKAkSGQoMd2FpdF9zZWNvbmRzGAIgASgNSACIAQESFwoPcmVzcG9uc2VfZm9ybWF0GAMgASgJEhAKCGdyb3VwaW5nGAQgASgJQg8KDV93YWl0X3NlY29uZHMiWQoOR2V0Sm9iUmVzcG9uc2USHQoDam9iGAEgASgLMhAuYWxsb3dvcHMudjEuSm9iEigKB3N1bW1hcnkYAiABKAsyFy5hbGxvd29wcy52MS5Kb2JTdW1tYXJ5IpwBCg5NZXRyaWNWYXJpYW5jZRINCgVsYWJlbBgBIAEoCRIMCgR1bml0GAIgASgJEgsKA21pbhgDIAEoARILCgNtYXgYBCABKAESCwoDcDk1GAUgASgBEhAKCG1pbl9ob3N0GAYgASgJEhAKCG1heF9ob3N0GAcgASgJEhUKDW91dGxpZXJfaG9zdHMYCCADKAkSCwoDcDUwGAkgASgBIogDCgtPdXRwdXRHcm91cBIWCglleGl0X2NvZGUYASABKAVIAIgBARIVCg1zdGRvdXRfc2hhMjU2GAIgASgMEhUKDXN0ZGVycl9zaGEyNTYYAyABKAwSEgoKaG9zdF9jb3VudBgEIAEoBBINCgVob3N0cxgFIAMoCRIOCgZzdGRvdXQYBiABKAkSDgoGc3RkZXJyGAcgASgJEhEKCXRydW5jYXRlZBgIIAEoCBIOCgZyZWFzb24YCSABKAkSLAoIc2V2ZXJpdHkYCiABKA4yGi5hbGxvd29wcy52MS5Hcm91cFNldmVyaXR5EhYKDmFub21hbHlfcmVhc29uGAsgASgJEhcKD3RlbXBsYXRlX3NoYTI1NhgMIAEoDBIXCg90ZW1wbGF0ZV9zdGRvdXQYDSABKAkSFwoPdGVtcGxhdGVfc3RkZXJyGA4gASgJEi4KCXZhcmlhbmNlcxgPIAMoCzIbLmFsbG93b3BzLnYxLk1ldHJpY1ZhcmlhbmNlQgwKCl9leGl0X2NvZGUitQIKCkpvYlN1bW1hcnkSKAoGZ3JvdXBzGAEgAygLMhguYWxsb3dvcHMudjEuT3V0cHV0R3JvdXASFQoNb2ZmbGluZV9ob3N0cxgCIAMoCRIuCgxvdXRwdXRfdHJ1c3QYAyABKA4yGC5hbGxvd29wcy52MS5PdXRwdXRUcnVzdBIRCgl0cnVuY2F0ZWQYBCABKAgSEAoIZ3JvdXBpbmcYBSABKAkSDwoHcmFua2luZxgGIAEoCRIUCgx0b3RhbF9ncm91cHMYByABKAQSFgoOb21pdHRlZF9ncm91cHMYCCABKAQSGwoTZm9sZGVkX25vcm1hbF9ob3N0cxgJIAEoBBIVCg1vbWl0dGVkX2hvc3RzGAogASgEEh4KFnVuZmluaXNoZWRfaG9zdHNfY291bnQYCyABKAQisAEKD0xpc3RKb2JzUmVxdWVzdBImCgRwYWdlGAEgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QSJwoHY3JlYXRlZBgCIAEoCzIWLmFsbG93b3BzLnYxLlRpbWVSYW5nZRIoCghzdGF0dXNlcxgDIAMoDjIWLmFsbG93b3BzLnYxLkpvYlN0YXR1cxIOCgZhY3Rpb24YBCABKAkSEgoKc3ViamVjdF9pZBgFIAEoCSJbChBMaXN0Sm9ic1Jlc3BvbnNlEh4KBGpvYnMYASADKAsyEC5hbGxvd29wcy52MS5Kb2ISJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSKHAQoQTGlzdFRhc2tzUmVxdWVzdBIOCgZqb2JfaWQYASABKAkSJgoEcGFnZRgCIAEoCzIYLmFsbG93b3BzLnYxLlBhZ2VSZXF1ZXN0EikKCHN0YXR1c2VzGAMgAygOMhcuYWxsb3dvcHMudjEuVGFza1N0YXR1cxIQCghob3N0bmFtZRgEIAEoCSJeChFMaXN0VGFza3NSZXNwb25zZRIgCgV0YXNrcxgBIAMoCzIRLmFsbG93b3BzLnYxLlRhc2sSJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSJfChRMaXN0VGFza1N0ZXBzUmVxdWVzdBIOCgZqb2JfaWQYASABKAkSDwoHdGFza19pZBgCIAEoCRImCgRwYWdlGAMgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QiZgoVTGlzdFRhc2tTdGVwc1Jlc3BvbnNlEiQKBXN0ZXBzGAEgAygLMhUuYWxsb3dvcHMudjEuVGFza1N0ZXASJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSIiChBDYW5jZWxKb2JSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCSIyChFDYW5jZWxKb2JSZXNwb25zZRIdCgNqb2IYASABKAsyEC5hbGxvd29wcy52MS5Kb2IirwEKE0dldEpvYk91dHB1dFJlcXVlc3QSDgoGam9iX2lkGAEgASgJEhAKCGhvc3RuYW1lGAIgASgJEhcKCnN0ZXBfaW5kZXgYAyABKA1IAIgBARIpCgZzdHJlYW0YBCABKA4yGS5hbGxvd29wcy52MS5PdXRwdXRTdHJlYW0SDgoGb2Zmc2V0GAUgASgEEhMKC2xpbWl0X2J5dGVzGAYgASgNQg0KC19zdGVwX2luZGV4IukBChRHZXRKb2JPdXRwdXRSZXNwb25zZRIMCgRkYXRhGAEgASgMEhMKC25leHRfb2Zmc2V0GAIgASgEEgsKA2VvZhgDIAEoCBIRCgl0cnVuY2F0ZWQYBCABKAgSGgoSc2Nhbl9saW1pdF9yZWFjaGVkGAUgASgIEhUKDW91dHB1dF9zdG9yZWQYBiABKAgSLgoMb3V0cHV0X3RydXN0GAcgASgOMhguYWxsb3dvcHMudjEuT3V0cHV0VHJ1c3QSKwoGb3V0cHV0GAggASgLMhsuYWxsb3dvcHMudjEuT3V0cHV0TWV0YWRhdGEiewoPRGlmZkpvYnNSZXF1ZXN0EhMKC2Jhc2Vfam9iX2lkGAEgASgJEhUKDXRhcmdldF9qb2JfaWQYAiABKAkSEAoIZ3JvdXBpbmcYAyABKAkSGQoMb25seV9jaGFuZ2VkGAQgASgISACIAQFCDwoNX29ubHlfY2hhbmdlZCKAAQoQRGlmZkpvYnNSZXNwb25zZRIiCghiYXNlX2pvYhgBIAEoCzIQLmFsbG93b3BzLnYxLkpvYhIkCgp0YXJnZXRfam9iGAIgASgLMhAuYWxsb3dvcHMudjEuSm9iEiIKBGRpZmYYAyABKAsyFC5hbGxvd29wcy52MS5Kb2JEaWZmIpACChBTdGF0dXNUcmFuc2l0aW9uEiwKC2Zyb21fc3RhdHVzGAEgASgOMhcuYWxsb3dvcHMudjEuVGFza1N0YXR1cxIqCgl0b19zdGF0dXMYAiABKA4yFy5hbGxvd29wcy52MS5UYXNrU3RhdHVzEhsKDmZyb21fZXhpdF9jb2RlGAMgASgFSACIAQESGQoMdG9fZXhpdF9jb2RlGAQgASgFSAGIAQESDgoGcmVhc29uGAUgASgJEhIKCmhvc3RfY291bnQYBiABKAQSDQoFaG9zdHMYByADKAkSEwoLZGVncmFkYXRpb24YCCABKAhCEQoPX2Zyb21fZXhpdF9jb2RlQg8KDV90b19leGl0X2NvZGUi0AIKDVBhdHRlcm5DaGFuZ2USMQoNYmFzZV9zZXZlcml0eRgBIAEoDjIaLmFsbG93b3BzLnYxLkdyb3VwU2V2ZXJpdHkSMwoPdGFyZ2V0X3NldmVyaXR5GAIgASgOMhouYWxsb3dvcHMudjEuR3JvdXBTZXZlcml0eRISCgpob3N0X2NvdW50GAMgASgEEg0KBWhvc3RzGAQgAygJEhEKCXVuY2hhbmdlZBgFIAEoCBIUCgxiYXNlX3ByZXZpZXcYBiABKAkSFgoOdGFyZ2V0X3ByZXZpZXcYByABKAkSFQoNcmVtb3ZlZF9saW5lcxgIIAMoCRITCgthZGRlZF9saW5lcxgJIAMoCRIVCg1kaWZmX2NvbXB1dGVkGAogASgIEhYKDmJhc2VfdHJ1bmNhdGVkGAsgASgIEhgKEHRhcmdldF90cnVuY2F0ZWQYDCABKAgipwIKC01ldHJpY0RyaWZ0Eg0KBWxhYmVsGAEgASgJEgwKBHVuaXQYAiABKAkSEAoIYmFzZV9wNTAYAyABKAESEgoKdGFyZ2V0X3A1MBgEIAEoARIQCghiYXNlX21heBgFIAEoARISCgp0YXJnZXRfbWF4GAYgASgBEhEKCW1heF9kZWx0YRgHIAEoARIWCg5tYXhfZGVsdGFfYmFzZRgIIAEoARIYChBtYXhfZGVsdGFfdGFyZ2V0GAkgASgBEhoKDW1heF9kZWx0YV9wY3QYCiABKAFIAIgBARIQCghtYXhfaG9zdBgLIAEoCRIWCg5hZmZlY3RlZF9ob3N0cxgMIAEoBBISCgpob3N0X2NvdW50GA0gASgEQhAKDl9tYXhfZGVsdGFfcGN0IrYECgdKb2JEaWZmEi4KDG91dHB1dF90cnVzdBgBIAEoDjIYLmFsbG93b3BzLnYxLk91dHB1dFRydXN0EhEKCXRydW5jYXRlZBgCIAEoCBIZChFwcmV2aWV3X3RydW5jYXRlZBgDIAEoCBIhChlhY3Rpb25fZGVmaW5pdGlvbl9jaGFuZ2VkGAQgASgIEhAKCGdyb3VwaW5nGAUgASgJEh0KFXVuY2hhbmdlZF9ob3N0c19jb3VudBgGIAEoBBIZChFhZGRlZF9ob3N0c19jb3VudBgHIAEoBBITCgthZGRlZF9ob3N0cxgIIAMoCRIbChNyZW1vdmVkX2hvc3RzX2NvdW50GAkgASgEEhUKDXJlbW92ZWRfaG9zdHMYCiADKAkSHAoUcmVwbGFjZWRfaG9zdHNfY291bnQYCyABKAQSFgoOcmVwbGFjZWRfaG9zdHMYDCADKAkSOQoSc3RhdHVzX3RyYW5zaXRpb25zGA0gAygLMh0uYWxsb3dvcHMudjEuU3RhdHVzVHJhbnNpdGlvbhIdChV0b3RhbF9wYXR0ZXJuX2NoYW5nZXMYDiABKAQSHwoXb21pdHRlZF9wYXR0ZXJuX2NoYW5nZXMYDyABKAQSMwoPcGF0dGVybl9jaGFuZ2VzGBAgAygLMhouYWxsb3dvcHMudjEuUGF0dGVybkNoYW5nZRIvCg1tZXRyaWNfZHJpZnRzGBEgAygLMhguYWxsb3dvcHMudjEuTWV0cmljRHJpZnQqggEKDUdyb3VwU2V2ZXJpdHkSHgoaR1JPVVBfU0VWRVJJVFlfVU5TUEVDSUZJRUQQABIaChZHUk9VUF9TRVZFUklUWV9GQUlMVVJFEAESGgoWR1JPVVBfU0VWRVJJVFlfQU5PTUFMWRACEhkKFUdST1VQX1NFVkVSSVRZX05PUk1BTBADMukECgpKb2JTZXJ2aWNlEkEKBlJ1bkpvYhIaLmFsbG93b3BzLnYxLlJ1bkpvYlJlcXVlc3QaGy5hbGxvd29wcy52MS5SdW5Kb2JSZXNwb25zZRJBCgZHZXRKb2ISGi5hbGxvd29wcy52MS5HZXRKb2JSZXF1ZXN0GhsuYWxsb3dvcHMudjEuR2V0Sm9iUmVzcG9uc2USRwoITGlzdEpvYnMSHC5hbGxvd29wcy52MS5MaXN0Sm9ic1JlcXVlc3QaHS5hbGxvd29wcy52MS5MaXN0Sm9ic1Jlc3BvbnNlEkoKCUxpc3RUYXNrcxIdLmFsbG93b3BzLnYxLkxpc3RUYXNrc1JlcXVlc3QaHi5hbGxvd29wcy52MS5MaXN0VGFza3NSZXNwb25zZRJWCg1MaXN0VGFza1N0ZXBzEiEuYWxsb3dvcHMudjEuTGlzdFRhc2tTdGVwc1JlcXVlc3QaIi5hbGxvd29wcy52MS5MaXN0VGFza1N0ZXBzUmVzcG9uc2USSgoJQ2FuY2VsSm9iEh0uYWxsb3dvcHMudjEuQ2FuY2VsSm9iUmVxdWVzdBoeLmFsbG93b3BzLnYxLkNhbmNlbEpvYlJlc3BvbnNlElMKDEdldEpvYk91dHB1dBIgLmFsbG93b3BzLnYxLkdldEpvYk91dHB1dFJlcXVlc3QaIS5hbGxvd29wcy52MS5HZXRKb2JPdXRwdXRSZXNwb25zZRJHCghEaWZmSm9icxIcLmFsbG93b3BzLnYxLkRpZmZKb2JzUmVxdWVzdBodLmFsbG93b3BzLnYxLkRpZmZKb2JzUmVzcG9uc2VCPFo6Z2l0aHViLmNvbS9saXViaW5nMDgwNi9hbGxvd29wcy9nZW4vYWxsb3dvcHMvdjE7YWxsb3dvcHN2MWIGcHJvdG8z", [file_allowops_v1_common, file_google_protobuf_timestamp]);
+  fileDesc("ChVhbGxvd29wcy92MS9qb2IucHJvdG8SC2FsbG93b3BzLnYxIkMKCVRhc2tDb3VudBInCgZzdGF0dXMYASABKA4yFy5hbGxvd29wcy52MS5UYXNrU3RhdHVzEg0KBWNvdW50GAIgASgEIi8KC0pvYkV2aWRlbmNlEg8KB2pvYl9pZHMYASADKAkSDwoHc3VtbWFyeRgCIAEoCSLzAgoSSm9iQXBwcm92YWxTdW1tYXJ5EhMKC2FwcHJvdmFsX2lkGAEgASgJEisKBnN0YXR1cxgCIAEoDjIbLmFsbG93b3BzLnYxLkFwcHJvdmFsU3RhdHVzEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDW1pbl9hcHByb3ZhbHMYBCABKA0SFgoOYXBwcm92ZWRfY291bnQYBSABKA0SRwobcmVxdWlyZWRfYXBwcm92ZXJfcm9sZV9zZXRzGAYgAygLMiIuYWxsb3dvcHMudjEuUG9saWN5QXBwcm92YWxSb2xlU2V0Ei4KCmRlY2lkZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhcKD2RlY2lzaW9uX3JlYXNvbhgIIAEoCRITCgtjb25zb2xlX3VybBgJIAEoCRIVCg1yZWNoZWNrX2Vycm9yGAogASgJIpsDCgNKb2ISDgoGam9iX2lkGAEgASgJEg4KBmFjdGlvbhgCIAEoCRIoCgdjYXRhbG9nGAMgASgLMhcuYWxsb3dvcHMudjEuQ2F0YWxvZ1JlZhIVCg1hY3Rpb25fc2hhMjU2GAQgASgMEhIKCnN1YmplY3RfaWQYBSABKAkSDgoGcmVhc29uGAYgASgJEiYKBnN0YXR1cxgHIAEoDjIWLmFsbG93b3BzLnYxLkpvYlN0YXR1cxIuCgpjcmVhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtmaW5pc2hlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLdG90YWxfdGFza3MYCiABKAQSJgoGY291bnRzGAsgAygLMhYuYWxsb3dvcHMudjEuVGFza0NvdW50EhYKDnBvbGljeV92ZXJzaW9uGAwgASgEEjEKCGFwcHJvdmFsGA0gASgLMh8uYWxsb3dvcHMudjEuSm9iQXBwcm92YWxTdW1tYXJ5IoQCCgRUYXNrEg4KBmpvYl9pZBgBIAEoCRIPCgd0YXNrX2lkGAIgASgJEg8KB2hvc3RfaWQYAyABKAkSEAoIaG9zdG5hbWUYBCABKAkSLAoGcmVzdWx0GAUgASgLMhwuYWxsb3dvcHMudjEuRXhlY3V0aW9uUmVzdWx0Ei4KCnN0YXJ0ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2ZpbmlzaGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1vdXRwdXRfc3RvcmVkGAggASgIEhIKCnN0ZXBfY291bnQYCSABKA0iVQoIVGFza1N0ZXASDQoFaW5kZXgYASABKA0SDAoEbmFtZRgCIAEoCRIsCgZyZXN1bHQYAyABKAsyHC5hbGxvd29wcy52MS5FeGVjdXRpb25SZXN1bHQi0gMKDVJ1bkpvYlJlcXVlc3QSDgoGYWN0aW9uGAEgASgJEikKB3RhcmdldHMYAiABKAsyGC5hbGxvd29wcy52MS5Ib3N0VGFyZ2V0cxIbCg5leHBlY3RlZF9jb3VudBgDIAEoBEgAiAEBEicKBnBhcmFtcxgEIAEoCzIXLmFsbG93b3BzLnYxLlBhcmFtZXRlcnMSDgoGcmVhc29uGAUgASgJEhkKDHdhaXRfc2Vjb25kcxgGIAEoDUgBiAEBEhcKCmJhdGNoX3NpemUYByABKA1IAogBARIZCgxtYXhfZmFpbHVyZXMYCCABKA1IA4gBARIrCgdmaWx0ZXJzGAkgASgLMhouYWxsb3dvcHMudjEuT3V0cHV0RmlsdGVycxIXCg9yZXNwb25zZV9mb3JtYXQYCiABKAkSEAoIZ3JvdXBpbmcYCyABKAkSKgoIZXZpZGVuY2UYDCABKAsyGC5hbGxvd29wcy52MS5Kb2JFdmlkZW5jZRIZChFjbGllbnRfcmVxdWVzdF9pZBgNIAEoCUIRCg9fZXhwZWN0ZWRfY291bnRCDwoNX3dhaXRfc2Vjb25kc0INCgtfYmF0Y2hfc2l6ZUIPCg1fbWF4X2ZhaWx1cmVzIlkKDlJ1bkpvYlJlc3BvbnNlEh0KA2pvYhgBIAEoCzIQLmFsbG93b3BzLnYxLkpvYhIoCgdzdW1tYXJ5GAIgASgLMhcuYWxsb3dvcHMudjEuSm9iU3VtbWFyeSJ2Cg1HZXRKb2JSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCRIZCgx3YWl0X3NlY29uZHMYAiABKA1IAIgBARIXCg9yZXNwb25zZV9mb3JtYXQYAyABKAkSEAoIZ3JvdXBpbmcYBCABKAlCDwoNX3dhaXRfc2Vjb25kcyJZCg5HZXRKb2JSZXNwb25zZRIdCgNqb2IYASABKAsyEC5hbGxvd29wcy52MS5Kb2ISKAoHc3VtbWFyeRgCIAEoCzIXLmFsbG93b3BzLnYxLkpvYlN1bW1hcnkinAEKDk1ldHJpY1ZhcmlhbmNlEg0KBWxhYmVsGAEgASgJEgwKBHVuaXQYAiABKAkSCwoDbWluGAMgASgBEgsKA21heBgEIAEoARILCgNwOTUYBSABKAESEAoIbWluX2hvc3QYBiABKAkSEAoIbWF4X2hvc3QYByABKAkSFQoNb3V0bGllcl9ob3N0cxgIIAMoCRILCgNwNTAYCSABKAEiiAMKC091dHB1dEdyb3VwEhYKCWV4aXRfY29kZRgBIAEoBUgAiAEBEhUKDXN0ZG91dF9zaGEyNTYYAiABKAwSFQoNc3RkZXJyX3NoYTI1NhgDIAEoDBISCgpob3N0X2NvdW50GAQgASgEEg0KBWhvc3RzGAUgAygJEg4KBnN0ZG91dBgGIAEoCRIOCgZzdGRlcnIYByABKAkSEQoJdHJ1bmNhdGVkGAggASgIEg4KBnJlYXNvbhgJIAEoCRIsCghzZXZlcml0eRgKIAEoDjIaLmFsbG93b3BzLnYxLkdyb3VwU2V2ZXJpdHkSFgoOYW5vbWFseV9yZWFzb24YCyABKAkSFwoPdGVtcGxhdGVfc2hhMjU2GAwgASgMEhcKD3RlbXBsYXRlX3N0ZG91dBgNIAEoCRIXCg90ZW1wbGF0ZV9zdGRlcnIYDiABKAkSLgoJdmFyaWFuY2VzGA8gAygLMhsuYWxsb3dvcHMudjEuTWV0cmljVmFyaWFuY2VCDAoKX2V4aXRfY29kZSK1AgoKSm9iU3VtbWFyeRIoCgZncm91cHMYASADKAsyGC5hbGxvd29wcy52MS5PdXRwdXRHcm91cBIVCg1vZmZsaW5lX2hvc3RzGAIgAygJEi4KDG91dHB1dF90cnVzdBgDIAEoDjIYLmFsbG93b3BzLnYxLk91dHB1dFRydXN0EhEKCXRydW5jYXRlZBgEIAEoCBIQCghncm91cGluZxgFIAEoCRIPCgdyYW5raW5nGAYgASgJEhQKDHRvdGFsX2dyb3VwcxgHIAEoBBIWCg5vbWl0dGVkX2dyb3VwcxgIIAEoBBIbChNmb2xkZWRfbm9ybWFsX2hvc3RzGAkgASgEEhUKDW9taXR0ZWRfaG9zdHMYCiABKAQSHgoWdW5maW5pc2hlZF9ob3N0c19jb3VudBgLIAEoBCKwAQoPTGlzdEpvYnNSZXF1ZXN0EiYKBHBhZ2UYASABKAsyGC5hbGxvd29wcy52MS5QYWdlUmVxdWVzdBInCgdjcmVhdGVkGAIgASgLMhYuYWxsb3dvcHMudjEuVGltZVJhbmdlEigKCHN0YXR1c2VzGAMgAygOMhYuYWxsb3dvcHMudjEuSm9iU3RhdHVzEg4KBmFjdGlvbhgEIAEoCRISCgpzdWJqZWN0X2lkGAUgASgJIlsKEExpc3RKb2JzUmVzcG9uc2USHgoEam9icxgBIAMoCzIQLmFsbG93b3BzLnYxLkpvYhInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlIocBChBMaXN0VGFza3NSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCRImCgRwYWdlGAIgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QSKQoIc3RhdHVzZXMYAyADKA4yFy5hbGxvd29wcy52MS5UYXNrU3RhdHVzEhAKCGhvc3RuYW1lGAQgASgJIl4KEUxpc3RUYXNrc1Jlc3BvbnNlEiAKBXRhc2tzGAEgAygLMhEuYWxsb3dvcHMudjEuVGFzaxInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlIl8KFExpc3RUYXNrU3RlcHNSZXF1ZXN0Eg4KBmpvYl9pZBgBIAEoCRIPCgd0YXNrX2lkGAIgASgJEiYKBHBhZ2UYAyABKAsyGC5hbGxvd29wcy52MS5QYWdlUmVxdWVzdCJmChVMaXN0VGFza1N0ZXBzUmVzcG9uc2USJAoFc3RlcHMYASADKAsyFS5hbGxvd29wcy52MS5UYXNrU3RlcBInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlIiIKEENhbmNlbEpvYlJlcXVlc3QSDgoGam9iX2lkGAEgASgJIjIKEUNhbmNlbEpvYlJlc3BvbnNlEh0KA2pvYhgBIAEoCzIQLmFsbG93b3BzLnYxLkpvYiKvAQoTR2V0Sm9iT3V0cHV0UmVxdWVzdBIOCgZqb2JfaWQYASABKAkSEAoIaG9zdG5hbWUYAiABKAkSFwoKc3RlcF9pbmRleBgDIAEoDUgAiAEBEikKBnN0cmVhbRgEIAEoDjIZLmFsbG93b3BzLnYxLk91dHB1dFN0cmVhbRIOCgZvZmZzZXQYBSABKAQSEwoLbGltaXRfYnl0ZXMYBiABKA1CDQoLX3N0ZXBfaW5kZXgi6QEKFEdldEpvYk91dHB1dFJlc3BvbnNlEgwKBGRhdGEYASABKAwSEwoLbmV4dF9vZmZzZXQYAiABKAQSCwoDZW9mGAMgASgIEhEKCXRydW5jYXRlZBgEIAEoCBIaChJzY2FuX2xpbWl0X3JlYWNoZWQYBSABKAgSFQoNb3V0cHV0X3N0b3JlZBgGIAEoCBIuCgxvdXRwdXRfdHJ1c3QYByABKA4yGC5hbGxvd29wcy52MS5PdXRwdXRUcnVzdBIrCgZvdXRwdXQYCCABKAsyGy5hbGxvd29wcy52MS5PdXRwdXRNZXRhZGF0YSJ7Cg9EaWZmSm9ic1JlcXVlc3QSEwoLYmFzZV9qb2JfaWQYASABKAkSFQoNdGFyZ2V0X2pvYl9pZBgCIAEoCRIQCghncm91cGluZxgDIAEoCRIZCgxvbmx5X2NoYW5nZWQYBCABKAhIAIgBAUIPCg1fb25seV9jaGFuZ2VkIoABChBEaWZmSm9ic1Jlc3BvbnNlEiIKCGJhc2Vfam9iGAEgASgLMhAuYWxsb3dvcHMudjEuSm9iEiQKCnRhcmdldF9qb2IYAiABKAsyEC5hbGxvd29wcy52MS5Kb2ISIgoEZGlmZhgDIAEoCzIULmFsbG93b3BzLnYxLkpvYkRpZmYikAIKEFN0YXR1c1RyYW5zaXRpb24SLAoLZnJvbV9zdGF0dXMYASABKA4yFy5hbGxvd29wcy52MS5UYXNrU3RhdHVzEioKCXRvX3N0YXR1cxgCIAEoDjIXLmFsbG93b3BzLnYxLlRhc2tTdGF0dXMSGwoOZnJvbV9leGl0X2NvZGUYAyABKAVIAIgBARIZCgx0b19leGl0X2NvZGUYBCABKAVIAYgBARIOCgZyZWFzb24YBSABKAkSEgoKaG9zdF9jb3VudBgGIAEoBBINCgVob3N0cxgHIAMoCRITCgtkZWdyYWRhdGlvbhgIIAEoCEIRCg9fZnJvbV9leGl0X2NvZGVCDwoNX3RvX2V4aXRfY29kZSLQAgoNUGF0dGVybkNoYW5nZRIxCg1iYXNlX3NldmVyaXR5GAEgASgOMhouYWxsb3dvcHMudjEuR3JvdXBTZXZlcml0eRIzCg90YXJnZXRfc2V2ZXJpdHkYAiABKA4yGi5hbGxvd29wcy52MS5Hcm91cFNldmVyaXR5EhIKCmhvc3RfY291bnQYAyABKAQSDQoFaG9zdHMYBCADKAkSEQoJdW5jaGFuZ2VkGAUgASgIEhQKDGJhc2VfcHJldmlldxgGIAEoCRIWCg50YXJnZXRfcHJldmlldxgHIAEoCRIVCg1yZW1vdmVkX2xpbmVzGAggAygJEhMKC2FkZGVkX2xpbmVzGAkgAygJEhUKDWRpZmZfY29tcHV0ZWQYCiABKAgSFgoOYmFzZV90cnVuY2F0ZWQYCyABKAgSGAoQdGFyZ2V0X3RydW5jYXRlZBgMIAEoCCKnAgoLTWV0cmljRHJpZnQSDQoFbGFiZWwYASABKAkSDAoEdW5pdBgCIAEoCRIQCghiYXNlX3A1MBgDIAEoARISCgp0YXJnZXRfcDUwGAQgASgBEhAKCGJhc2VfbWF4GAUgASgBEhIKCnRhcmdldF9tYXgYBiABKAESEQoJbWF4X2RlbHRhGAcgASgBEhYKDm1heF9kZWx0YV9iYXNlGAggASgBEhgKEG1heF9kZWx0YV90YXJnZXQYCSABKAESGgoNbWF4X2RlbHRhX3BjdBgKIAEoAUgAiAEBEhAKCG1heF9ob3N0GAsgASgJEhYKDmFmZmVjdGVkX2hvc3RzGAwgASgEEhIKCmhvc3RfY291bnQYDSABKARCEAoOX21heF9kZWx0YV9wY3QitgQKB0pvYkRpZmYSLgoMb3V0cHV0X3RydXN0GAEgASgOMhguYWxsb3dvcHMudjEuT3V0cHV0VHJ1c3QSEQoJdHJ1bmNhdGVkGAIgASgIEhkKEXByZXZpZXdfdHJ1bmNhdGVkGAMgASgIEiEKGWFjdGlvbl9kZWZpbml0aW9uX2NoYW5nZWQYBCABKAgSEAoIZ3JvdXBpbmcYBSABKAkSHQoVdW5jaGFuZ2VkX2hvc3RzX2NvdW50GAYgASgEEhkKEWFkZGVkX2hvc3RzX2NvdW50GAcgASgEEhMKC2FkZGVkX2hvc3RzGAggAygJEhsKE3JlbW92ZWRfaG9zdHNfY291bnQYCSABKAQSFQoNcmVtb3ZlZF9ob3N0cxgKIAMoCRIcChRyZXBsYWNlZF9ob3N0c19jb3VudBgLIAEoBBIWCg5yZXBsYWNlZF9ob3N0cxgMIAMoCRI5ChJzdGF0dXNfdHJhbnNpdGlvbnMYDSADKAsyHS5hbGxvd29wcy52MS5TdGF0dXNUcmFuc2l0aW9uEh0KFXRvdGFsX3BhdHRlcm5fY2hhbmdlcxgOIAEoBBIfChdvbWl0dGVkX3BhdHRlcm5fY2hhbmdlcxgPIAEoBBIzCg9wYXR0ZXJuX2NoYW5nZXMYECADKAsyGi5hbGxvd29wcy52MS5QYXR0ZXJuQ2hhbmdlEi8KDW1ldHJpY19kcmlmdHMYESADKAsyGC5hbGxvd29wcy52MS5NZXRyaWNEcmlmdCqCAQoNR3JvdXBTZXZlcml0eRIeChpHUk9VUF9TRVZFUklUWV9VTlNQRUNJRklFRBAAEhoKFkdST1VQX1NFVkVSSVRZX0ZBSUxVUkUQARIaChZHUk9VUF9TRVZFUklUWV9BTk9NQUxZEAISGQoVR1JPVVBfU0VWRVJJVFlfTk9STUFMEAMy6QQKCkpvYlNlcnZpY2USQQoGUnVuSm9iEhouYWxsb3dvcHMudjEuUnVuSm9iUmVxdWVzdBobLmFsbG93b3BzLnYxLlJ1bkpvYlJlc3BvbnNlEkEKBkdldEpvYhIaLmFsbG93b3BzLnYxLkdldEpvYlJlcXVlc3QaGy5hbGxvd29wcy52MS5HZXRKb2JSZXNwb25zZRJHCghMaXN0Sm9icxIcLmFsbG93b3BzLnYxLkxpc3RKb2JzUmVxdWVzdBodLmFsbG93b3BzLnYxLkxpc3RKb2JzUmVzcG9uc2USSgoJTGlzdFRhc2tzEh0uYWxsb3dvcHMudjEuTGlzdFRhc2tzUmVxdWVzdBoeLmFsbG93b3BzLnYxLkxpc3RUYXNrc1Jlc3BvbnNlElYKDUxpc3RUYXNrU3RlcHMSIS5hbGxvd29wcy52MS5MaXN0VGFza1N0ZXBzUmVxdWVzdBoiLmFsbG93b3BzLnYxLkxpc3RUYXNrU3RlcHNSZXNwb25zZRJKCglDYW5jZWxKb2ISHS5hbGxvd29wcy52MS5DYW5jZWxKb2JSZXF1ZXN0Gh4uYWxsb3dvcHMudjEuQ2FuY2VsSm9iUmVzcG9uc2USUwoMR2V0Sm9iT3V0cHV0EiAuYWxsb3dvcHMudjEuR2V0Sm9iT3V0cHV0UmVxdWVzdBohLmFsbG93b3BzLnYxLkdldEpvYk91dHB1dFJlc3BvbnNlEkcKCERpZmZKb2JzEhwuYWxsb3dvcHMudjEuRGlmZkpvYnNSZXF1ZXN0Gh0uYWxsb3dvcHMudjEuRGlmZkpvYnNSZXNwb25zZUI8WjpnaXRodWIuY29tL2xpdWJpbmcwODA2L2FsbG93b3BzL2dlbi9hbGxvd29wcy92MTthbGxvd29wc3YxYgZwcm90bzM", [file_allowops_v1_common, file_allowops_v1_policy, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message allowops.v1.TaskCount
@@ -52,6 +54,160 @@ export type TaskCountJson = {
  */
 export const TaskCountSchema: GenMessage<TaskCount, {jsonType: TaskCountJson}> = /*@__PURE__*/
   messageDesc(file_allowops_v1_job, 0);
+
+/**
+ * @generated from message allowops.v1.JobEvidence
+ */
+export type JobEvidence = Message<"allowops.v1.JobEvidence"> & {
+  /**
+   * @generated from field: repeated string job_ids = 1;
+   */
+  jobIds: string[];
+
+  /**
+   * @generated from field: string summary = 2;
+   */
+  summary: string;
+};
+
+/**
+ * @generated from message allowops.v1.JobEvidence
+ */
+export type JobEvidenceJson = {
+  /**
+   * @generated from field: repeated string job_ids = 1;
+   */
+  jobIds?: string[];
+
+  /**
+   * @generated from field: string summary = 2;
+   */
+  summary?: string;
+};
+
+/**
+ * Describes the message allowops.v1.JobEvidence.
+ * Use `create(JobEvidenceSchema)` to create a new message.
+ */
+export const JobEvidenceSchema: GenMessage<JobEvidence, {jsonType: JobEvidenceJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_job, 1);
+
+/**
+ * @generated from message allowops.v1.JobApprovalSummary
+ */
+export type JobApprovalSummary = Message<"allowops.v1.JobApprovalSummary"> & {
+  /**
+   * @generated from field: string approval_id = 1;
+   */
+  approvalId: string;
+
+  /**
+   * @generated from field: allowops.v1.ApprovalStatus status = 2;
+   */
+  status: ApprovalStatus;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 3;
+   */
+  expiresAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: uint32 min_approvals = 4;
+   */
+  minApprovals: number;
+
+  /**
+   * @generated from field: uint32 approved_count = 5;
+   */
+  approvedCount: number;
+
+  /**
+   * @generated from field: repeated allowops.v1.PolicyApprovalRoleSet required_approver_role_sets = 6;
+   */
+  requiredApproverRoleSets: PolicyApprovalRoleSet[];
+
+  /**
+   * @generated from field: google.protobuf.Timestamp decided_at = 7;
+   */
+  decidedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: string decision_reason = 8;
+   */
+  decisionReason: string;
+
+  /**
+   * @generated from field: string console_url = 9;
+   */
+  consoleUrl: string;
+
+  /**
+   * @generated from field: string recheck_error = 10;
+   */
+  recheckError: string;
+};
+
+/**
+ * @generated from message allowops.v1.JobApprovalSummary
+ */
+export type JobApprovalSummaryJson = {
+  /**
+   * @generated from field: string approval_id = 1;
+   */
+  approvalId?: string;
+
+  /**
+   * @generated from field: allowops.v1.ApprovalStatus status = 2;
+   */
+  status?: ApprovalStatusJson;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 3;
+   */
+  expiresAt?: TimestampJson;
+
+  /**
+   * @generated from field: uint32 min_approvals = 4;
+   */
+  minApprovals?: number;
+
+  /**
+   * @generated from field: uint32 approved_count = 5;
+   */
+  approvedCount?: number;
+
+  /**
+   * @generated from field: repeated allowops.v1.PolicyApprovalRoleSet required_approver_role_sets = 6;
+   */
+  requiredApproverRoleSets?: PolicyApprovalRoleSetJson[];
+
+  /**
+   * @generated from field: google.protobuf.Timestamp decided_at = 7;
+   */
+  decidedAt?: TimestampJson;
+
+  /**
+   * @generated from field: string decision_reason = 8;
+   */
+  decisionReason?: string;
+
+  /**
+   * @generated from field: string console_url = 9;
+   */
+  consoleUrl?: string;
+
+  /**
+   * @generated from field: string recheck_error = 10;
+   */
+  recheckError?: string;
+};
+
+/**
+ * Describes the message allowops.v1.JobApprovalSummary.
+ * Use `create(JobApprovalSummarySchema)` to create a new message.
+ */
+export const JobApprovalSummarySchema: GenMessage<JobApprovalSummary, {jsonType: JobApprovalSummaryJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_job, 2);
 
 /**
  * Metadata only; even output previews require view_output authorization.
@@ -118,6 +274,11 @@ export type Job = Message<"allowops.v1.Job"> & {
    * @generated from field: uint64 policy_version = 12;
    */
   policyVersion: bigint;
+
+  /**
+   * @generated from field: allowops.v1.JobApprovalSummary approval = 13;
+   */
+  approval?: JobApprovalSummary | undefined;
 };
 
 /**
@@ -185,6 +346,11 @@ export type JobJson = {
    * @generated from field: uint64 policy_version = 12;
    */
   policyVersion?: string;
+
+  /**
+   * @generated from field: allowops.v1.JobApprovalSummary approval = 13;
+   */
+  approval?: JobApprovalSummaryJson;
 };
 
 /**
@@ -192,7 +358,7 @@ export type JobJson = {
  * Use `create(JobSchema)` to create a new message.
  */
 export const JobSchema: GenMessage<Job, {jsonType: JobJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 1);
+  messageDesc(file_allowops_v1_job, 3);
 
 /**
  * @generated from message allowops.v1.Task
@@ -299,7 +465,7 @@ export type TaskJson = {
  * Use `create(TaskSchema)` to create a new message.
  */
 export const TaskSchema: GenMessage<Task, {jsonType: TaskJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 2);
+  messageDesc(file_allowops_v1_job, 4);
 
 /**
  * @generated from message allowops.v1.TaskStep
@@ -346,7 +512,7 @@ export type TaskStepJson = {
  * Use `create(TaskStepSchema)` to create a new message.
  */
 export const TaskStepSchema: GenMessage<TaskStep, {jsonType: TaskStepJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 3);
+  messageDesc(file_allowops_v1_job, 5);
 
 /**
  * @generated from message allowops.v1.RunJobRequest
@@ -406,6 +572,16 @@ export type RunJobRequest = Message<"allowops.v1.RunJobRequest"> & {
    * @generated from field: string grouping = 11;
    */
   grouping: string;
+
+  /**
+   * @generated from field: allowops.v1.JobEvidence evidence = 12;
+   */
+  evidence?: JobEvidence | undefined;
+
+  /**
+   * @generated from field: string client_request_id = 13;
+   */
+  clientRequestId: string;
 };
 
 /**
@@ -466,6 +642,16 @@ export type RunJobRequestJson = {
    * @generated from field: string grouping = 11;
    */
   grouping?: string;
+
+  /**
+   * @generated from field: allowops.v1.JobEvidence evidence = 12;
+   */
+  evidence?: JobEvidenceJson;
+
+  /**
+   * @generated from field: string client_request_id = 13;
+   */
+  clientRequestId?: string;
 };
 
 /**
@@ -473,7 +659,7 @@ export type RunJobRequestJson = {
  * Use `create(RunJobRequestSchema)` to create a new message.
  */
 export const RunJobRequestSchema: GenMessage<RunJobRequest, {jsonType: RunJobRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 4);
+  messageDesc(file_allowops_v1_job, 6);
 
 /**
  * @generated from message allowops.v1.RunJobResponse
@@ -510,7 +696,7 @@ export type RunJobResponseJson = {
  * Use `create(RunJobResponseSchema)` to create a new message.
  */
 export const RunJobResponseSchema: GenMessage<RunJobResponse, {jsonType: RunJobResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 5);
+  messageDesc(file_allowops_v1_job, 7);
 
 /**
  * @generated from message allowops.v1.GetJobRequest
@@ -567,7 +753,7 @@ export type GetJobRequestJson = {
  * Use `create(GetJobRequestSchema)` to create a new message.
  */
 export const GetJobRequestSchema: GenMessage<GetJobRequest, {jsonType: GetJobRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 6);
+  messageDesc(file_allowops_v1_job, 8);
 
 /**
  * @generated from message allowops.v1.GetJobResponse
@@ -604,7 +790,7 @@ export type GetJobResponseJson = {
  * Use `create(GetJobResponseSchema)` to create a new message.
  */
 export const GetJobResponseSchema: GenMessage<GetJobResponse, {jsonType: GetJobResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 7);
+  messageDesc(file_allowops_v1_job, 9);
 
 /**
  * @generated from message allowops.v1.MetricVariance
@@ -711,7 +897,7 @@ export type MetricVarianceJson = {
  * Use `create(MetricVarianceSchema)` to create a new message.
  */
 export const MetricVarianceSchema: GenMessage<MetricVariance, {jsonType: MetricVarianceJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 8);
+  messageDesc(file_allowops_v1_job, 10);
 
 /**
  * G39: previews require view_output. Concise samples at most two hostnames;
@@ -888,7 +1074,7 @@ export type OutputGroupJson = {
  * Use `create(OutputGroupSchema)` to create a new message.
  */
 export const OutputGroupSchema: GenMessage<OutputGroup, {jsonType: OutputGroupJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 9);
+  messageDesc(file_allowops_v1_job, 11);
 
 /**
  * @generated from message allowops.v1.JobSummary
@@ -1019,7 +1205,7 @@ export type JobSummaryJson = {
  * Use `create(JobSummarySchema)` to create a new message.
  */
 export const JobSummarySchema: GenMessage<JobSummary, {jsonType: JobSummaryJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 10);
+  messageDesc(file_allowops_v1_job, 12);
 
 /**
  * @generated from message allowops.v1.ListJobsRequest
@@ -1086,7 +1272,7 @@ export type ListJobsRequestJson = {
  * Use `create(ListJobsRequestSchema)` to create a new message.
  */
 export const ListJobsRequestSchema: GenMessage<ListJobsRequest, {jsonType: ListJobsRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 11);
+  messageDesc(file_allowops_v1_job, 13);
 
 /**
  * @generated from message allowops.v1.ListJobsResponse
@@ -1123,7 +1309,7 @@ export type ListJobsResponseJson = {
  * Use `create(ListJobsResponseSchema)` to create a new message.
  */
 export const ListJobsResponseSchema: GenMessage<ListJobsResponse, {jsonType: ListJobsResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 12);
+  messageDesc(file_allowops_v1_job, 14);
 
 /**
  * @generated from message allowops.v1.ListTasksRequest
@@ -1180,7 +1366,7 @@ export type ListTasksRequestJson = {
  * Use `create(ListTasksRequestSchema)` to create a new message.
  */
 export const ListTasksRequestSchema: GenMessage<ListTasksRequest, {jsonType: ListTasksRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 13);
+  messageDesc(file_allowops_v1_job, 15);
 
 /**
  * @generated from message allowops.v1.ListTasksResponse
@@ -1217,7 +1403,7 @@ export type ListTasksResponseJson = {
  * Use `create(ListTasksResponseSchema)` to create a new message.
  */
 export const ListTasksResponseSchema: GenMessage<ListTasksResponse, {jsonType: ListTasksResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 14);
+  messageDesc(file_allowops_v1_job, 16);
 
 /**
  * @generated from message allowops.v1.ListTaskStepsRequest
@@ -1264,7 +1450,7 @@ export type ListTaskStepsRequestJson = {
  * Use `create(ListTaskStepsRequestSchema)` to create a new message.
  */
 export const ListTaskStepsRequestSchema: GenMessage<ListTaskStepsRequest, {jsonType: ListTaskStepsRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 15);
+  messageDesc(file_allowops_v1_job, 17);
 
 /**
  * @generated from message allowops.v1.ListTaskStepsResponse
@@ -1301,7 +1487,7 @@ export type ListTaskStepsResponseJson = {
  * Use `create(ListTaskStepsResponseSchema)` to create a new message.
  */
 export const ListTaskStepsResponseSchema: GenMessage<ListTaskStepsResponse, {jsonType: ListTaskStepsResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 16);
+  messageDesc(file_allowops_v1_job, 18);
 
 /**
  * @generated from message allowops.v1.CancelJobRequest
@@ -1328,7 +1514,7 @@ export type CancelJobRequestJson = {
  * Use `create(CancelJobRequestSchema)` to create a new message.
  */
 export const CancelJobRequestSchema: GenMessage<CancelJobRequest, {jsonType: CancelJobRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 17);
+  messageDesc(file_allowops_v1_job, 19);
 
 /**
  * @generated from message allowops.v1.CancelJobResponse
@@ -1355,7 +1541,7 @@ export type CancelJobResponseJson = {
  * Use `create(CancelJobResponseSchema)` to create a new message.
  */
 export const CancelJobResponseSchema: GenMessage<CancelJobResponse, {jsonType: CancelJobResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 18);
+  messageDesc(file_allowops_v1_job, 20);
 
 /**
  * @generated from message allowops.v1.GetJobOutputRequest
@@ -1432,7 +1618,7 @@ export type GetJobOutputRequestJson = {
  * Use `create(GetJobOutputRequestSchema)` to create a new message.
  */
 export const GetJobOutputRequestSchema: GenMessage<GetJobOutputRequest, {jsonType: GetJobOutputRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 19);
+  messageDesc(file_allowops_v1_job, 21);
 
 /**
  * @generated from message allowops.v1.GetJobOutputResponse
@@ -1529,7 +1715,7 @@ export type GetJobOutputResponseJson = {
  * Use `create(GetJobOutputResponseSchema)` to create a new message.
  */
 export const GetJobOutputResponseSchema: GenMessage<GetJobOutputResponse, {jsonType: GetJobOutputResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 20);
+  messageDesc(file_allowops_v1_job, 22);
 
 /**
  * @generated from message allowops.v1.DiffJobsRequest
@@ -1586,7 +1772,7 @@ export type DiffJobsRequestJson = {
  * Use `create(DiffJobsRequestSchema)` to create a new message.
  */
 export const DiffJobsRequestSchema: GenMessage<DiffJobsRequest, {jsonType: DiffJobsRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 21);
+  messageDesc(file_allowops_v1_job, 23);
 
 /**
  * @generated from message allowops.v1.DiffJobsResponse
@@ -1633,7 +1819,7 @@ export type DiffJobsResponseJson = {
  * Use `create(DiffJobsResponseSchema)` to create a new message.
  */
 export const DiffJobsResponseSchema: GenMessage<DiffJobsResponse, {jsonType: DiffJobsResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 22);
+  messageDesc(file_allowops_v1_job, 24);
 
 /**
  * @generated from message allowops.v1.StatusTransition
@@ -1730,7 +1916,7 @@ export type StatusTransitionJson = {
  * Use `create(StatusTransitionSchema)` to create a new message.
  */
 export const StatusTransitionSchema: GenMessage<StatusTransition, {jsonType: StatusTransitionJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 23);
+  messageDesc(file_allowops_v1_job, 25);
 
 /**
  * @generated from message allowops.v1.PatternChange
@@ -1867,7 +2053,7 @@ export type PatternChangeJson = {
  * Use `create(PatternChangeSchema)` to create a new message.
  */
 export const PatternChangeSchema: GenMessage<PatternChange, {jsonType: PatternChangeJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 24);
+  messageDesc(file_allowops_v1_job, 26);
 
 /**
  * @generated from message allowops.v1.MetricDrift
@@ -2014,7 +2200,7 @@ export type MetricDriftJson = {
  * Use `create(MetricDriftSchema)` to create a new message.
  */
 export const MetricDriftSchema: GenMessage<MetricDrift, {jsonType: MetricDriftJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 25);
+  messageDesc(file_allowops_v1_job, 27);
 
 /**
  * @generated from message allowops.v1.JobDiff
@@ -2201,7 +2387,7 @@ export type JobDiffJson = {
  * Use `create(JobDiffSchema)` to create a new message.
  */
 export const JobDiffSchema: GenMessage<JobDiff, {jsonType: JobDiffJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_job, 26);
+  messageDesc(file_allowops_v1_job, 28);
 
 /**
  * @generated from enum allowops.v1.GroupSeverity

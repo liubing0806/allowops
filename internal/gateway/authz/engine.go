@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/netip"
 	"reflect"
+	"slices"
 	"time"
 	_ "time/tzdata"
 
@@ -23,8 +24,9 @@ var policy string
 
 // Engine is an immutable policy snapshot, safe for concurrent evaluation.
 type Engine struct {
-	query rego.PreparedEvalQuery
-	ready bool
+	query          rego.PreparedEvalQuery
+	approvalByRule map[string]ApprovalConfig
+	ready          bool
 }
 
 func New(ctx context.Context, source RuleSource, bootstrapAdmins []string) (*Engine, error) {
@@ -40,12 +42,13 @@ func New(ctx context.Context, source RuleSource, bootstrapAdmins []string) (*Eng
 
 func newEngine(ctx context.Context, rules []Rule, bootstrapAdmins []string) (*Engine, error) {
 	ids := make(map[string]bool, len(rules))
+	approvalByRule := make(map[string]ApprovalConfig)
 	for _, rule := range rules {
 		if rule.ID == "" || rule.ID == "bootstrap_admins" || ids[rule.ID] {
 			return nil, fmt.Errorf("invalid or duplicate rule ID %q", rule.ID)
 		}
 		ids[rule.ID] = true
-		if rule.Effect != "allow" && rule.Effect != "deny" {
+		if rule.Effect != "allow" && rule.Effect != "deny" && rule.Effect != "require_approval" {
 			return nil, fmt.Errorf("rule %q: invalid effect", rule.ID)
 		}
 		if len(rule.Roles) == 0 || len(rule.Operations) == 0 {
@@ -55,6 +58,19 @@ func newEngine(ctx context.Context, rules []Rule, bootstrapAdmins []string) (*En
 			if !validOperation(op) {
 				return nil, fmt.Errorf("rule %q: unknown operation %q", rule.ID, op)
 			}
+		}
+		if err := rule.ValidateApproval(); err != nil {
+			return nil, fmt.Errorf("rule %q: %w", rule.ID, err)
+		}
+		if rule.Effect == "require_approval" {
+			var approval ApprovalConfig
+			if rule.Approval != nil {
+				approval = *rule.Approval
+				approval.ApproverRoles = slices.Clone(approval.ApproverRoles)
+				slices.Sort(approval.ApproverRoles)
+			}
+			approval.MinApprovals = max(1, approval.MinApprovals)
+			approvalByRule[rule.ID] = approval
 		}
 		if rule.Hours != nil && (rule.Hours.From < 0 || rule.Hours.To > 24 || rule.Hours.From >= rule.Hours.To) {
 			return nil, fmt.Errorf("rule %q: invalid hours", rule.ID)
@@ -84,7 +100,7 @@ func newEngine(ctx context.Context, rules []Rule, bootstrapAdmins []string) (*En
 	if err != nil {
 		return nil, err
 	}
-	return &Engine{query: query, ready: true}, nil
+	return &Engine{query: query, approvalByRule: approvalByRule, ready: true}, nil
 }
 
 type ruleGroup struct {
@@ -98,6 +114,8 @@ func compactRules(rules []Rule) []ruleGroup {
 	groups := []ruleGroup{}
 	indices := map[string]int{}
 	for _, rule := range rules {
+		// Rego matches on conditions and effects. Go aggregates approvals by rule ID.
+		rule.Approval = nil
 		condition := rule
 		condition.ID = ""
 		key, _ := json.Marshal(condition) // Rule contains only JSON-serializable field types.
@@ -139,7 +157,28 @@ func (e *Engine) Evaluate(ctx context.Context, input Input) (Result, error) {
 	if err := json.Unmarshal(encoded, &result); err != nil {
 		return deny, err
 	}
-	if (result.Decision != "allow" && result.Decision != "deny") || result.RuleIDs == nil {
+	if result.RuleIDs == nil {
+		return deny, errors.New("invalid policy result")
+	}
+	switch result.Decision {
+	case "allow", "deny":
+	case "require_approval":
+		var approvals []*EffectiveApproval
+		for _, id := range result.RuleIDs {
+			if config, ok := e.approvalByRule[id]; ok {
+				approvals = append(approvals, &EffectiveApproval{
+					RequiredApproverRoleSets: [][]string{config.ApproverRoles},
+					MinApprovals:             config.MinApprovals,
+					TTLSeconds:               config.TTLSeconds,
+					AllowOwnerApprove:        config.AllowOwnerApprove,
+				})
+			}
+		}
+		result.Approval = MergeEffectiveApprovals(approvals)
+		if result.Approval == nil {
+			return deny, errors.New("policy requires approval without a matched approval rule")
+		}
+	default:
 		return deny, errors.New("invalid policy result")
 	}
 	return result, nil
@@ -160,7 +199,7 @@ func capabilities() *ast.Capabilities {
 
 func validOperation(op Operation) bool {
 	switch op {
-	case ExecuteAction, ModifyPolicy, ManageServiceAccounts, ManageHosts, CreateJoinToken, ManageUserRoles, PublishCatalog, ViewHosts, ViewInventory, ViewChanges, ViewKnowledge, ViewCatalog, ViewJobs, ViewOutput, ViewAudit, ViewSystem:
+	case ExecuteAction, ModifyPolicy, ManageServiceAccounts, ManageHosts, CreateJoinToken, ManageUserRoles, PublishCatalog, ViewHosts, ViewInventory, ViewChanges, ViewKnowledge, ViewCatalog, ViewJobs, ViewOutput, ViewApprovals, ApproveJobs, ViewAudit, ViewSystem:
 		return true
 	default:
 		return false
@@ -186,7 +225,7 @@ func CheckPolicyUpdate(ctx context.Context, proposed []Rule, subjects []Subject,
 	return ErrPolicyLockout
 }
 
-// Simulate returns changes to decisions or matched rule IDs, in input order, without I/O.
+// Simulate returns changes to decisions, matched rule IDs or approval requirements in input order.
 func Simulate(ctx context.Context, before, after []Rule, inputs []Input, bootstrapAdmins []string) ([]HostChange, error) {
 	oldEngine, err := newEngine(ctx, before, bootstrapAdmins)
 	if err != nil {

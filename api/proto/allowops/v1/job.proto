@@ -3,6 +3,7 @@ syntax = "proto3";
 package allowops.v1;
 
 import "allowops/v1/common.proto";
+import "allowops/v1/policy.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1";
@@ -23,6 +24,24 @@ message TaskCount {
   uint64 count = 2;
 }
 
+message JobEvidence {
+  repeated string job_ids = 1;
+  string summary = 2;
+}
+
+message JobApprovalSummary {
+  string approval_id = 1;
+  ApprovalStatus status = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  uint32 min_approvals = 4;
+  uint32 approved_count = 5;
+  repeated PolicyApprovalRoleSet required_approver_role_sets = 6;
+  google.protobuf.Timestamp decided_at = 7;
+  string decision_reason = 8;
+  string console_url = 9;
+  string recheck_error = 10;
+}
+
 // Metadata only; even output previews require view_output authorization.
 message Job {
   string job_id = 1;
@@ -37,6 +56,7 @@ message Job {
   uint64 total_tasks = 10;
   repeated TaskCount counts = 11;
   uint64 policy_version = 12;
+  JobApprovalSummary approval = 13;
 }
 
 message Task {
@@ -69,6 +89,8 @@ message RunJobRequest {
   OutputFilters filters = 9;
   string response_format = 10;
   string grouping = 11;
+  JobEvidence evidence = 12;
+  string client_request_id = 13;
 }
 
 message RunJobResponse {

@@ -34,6 +34,7 @@ const (
 	JobStatus_JOB_STATUS_FAILED           JobStatus = 5
 	JobStatus_JOB_STATUS_CANCELLED        JobStatus = 6
 	JobStatus_JOB_STATUS_DENIED           JobStatus = 7
+	JobStatus_JOB_STATUS_PENDING_APPROVAL JobStatus = 8
 )
 
 // Enum value maps for JobStatus.
@@ -47,6 +48,7 @@ var (
 		5: "JOB_STATUS_FAILED",
 		6: "JOB_STATUS_CANCELLED",
 		7: "JOB_STATUS_DENIED",
+		8: "JOB_STATUS_PENDING_APPROVAL",
 	}
 	JobStatus_value = map[string]int32{
 		"JOB_STATUS_UNSPECIFIED":      0,
@@ -57,6 +59,7 @@ var (
 		"JOB_STATUS_FAILED":           5,
 		"JOB_STATUS_CANCELLED":        6,
 		"JOB_STATUS_DENIED":           7,
+		"JOB_STATUS_PENDING_APPROVAL": 8,
 	}
 )
 
@@ -85,6 +88,116 @@ func (x JobStatus) Number() protoreflect.EnumNumber {
 // Deprecated: Use JobStatus.Descriptor instead.
 func (JobStatus) EnumDescriptor() ([]byte, []int) {
 	return file_allowops_v1_common_proto_rawDescGZIP(), []int{0}
+}
+
+type ApprovalStatus int32
+
+const (
+	ApprovalStatus_APPROVAL_STATUS_UNSPECIFIED      ApprovalStatus = 0
+	ApprovalStatus_APPROVAL_STATUS_PENDING          ApprovalStatus = 1
+	ApprovalStatus_APPROVAL_STATUS_APPROVED         ApprovalStatus = 2
+	ApprovalStatus_APPROVAL_STATUS_REJECTED         ApprovalStatus = 3
+	ApprovalStatus_APPROVAL_STATUS_EXPIRED          ApprovalStatus = 4
+	ApprovalStatus_APPROVAL_STATUS_CANCELLED        ApprovalStatus = 5
+	ApprovalStatus_APPROVAL_STATUS_EXECUTION_DENIED ApprovalStatus = 6
+)
+
+// Enum value maps for ApprovalStatus.
+var (
+	ApprovalStatus_name = map[int32]string{
+		0: "APPROVAL_STATUS_UNSPECIFIED",
+		1: "APPROVAL_STATUS_PENDING",
+		2: "APPROVAL_STATUS_APPROVED",
+		3: "APPROVAL_STATUS_REJECTED",
+		4: "APPROVAL_STATUS_EXPIRED",
+		5: "APPROVAL_STATUS_CANCELLED",
+		6: "APPROVAL_STATUS_EXECUTION_DENIED",
+	}
+	ApprovalStatus_value = map[string]int32{
+		"APPROVAL_STATUS_UNSPECIFIED":      0,
+		"APPROVAL_STATUS_PENDING":          1,
+		"APPROVAL_STATUS_APPROVED":         2,
+		"APPROVAL_STATUS_REJECTED":         3,
+		"APPROVAL_STATUS_EXPIRED":          4,
+		"APPROVAL_STATUS_CANCELLED":        5,
+		"APPROVAL_STATUS_EXECUTION_DENIED": 6,
+	}
+)
+
+func (x ApprovalStatus) Enum() *ApprovalStatus {
+	p := new(ApprovalStatus)
+	*p = x
+	return p
+}
+
+func (x ApprovalStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ApprovalStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_allowops_v1_common_proto_enumTypes[1].Descriptor()
+}
+
+func (ApprovalStatus) Type() protoreflect.EnumType {
+	return &file_allowops_v1_common_proto_enumTypes[1]
+}
+
+func (x ApprovalStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ApprovalStatus.Descriptor instead.
+func (ApprovalStatus) EnumDescriptor() ([]byte, []int) {
+	return file_allowops_v1_common_proto_rawDescGZIP(), []int{1}
+}
+
+type ApprovalVote int32
+
+const (
+	ApprovalVote_APPROVAL_VOTE_UNSPECIFIED ApprovalVote = 0
+	ApprovalVote_APPROVAL_VOTE_APPROVE     ApprovalVote = 1
+	ApprovalVote_APPROVAL_VOTE_REJECT      ApprovalVote = 2
+)
+
+// Enum value maps for ApprovalVote.
+var (
+	ApprovalVote_name = map[int32]string{
+		0: "APPROVAL_VOTE_UNSPECIFIED",
+		1: "APPROVAL_VOTE_APPROVE",
+		2: "APPROVAL_VOTE_REJECT",
+	}
+	ApprovalVote_value = map[string]int32{
+		"APPROVAL_VOTE_UNSPECIFIED": 0,
+		"APPROVAL_VOTE_APPROVE":     1,
+		"APPROVAL_VOTE_REJECT":      2,
+	}
+)
+
+func (x ApprovalVote) Enum() *ApprovalVote {
+	p := new(ApprovalVote)
+	*p = x
+	return p
+}
+
+func (x ApprovalVote) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ApprovalVote) Descriptor() protoreflect.EnumDescriptor {
+	return file_allowops_v1_common_proto_enumTypes[2].Descriptor()
+}
+
+func (ApprovalVote) Type() protoreflect.EnumType {
+	return &file_allowops_v1_common_proto_enumTypes[2]
+}
+
+func (x ApprovalVote) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ApprovalVote.Descriptor instead.
+func (ApprovalVote) EnumDescriptor() ([]byte, []int) {
+	return file_allowops_v1_common_proto_rawDescGZIP(), []int{2}
 }
 
 type TaskStatus int32
@@ -141,11 +254,11 @@ func (x TaskStatus) String() string {
 }
 
 func (TaskStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_allowops_v1_common_proto_enumTypes[1].Descriptor()
+	return file_allowops_v1_common_proto_enumTypes[3].Descriptor()
 }
 
 func (TaskStatus) Type() protoreflect.EnumType {
-	return &file_allowops_v1_common_proto_enumTypes[1]
+	return &file_allowops_v1_common_proto_enumTypes[3]
 }
 
 func (x TaskStatus) Number() protoreflect.EnumNumber {
@@ -154,7 +267,7 @@ func (x TaskStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TaskStatus.Descriptor instead.
 func (TaskStatus) EnumDescriptor() ([]byte, []int) {
-	return file_allowops_v1_common_proto_rawDescGZIP(), []int{1}
+	return file_allowops_v1_common_proto_rawDescGZIP(), []int{3}
 }
 
 type OutputStream int32
@@ -190,11 +303,11 @@ func (x OutputStream) String() string {
 }
 
 func (OutputStream) Descriptor() protoreflect.EnumDescriptor {
-	return file_allowops_v1_common_proto_enumTypes[2].Descriptor()
+	return file_allowops_v1_common_proto_enumTypes[4].Descriptor()
 }
 
 func (OutputStream) Type() protoreflect.EnumType {
-	return &file_allowops_v1_common_proto_enumTypes[2]
+	return &file_allowops_v1_common_proto_enumTypes[4]
 }
 
 func (x OutputStream) Number() protoreflect.EnumNumber {
@@ -203,7 +316,7 @@ func (x OutputStream) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use OutputStream.Descriptor instead.
 func (OutputStream) EnumDescriptor() ([]byte, []int) {
-	return file_allowops_v1_common_proto_rawDescGZIP(), []int{2}
+	return file_allowops_v1_common_proto_rawDescGZIP(), []int{4}
 }
 
 type OutputTrust int32
@@ -236,11 +349,11 @@ func (x OutputTrust) String() string {
 }
 
 func (OutputTrust) Descriptor() protoreflect.EnumDescriptor {
-	return file_allowops_v1_common_proto_enumTypes[3].Descriptor()
+	return file_allowops_v1_common_proto_enumTypes[5].Descriptor()
 }
 
 func (OutputTrust) Type() protoreflect.EnumType {
-	return &file_allowops_v1_common_proto_enumTypes[3]
+	return &file_allowops_v1_common_proto_enumTypes[5]
 }
 
 func (x OutputTrust) Number() protoreflect.EnumNumber {
@@ -249,7 +362,7 @@ func (x OutputTrust) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use OutputTrust.Descriptor instead.
 func (OutputTrust) EnumDescriptor() ([]byte, []int) {
-	return file_allowops_v1_common_proto_rawDescGZIP(), []int{3}
+	return file_allowops_v1_common_proto_rawDescGZIP(), []int{5}
 }
 
 // Opaque cursors bind filters and ordering; configurable limits follow G10.
@@ -1266,7 +1379,7 @@ const file_allowops_v1_common_proto_rawDesc = "" +
 	"\n" +
 	"request_id\x18\a \x01(\tR\trequestId\x12+\n" +
 	"\x11details_truncated\x18\b \x01(\bR\x10detailsTruncatedB\x0f\n" +
-	"\r_actual_count*\xd9\x01\n" +
+	"\r_actual_count*\xfa\x01\n" +
 	"\tJobStatus\x12\x1a\n" +
 	"\x16JOB_STATUS_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11JOB_STATUS_QUEUED\x10\x01\x12\x16\n" +
@@ -1275,7 +1388,20 @@ const file_allowops_v1_common_proto_rawDesc = "" +
 	"\x1bJOB_STATUS_PARTIALLY_FAILED\x10\x04\x12\x15\n" +
 	"\x11JOB_STATUS_FAILED\x10\x05\x12\x18\n" +
 	"\x14JOB_STATUS_CANCELLED\x10\x06\x12\x15\n" +
-	"\x11JOB_STATUS_DENIED\x10\a*\x91\x02\n" +
+	"\x11JOB_STATUS_DENIED\x10\a\x12\x1f\n" +
+	"\x1bJOB_STATUS_PENDING_APPROVAL\x10\b*\xec\x01\n" +
+	"\x0eApprovalStatus\x12\x1f\n" +
+	"\x1bAPPROVAL_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17APPROVAL_STATUS_PENDING\x10\x01\x12\x1c\n" +
+	"\x18APPROVAL_STATUS_APPROVED\x10\x02\x12\x1c\n" +
+	"\x18APPROVAL_STATUS_REJECTED\x10\x03\x12\x1b\n" +
+	"\x17APPROVAL_STATUS_EXPIRED\x10\x04\x12\x1d\n" +
+	"\x19APPROVAL_STATUS_CANCELLED\x10\x05\x12$\n" +
+	" APPROVAL_STATUS_EXECUTION_DENIED\x10\x06*b\n" +
+	"\fApprovalVote\x12\x1d\n" +
+	"\x19APPROVAL_VOTE_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15APPROVAL_VOTE_APPROVE\x10\x01\x12\x18\n" +
+	"\x14APPROVAL_VOTE_REJECT\x10\x02*\x91\x02\n" +
 	"\n" +
 	"TaskStatus\x12\x1b\n" +
 	"\x17TASK_STATUS_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -1308,45 +1434,47 @@ func file_allowops_v1_common_proto_rawDescGZIP() []byte {
 	return file_allowops_v1_common_proto_rawDescData
 }
 
-var file_allowops_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_allowops_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
 var file_allowops_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_allowops_v1_common_proto_goTypes = []any{
 	(JobStatus)(0),                // 0: allowops.v1.JobStatus
-	(TaskStatus)(0),               // 1: allowops.v1.TaskStatus
-	(OutputStream)(0),             // 2: allowops.v1.OutputStream
-	(OutputTrust)(0),              // 3: allowops.v1.OutputTrust
-	(*PageRequest)(nil),           // 4: allowops.v1.PageRequest
-	(*PageResponse)(nil),          // 5: allowops.v1.PageResponse
-	(*TimeRange)(nil),             // 6: allowops.v1.TimeRange
-	(*Parameters)(nil),            // 7: allowops.v1.Parameters
-	(*HostNames)(nil),             // 8: allowops.v1.HostNames
-	(*HostTargets)(nil),           // 9: allowops.v1.HostTargets
-	(*CatalogRef)(nil),            // 10: allowops.v1.CatalogRef
-	(*OutputFilters)(nil),         // 11: allowops.v1.OutputFilters
-	(*TaskAssignment)(nil),        // 12: allowops.v1.TaskAssignment
-	(*OutputMetadata)(nil),        // 13: allowops.v1.OutputMetadata
-	(*ExecutionResult)(nil),       // 14: allowops.v1.ExecutionResult
-	(*HostDenial)(nil),            // 15: allowops.v1.HostDenial
-	(*FieldViolation)(nil),        // 16: allowops.v1.FieldViolation
-	(*ErrorDetail)(nil),           // 17: allowops.v1.ErrorDetail
-	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 19: google.protobuf.Duration
+	(ApprovalStatus)(0),           // 1: allowops.v1.ApprovalStatus
+	(ApprovalVote)(0),             // 2: allowops.v1.ApprovalVote
+	(TaskStatus)(0),               // 3: allowops.v1.TaskStatus
+	(OutputStream)(0),             // 4: allowops.v1.OutputStream
+	(OutputTrust)(0),              // 5: allowops.v1.OutputTrust
+	(*PageRequest)(nil),           // 6: allowops.v1.PageRequest
+	(*PageResponse)(nil),          // 7: allowops.v1.PageResponse
+	(*TimeRange)(nil),             // 8: allowops.v1.TimeRange
+	(*Parameters)(nil),            // 9: allowops.v1.Parameters
+	(*HostNames)(nil),             // 10: allowops.v1.HostNames
+	(*HostTargets)(nil),           // 11: allowops.v1.HostTargets
+	(*CatalogRef)(nil),            // 12: allowops.v1.CatalogRef
+	(*OutputFilters)(nil),         // 13: allowops.v1.OutputFilters
+	(*TaskAssignment)(nil),        // 14: allowops.v1.TaskAssignment
+	(*OutputMetadata)(nil),        // 15: allowops.v1.OutputMetadata
+	(*ExecutionResult)(nil),       // 16: allowops.v1.ExecutionResult
+	(*HostDenial)(nil),            // 17: allowops.v1.HostDenial
+	(*FieldViolation)(nil),        // 18: allowops.v1.FieldViolation
+	(*ErrorDetail)(nil),           // 19: allowops.v1.ErrorDetail
+	(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 21: google.protobuf.Duration
 }
 var file_allowops_v1_common_proto_depIdxs = []int32{
-	18, // 0: allowops.v1.TimeRange.from:type_name -> google.protobuf.Timestamp
-	18, // 1: allowops.v1.TimeRange.to:type_name -> google.protobuf.Timestamp
-	8,  // 2: allowops.v1.HostTargets.hosts:type_name -> allowops.v1.HostNames
-	10, // 3: allowops.v1.TaskAssignment.catalog:type_name -> allowops.v1.CatalogRef
-	7,  // 4: allowops.v1.TaskAssignment.params:type_name -> allowops.v1.Parameters
-	19, // 5: allowops.v1.TaskAssignment.timeout:type_name -> google.protobuf.Duration
-	11, // 6: allowops.v1.TaskAssignment.filters:type_name -> allowops.v1.OutputFilters
-	1,  // 7: allowops.v1.ExecutionResult.status:type_name -> allowops.v1.TaskStatus
-	19, // 8: allowops.v1.ExecutionResult.duration:type_name -> google.protobuf.Duration
-	13, // 9: allowops.v1.ExecutionResult.stdout:type_name -> allowops.v1.OutputMetadata
-	13, // 10: allowops.v1.ExecutionResult.stderr:type_name -> allowops.v1.OutputMetadata
-	16, // 11: allowops.v1.ErrorDetail.violations:type_name -> allowops.v1.FieldViolation
-	15, // 12: allowops.v1.ErrorDetail.denied_hosts:type_name -> allowops.v1.HostDenial
-	19, // 13: allowops.v1.ErrorDetail.retry_after:type_name -> google.protobuf.Duration
+	20, // 0: allowops.v1.TimeRange.from:type_name -> google.protobuf.Timestamp
+	20, // 1: allowops.v1.TimeRange.to:type_name -> google.protobuf.Timestamp
+	10, // 2: allowops.v1.HostTargets.hosts:type_name -> allowops.v1.HostNames
+	12, // 3: allowops.v1.TaskAssignment.catalog:type_name -> allowops.v1.CatalogRef
+	9,  // 4: allowops.v1.TaskAssignment.params:type_name -> allowops.v1.Parameters
+	21, // 5: allowops.v1.TaskAssignment.timeout:type_name -> google.protobuf.Duration
+	13, // 6: allowops.v1.TaskAssignment.filters:type_name -> allowops.v1.OutputFilters
+	3,  // 7: allowops.v1.ExecutionResult.status:type_name -> allowops.v1.TaskStatus
+	21, // 8: allowops.v1.ExecutionResult.duration:type_name -> google.protobuf.Duration
+	15, // 9: allowops.v1.ExecutionResult.stdout:type_name -> allowops.v1.OutputMetadata
+	15, // 10: allowops.v1.ExecutionResult.stderr:type_name -> allowops.v1.OutputMetadata
+	18, // 11: allowops.v1.ErrorDetail.violations:type_name -> allowops.v1.FieldViolation
+	17, // 12: allowops.v1.ErrorDetail.denied_hosts:type_name -> allowops.v1.HostDenial
+	21, // 13: allowops.v1.ErrorDetail.retry_after:type_name -> google.protobuf.Duration
 	14, // [14:14] is the sub-list for method output_type
 	14, // [14:14] is the sub-list for method input_type
 	14, // [14:14] is the sub-list for extension type_name
@@ -1371,7 +1499,7 @@ func file_allowops_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_allowops_v1_common_proto_rawDesc), len(file_allowops_v1_common_proto_rawDesc)),
-			NumEnums:      4,
+			NumEnums:      6,
 			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,

@@ -20,6 +20,7 @@ enum PolicyEffect {
   POLICY_EFFECT_UNSPECIFIED = 0;
   POLICY_EFFECT_ALLOW = 1;
   POLICY_EFFECT_DENY = 2;
+  POLICY_EFFECT_REQUIRE_APPROVAL = 3;
 }
 
 // A11: structured policy rules; exact matching is documented in protocol.md.
@@ -27,6 +28,24 @@ message PolicyHours {
   uint32 from = 1;
   uint32 to = 2;
   string timezone = 3;
+}
+
+message PolicyApprovalConfig {
+  repeated string approver_roles = 1;
+  uint32 min_approvals = 2;
+  uint32 ttl_seconds = 3;
+  bool allow_owner_approve = 4;
+}
+
+message PolicyApprovalRoleSet {
+  repeated string roles = 1;
+}
+
+message PolicyApprovalRequirement {
+  repeated PolicyApprovalRoleSet required_approver_role_sets = 1;
+  uint32 min_approvals = 2;
+  uint32 ttl_seconds = 3;
+  bool allow_owner_approve = 4;
 }
 
 message PolicyRule {
@@ -41,6 +60,7 @@ message PolicyRule {
   PolicyHours hours = 9;
   repeated string source_cidrs = 10;
   PolicyEffect effect = 11;
+  PolicyApprovalConfig approval = 12;
 }
 
 message PolicyRules {
@@ -60,6 +80,7 @@ message PolicyDecision {
   PolicyEffect effect = 1;
   repeated string matched_rules = 2;
   string error_reason = 3;
+  PolicyApprovalRequirement approval = 4;
 }
 
 message PolicyTestCase {

@@ -25,9 +25,10 @@ const (
 type PolicyEffect int32
 
 const (
-	PolicyEffect_POLICY_EFFECT_UNSPECIFIED PolicyEffect = 0
-	PolicyEffect_POLICY_EFFECT_ALLOW       PolicyEffect = 1
-	PolicyEffect_POLICY_EFFECT_DENY        PolicyEffect = 2
+	PolicyEffect_POLICY_EFFECT_UNSPECIFIED      PolicyEffect = 0
+	PolicyEffect_POLICY_EFFECT_ALLOW            PolicyEffect = 1
+	PolicyEffect_POLICY_EFFECT_DENY             PolicyEffect = 2
+	PolicyEffect_POLICY_EFFECT_REQUIRE_APPROVAL PolicyEffect = 3
 )
 
 // Enum value maps for PolicyEffect.
@@ -36,11 +37,13 @@ var (
 		0: "POLICY_EFFECT_UNSPECIFIED",
 		1: "POLICY_EFFECT_ALLOW",
 		2: "POLICY_EFFECT_DENY",
+		3: "POLICY_EFFECT_REQUIRE_APPROVAL",
 	}
 	PolicyEffect_value = map[string]int32{
-		"POLICY_EFFECT_UNSPECIFIED": 0,
-		"POLICY_EFFECT_ALLOW":       1,
-		"POLICY_EFFECT_DENY":        2,
+		"POLICY_EFFECT_UNSPECIFIED":      0,
+		"POLICY_EFFECT_ALLOW":            1,
+		"POLICY_EFFECT_DENY":             2,
+		"POLICY_EFFECT_REQUIRE_APPROVAL": 3,
 	}
 )
 
@@ -132,6 +135,186 @@ func (x *PolicyHours) GetTimezone() string {
 	return ""
 }
 
+type PolicyApprovalConfig struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	ApproverRoles     []string               `protobuf:"bytes,1,rep,name=approver_roles,json=approverRoles,proto3" json:"approver_roles,omitempty"`
+	MinApprovals      uint32                 `protobuf:"varint,2,opt,name=min_approvals,json=minApprovals,proto3" json:"min_approvals,omitempty"`
+	TtlSeconds        uint32                 `protobuf:"varint,3,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	AllowOwnerApprove bool                   `protobuf:"varint,4,opt,name=allow_owner_approve,json=allowOwnerApprove,proto3" json:"allow_owner_approve,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *PolicyApprovalConfig) Reset() {
+	*x = PolicyApprovalConfig{}
+	mi := &file_allowops_v1_policy_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyApprovalConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyApprovalConfig) ProtoMessage() {}
+
+func (x *PolicyApprovalConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_policy_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyApprovalConfig.ProtoReflect.Descriptor instead.
+func (*PolicyApprovalConfig) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *PolicyApprovalConfig) GetApproverRoles() []string {
+	if x != nil {
+		return x.ApproverRoles
+	}
+	return nil
+}
+
+func (x *PolicyApprovalConfig) GetMinApprovals() uint32 {
+	if x != nil {
+		return x.MinApprovals
+	}
+	return 0
+}
+
+func (x *PolicyApprovalConfig) GetTtlSeconds() uint32 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+func (x *PolicyApprovalConfig) GetAllowOwnerApprove() bool {
+	if x != nil {
+		return x.AllowOwnerApprove
+	}
+	return false
+}
+
+type PolicyApprovalRoleSet struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Roles         []string               `protobuf:"bytes,1,rep,name=roles,proto3" json:"roles,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicyApprovalRoleSet) Reset() {
+	*x = PolicyApprovalRoleSet{}
+	mi := &file_allowops_v1_policy_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyApprovalRoleSet) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyApprovalRoleSet) ProtoMessage() {}
+
+func (x *PolicyApprovalRoleSet) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_policy_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyApprovalRoleSet.ProtoReflect.Descriptor instead.
+func (*PolicyApprovalRoleSet) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *PolicyApprovalRoleSet) GetRoles() []string {
+	if x != nil {
+		return x.Roles
+	}
+	return nil
+}
+
+type PolicyApprovalRequirement struct {
+	state                    protoimpl.MessageState   `protogen:"open.v1"`
+	RequiredApproverRoleSets []*PolicyApprovalRoleSet `protobuf:"bytes,1,rep,name=required_approver_role_sets,json=requiredApproverRoleSets,proto3" json:"required_approver_role_sets,omitempty"`
+	MinApprovals             uint32                   `protobuf:"varint,2,opt,name=min_approvals,json=minApprovals,proto3" json:"min_approvals,omitempty"`
+	TtlSeconds               uint32                   `protobuf:"varint,3,opt,name=ttl_seconds,json=ttlSeconds,proto3" json:"ttl_seconds,omitempty"`
+	AllowOwnerApprove        bool                     `protobuf:"varint,4,opt,name=allow_owner_approve,json=allowOwnerApprove,proto3" json:"allow_owner_approve,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *PolicyApprovalRequirement) Reset() {
+	*x = PolicyApprovalRequirement{}
+	mi := &file_allowops_v1_policy_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyApprovalRequirement) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyApprovalRequirement) ProtoMessage() {}
+
+func (x *PolicyApprovalRequirement) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_policy_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyApprovalRequirement.ProtoReflect.Descriptor instead.
+func (*PolicyApprovalRequirement) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *PolicyApprovalRequirement) GetRequiredApproverRoleSets() []*PolicyApprovalRoleSet {
+	if x != nil {
+		return x.RequiredApproverRoleSets
+	}
+	return nil
+}
+
+func (x *PolicyApprovalRequirement) GetMinApprovals() uint32 {
+	if x != nil {
+		return x.MinApprovals
+	}
+	return 0
+}
+
+func (x *PolicyApprovalRequirement) GetTtlSeconds() uint32 {
+	if x != nil {
+		return x.TtlSeconds
+	}
+	return 0
+}
+
+func (x *PolicyApprovalRequirement) GetAllowOwnerApprove() bool {
+	if x != nil {
+		return x.AllowOwnerApprove
+	}
+	return false
+}
+
 type PolicyRule struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -145,13 +328,14 @@ type PolicyRule struct {
 	Hours         *PolicyHours           `protobuf:"bytes,9,opt,name=hours,proto3" json:"hours,omitempty"`
 	SourceCidrs   []string               `protobuf:"bytes,10,rep,name=source_cidrs,json=sourceCidrs,proto3" json:"source_cidrs,omitempty"`
 	Effect        PolicyEffect           `protobuf:"varint,11,opt,name=effect,proto3,enum=allowops.v1.PolicyEffect" json:"effect,omitempty"`
+	Approval      *PolicyApprovalConfig  `protobuf:"bytes,12,opt,name=approval,proto3" json:"approval,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PolicyRule) Reset() {
 	*x = PolicyRule{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[1]
+	mi := &file_allowops_v1_policy_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -163,7 +347,7 @@ func (x *PolicyRule) String() string {
 func (*PolicyRule) ProtoMessage() {}
 
 func (x *PolicyRule) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[1]
+	mi := &file_allowops_v1_policy_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -176,7 +360,7 @@ func (x *PolicyRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PolicyRule.ProtoReflect.Descriptor instead.
 func (*PolicyRule) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{1}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *PolicyRule) GetName() string {
@@ -256,6 +440,13 @@ func (x *PolicyRule) GetEffect() PolicyEffect {
 	return PolicyEffect_POLICY_EFFECT_UNSPECIFIED
 }
 
+func (x *PolicyRule) GetApproval() *PolicyApprovalConfig {
+	if x != nil {
+		return x.Approval
+	}
+	return nil
+}
+
 type PolicyRules struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Rules         []*PolicyRule          `protobuf:"bytes,1,rep,name=rules,proto3" json:"rules,omitempty"`
@@ -265,7 +456,7 @@ type PolicyRules struct {
 
 func (x *PolicyRules) Reset() {
 	*x = PolicyRules{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[2]
+	mi := &file_allowops_v1_policy_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -277,7 +468,7 @@ func (x *PolicyRules) String() string {
 func (*PolicyRules) ProtoMessage() {}
 
 func (x *PolicyRules) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[2]
+	mi := &file_allowops_v1_policy_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -290,7 +481,7 @@ func (x *PolicyRules) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PolicyRules.ProtoReflect.Descriptor instead.
 func (*PolicyRules) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{2}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *PolicyRules) GetRules() []*PolicyRule {
@@ -314,7 +505,7 @@ type PolicyVersion struct {
 
 func (x *PolicyVersion) Reset() {
 	*x = PolicyVersion{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[3]
+	mi := &file_allowops_v1_policy_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -326,7 +517,7 @@ func (x *PolicyVersion) String() string {
 func (*PolicyVersion) ProtoMessage() {}
 
 func (x *PolicyVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[3]
+	mi := &file_allowops_v1_policy_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -339,7 +530,7 @@ func (x *PolicyVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PolicyVersion.ProtoReflect.Descriptor instead.
 func (*PolicyVersion) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{3}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *PolicyVersion) GetVersion() uint64 {
@@ -385,17 +576,18 @@ func (x *PolicyVersion) GetRolledBackFrom() uint64 {
 }
 
 type PolicyDecision struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Effect        PolicyEffect           `protobuf:"varint,1,opt,name=effect,proto3,enum=allowops.v1.PolicyEffect" json:"effect,omitempty"`
-	MatchedRules  []string               `protobuf:"bytes,2,rep,name=matched_rules,json=matchedRules,proto3" json:"matched_rules,omitempty"`
-	ErrorReason   string                 `protobuf:"bytes,3,opt,name=error_reason,json=errorReason,proto3" json:"error_reason,omitempty"`
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Effect        PolicyEffect               `protobuf:"varint,1,opt,name=effect,proto3,enum=allowops.v1.PolicyEffect" json:"effect,omitempty"`
+	MatchedRules  []string                   `protobuf:"bytes,2,rep,name=matched_rules,json=matchedRules,proto3" json:"matched_rules,omitempty"`
+	ErrorReason   string                     `protobuf:"bytes,3,opt,name=error_reason,json=errorReason,proto3" json:"error_reason,omitempty"`
+	Approval      *PolicyApprovalRequirement `protobuf:"bytes,4,opt,name=approval,proto3" json:"approval,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PolicyDecision) Reset() {
 	*x = PolicyDecision{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[4]
+	mi := &file_allowops_v1_policy_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -407,7 +599,7 @@ func (x *PolicyDecision) String() string {
 func (*PolicyDecision) ProtoMessage() {}
 
 func (x *PolicyDecision) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[4]
+	mi := &file_allowops_v1_policy_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -420,7 +612,7 @@ func (x *PolicyDecision) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PolicyDecision.ProtoReflect.Descriptor instead.
 func (*PolicyDecision) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{4}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *PolicyDecision) GetEffect() PolicyEffect {
@@ -444,6 +636,13 @@ func (x *PolicyDecision) GetErrorReason() string {
 	return ""
 }
 
+func (x *PolicyDecision) GetApproval() *PolicyApprovalRequirement {
+	if x != nil {
+		return x.Approval
+	}
+	return nil
+}
+
 type PolicyTestCase struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SubjectId     string                 `protobuf:"bytes,1,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
@@ -458,7 +657,7 @@ type PolicyTestCase struct {
 
 func (x *PolicyTestCase) Reset() {
 	*x = PolicyTestCase{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[5]
+	mi := &file_allowops_v1_policy_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -470,7 +669,7 @@ func (x *PolicyTestCase) String() string {
 func (*PolicyTestCase) ProtoMessage() {}
 
 func (x *PolicyTestCase) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[5]
+	mi := &file_allowops_v1_policy_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -483,7 +682,7 @@ func (x *PolicyTestCase) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PolicyTestCase.ProtoReflect.Descriptor instead.
 func (*PolicyTestCase) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{5}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *PolicyTestCase) GetSubjectId() string {
@@ -540,7 +739,7 @@ type PolicyChange struct {
 
 func (x *PolicyChange) Reset() {
 	*x = PolicyChange{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[6]
+	mi := &file_allowops_v1_policy_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -552,7 +751,7 @@ func (x *PolicyChange) String() string {
 func (*PolicyChange) ProtoMessage() {}
 
 func (x *PolicyChange) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[6]
+	mi := &file_allowops_v1_policy_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -565,7 +764,7 @@ func (x *PolicyChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PolicyChange.ProtoReflect.Descriptor instead.
 func (*PolicyChange) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{6}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *PolicyChange) GetCaseIndex() uint32 {
@@ -611,7 +810,7 @@ type PolicyTest struct {
 
 func (x *PolicyTest) Reset() {
 	*x = PolicyTest{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[7]
+	mi := &file_allowops_v1_policy_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -623,7 +822,7 @@ func (x *PolicyTest) String() string {
 func (*PolicyTest) ProtoMessage() {}
 
 func (x *PolicyTest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[7]
+	mi := &file_allowops_v1_policy_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -636,7 +835,7 @@ func (x *PolicyTest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PolicyTest.ProtoReflect.Descriptor instead.
 func (*PolicyTest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{7}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *PolicyTest) GetTestId() string {
@@ -697,7 +896,7 @@ type GetPolicyRequest struct {
 
 func (x *GetPolicyRequest) Reset() {
 	*x = GetPolicyRequest{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[8]
+	mi := &file_allowops_v1_policy_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -709,7 +908,7 @@ func (x *GetPolicyRequest) String() string {
 func (*GetPolicyRequest) ProtoMessage() {}
 
 func (x *GetPolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[8]
+	mi := &file_allowops_v1_policy_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -722,7 +921,7 @@ func (x *GetPolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPolicyRequest.ProtoReflect.Descriptor instead.
 func (*GetPolicyRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{8}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetPolicyRequest) GetVersion() uint64 {
@@ -741,7 +940,7 @@ type GetPolicyResponse struct {
 
 func (x *GetPolicyResponse) Reset() {
 	*x = GetPolicyResponse{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[9]
+	mi := &file_allowops_v1_policy_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -753,7 +952,7 @@ func (x *GetPolicyResponse) String() string {
 func (*GetPolicyResponse) ProtoMessage() {}
 
 func (x *GetPolicyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[9]
+	mi := &file_allowops_v1_policy_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -766,7 +965,7 @@ func (x *GetPolicyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPolicyResponse.ProtoReflect.Descriptor instead.
 func (*GetPolicyResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{9}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetPolicyResponse) GetPolicy() *PolicyVersion {
@@ -791,7 +990,7 @@ type TestPolicyRequest struct {
 
 func (x *TestPolicyRequest) Reset() {
 	*x = TestPolicyRequest{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[10]
+	mi := &file_allowops_v1_policy_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -803,7 +1002,7 @@ func (x *TestPolicyRequest) String() string {
 func (*TestPolicyRequest) ProtoMessage() {}
 
 func (x *TestPolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[10]
+	mi := &file_allowops_v1_policy_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -816,7 +1015,7 @@ func (x *TestPolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestPolicyRequest.ProtoReflect.Descriptor instead.
 func (*TestPolicyRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{10}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *TestPolicyRequest) GetBaseVersion() uint64 {
@@ -883,7 +1082,7 @@ type TestPolicyResponse struct {
 
 func (x *TestPolicyResponse) Reset() {
 	*x = TestPolicyResponse{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[11]
+	mi := &file_allowops_v1_policy_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -895,7 +1094,7 @@ func (x *TestPolicyResponse) String() string {
 func (*TestPolicyResponse) ProtoMessage() {}
 
 func (x *TestPolicyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[11]
+	mi := &file_allowops_v1_policy_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -908,7 +1107,7 @@ func (x *TestPolicyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TestPolicyResponse.ProtoReflect.Descriptor instead.
 func (*TestPolicyResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{11}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *TestPolicyResponse) GetTest() *PolicyTest {
@@ -928,7 +1127,7 @@ type GetPolicyTestChangesRequest struct {
 
 func (x *GetPolicyTestChangesRequest) Reset() {
 	*x = GetPolicyTestChangesRequest{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[12]
+	mi := &file_allowops_v1_policy_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -940,7 +1139,7 @@ func (x *GetPolicyTestChangesRequest) String() string {
 func (*GetPolicyTestChangesRequest) ProtoMessage() {}
 
 func (x *GetPolicyTestChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[12]
+	mi := &file_allowops_v1_policy_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -953,7 +1152,7 @@ func (x *GetPolicyTestChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPolicyTestChangesRequest.ProtoReflect.Descriptor instead.
 func (*GetPolicyTestChangesRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{12}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetPolicyTestChangesRequest) GetTestId() string {
@@ -980,7 +1179,7 @@ type GetPolicyTestChangesResponse struct {
 
 func (x *GetPolicyTestChangesResponse) Reset() {
 	*x = GetPolicyTestChangesResponse{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[13]
+	mi := &file_allowops_v1_policy_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -992,7 +1191,7 @@ func (x *GetPolicyTestChangesResponse) String() string {
 func (*GetPolicyTestChangesResponse) ProtoMessage() {}
 
 func (x *GetPolicyTestChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[13]
+	mi := &file_allowops_v1_policy_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1005,7 +1204,7 @@ func (x *GetPolicyTestChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPolicyTestChangesResponse.ProtoReflect.Descriptor instead.
 func (*GetPolicyTestChangesResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{13}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetPolicyTestChangesResponse) GetChanges() []*PolicyChange {
@@ -1034,7 +1233,7 @@ type SavePolicyRequest struct {
 
 func (x *SavePolicyRequest) Reset() {
 	*x = SavePolicyRequest{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[14]
+	mi := &file_allowops_v1_policy_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1046,7 +1245,7 @@ func (x *SavePolicyRequest) String() string {
 func (*SavePolicyRequest) ProtoMessage() {}
 
 func (x *SavePolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[14]
+	mi := &file_allowops_v1_policy_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1059,7 +1258,7 @@ func (x *SavePolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SavePolicyRequest.ProtoReflect.Descriptor instead.
 func (*SavePolicyRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{14}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SavePolicyRequest) GetBaseVersion() uint64 {
@@ -1099,7 +1298,7 @@ type SavePolicyResponse struct {
 
 func (x *SavePolicyResponse) Reset() {
 	*x = SavePolicyResponse{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[15]
+	mi := &file_allowops_v1_policy_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1111,7 +1310,7 @@ func (x *SavePolicyResponse) String() string {
 func (*SavePolicyResponse) ProtoMessage() {}
 
 func (x *SavePolicyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[15]
+	mi := &file_allowops_v1_policy_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1124,7 +1323,7 @@ func (x *SavePolicyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SavePolicyResponse.ProtoReflect.Descriptor instead.
 func (*SavePolicyResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{15}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SavePolicyResponse) GetPolicy() *PolicyVersion {
@@ -1143,7 +1342,7 @@ type ListPolicyHistoryRequest struct {
 
 func (x *ListPolicyHistoryRequest) Reset() {
 	*x = ListPolicyHistoryRequest{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[16]
+	mi := &file_allowops_v1_policy_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1155,7 +1354,7 @@ func (x *ListPolicyHistoryRequest) String() string {
 func (*ListPolicyHistoryRequest) ProtoMessage() {}
 
 func (x *ListPolicyHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[16]
+	mi := &file_allowops_v1_policy_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1168,7 +1367,7 @@ func (x *ListPolicyHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPolicyHistoryRequest.ProtoReflect.Descriptor instead.
 func (*ListPolicyHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{16}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListPolicyHistoryRequest) GetPage() *PageRequest {
@@ -1188,7 +1387,7 @@ type ListPolicyHistoryResponse struct {
 
 func (x *ListPolicyHistoryResponse) Reset() {
 	*x = ListPolicyHistoryResponse{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[17]
+	mi := &file_allowops_v1_policy_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1200,7 +1399,7 @@ func (x *ListPolicyHistoryResponse) String() string {
 func (*ListPolicyHistoryResponse) ProtoMessage() {}
 
 func (x *ListPolicyHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[17]
+	mi := &file_allowops_v1_policy_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1213,7 +1412,7 @@ func (x *ListPolicyHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPolicyHistoryResponse.ProtoReflect.Descriptor instead.
 func (*ListPolicyHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{17}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListPolicyHistoryResponse) GetPolicies() []*PolicyVersion {
@@ -1242,7 +1441,7 @@ type RollbackPolicyRequest struct {
 
 func (x *RollbackPolicyRequest) Reset() {
 	*x = RollbackPolicyRequest{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[18]
+	mi := &file_allowops_v1_policy_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1254,7 +1453,7 @@ func (x *RollbackPolicyRequest) String() string {
 func (*RollbackPolicyRequest) ProtoMessage() {}
 
 func (x *RollbackPolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[18]
+	mi := &file_allowops_v1_policy_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1267,7 +1466,7 @@ func (x *RollbackPolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackPolicyRequest.ProtoReflect.Descriptor instead.
 func (*RollbackPolicyRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{18}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RollbackPolicyRequest) GetBaseVersion() uint64 {
@@ -1307,7 +1506,7 @@ type RollbackPolicyResponse struct {
 
 func (x *RollbackPolicyResponse) Reset() {
 	*x = RollbackPolicyResponse{}
-	mi := &file_allowops_v1_policy_proto_msgTypes[19]
+	mi := &file_allowops_v1_policy_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1319,7 +1518,7 @@ func (x *RollbackPolicyResponse) String() string {
 func (*RollbackPolicyResponse) ProtoMessage() {}
 
 func (x *RollbackPolicyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_policy_proto_msgTypes[19]
+	mi := &file_allowops_v1_policy_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1332,7 +1531,7 @@ func (x *RollbackPolicyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackPolicyResponse.ProtoReflect.Descriptor instead.
 func (*RollbackPolicyResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{19}
+	return file_allowops_v1_policy_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RollbackPolicyResponse) GetPolicy() *PolicyVersion {
@@ -1350,7 +1549,21 @@ const file_allowops_v1_policy_proto_rawDesc = "" +
 	"\vPolicyHours\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\rR\x04from\x12\x0e\n" +
 	"\x02to\x18\x02 \x01(\rR\x02to\x12\x1a\n" +
-	"\btimezone\x18\x03 \x01(\tR\btimezone\"\xc3\x03\n" +
+	"\btimezone\x18\x03 \x01(\tR\btimezone\"\xb3\x01\n" +
+	"\x14PolicyApprovalConfig\x12%\n" +
+	"\x0eapprover_roles\x18\x01 \x03(\tR\rapproverRoles\x12#\n" +
+	"\rmin_approvals\x18\x02 \x01(\rR\fminApprovals\x12\x1f\n" +
+	"\vttl_seconds\x18\x03 \x01(\rR\n" +
+	"ttlSeconds\x12.\n" +
+	"\x13allow_owner_approve\x18\x04 \x01(\bR\x11allowOwnerApprove\"-\n" +
+	"\x15PolicyApprovalRoleSet\x12\x14\n" +
+	"\x05roles\x18\x01 \x03(\tR\x05roles\"\xf4\x01\n" +
+	"\x19PolicyApprovalRequirement\x12a\n" +
+	"\x1brequired_approver_role_sets\x18\x01 \x03(\v2\".allowops.v1.PolicyApprovalRoleSetR\x18requiredApproverRoleSets\x12#\n" +
+	"\rmin_approvals\x18\x02 \x01(\rR\fminApprovals\x12\x1f\n" +
+	"\vttl_seconds\x18\x03 \x01(\rR\n" +
+	"ttlSeconds\x12.\n" +
+	"\x13allow_owner_approve\x18\x04 \x01(\bR\x11allowOwnerApprove\"\x82\x04\n" +
 	"\n" +
 	"PolicyRule\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
@@ -1367,7 +1580,8 @@ const file_allowops_v1_policy_proto_rawDesc = "" +
 	"\x05hours\x18\t \x01(\v2\x18.allowops.v1.PolicyHoursR\x05hours\x12!\n" +
 	"\fsource_cidrs\x18\n" +
 	" \x03(\tR\vsourceCidrs\x121\n" +
-	"\x06effect\x18\v \x01(\x0e2\x19.allowops.v1.PolicyEffectR\x06effect\x1a=\n" +
+	"\x06effect\x18\v \x01(\x0e2\x19.allowops.v1.PolicyEffectR\x06effect\x12=\n" +
+	"\bapproval\x18\f \x01(\v2!.allowops.v1.PolicyApprovalConfigR\bapproval\x1a=\n" +
 	"\x0fHostLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"<\n" +
@@ -1382,11 +1596,12 @@ const file_allowops_v1_policy_proto_rawDesc = "" +
 	"created_by\x18\x04 \x01(\tR\tcreatedBy\x12\x16\n" +
 	"\x06reason\x18\x05 \x01(\tR\x06reason\x12-\n" +
 	"\x10rolled_back_from\x18\x06 \x01(\x04H\x00R\x0erolledBackFrom\x88\x01\x01B\x13\n" +
-	"\x11_rolled_back_from\"\x8b\x01\n" +
+	"\x11_rolled_back_from\"\xcf\x01\n" +
 	"\x0ePolicyDecision\x121\n" +
 	"\x06effect\x18\x01 \x01(\x0e2\x19.allowops.v1.PolicyEffectR\x06effect\x12#\n" +
 	"\rmatched_rules\x18\x02 \x03(\tR\fmatchedRules\x12!\n" +
-	"\ferror_reason\x18\x03 \x01(\tR\verrorReason\"\xe2\x01\n" +
+	"\ferror_reason\x18\x03 \x01(\tR\verrorReason\x12B\n" +
+	"\bapproval\x18\x04 \x01(\v2&.allowops.v1.PolicyApprovalRequirementR\bapproval\"\xe2\x01\n" +
 	"\x0ePolicyTestCase\x12\x1d\n" +
 	"\n" +
 	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x1c\n" +
@@ -1449,11 +1664,12 @@ const file_allowops_v1_policy_proto_rawDesc = "" +
 	"\atest_id\x18\x03 \x01(\tR\x06testId\x12\x16\n" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\"L\n" +
 	"\x16RollbackPolicyResponse\x122\n" +
-	"\x06policy\x18\x01 \x01(\v2\x1a.allowops.v1.PolicyVersionR\x06policy*^\n" +
+	"\x06policy\x18\x01 \x01(\v2\x1a.allowops.v1.PolicyVersionR\x06policy*\x82\x01\n" +
 	"\fPolicyEffect\x12\x1d\n" +
 	"\x19POLICY_EFFECT_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13POLICY_EFFECT_ALLOW\x10\x01\x12\x16\n" +
-	"\x12POLICY_EFFECT_DENY\x10\x022\xa5\x04\n" +
+	"\x12POLICY_EFFECT_DENY\x10\x02\x12\"\n" +
+	"\x1ePOLICY_EFFECT_REQUIRE_APPROVAL\x10\x032\xa5\x04\n" +
 	"\rPolicyService\x12J\n" +
 	"\tGetPolicy\x12\x1d.allowops.v1.GetPolicyRequest\x1a\x1e.allowops.v1.GetPolicyResponse\x12M\n" +
 	"\n" +
@@ -1477,78 +1693,84 @@ func file_allowops_v1_policy_proto_rawDescGZIP() []byte {
 }
 
 var file_allowops_v1_policy_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_allowops_v1_policy_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_allowops_v1_policy_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_allowops_v1_policy_proto_goTypes = []any{
 	(PolicyEffect)(0),                    // 0: allowops.v1.PolicyEffect
 	(*PolicyHours)(nil),                  // 1: allowops.v1.PolicyHours
-	(*PolicyRule)(nil),                   // 2: allowops.v1.PolicyRule
-	(*PolicyRules)(nil),                  // 3: allowops.v1.PolicyRules
-	(*PolicyVersion)(nil),                // 4: allowops.v1.PolicyVersion
-	(*PolicyDecision)(nil),               // 5: allowops.v1.PolicyDecision
-	(*PolicyTestCase)(nil),               // 6: allowops.v1.PolicyTestCase
-	(*PolicyChange)(nil),                 // 7: allowops.v1.PolicyChange
-	(*PolicyTest)(nil),                   // 8: allowops.v1.PolicyTest
-	(*GetPolicyRequest)(nil),             // 9: allowops.v1.GetPolicyRequest
-	(*GetPolicyResponse)(nil),            // 10: allowops.v1.GetPolicyResponse
-	(*TestPolicyRequest)(nil),            // 11: allowops.v1.TestPolicyRequest
-	(*TestPolicyResponse)(nil),           // 12: allowops.v1.TestPolicyResponse
-	(*GetPolicyTestChangesRequest)(nil),  // 13: allowops.v1.GetPolicyTestChangesRequest
-	(*GetPolicyTestChangesResponse)(nil), // 14: allowops.v1.GetPolicyTestChangesResponse
-	(*SavePolicyRequest)(nil),            // 15: allowops.v1.SavePolicyRequest
-	(*SavePolicyResponse)(nil),           // 16: allowops.v1.SavePolicyResponse
-	(*ListPolicyHistoryRequest)(nil),     // 17: allowops.v1.ListPolicyHistoryRequest
-	(*ListPolicyHistoryResponse)(nil),    // 18: allowops.v1.ListPolicyHistoryResponse
-	(*RollbackPolicyRequest)(nil),        // 19: allowops.v1.RollbackPolicyRequest
-	(*RollbackPolicyResponse)(nil),       // 20: allowops.v1.RollbackPolicyResponse
-	nil,                                  // 21: allowops.v1.PolicyRule.HostLabelsEntry
-	(*timestamppb.Timestamp)(nil),        // 22: google.protobuf.Timestamp
-	(*HostTargets)(nil),                  // 23: allowops.v1.HostTargets
-	(*PageRequest)(nil),                  // 24: allowops.v1.PageRequest
-	(*PageResponse)(nil),                 // 25: allowops.v1.PageResponse
+	(*PolicyApprovalConfig)(nil),         // 2: allowops.v1.PolicyApprovalConfig
+	(*PolicyApprovalRoleSet)(nil),        // 3: allowops.v1.PolicyApprovalRoleSet
+	(*PolicyApprovalRequirement)(nil),    // 4: allowops.v1.PolicyApprovalRequirement
+	(*PolicyRule)(nil),                   // 5: allowops.v1.PolicyRule
+	(*PolicyRules)(nil),                  // 6: allowops.v1.PolicyRules
+	(*PolicyVersion)(nil),                // 7: allowops.v1.PolicyVersion
+	(*PolicyDecision)(nil),               // 8: allowops.v1.PolicyDecision
+	(*PolicyTestCase)(nil),               // 9: allowops.v1.PolicyTestCase
+	(*PolicyChange)(nil),                 // 10: allowops.v1.PolicyChange
+	(*PolicyTest)(nil),                   // 11: allowops.v1.PolicyTest
+	(*GetPolicyRequest)(nil),             // 12: allowops.v1.GetPolicyRequest
+	(*GetPolicyResponse)(nil),            // 13: allowops.v1.GetPolicyResponse
+	(*TestPolicyRequest)(nil),            // 14: allowops.v1.TestPolicyRequest
+	(*TestPolicyResponse)(nil),           // 15: allowops.v1.TestPolicyResponse
+	(*GetPolicyTestChangesRequest)(nil),  // 16: allowops.v1.GetPolicyTestChangesRequest
+	(*GetPolicyTestChangesResponse)(nil), // 17: allowops.v1.GetPolicyTestChangesResponse
+	(*SavePolicyRequest)(nil),            // 18: allowops.v1.SavePolicyRequest
+	(*SavePolicyResponse)(nil),           // 19: allowops.v1.SavePolicyResponse
+	(*ListPolicyHistoryRequest)(nil),     // 20: allowops.v1.ListPolicyHistoryRequest
+	(*ListPolicyHistoryResponse)(nil),    // 21: allowops.v1.ListPolicyHistoryResponse
+	(*RollbackPolicyRequest)(nil),        // 22: allowops.v1.RollbackPolicyRequest
+	(*RollbackPolicyResponse)(nil),       // 23: allowops.v1.RollbackPolicyResponse
+	nil,                                  // 24: allowops.v1.PolicyRule.HostLabelsEntry
+	(*timestamppb.Timestamp)(nil),        // 25: google.protobuf.Timestamp
+	(*HostTargets)(nil),                  // 26: allowops.v1.HostTargets
+	(*PageRequest)(nil),                  // 27: allowops.v1.PageRequest
+	(*PageResponse)(nil),                 // 28: allowops.v1.PageResponse
 }
 var file_allowops_v1_policy_proto_depIdxs = []int32{
-	21, // 0: allowops.v1.PolicyRule.host_labels:type_name -> allowops.v1.PolicyRule.HostLabelsEntry
-	1,  // 1: allowops.v1.PolicyRule.hours:type_name -> allowops.v1.PolicyHours
-	0,  // 2: allowops.v1.PolicyRule.effect:type_name -> allowops.v1.PolicyEffect
-	2,  // 3: allowops.v1.PolicyRules.rules:type_name -> allowops.v1.PolicyRule
-	3,  // 4: allowops.v1.PolicyVersion.rules:type_name -> allowops.v1.PolicyRules
-	22, // 5: allowops.v1.PolicyVersion.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 6: allowops.v1.PolicyDecision.effect:type_name -> allowops.v1.PolicyEffect
-	23, // 7: allowops.v1.PolicyTestCase.targets:type_name -> allowops.v1.HostTargets
-	22, // 8: allowops.v1.PolicyTestCase.at:type_name -> google.protobuf.Timestamp
-	5,  // 9: allowops.v1.PolicyChange.before:type_name -> allowops.v1.PolicyDecision
-	5,  // 10: allowops.v1.PolicyChange.after:type_name -> allowops.v1.PolicyDecision
-	22, // 11: allowops.v1.PolicyTest.expires_at:type_name -> google.protobuf.Timestamp
-	4,  // 12: allowops.v1.GetPolicyResponse.policy:type_name -> allowops.v1.PolicyVersion
-	3,  // 13: allowops.v1.TestPolicyRequest.rules:type_name -> allowops.v1.PolicyRules
-	6,  // 14: allowops.v1.TestPolicyRequest.cases:type_name -> allowops.v1.PolicyTestCase
-	8,  // 15: allowops.v1.TestPolicyResponse.test:type_name -> allowops.v1.PolicyTest
-	24, // 16: allowops.v1.GetPolicyTestChangesRequest.page:type_name -> allowops.v1.PageRequest
-	7,  // 17: allowops.v1.GetPolicyTestChangesResponse.changes:type_name -> allowops.v1.PolicyChange
-	25, // 18: allowops.v1.GetPolicyTestChangesResponse.page:type_name -> allowops.v1.PageResponse
-	3,  // 19: allowops.v1.SavePolicyRequest.rules:type_name -> allowops.v1.PolicyRules
-	4,  // 20: allowops.v1.SavePolicyResponse.policy:type_name -> allowops.v1.PolicyVersion
-	24, // 21: allowops.v1.ListPolicyHistoryRequest.page:type_name -> allowops.v1.PageRequest
-	4,  // 22: allowops.v1.ListPolicyHistoryResponse.policies:type_name -> allowops.v1.PolicyVersion
-	25, // 23: allowops.v1.ListPolicyHistoryResponse.page:type_name -> allowops.v1.PageResponse
-	4,  // 24: allowops.v1.RollbackPolicyResponse.policy:type_name -> allowops.v1.PolicyVersion
-	9,  // 25: allowops.v1.PolicyService.GetPolicy:input_type -> allowops.v1.GetPolicyRequest
-	11, // 26: allowops.v1.PolicyService.TestPolicy:input_type -> allowops.v1.TestPolicyRequest
-	13, // 27: allowops.v1.PolicyService.GetPolicyTestChanges:input_type -> allowops.v1.GetPolicyTestChangesRequest
-	15, // 28: allowops.v1.PolicyService.SavePolicy:input_type -> allowops.v1.SavePolicyRequest
-	17, // 29: allowops.v1.PolicyService.ListPolicyHistory:input_type -> allowops.v1.ListPolicyHistoryRequest
-	19, // 30: allowops.v1.PolicyService.RollbackPolicy:input_type -> allowops.v1.RollbackPolicyRequest
-	10, // 31: allowops.v1.PolicyService.GetPolicy:output_type -> allowops.v1.GetPolicyResponse
-	12, // 32: allowops.v1.PolicyService.TestPolicy:output_type -> allowops.v1.TestPolicyResponse
-	14, // 33: allowops.v1.PolicyService.GetPolicyTestChanges:output_type -> allowops.v1.GetPolicyTestChangesResponse
-	16, // 34: allowops.v1.PolicyService.SavePolicy:output_type -> allowops.v1.SavePolicyResponse
-	18, // 35: allowops.v1.PolicyService.ListPolicyHistory:output_type -> allowops.v1.ListPolicyHistoryResponse
-	20, // 36: allowops.v1.PolicyService.RollbackPolicy:output_type -> allowops.v1.RollbackPolicyResponse
-	31, // [31:37] is the sub-list for method output_type
-	25, // [25:31] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	3,  // 0: allowops.v1.PolicyApprovalRequirement.required_approver_role_sets:type_name -> allowops.v1.PolicyApprovalRoleSet
+	24, // 1: allowops.v1.PolicyRule.host_labels:type_name -> allowops.v1.PolicyRule.HostLabelsEntry
+	1,  // 2: allowops.v1.PolicyRule.hours:type_name -> allowops.v1.PolicyHours
+	0,  // 3: allowops.v1.PolicyRule.effect:type_name -> allowops.v1.PolicyEffect
+	2,  // 4: allowops.v1.PolicyRule.approval:type_name -> allowops.v1.PolicyApprovalConfig
+	5,  // 5: allowops.v1.PolicyRules.rules:type_name -> allowops.v1.PolicyRule
+	6,  // 6: allowops.v1.PolicyVersion.rules:type_name -> allowops.v1.PolicyRules
+	25, // 7: allowops.v1.PolicyVersion.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 8: allowops.v1.PolicyDecision.effect:type_name -> allowops.v1.PolicyEffect
+	4,  // 9: allowops.v1.PolicyDecision.approval:type_name -> allowops.v1.PolicyApprovalRequirement
+	26, // 10: allowops.v1.PolicyTestCase.targets:type_name -> allowops.v1.HostTargets
+	25, // 11: allowops.v1.PolicyTestCase.at:type_name -> google.protobuf.Timestamp
+	8,  // 12: allowops.v1.PolicyChange.before:type_name -> allowops.v1.PolicyDecision
+	8,  // 13: allowops.v1.PolicyChange.after:type_name -> allowops.v1.PolicyDecision
+	25, // 14: allowops.v1.PolicyTest.expires_at:type_name -> google.protobuf.Timestamp
+	7,  // 15: allowops.v1.GetPolicyResponse.policy:type_name -> allowops.v1.PolicyVersion
+	6,  // 16: allowops.v1.TestPolicyRequest.rules:type_name -> allowops.v1.PolicyRules
+	9,  // 17: allowops.v1.TestPolicyRequest.cases:type_name -> allowops.v1.PolicyTestCase
+	11, // 18: allowops.v1.TestPolicyResponse.test:type_name -> allowops.v1.PolicyTest
+	27, // 19: allowops.v1.GetPolicyTestChangesRequest.page:type_name -> allowops.v1.PageRequest
+	10, // 20: allowops.v1.GetPolicyTestChangesResponse.changes:type_name -> allowops.v1.PolicyChange
+	28, // 21: allowops.v1.GetPolicyTestChangesResponse.page:type_name -> allowops.v1.PageResponse
+	6,  // 22: allowops.v1.SavePolicyRequest.rules:type_name -> allowops.v1.PolicyRules
+	7,  // 23: allowops.v1.SavePolicyResponse.policy:type_name -> allowops.v1.PolicyVersion
+	27, // 24: allowops.v1.ListPolicyHistoryRequest.page:type_name -> allowops.v1.PageRequest
+	7,  // 25: allowops.v1.ListPolicyHistoryResponse.policies:type_name -> allowops.v1.PolicyVersion
+	28, // 26: allowops.v1.ListPolicyHistoryResponse.page:type_name -> allowops.v1.PageResponse
+	7,  // 27: allowops.v1.RollbackPolicyResponse.policy:type_name -> allowops.v1.PolicyVersion
+	12, // 28: allowops.v1.PolicyService.GetPolicy:input_type -> allowops.v1.GetPolicyRequest
+	14, // 29: allowops.v1.PolicyService.TestPolicy:input_type -> allowops.v1.TestPolicyRequest
+	16, // 30: allowops.v1.PolicyService.GetPolicyTestChanges:input_type -> allowops.v1.GetPolicyTestChangesRequest
+	18, // 31: allowops.v1.PolicyService.SavePolicy:input_type -> allowops.v1.SavePolicyRequest
+	20, // 32: allowops.v1.PolicyService.ListPolicyHistory:input_type -> allowops.v1.ListPolicyHistoryRequest
+	22, // 33: allowops.v1.PolicyService.RollbackPolicy:input_type -> allowops.v1.RollbackPolicyRequest
+	13, // 34: allowops.v1.PolicyService.GetPolicy:output_type -> allowops.v1.GetPolicyResponse
+	15, // 35: allowops.v1.PolicyService.TestPolicy:output_type -> allowops.v1.TestPolicyResponse
+	17, // 36: allowops.v1.PolicyService.GetPolicyTestChanges:output_type -> allowops.v1.GetPolicyTestChangesResponse
+	19, // 37: allowops.v1.PolicyService.SavePolicy:output_type -> allowops.v1.SavePolicyResponse
+	21, // 38: allowops.v1.PolicyService.ListPolicyHistory:output_type -> allowops.v1.ListPolicyHistoryResponse
+	23, // 39: allowops.v1.PolicyService.RollbackPolicy:output_type -> allowops.v1.RollbackPolicyResponse
+	34, // [34:40] is the sub-list for method output_type
+	28, // [28:34] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_allowops_v1_policy_proto_init() }
@@ -1557,9 +1779,9 @@ func file_allowops_v1_policy_proto_init() {
 		return
 	}
 	file_allowops_v1_common_proto_init()
-	file_allowops_v1_policy_proto_msgTypes[3].OneofWrappers = []any{}
-	file_allowops_v1_policy_proto_msgTypes[8].OneofWrappers = []any{}
-	file_allowops_v1_policy_proto_msgTypes[10].OneofWrappers = []any{
+	file_allowops_v1_policy_proto_msgTypes[6].OneofWrappers = []any{}
+	file_allowops_v1_policy_proto_msgTypes[11].OneofWrappers = []any{}
+	file_allowops_v1_policy_proto_msgTypes[13].OneofWrappers = []any{
 		(*TestPolicyRequest_Rules)(nil),
 		(*TestPolicyRequest_HistoricalVersion)(nil),
 	}
@@ -1569,7 +1791,7 @@ func file_allowops_v1_policy_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_allowops_v1_policy_proto_rawDesc), len(file_allowops_v1_policy_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   21,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

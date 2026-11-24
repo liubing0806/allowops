@@ -54,6 +54,8 @@ func TestDecisions(t *testing.T) {
 		{"unmatched", nil, executionInput(), "deny", []string{}},
 		{"allow", []Rule{executionRule("allow-1", "allow")}, executionInput(), "allow", []string{"allow-1"}},
 		{"deny wins", []Rule{executionRule("z-allow", "allow"), executionRule("a-deny", "deny")}, executionInput(), "deny", []string{"a-deny", "z-allow"}},
+		{"approval wins over allow", []Rule{executionRule("allow", "allow"), executionRule("approval", "require_approval")}, executionInput(), "require_approval", []string{"allow", "approval"}},
+		{"deny wins over approval", []Rule{executionRule("approval", "require_approval"), executionRule("deny", "deny"), executionRule("allow", "allow")}, executionInput(), "deny", []string{"allow", "approval", "deny"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -63,6 +65,13 @@ func TestDecisions(t *testing.T) {
 			}
 			if got.Decision != tt.decision || !reflect.DeepEqual(got.RuleIDs, tt.ids) {
 				t.Fatalf("got %+v, want %s %v", got, tt.decision, tt.ids)
+			}
+			var wantApproval *EffectiveApproval
+			if tt.decision == "require_approval" {
+				wantApproval = &EffectiveApproval{MinApprovals: 1}
+			}
+			if !reflect.DeepEqual(got.Approval, wantApproval) {
+				t.Errorf("approval = %+v, want %+v", got.Approval, wantApproval)
 			}
 		})
 	}
@@ -116,7 +125,7 @@ func TestConditionsAndOperationIsolation(t *testing.T) {
 
 func TestDefaultRoles(t *testing.T) {
 	permissions := map[string][]Operation{
-		"admin":     {ModifyPolicy, ManageServiceAccounts, ManageHosts, CreateJoinToken, ManageUserRoles, PublishCatalog, ViewHosts, ViewInventory, ViewChanges, ViewKnowledge, ViewCatalog, ViewJobs, ViewOutput, ViewAudit, ViewSystem, ExecuteAction},
+		"admin":     {ModifyPolicy, ManageServiceAccounts, ManageHosts, CreateJoinToken, ManageUserRoles, PublishCatalog, ViewHosts, ViewInventory, ViewChanges, ViewKnowledge, ViewCatalog, ViewJobs, ViewOutput, ViewApprovals, ApproveJobs, ViewAudit, ViewSystem, ExecuteAction},
 		"operator":  {ManageHosts, CreateJoinToken, ViewHosts, ViewInventory, ViewChanges, ViewKnowledge, ViewJobs, ViewSystem},
 		"auditor":   {ViewAudit, ViewJobs, ViewOutput},
 		"viewer":    {ViewHosts, ViewInventory, ViewChanges, ViewKnowledge, ViewCatalog, ViewJobs},
@@ -206,10 +215,12 @@ func TestBootstrapAndLockout(t *testing.T) {
 		if err != nil || got.Decision != "allow" || !reflect.DeepEqual(got.RuleIDs, []string{"bootstrap_admins"}) {
 			t.Fatalf("bootstrap: %+v, %v", got, err)
 		}
-		in.Operation = ManageUserRoles
-		got, err = e.Evaluate(context.Background(), in)
-		if err != nil || got.Decision != "deny" {
-			t.Fatalf("bootstrap other operation: %+v, %v", got, err)
+		for _, op := range []Operation{ManageUserRoles, ExecuteAction, ViewApprovals, ApproveJobs} {
+			in.Operation = op
+			got, err = e.Evaluate(context.Background(), in)
+			if err != nil || got.Decision != "deny" {
+				t.Fatalf("bootstrap %s: %+v, %v", op, got, err)
+			}
 		}
 	}
 	in := executionInput()
@@ -302,7 +313,7 @@ func TestEvaluationErrorsAndMalformedResultsDeny(t *testing.T) {
 	if err == nil || result.Decision != "deny" {
 		t.Fatalf("builtin error: %+v, %v", result, err)
 	}
-	for _, query := range []string{`{"decision": "invalid", "rules": []}`, `{"decision": "allow"}`, `{"decision": "allow", "rules": [123]}`, `false`} {
+	for _, query := range []string{`{"decision": "invalid", "rules": []}`, `{"decision": "allow"}`, `{"decision": "allow", "rules": [123]}`, `{"decision": "require_approval", "rules": ["unknown"]}`, `false`} {
 		prepared, err := rego.New(rego.Query(query)).PrepareForEval(context.Background())
 		if err != nil {
 			t.Fatal(err)
@@ -353,6 +364,142 @@ func TestSimulationAndSnapshot(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+func TestApprovalAggregationAndSnapshot(t *testing.T) {
+	ctx := context.Background()
+	rules := []Rule{
+		executionRule("allow", "allow"),
+		executionRule("first", "require_approval"),
+		executionRule("second", "require_approval"),
+		executionRule("duplicate-role-set", "require_approval"),
+		executionRule("no-ttl", "require_approval"),
+		executionRule("unmatched", "require_approval"),
+	}
+	rules[1].Approval = &ApprovalConfig{ApproverRoles: []string{"ops", "lead"}, MinApprovals: 2, TTLSeconds: 360, AllowOwnerApprove: true}
+	rules[2].Approval = &ApprovalConfig{ApproverRoles: []string{"security"}, MinApprovals: 3, TTLSeconds: 120, AllowOwnerApprove: true}
+	rules[3].Approval = &ApprovalConfig{ApproverRoles: []string{"lead", "ops"}, TTLSeconds: 600, AllowOwnerApprove: true}
+	rules[4].Approval = &ApprovalConfig{AllowOwnerApprove: true}
+	rules[5].Approval = &ApprovalConfig{ApproverRoles: []string{"other"}, MinApprovals: 5, TTLSeconds: 60}
+	rules[5].HostLabels = map[string]string{"env": "dev"}
+	e := engineFor(t, rules, nil)
+	if roles := rules[1].Approval.ApproverRoles; !reflect.DeepEqual(roles, []string{"ops", "lead"}) {
+		t.Fatalf("normalized source roles in place: %v", roles)
+	}
+	rules[1].Approval.ApproverRoles[0] = "mutated"
+	rules[1].Approval.MinApprovals = 5
+
+	want := &EffectiveApproval{RequiredApproverRoleSets: [][]string{{"lead", "ops"}, {"security"}}, MinApprovals: 3, TTLSeconds: 120, AllowOwnerApprove: true}
+	in := executionInput()
+	got, err := e.Evaluate(ctx, in)
+	if err != nil || got.Decision != "require_approval" || !reflect.DeepEqual(got.Approval, want) {
+		t.Fatalf("effective approval = %+v, decision=%s, err=%v; want %+v", got.Approval, got.Decision, err, want)
+	}
+	if wantIDs := []string{"allow", "duplicate-role-set", "first", "no-ttl", "second"}; !reflect.DeepEqual(got.RuleIDs, wantIDs) {
+		t.Errorf("matched rule IDs = %v, want %v", got.RuleIDs, wantIDs)
+	}
+	got.Approval.RequiredApproverRoleSets[0][0] = "mutated"
+	got, err = e.Evaluate(ctx, in)
+	if err != nil || !reflect.DeepEqual(got.Approval, want) {
+		t.Fatalf("approval after modifying result = %+v, err=%v; want %+v", got.Approval, err, want)
+	}
+}
+
+func TestMergeEffectiveApprovals(t *testing.T) {
+	frozen := &EffectiveApproval{RequiredApproverRoleSets: [][]string{{"ops", "lead"}}, MinApprovals: 3, AllowOwnerApprove: true}
+	current := &EffectiveApproval{RequiredApproverRoleSets: [][]string{{"lead", "ops"}, {"lead"}, {"audit"}}, MinApprovals: 2, TTLSeconds: 300}
+	want := &EffectiveApproval{RequiredApproverRoleSets: [][]string{{"audit"}, {"lead"}, {"lead", "ops"}}, MinApprovals: 3, TTLSeconds: 300}
+	for _, items := range [][]*EffectiveApproval{{nil, frozen, current}, {current, frozen}} {
+		got := MergeEffectiveApprovals(items)
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("merged approval = %+v, want %+v", got, want)
+		}
+		got.RequiredApproverRoleSets[2][1] = "mutated"
+		if frozen.RequiredApproverRoleSets[0][0] != "ops" || current.RequiredApproverRoleSets[0][1] != "ops" {
+			t.Fatal("merged approval changed the input role sets")
+		}
+	}
+	if got := MergeEffectiveApprovals([]*EffectiveApproval{nil}); got != nil {
+		t.Errorf("merge of absent requirements = %+v, want nil", got)
+	}
+}
+
+func TestApprovalRuleValidation(t *testing.T) {
+	tests := []struct {
+		name   string
+		change func(*Rule)
+		want   string
+	}{
+		{"other operation", func(r *Rule) { r.Operations = []Operation{ApproveJobs} }, "sole operation"},
+		{"multiple operations", func(r *Rule) { r.Operations = []Operation{ExecuteAction, ViewApprovals} }, "sole operation"},
+		{"duplicate execute operation", func(r *Rule) { r.Operations = []Operation{ExecuteAction, ExecuteAction} }, "sole operation"},
+		{"allow with config", func(r *Rule) { r.Effect = "allow" }, "requires require_approval"},
+		{"deny with config", func(r *Rule) { r.Effect = "deny" }, "requires require_approval"},
+		{"negative count", func(r *Rule) { r.Approval.MinApprovals = -1 }, "min_approvals"},
+		{"excessive count", func(r *Rule) { r.Approval.MinApprovals = 6 }, "min_approvals"},
+		{"short TTL", func(r *Rule) { r.Approval.TTLSeconds = 59 }, "ttl_seconds"},
+		{"long TTL", func(r *Rule) { r.Approval.TTLSeconds = 604801 }, "ttl_seconds"},
+		{"too many roles", func(r *Rule) { r.Approval.ApproverRoles = make([]string, 17) }, "at most 16"},
+		{"empty role", func(r *Rule) { r.Approval.ApproverRoles = []string{""} }, "approver_roles"},
+		{"wildcard role", func(r *Rule) { r.Approval.ApproverRoles = []string{"*"} }, "approver_roles"},
+		{"invalid role", func(r *Rule) { r.Approval.ApproverRoles = []string{"lead ops"} }, "approver_roles"},
+		{"long role", func(r *Rule) { r.Approval.ApproverRoles = []string{strings.Repeat("a", 65)} }, "approver_roles"},
+		{"duplicate role", func(r *Rule) { r.Approval.ApproverRoles = []string{"ops", "ops"} }, "distinct role names"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := executionRule("approval", "require_approval")
+			rule.Approval = &ApprovalConfig{}
+			tt.change(&rule)
+			if _, err := New(context.Background(), rulesSource{rule}, nil); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("rule validation error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+	rule := executionRule("approval", "require_approval")
+	rule.Approval = &ApprovalConfig{MinApprovals: 5, TTLSeconds: 604800, ApproverRoles: []string{"OPS.Team_01", strings.Repeat("a", 64)}}
+	engineFor(t, []Rule{rule}, nil)
+}
+
+func TestApprovalDoesNotRetainPolicyAdministrator(t *testing.T) {
+	in := executionInput()
+	approval := executionRule("approval", "require_approval")
+	if err := CheckPolicyUpdate(context.Background(), []Rule{approval}, []Subject{in.Subject}, in.Env, nil); !errors.Is(err, ErrPolicyLockout) {
+		t.Fatalf("approval-only policy returned %v, want policy lockout", err)
+	}
+	approval.Operations = []Operation{ModifyPolicy}
+	if err := CheckPolicyUpdate(context.Background(), []Rule{approval}, []Subject{in.Subject}, in.Env, []string{"alice"}); err == nil || !strings.Contains(err.Error(), "sole operation") {
+		t.Fatalf("require_approval on modify_policy returned %v, want validation failure", err)
+	}
+}
+
+func TestSimulateApprovalConfigChanges(t *testing.T) {
+	before := executionRule("approval", "require_approval")
+	before.Approval = &ApprovalConfig{ApproverRoles: []string{"ops", "lead"}}
+	for _, tt := range []struct {
+		name    string
+		config  ApprovalConfig
+		changed bool
+	}{
+		{"quorum", ApprovalConfig{ApproverRoles: []string{"ops", "lead"}, MinApprovals: 2}, true},
+		{"roles", ApprovalConfig{ApproverRoles: []string{"ops", "audit"}}, true},
+		{"equivalent roles and defaults", ApprovalConfig{ApproverRoles: []string{"lead", "ops"}, MinApprovals: 1}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			after := before
+			after.Approval = &tt.config
+			changes, err := Simulate(context.Background(), []Rule{before}, []Rule{after}, []Input{executionInput()}, nil)
+			if err != nil || (len(changes) == 1) != tt.changed {
+				t.Fatalf("approval changes = %+v, err=%v; want change=%t", changes, err, tt.changed)
+			}
+			if tt.changed {
+				change := changes[0]
+				if change.Before.Decision != "require_approval" || change.After.Decision != "require_approval" || !reflect.DeepEqual(change.Before.RuleIDs, change.After.RuleIDs) || reflect.DeepEqual(change.Before.Approval, change.After.Approval) {
+					t.Fatalf("expected approval-only change, got %+v", change)
+				}
+			}
+		})
+	}
 }
 
 func BenchmarkPolicy500Rules1000Hosts(b *testing.B) {

@@ -10,7 +10,8 @@ import (
 )
 
 func TestDefaultPolicyViewInputsCarryStoredActionsAndHosts(t *testing.T) {
-	s := &Service{Config: Config{MaxTestEvaluations: 37}}
+	const evaluations = 46 // One subject: 16 global, 2*2 host, 3*2 action-only, 5*2*2 action-host inputs.
+	s := &Service{Config: Config{MaxTestEvaluations: evaluations}}
 	snap := &policySnapshot{Subjects: []policySubject{{ID: "inspector", Attributes: authz.Subject{ID: "inspector"}}}, Actions: []authz.Action{{Name: "danger_action", Risk: "dangerous"}, {Name: "read_action", Risk: "read"}}, Hosts: []authz.Host{{ID: "dev", Labels: map[string]string{"env": "dev"}}, {ID: "prod", Labels: map[string]string{"env": "prod"}}}}
 	env := authz.Environment{TimeNS: 1234567890, SourceIP: "192.0.2.1"}
 	inputs, indices, err := s.inputs(snap, nil, env)
@@ -23,6 +24,9 @@ func TestDefaultPolicyViewInputsCarryStoredActionsAndHosts(t *testing.T) {
 			t.Errorf("default input lost environment or stable case index at %d", i)
 		}
 		if input.Action.Name == "" {
+			if input.Operation == authz.ApproveJobs {
+				t.Error("approve_jobs input has no action")
+			}
 			continue
 		}
 		key := [3]string{string(input.Operation), input.Action.Name, input.Host.ID}
@@ -48,7 +52,12 @@ func TestDefaultPolicyViewInputsCarryStoredActionsAndHosts(t *testing.T) {
 				t.Errorf("missing empty-host input op=%s action=%s", op, action.Name)
 			}
 		}
-		for _, op := range []authz.Operation{authz.ViewJobs, authz.ViewOutput, authz.ExecuteAction} {
+		for _, op := range []authz.Operation{authz.ViewApprovals, authz.ApproveJobs} {
+			if seen[[3]string{string(op), action.Name, ""}] {
+				t.Errorf("unexpected empty-host input op=%s action=%s", op, action.Name)
+			}
+		}
+		for _, op := range []authz.Operation{authz.ViewJobs, authz.ViewOutput, authz.ExecuteAction, authz.ViewApprovals, authz.ApproveJobs} {
 			for _, host := range snap.Hosts {
 				if !seen[[3]string{string(op), action.Name, host.ID}] {
 					t.Errorf("missing resource input op=%s action=%s host=%s", op, action.Name, host.ID)
@@ -56,10 +65,10 @@ func TestDefaultPolicyViewInputsCarryStoredActionsAndHosts(t *testing.T) {
 			}
 		}
 	}
-	if len(inputs) != 37 { // S=1, C=15, H=2, A=2: S*(C+2H+3A+3AH).
-		t.Errorf("default inputs=%d; want 37", len(inputs))
+	if len(inputs) != evaluations {
+		t.Errorf("default inputs=%d; want %d", len(inputs), evaluations)
 	}
-	s.Config.MaxTestEvaluations = 36
+	s.Config.MaxTestEvaluations = evaluations - 1
 	_, _, err = s.inputs(snap, nil, env)
 	if connect.CodeOf(err) != connect.CodeResourceExhausted {
 		t.Errorf("resource matrix over cap code=%v; want resource_exhausted", connect.CodeOf(err))
@@ -75,12 +84,13 @@ func (r viewRuleSource) LoadRules(context.Context) ([]authz.Rule, error) { retur
 func TestExplicitViewCasesUseCaseAction(t *testing.T) {
 	s := &Service{Config: Config{MaxTestEvaluations: 100}}
 	snap := &policySnapshot{Subjects: []policySubject{{ID: "inspector", Attributes: authz.Subject{ID: "inspector", Roles: []string{"viewer"}}}}, Actions: []authz.Action{{Name: "danger_action", Risk: "dangerous"}, {Name: "read_action", Risk: "read"}}}
-	engine, err := authz.New(context.Background(), viewRuleSource{{ID: "read-only", Effect: "allow", Roles: []string{"viewer"}, Operations: []authz.Operation{authz.ViewCatalog, authz.ViewJobs, authz.ViewOutput}, Risks: []string{"read"}}}, nil)
+	viewOperations := []authz.Operation{authz.ViewCatalog, authz.ViewJobs, authz.ViewOutput, authz.ViewApprovals}
+	engine, err := authz.New(context.Background(), viewRuleSource{{ID: "read-only", Effect: "allow", Roles: []string{"viewer"}, Operations: viewOperations, Risks: []string{"read"}}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	env := authz.Environment{TimeNS: 1234567890, SourceIP: "192.0.2.1"}
-	for _, op := range []authz.Operation{authz.ViewCatalog, authz.ViewJobs, authz.ViewOutput} {
+	for _, op := range viewOperations {
 		for action, want := range map[string]string{"danger_action": "deny", "read_action": "allow"} {
 			inputs, _, err := s.inputs(snap, []*v1.PolicyTestCase{{SubjectId: "inspector", Operation: string(op), Action: action}}, env)
 			if err != nil || len(inputs) != 1 {

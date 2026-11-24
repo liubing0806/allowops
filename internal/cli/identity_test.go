@@ -1,20 +1,90 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
+	rpc "github.com/liubing0806/allowops/gen/allowops/v1/allowopsv1connect"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
+	"google.golang.org/protobuf/proto"
 )
+
+type policyYAMLFixture struct {
+	rpc.UnimplementedPolicyServiceHandler
+	rules *v1.PolicyRules
+}
+
+func (f policyYAMLFixture) GetPolicy(context.Context, *connect.Request[v1.GetPolicyRequest]) (*connect.Response[v1.GetPolicyResponse], error) {
+	return connect.NewResponse(&v1.GetPolicyResponse{Policy: &v1.PolicyVersion{Version: 1, Rules: f.rules}}), nil
+}
+
+func TestPolicyGetApprovalRulesYAMLRoundTrip(t *testing.T) {
+	rules, err := readRules("../../examples/policy/hitl-approval.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]*v1.PolicyApprovalConfig{
+		"java-arthas-l2":                {ApproverRoles: []string{"java-approver"}, MinApprovals: 1, TtlSeconds: 900},
+		"operations-write-or-dangerous": {ApproverRoles: []string{"ops-approver"}, MinApprovals: 2, TtlSeconds: 1800},
+	}
+	for _, rule := range rules.Rules {
+		if approval, ok := want[rule.Name]; ok {
+			if rule.Effect != v1.PolicyEffect_POLICY_EFFECT_REQUIRE_APPROVAL || !proto.Equal(rule.Approval, approval) {
+				t.Fatalf("parsed approval rule = %v, want approval %v", rule, approval)
+			}
+			delete(want, rule.Name)
+		}
+	}
+	if len(want) > 0 {
+		t.Fatalf("missing approval rules: %v", want)
+	}
+
+	_, handler := rpc.NewPolicyServiceHandler(policyYAMLFixture{rules: rules})
+	server := httptest.NewTLSServer(handler)
+	t.Cleanup(server.Close)
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	ca := filepath.Join(dir, "ca.pem")
+	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := saveCredentials(credentials{Gateway: server.URL, CAFile: ca, Token: "synthetic-policy-token", ExpiresAt: time.Now().Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	cmd := NewPolicyCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"get"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"effect: require_approval", "approval:", "approver_roles:", "min_approvals:", "ttl_seconds:"} {
+		if !strings.Contains(out.String(), field) {
+			t.Errorf("exported YAML missing %q:\n%s", field, out.String())
+		}
+	}
+	path := filepath.Join(dir, "rules.yaml")
+	if err := os.WriteFile(path, out.Bytes(), 0600); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := readRules(path)
+	if err != nil || !proto.Equal(reloaded, rules) {
+		t.Fatalf("reloaded YAML rules = %v, err=%v; want %v", reloaded, err, rules)
+	}
+}
 
 func TestRPCErrorReportsPossibleCommitWithoutEchoingServerSecrets(t *testing.T) {
 	err := connect.NewError(connect.CodeUnavailable, errors.New("provider-password-must-not-leak"))

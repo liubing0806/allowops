@@ -38,11 +38,22 @@ func rulesFromProto(p *v1.PolicyRules) ([]authz.Rule, error) {
 			rule.Effect = "allow"
 		case v1.PolicyEffect_POLICY_EFFECT_DENY:
 			rule.Effect = "deny"
+		case v1.PolicyEffect_POLICY_EFFECT_REQUIRE_APPROVAL:
+			rule.Effect = "require_approval"
 		default:
 			return nil, failure(connect.CodeInvalidArgument, "rule effect required")
 		}
 		for _, op := range r.Operations {
 			rule.Operations = append(rule.Operations, authz.Operation(op))
+		}
+		if a := r.Approval; a != nil {
+			rule.Approval = &authz.ApprovalConfig{
+				ApproverRoles: a.ApproverRoles, MinApprovals: int(a.MinApprovals),
+				TTLSeconds: int(a.TtlSeconds), AllowOwnerApprove: a.AllowOwnerApprove,
+			}
+		}
+		if err := rule.ValidateApproval(); err != nil {
+			return nil, failure(connect.CodeInvalidArgument, err.Error())
 		}
 		if r.Hours != nil {
 			if r.Hours.Timezone == "" || r.Hours.From >= r.Hours.To || r.Hours.To > 24 {
@@ -58,9 +69,15 @@ func rulesFromProto(p *v1.PolicyRules) ([]authz.Rule, error) {
 func defaultRules() *v1.PolicyRules {
 	p := &v1.PolicyRules{}
 	for _, r := range authz.DefaultRules() {
-		pr := &v1.PolicyRule{Name: r.ID, Roles: r.Roles, Actions: r.Actions, Risks: r.Risks, Effect: v1.PolicyEffect_POLICY_EFFECT_ALLOW}
+		pr := &v1.PolicyRule{Name: r.ID, Roles: r.Roles, Actions: r.Actions, Risks: r.Risks, Effect: policyEffect(r.Effect)}
 		for _, op := range r.Operations {
 			pr.Operations = append(pr.Operations, string(op))
+		}
+		if a := r.Approval; a != nil {
+			pr.Approval = &v1.PolicyApprovalConfig{
+				ApproverRoles: a.ApproverRoles, MinApprovals: uint32(a.MinApprovals),
+				TtlSeconds: uint32(a.TTLSeconds), AllowOwnerApprove: a.AllowOwnerApprove,
+			}
 		}
 		p.Rules = append(p.Rules, pr)
 	}
@@ -326,13 +343,49 @@ func snapshotActions(ctx context.Context, q querier, snap *policySnapshot) error
 	return nil
 }
 
-var actionViewOperations = []authz.Operation{authz.ViewCatalog, authz.ViewJobs, authz.ViewOutput}
+var actionViewOperations = []authz.Operation{authz.ViewCatalog, authz.ViewJobs, authz.ViewOutput, authz.ViewApprovals, authz.ApproveJobs}
 
-var consoleOperations = []authz.Operation{authz.ModifyPolicy, authz.ManageServiceAccounts, authz.ManageHosts, authz.CreateJoinToken, authz.ManageUserRoles, authz.PublishCatalog, authz.ViewHosts, authz.ViewInventory, authz.ViewChanges, authz.ViewKnowledge, authz.ViewCatalog, authz.ViewJobs, authz.ViewOutput, authz.ViewAudit, authz.ViewSystem}
+var consoleOperations = []authz.Operation{authz.ModifyPolicy, authz.ManageServiceAccounts, authz.ManageHosts, authz.CreateJoinToken, authz.ManageUserRoles, authz.PublishCatalog, authz.ViewHosts, authz.ViewInventory, authz.ViewChanges, authz.ViewKnowledge, authz.ViewCatalog, authz.ViewJobs, authz.ViewOutput, authz.ViewApprovals, authz.ApproveJobs, authz.ViewAudit, authz.ViewSystem}
 
 type testEnvironment struct {
 	authz.Environment
 	Cases []*v1.PolicyTestCase `json:"cases,omitempty"`
+}
+
+// UnmarshalJSON reads the existing policy test storage format. encoding/json
+// writes the HostTargets oneof wrapper but needs a concrete type to read it.
+func (e *testEnvironment) UnmarshalJSON(data []byte) error {
+	var stored struct {
+		authz.Environment
+		Cases []struct {
+			v1.PolicyTestCase
+			Targets *struct {
+				Selection struct {
+					Hosts    *v1.HostNames
+					Selector *string
+				}
+			} `json:"targets"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return err
+	}
+	*e = testEnvironment{Environment: stored.Environment}
+	for i := range stored.Cases {
+		c := &stored.Cases[i]
+		if c.Targets != nil {
+			c.PolicyTestCase.Targets = &v1.HostTargets{}
+			selection := c.Targets.Selection
+			switch {
+			case selection.Hosts != nil:
+				c.PolicyTestCase.Targets.Selection = &v1.HostTargets_Hosts{Hosts: selection.Hosts}
+			case selection.Selector != nil:
+				c.PolicyTestCase.Targets.Selection = &v1.HostTargets_Selector{Selector: *selection.Selector}
+			}
+		}
+		e.Cases = append(e.Cases, &c.PolicyTestCase)
+	}
+	return nil
 }
 
 // inputCollector accumulates policy evaluation inputs up to the configured limit.
@@ -392,8 +445,10 @@ func defaultInputs(c *inputCollector, snap *policySnapshot, env authz.Environmen
 
 // operationInputs adds the inputs of one console operation for one subject.
 func operationInputs(c *inputCollector, snap *policySnapshot, sub policySubject, op authz.Operation, jobHosts []authz.Host, env authz.Environment) error {
-	if err := c.addNext(authz.Input{Subject: sub.Attributes, Operation: op, Env: env}); err != nil {
-		return err
+	if op != authz.ApproveJobs {
+		if err := c.addNext(authz.Input{Subject: sub.Attributes, Operation: op, Env: env}); err != nil {
+			return err
+		}
 	}
 	// Host listing and import preview also have an empty-target check.
 	// Retain it above, and cover the stored host attributes used by
@@ -405,7 +460,11 @@ func operationInputs(c *inputCollector, snap *policySnapshot, sub policySubject,
 			}
 		}
 	}
-	if op == authz.ViewCatalog || op == authz.ViewJobs || op == authz.ViewOutput {
+	if slices.Contains(actionViewOperations, op) {
+		hosts := jobHosts
+		if op == authz.ViewApprovals || op == authz.ApproveJobs {
+			hosts = snap.Hosts
+		}
 		for _, a := range snap.Actions {
 			input := authz.Input{Subject: sub.Attributes, Operation: op, Action: a, Env: env}
 			if op == authz.ViewCatalog {
@@ -414,7 +473,7 @@ func operationInputs(c *inputCollector, snap *policySnapshot, sub policySubject,
 				}
 				continue
 			}
-			for _, h := range jobHosts {
+			for _, h := range hosts {
 				input.Host = h
 				if err := c.addNext(input); err != nil {
 					return err
@@ -472,9 +531,9 @@ func caseInput(snap *policySnapshot, c *v1.PolicyTestCase, env authz.Environment
 	if _, err := netip.ParseAddr(e.SourceIP); err != nil {
 		return authz.Input{}, nil, failure(connect.CodeInvalidArgument, "invalid test source IP")
 	}
-	// View operations use the case action when given; without one they stay
-	// a global check. execute_action always requires an action.
-	if input.Operation == authz.ExecuteAction || (c.Action != "" && slices.Contains(actionViewOperations, input.Operation)) {
+	// Execution and voting always require an action and targets.
+	requiresTargets := input.Operation == authz.ExecuteAction || input.Operation == authz.ApproveJobs
+	if requiresTargets || (c.Action != "" && slices.Contains(actionViewOperations, input.Operation)) {
 		found := false
 		for _, a := range snap.Actions {
 			if a.Name == c.Action {
@@ -491,11 +550,14 @@ func caseInput(snap *policySnapshot, c *v1.PolicyTestCase, env authz.Environment
 	if err != nil {
 		return authz.Input{}, nil, err
 	}
-	if c.Targets == nil && input.Operation != authz.ExecuteAction {
-		hosts = []authz.Host{{}}
+	if input.Operation == authz.ApproveJobs && len(hosts) == 0 {
+		return authz.Input{}, nil, failure(connect.CodeInvalidArgument, "approval test targets required")
 	}
-	if input.Operation == authz.ExecuteAction && c.Targets == nil {
-		return authz.Input{}, nil, failure(connect.CodeInvalidArgument, "execution test targets required")
+	if c.Targets == nil {
+		if input.Operation == authz.ExecuteAction {
+			return authz.Input{}, nil, failure(connect.CodeInvalidArgument, "execution test targets required")
+		}
+		hosts = []authz.Host{{}}
 	}
 	return input, hosts, nil
 }
@@ -561,12 +623,28 @@ func selectHosts(hosts []authz.Host, t *v1.HostTargets, reported ...map[string]m
 	return out, nil
 }
 
-func decision(r authz.Result, reason string) *v1.PolicyDecision {
-	effect := v1.PolicyEffect_POLICY_EFFECT_DENY
-	if r.Decision == "allow" {
-		effect = v1.PolicyEffect_POLICY_EFFECT_ALLOW
+func policyEffect(effect string) v1.PolicyEffect {
+	switch effect {
+	case "allow":
+		return v1.PolicyEffect_POLICY_EFFECT_ALLOW
+	case "require_approval":
+		return v1.PolicyEffect_POLICY_EFFECT_REQUIRE_APPROVAL
+	default:
+		return v1.PolicyEffect_POLICY_EFFECT_DENY
 	}
-	return &v1.PolicyDecision{Effect: effect, MatchedRules: r.RuleIDs, ErrorReason: reason}
+}
+
+func decision(r authz.Result, reason string) *v1.PolicyDecision {
+	d := &v1.PolicyDecision{Effect: policyEffect(r.Decision), MatchedRules: r.RuleIDs, ErrorReason: reason}
+	if a := r.Approval; a != nil {
+		d.Approval = &v1.PolicyApprovalRequirement{
+			MinApprovals: uint32(a.MinApprovals), TtlSeconds: uint32(a.TTLSeconds), AllowOwnerApprove: a.AllowOwnerApprove,
+		}
+		for _, roles := range a.RequiredApproverRoleSets {
+			d.Approval.RequiredApproverRoleSets = append(d.Approval.RequiredApproverRoleSets, &v1.PolicyApprovalRoleSet{Roles: roles})
+		}
+	}
+	return d
 }
 
 func (s *Service) GetPolicy(ctx context.Context, r *connect.Request[v1.GetPolicyRequest]) (*connect.Response[v1.GetPolicyResponse], error) {

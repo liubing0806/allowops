@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file allowops/v1/policy.proto.
  */
 export const file_allowops_v1_policy: GenFile = /*@__PURE__*/
-  fileDesc("ChhhbGxvd29wcy92MS9wb2xpY3kucHJvdG8SC2FsbG93b3BzLnYxIjkKC1BvbGljeUhvdXJzEgwKBGZyb20YASABKA0SCgoCdG8YAiABKA0SEAoIdGltZXpvbmUYAyABKAki1wIKClBvbGljeVJ1bGUSDAoEbmFtZRgBIAEoCRINCgVyb2xlcxgCIAMoCRINCgV0ZWFtcxgDIAMoCRIOCgZvd25lcnMYBCADKAkSEgoKb3BlcmF0aW9ucxgFIAMoCRIPCgdhY3Rpb25zGAYgAygJEg0KBXJpc2tzGAcgAygJEjwKC2hvc3RfbGFiZWxzGAggAygLMicuYWxsb3dvcHMudjEuUG9saWN5UnVsZS5Ib3N0TGFiZWxzRW50cnkSJwoFaG91cnMYCSABKAsyGC5hbGxvd29wcy52MS5Qb2xpY3lIb3VycxIUCgxzb3VyY2VfY2lkcnMYCiADKAkSKQoGZWZmZWN0GAsgASgOMhkuYWxsb3dvcHMudjEuUG9saWN5RWZmZWN0GjEKD0hvc3RMYWJlbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjUKC1BvbGljeVJ1bGVzEiYKBXJ1bGVzGAEgAygLMhcuYWxsb3dvcHMudjEuUG9saWN5UnVsZSLRAQoNUG9saWN5VmVyc2lvbhIPCgd2ZXJzaW9uGAEgASgEEicKBXJ1bGVzGAIgASgLMhguYWxsb3dvcHMudjEuUG9saWN5UnVsZXMSLgoKY3JlYXRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKY3JlYXRlZF9ieRgEIAEoCRIOCgZyZWFzb24YBSABKAkSHQoQcm9sbGVkX2JhY2tfZnJvbRgGIAEoBEgAiAEBQhMKEV9yb2xsZWRfYmFja19mcm9tImgKDlBvbGljeURlY2lzaW9uEikKBmVmZmVjdBgBIAEoDjIZLmFsbG93b3BzLnYxLlBvbGljeUVmZmVjdBIVCg1tYXRjaGVkX3J1bGVzGAIgAygJEhQKDGVycm9yX3JlYXNvbhgDIAEoCSKtAQoOUG9saWN5VGVzdENhc2USEgoKc3ViamVjdF9pZBgBIAEoCRIRCglvcGVyYXRpb24YAiABKAkSDgoGYWN0aW9uGAMgASgJEikKB3RhcmdldHMYBCABKAsyGC5hbGxvd29wcy52MS5Ib3N0VGFyZ2V0cxImCgJhdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEQoJc291cmNlX2lwGAYgASgJIokBCgxQb2xpY3lDaGFuZ2USEgoKY2FzZV9pbmRleBgBIAEoDRIMCgRob3N0GAIgASgJEisKBmJlZm9yZRgDIAEoCzIbLmFsbG93b3BzLnYxLlBvbGljeURlY2lzaW9uEioKBWFmdGVyGAQgASgLMhsuYWxsb3dvcHMudjEuUG9saWN5RGVjaXNpb24i0wEKClBvbGljeVRlc3QSDwoHdGVzdF9pZBgBIAEoCRIUCgxiYXNlX3ZlcnNpb24YAiABKAQSGAoQY2FuZGlkYXRlX3NoYTI1NhgDIAEoDBIXCg9ldmFsdWF0ZWRfY291bnQYBCABKAQSFQoNY2hhbmdlZF9jb3VudBgFIAEoBBIkChxyZXRhaW5zX3BvbGljeV9hZG1pbmlzdHJhdG9yGAYgASgIEi4KCmV4cGlyZXNfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIjQKEEdldFBvbGljeVJlcXVlc3QSFAoHdmVyc2lvbhgBIAEoBEgAiAEBQgoKCF92ZXJzaW9uIj8KEUdldFBvbGljeVJlc3BvbnNlEioKBnBvbGljeRgBIAEoCzIaLmFsbG93b3BzLnYxLlBvbGljeVZlcnNpb24iqwEKEVRlc3RQb2xpY3lSZXF1ZXN0EhQKDGJhc2VfdmVyc2lvbhgBIAEoBBIpCgVydWxlcxgCIAEoCzIYLmFsbG93b3BzLnYxLlBvbGljeVJ1bGVzSAASHAoSaGlzdG9yaWNhbF92ZXJzaW9uGAMgASgESAASKgoFY2FzZXMYBCADKAsyGy5hbGxvd29wcy52MS5Qb2xpY3lUZXN0Q2FzZUILCgljYW5kaWRhdGUiOwoSVGVzdFBvbGljeVJlc3BvbnNlEiUKBHRlc3QYASABKAsyFy5hbGxvd29wcy52MS5Qb2xpY3lUZXN0IlYKG0dldFBvbGljeVRlc3RDaGFuZ2VzUmVxdWVzdBIPCgd0ZXN0X2lkGAEgASgJEiYKBHBhZ2UYAiABKAsyGC5hbGxvd29wcy52MS5QYWdlUmVxdWVzdCJzChxHZXRQb2xpY3lUZXN0Q2hhbmdlc1Jlc3BvbnNlEioKB2NoYW5nZXMYASADKAsyGS5hbGxvd29wcy52MS5Qb2xpY3lDaGFuZ2USJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSJzChFTYXZlUG9saWN5UmVxdWVzdBIUCgxiYXNlX3ZlcnNpb24YASABKAQSJwoFcnVsZXMYAiABKAsyGC5hbGxvd29wcy52MS5Qb2xpY3lSdWxlcxIPCgd0ZXN0X2lkGAMgASgJEg4KBnJlYXNvbhgEIAEoCSJAChJTYXZlUG9saWN5UmVzcG9uc2USKgoGcG9saWN5GAEgASgLMhouYWxsb3dvcHMudjEuUG9saWN5VmVyc2lvbiJCChhMaXN0UG9saWN5SGlzdG9yeVJlcXVlc3QSJgoEcGFnZRgBIAEoCzIYLmFsbG93b3BzLnYxLlBhZ2VSZXF1ZXN0InIKGUxpc3RQb2xpY3lIaXN0b3J5UmVzcG9uc2USLAoIcG9saWNpZXMYASADKAsyGi5hbGxvd29wcy52MS5Qb2xpY3lWZXJzaW9uEicKBHBhZ2UYAiABKAsyGS5hbGxvd29wcy52MS5QYWdlUmVzcG9uc2UiZgoVUm9sbGJhY2tQb2xpY3lSZXF1ZXN0EhQKDGJhc2VfdmVyc2lvbhgBIAEoBBIWCg50YXJnZXRfdmVyc2lvbhgCIAEoBBIPCgd0ZXN0X2lkGAMgASgJEg4KBnJlYXNvbhgEIAEoCSJEChZSb2xsYmFja1BvbGljeVJlc3BvbnNlEioKBnBvbGljeRgBIAEoCzIaLmFsbG93b3BzLnYxLlBvbGljeVZlcnNpb24qXgoMUG9saWN5RWZmZWN0Eh0KGVBPTElDWV9FRkZFQ1RfVU5TUEVDSUZJRUQQABIXChNQT0xJQ1lfRUZGRUNUX0FMTE9XEAESFgoSUE9MSUNZX0VGRkVDVF9ERU5ZEAIypQQKDVBvbGljeVNlcnZpY2USSgoJR2V0UG9saWN5Eh0uYWxsb3dvcHMudjEuR2V0UG9saWN5UmVxdWVzdBoeLmFsbG93b3BzLnYxLkdldFBvbGljeVJlc3BvbnNlEk0KClRlc3RQb2xpY3kSHi5hbGxvd29wcy52MS5UZXN0UG9saWN5UmVxdWVzdBofLmFsbG93b3BzLnYxLlRlc3RQb2xpY3lSZXNwb25zZRJrChRHZXRQb2xpY3lUZXN0Q2hhbmdlcxIoLmFsbG93b3BzLnYxLkdldFBvbGljeVRlc3RDaGFuZ2VzUmVxdWVzdBopLmFsbG93b3BzLnYxLkdldFBvbGljeVRlc3RDaGFuZ2VzUmVzcG9uc2USTQoKU2F2ZVBvbGljeRIeLmFsbG93b3BzLnYxLlNhdmVQb2xpY3lSZXF1ZXN0Gh8uYWxsb3dvcHMudjEuU2F2ZVBvbGljeVJlc3BvbnNlEmIKEUxpc3RQb2xpY3lIaXN0b3J5EiUuYWxsb3dvcHMudjEuTGlzdFBvbGljeUhpc3RvcnlSZXF1ZXN0GiYuYWxsb3dvcHMudjEuTGlzdFBvbGljeUhpc3RvcnlSZXNwb25zZRJZCg5Sb2xsYmFja1BvbGljeRIiLmFsbG93b3BzLnYxLlJvbGxiYWNrUG9saWN5UmVxdWVzdBojLmFsbG93b3BzLnYxLlJvbGxiYWNrUG9saWN5UmVzcG9uc2VCPFo6Z2l0aHViLmNvbS9saXViaW5nMDgwNi9hbGxvd29wcy9nZW4vYWxsb3dvcHMvdjE7YWxsb3dvcHN2MWIGcHJvdG8z", [file_allowops_v1_common, file_google_protobuf_timestamp]);
+  fileDesc("ChhhbGxvd29wcy92MS9wb2xpY3kucHJvdG8SC2FsbG93b3BzLnYxIjkKC1BvbGljeUhvdXJzEgwKBGZyb20YASABKA0SCgoCdG8YAiABKA0SEAoIdGltZXpvbmUYAyABKAkidwoUUG9saWN5QXBwcm92YWxDb25maWcSFgoOYXBwcm92ZXJfcm9sZXMYASADKAkSFQoNbWluX2FwcHJvdmFscxgCIAEoDRITCgt0dGxfc2Vjb25kcxgDIAEoDRIbChNhbGxvd19vd25lcl9hcHByb3ZlGAQgASgIIiYKFVBvbGljeUFwcHJvdmFsUm9sZVNldBINCgVyb2xlcxgBIAMoCSKtAQoZUG9saWN5QXBwcm92YWxSZXF1aXJlbWVudBJHChtyZXF1aXJlZF9hcHByb3Zlcl9yb2xlX3NldHMYASADKAsyIi5hbGxvd29wcy52MS5Qb2xpY3lBcHByb3ZhbFJvbGVTZXQSFQoNbWluX2FwcHJvdmFscxgCIAEoDRITCgt0dGxfc2Vjb25kcxgDIAEoDRIbChNhbGxvd19vd25lcl9hcHByb3ZlGAQgASgIIowDCgpQb2xpY3lSdWxlEgwKBG5hbWUYASABKAkSDQoFcm9sZXMYAiADKAkSDQoFdGVhbXMYAyADKAkSDgoGb3duZXJzGAQgAygJEhIKCm9wZXJhdGlvbnMYBSADKAkSDwoHYWN0aW9ucxgGIAMoCRINCgVyaXNrcxgHIAMoCRI8Cgtob3N0X2xhYmVscxgIIAMoCzInLmFsbG93b3BzLnYxLlBvbGljeVJ1bGUuSG9zdExhYmVsc0VudHJ5EicKBWhvdXJzGAkgASgLMhguYWxsb3dvcHMudjEuUG9saWN5SG91cnMSFAoMc291cmNlX2NpZHJzGAogAygJEikKBmVmZmVjdBgLIAEoDjIZLmFsbG93b3BzLnYxLlBvbGljeUVmZmVjdBIzCghhcHByb3ZhbBgMIAEoCzIhLmFsbG93b3BzLnYxLlBvbGljeUFwcHJvdmFsQ29uZmlnGjEKD0hvc3RMYWJlbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjUKC1BvbGljeVJ1bGVzEiYKBXJ1bGVzGAEgAygLMhcuYWxsb3dvcHMudjEuUG9saWN5UnVsZSLRAQoNUG9saWN5VmVyc2lvbhIPCgd2ZXJzaW9uGAEgASgEEicKBXJ1bGVzGAIgASgLMhguYWxsb3dvcHMudjEuUG9saWN5UnVsZXMSLgoKY3JlYXRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKY3JlYXRlZF9ieRgEIAEoCRIOCgZyZWFzb24YBSABKAkSHQoQcm9sbGVkX2JhY2tfZnJvbRgGIAEoBEgAiAEBQhMKEV9yb2xsZWRfYmFja19mcm9tIqIBCg5Qb2xpY3lEZWNpc2lvbhIpCgZlZmZlY3QYASABKA4yGS5hbGxvd29wcy52MS5Qb2xpY3lFZmZlY3QSFQoNbWF0Y2hlZF9ydWxlcxgCIAMoCRIUCgxlcnJvcl9yZWFzb24YAyABKAkSOAoIYXBwcm92YWwYBCABKAsyJi5hbGxvd29wcy52MS5Qb2xpY3lBcHByb3ZhbFJlcXVpcmVtZW50Iq0BCg5Qb2xpY3lUZXN0Q2FzZRISCgpzdWJqZWN0X2lkGAEgASgJEhEKCW9wZXJhdGlvbhgCIAEoCRIOCgZhY3Rpb24YAyABKAkSKQoHdGFyZ2V0cxgEIAEoCzIYLmFsbG93b3BzLnYxLkhvc3RUYXJnZXRzEiYKAmF0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglzb3VyY2VfaXAYBiABKAkiiQEKDFBvbGljeUNoYW5nZRISCgpjYXNlX2luZGV4GAEgASgNEgwKBGhvc3QYAiABKAkSKwoGYmVmb3JlGAMgASgLMhsuYWxsb3dvcHMudjEuUG9saWN5RGVjaXNpb24SKgoFYWZ0ZXIYBCABKAsyGy5hbGxvd29wcy52MS5Qb2xpY3lEZWNpc2lvbiLTAQoKUG9saWN5VGVzdBIPCgd0ZXN0X2lkGAEgASgJEhQKDGJhc2VfdmVyc2lvbhgCIAEoBBIYChBjYW5kaWRhdGVfc2hhMjU2GAMgASgMEhcKD2V2YWx1YXRlZF9jb3VudBgEIAEoBBIVCg1jaGFuZ2VkX2NvdW50GAUgASgEEiQKHHJldGFpbnNfcG9saWN5X2FkbWluaXN0cmF0b3IYBiABKAgSLgoKZXhwaXJlc19hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiNAoQR2V0UG9saWN5UmVxdWVzdBIUCgd2ZXJzaW9uGAEgASgESACIAQFCCgoIX3ZlcnNpb24iPwoRR2V0UG9saWN5UmVzcG9uc2USKgoGcG9saWN5GAEgASgLMhouYWxsb3dvcHMudjEuUG9saWN5VmVyc2lvbiKrAQoRVGVzdFBvbGljeVJlcXVlc3QSFAoMYmFzZV92ZXJzaW9uGAEgASgEEikKBXJ1bGVzGAIgASgLMhguYWxsb3dvcHMudjEuUG9saWN5UnVsZXNIABIcChJoaXN0b3JpY2FsX3ZlcnNpb24YAyABKARIABIqCgVjYXNlcxgEIAMoCzIbLmFsbG93b3BzLnYxLlBvbGljeVRlc3RDYXNlQgsKCWNhbmRpZGF0ZSI7ChJUZXN0UG9saWN5UmVzcG9uc2USJQoEdGVzdBgBIAEoCzIXLmFsbG93b3BzLnYxLlBvbGljeVRlc3QiVgobR2V0UG9saWN5VGVzdENoYW5nZXNSZXF1ZXN0Eg8KB3Rlc3RfaWQYASABKAkSJgoEcGFnZRgCIAEoCzIYLmFsbG93b3BzLnYxLlBhZ2VSZXF1ZXN0InMKHEdldFBvbGljeVRlc3RDaGFuZ2VzUmVzcG9uc2USKgoHY2hhbmdlcxgBIAMoCzIZLmFsbG93b3BzLnYxLlBvbGljeUNoYW5nZRInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlInMKEVNhdmVQb2xpY3lSZXF1ZXN0EhQKDGJhc2VfdmVyc2lvbhgBIAEoBBInCgVydWxlcxgCIAEoCzIYLmFsbG93b3BzLnYxLlBvbGljeVJ1bGVzEg8KB3Rlc3RfaWQYAyABKAkSDgoGcmVhc29uGAQgASgJIkAKElNhdmVQb2xpY3lSZXNwb25zZRIqCgZwb2xpY3kYASABKAsyGi5hbGxvd29wcy52MS5Qb2xpY3lWZXJzaW9uIkIKGExpc3RQb2xpY3lIaXN0b3J5UmVxdWVzdBImCgRwYWdlGAEgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QicgoZTGlzdFBvbGljeUhpc3RvcnlSZXNwb25zZRIsCghwb2xpY2llcxgBIAMoCzIaLmFsbG93b3BzLnYxLlBvbGljeVZlcnNpb24SJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSJmChVSb2xsYmFja1BvbGljeVJlcXVlc3QSFAoMYmFzZV92ZXJzaW9uGAEgASgEEhYKDnRhcmdldF92ZXJzaW9uGAIgASgEEg8KB3Rlc3RfaWQYAyABKAkSDgoGcmVhc29uGAQgASgJIkQKFlJvbGxiYWNrUG9saWN5UmVzcG9uc2USKgoGcG9saWN5GAEgASgLMhouYWxsb3dvcHMudjEuUG9saWN5VmVyc2lvbiqCAQoMUG9saWN5RWZmZWN0Eh0KGVBPTElDWV9FRkZFQ1RfVU5TUEVDSUZJRUQQABIXChNQT0xJQ1lfRUZGRUNUX0FMTE9XEAESFgoSUE9MSUNZX0VGRkVDVF9ERU5ZEAISIgoeUE9MSUNZX0VGRkVDVF9SRVFVSVJFX0FQUFJPVkFMEAMypQQKDVBvbGljeVNlcnZpY2USSgoJR2V0UG9saWN5Eh0uYWxsb3dvcHMudjEuR2V0UG9saWN5UmVxdWVzdBoeLmFsbG93b3BzLnYxLkdldFBvbGljeVJlc3BvbnNlEk0KClRlc3RQb2xpY3kSHi5hbGxvd29wcy52MS5UZXN0UG9saWN5UmVxdWVzdBofLmFsbG93b3BzLnYxLlRlc3RQb2xpY3lSZXNwb25zZRJrChRHZXRQb2xpY3lUZXN0Q2hhbmdlcxIoLmFsbG93b3BzLnYxLkdldFBvbGljeVRlc3RDaGFuZ2VzUmVxdWVzdBopLmFsbG93b3BzLnYxLkdldFBvbGljeVRlc3RDaGFuZ2VzUmVzcG9uc2USTQoKU2F2ZVBvbGljeRIeLmFsbG93b3BzLnYxLlNhdmVQb2xpY3lSZXF1ZXN0Gh8uYWxsb3dvcHMudjEuU2F2ZVBvbGljeVJlc3BvbnNlEmIKEUxpc3RQb2xpY3lIaXN0b3J5EiUuYWxsb3dvcHMudjEuTGlzdFBvbGljeUhpc3RvcnlSZXF1ZXN0GiYuYWxsb3dvcHMudjEuTGlzdFBvbGljeUhpc3RvcnlSZXNwb25zZRJZCg5Sb2xsYmFja1BvbGljeRIiLmFsbG93b3BzLnYxLlJvbGxiYWNrUG9saWN5UmVxdWVzdBojLmFsbG93b3BzLnYxLlJvbGxiYWNrUG9saWN5UmVzcG9uc2VCPFo6Z2l0aHViLmNvbS9saXViaW5nMDgwNi9hbGxvd29wcy9nZW4vYWxsb3dvcHMvdjE7YWxsb3dvcHN2MWIGcHJvdG8z", [file_allowops_v1_common, file_google_protobuf_timestamp]);
 
 /**
  * A11: structured policy rules; exact matching is documented in protocol.md.
@@ -66,6 +66,147 @@ export type PolicyHoursJson = {
  */
 export const PolicyHoursSchema: GenMessage<PolicyHours, {jsonType: PolicyHoursJson}> = /*@__PURE__*/
   messageDesc(file_allowops_v1_policy, 0);
+
+/**
+ * @generated from message allowops.v1.PolicyApprovalConfig
+ */
+export type PolicyApprovalConfig = Message<"allowops.v1.PolicyApprovalConfig"> & {
+  /**
+   * @generated from field: repeated string approver_roles = 1;
+   */
+  approverRoles: string[];
+
+  /**
+   * @generated from field: uint32 min_approvals = 2;
+   */
+  minApprovals: number;
+
+  /**
+   * @generated from field: uint32 ttl_seconds = 3;
+   */
+  ttlSeconds: number;
+
+  /**
+   * @generated from field: bool allow_owner_approve = 4;
+   */
+  allowOwnerApprove: boolean;
+};
+
+/**
+ * @generated from message allowops.v1.PolicyApprovalConfig
+ */
+export type PolicyApprovalConfigJson = {
+  /**
+   * @generated from field: repeated string approver_roles = 1;
+   */
+  approverRoles?: string[];
+
+  /**
+   * @generated from field: uint32 min_approvals = 2;
+   */
+  minApprovals?: number;
+
+  /**
+   * @generated from field: uint32 ttl_seconds = 3;
+   */
+  ttlSeconds?: number;
+
+  /**
+   * @generated from field: bool allow_owner_approve = 4;
+   */
+  allowOwnerApprove?: boolean;
+};
+
+/**
+ * Describes the message allowops.v1.PolicyApprovalConfig.
+ * Use `create(PolicyApprovalConfigSchema)` to create a new message.
+ */
+export const PolicyApprovalConfigSchema: GenMessage<PolicyApprovalConfig, {jsonType: PolicyApprovalConfigJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_policy, 1);
+
+/**
+ * @generated from message allowops.v1.PolicyApprovalRoleSet
+ */
+export type PolicyApprovalRoleSet = Message<"allowops.v1.PolicyApprovalRoleSet"> & {
+  /**
+   * @generated from field: repeated string roles = 1;
+   */
+  roles: string[];
+};
+
+/**
+ * @generated from message allowops.v1.PolicyApprovalRoleSet
+ */
+export type PolicyApprovalRoleSetJson = {
+  /**
+   * @generated from field: repeated string roles = 1;
+   */
+  roles?: string[];
+};
+
+/**
+ * Describes the message allowops.v1.PolicyApprovalRoleSet.
+ * Use `create(PolicyApprovalRoleSetSchema)` to create a new message.
+ */
+export const PolicyApprovalRoleSetSchema: GenMessage<PolicyApprovalRoleSet, {jsonType: PolicyApprovalRoleSetJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_policy, 2);
+
+/**
+ * @generated from message allowops.v1.PolicyApprovalRequirement
+ */
+export type PolicyApprovalRequirement = Message<"allowops.v1.PolicyApprovalRequirement"> & {
+  /**
+   * @generated from field: repeated allowops.v1.PolicyApprovalRoleSet required_approver_role_sets = 1;
+   */
+  requiredApproverRoleSets: PolicyApprovalRoleSet[];
+
+  /**
+   * @generated from field: uint32 min_approvals = 2;
+   */
+  minApprovals: number;
+
+  /**
+   * @generated from field: uint32 ttl_seconds = 3;
+   */
+  ttlSeconds: number;
+
+  /**
+   * @generated from field: bool allow_owner_approve = 4;
+   */
+  allowOwnerApprove: boolean;
+};
+
+/**
+ * @generated from message allowops.v1.PolicyApprovalRequirement
+ */
+export type PolicyApprovalRequirementJson = {
+  /**
+   * @generated from field: repeated allowops.v1.PolicyApprovalRoleSet required_approver_role_sets = 1;
+   */
+  requiredApproverRoleSets?: PolicyApprovalRoleSetJson[];
+
+  /**
+   * @generated from field: uint32 min_approvals = 2;
+   */
+  minApprovals?: number;
+
+  /**
+   * @generated from field: uint32 ttl_seconds = 3;
+   */
+  ttlSeconds?: number;
+
+  /**
+   * @generated from field: bool allow_owner_approve = 4;
+   */
+  allowOwnerApprove?: boolean;
+};
+
+/**
+ * Describes the message allowops.v1.PolicyApprovalRequirement.
+ * Use `create(PolicyApprovalRequirementSchema)` to create a new message.
+ */
+export const PolicyApprovalRequirementSchema: GenMessage<PolicyApprovalRequirement, {jsonType: PolicyApprovalRequirementJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_policy, 3);
 
 /**
  * @generated from message allowops.v1.PolicyRule
@@ -125,6 +266,11 @@ export type PolicyRule = Message<"allowops.v1.PolicyRule"> & {
    * @generated from field: allowops.v1.PolicyEffect effect = 11;
    */
   effect: PolicyEffect;
+
+  /**
+   * @generated from field: allowops.v1.PolicyApprovalConfig approval = 12;
+   */
+  approval?: PolicyApprovalConfig | undefined;
 };
 
 /**
@@ -185,6 +331,11 @@ export type PolicyRuleJson = {
    * @generated from field: allowops.v1.PolicyEffect effect = 11;
    */
   effect?: PolicyEffectJson;
+
+  /**
+   * @generated from field: allowops.v1.PolicyApprovalConfig approval = 12;
+   */
+  approval?: PolicyApprovalConfigJson;
 };
 
 /**
@@ -192,7 +343,7 @@ export type PolicyRuleJson = {
  * Use `create(PolicyRuleSchema)` to create a new message.
  */
 export const PolicyRuleSchema: GenMessage<PolicyRule, {jsonType: PolicyRuleJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 1);
+  messageDesc(file_allowops_v1_policy, 4);
 
 /**
  * @generated from message allowops.v1.PolicyRules
@@ -219,7 +370,7 @@ export type PolicyRulesJson = {
  * Use `create(PolicyRulesSchema)` to create a new message.
  */
 export const PolicyRulesSchema: GenMessage<PolicyRules, {jsonType: PolicyRulesJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 2);
+  messageDesc(file_allowops_v1_policy, 5);
 
 /**
  * @generated from message allowops.v1.PolicyVersion
@@ -296,7 +447,7 @@ export type PolicyVersionJson = {
  * Use `create(PolicyVersionSchema)` to create a new message.
  */
 export const PolicyVersionSchema: GenMessage<PolicyVersion, {jsonType: PolicyVersionJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 3);
+  messageDesc(file_allowops_v1_policy, 6);
 
 /**
  * @generated from message allowops.v1.PolicyDecision
@@ -316,6 +467,11 @@ export type PolicyDecision = Message<"allowops.v1.PolicyDecision"> & {
    * @generated from field: string error_reason = 3;
    */
   errorReason: string;
+
+  /**
+   * @generated from field: allowops.v1.PolicyApprovalRequirement approval = 4;
+   */
+  approval?: PolicyApprovalRequirement | undefined;
 };
 
 /**
@@ -336,6 +492,11 @@ export type PolicyDecisionJson = {
    * @generated from field: string error_reason = 3;
    */
   errorReason?: string;
+
+  /**
+   * @generated from field: allowops.v1.PolicyApprovalRequirement approval = 4;
+   */
+  approval?: PolicyApprovalRequirementJson;
 };
 
 /**
@@ -343,7 +504,7 @@ export type PolicyDecisionJson = {
  * Use `create(PolicyDecisionSchema)` to create a new message.
  */
 export const PolicyDecisionSchema: GenMessage<PolicyDecision, {jsonType: PolicyDecisionJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 4);
+  messageDesc(file_allowops_v1_policy, 7);
 
 /**
  * @generated from message allowops.v1.PolicyTestCase
@@ -420,7 +581,7 @@ export type PolicyTestCaseJson = {
  * Use `create(PolicyTestCaseSchema)` to create a new message.
  */
 export const PolicyTestCaseSchema: GenMessage<PolicyTestCase, {jsonType: PolicyTestCaseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 5);
+  messageDesc(file_allowops_v1_policy, 8);
 
 /**
  * @generated from message allowops.v1.PolicyChange
@@ -477,7 +638,7 @@ export type PolicyChangeJson = {
  * Use `create(PolicyChangeSchema)` to create a new message.
  */
 export const PolicyChangeSchema: GenMessage<PolicyChange, {jsonType: PolicyChangeJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 6);
+  messageDesc(file_allowops_v1_policy, 9);
 
 /**
  * @generated from message allowops.v1.PolicyTest
@@ -564,7 +725,7 @@ export type PolicyTestJson = {
  * Use `create(PolicyTestSchema)` to create a new message.
  */
 export const PolicyTestSchema: GenMessage<PolicyTest, {jsonType: PolicyTestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 7);
+  messageDesc(file_allowops_v1_policy, 10);
 
 /**
  * @generated from message allowops.v1.GetPolicyRequest
@@ -591,7 +752,7 @@ export type GetPolicyRequestJson = {
  * Use `create(GetPolicyRequestSchema)` to create a new message.
  */
 export const GetPolicyRequestSchema: GenMessage<GetPolicyRequest, {jsonType: GetPolicyRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 8);
+  messageDesc(file_allowops_v1_policy, 11);
 
 /**
  * @generated from message allowops.v1.GetPolicyResponse
@@ -618,7 +779,7 @@ export type GetPolicyResponseJson = {
  * Use `create(GetPolicyResponseSchema)` to create a new message.
  */
 export const GetPolicyResponseSchema: GenMessage<GetPolicyResponse, {jsonType: GetPolicyResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 9);
+  messageDesc(file_allowops_v1_policy, 12);
 
 /**
  * @generated from message allowops.v1.TestPolicyRequest
@@ -682,7 +843,7 @@ export type TestPolicyRequestJson = {
  * Use `create(TestPolicyRequestSchema)` to create a new message.
  */
 export const TestPolicyRequestSchema: GenMessage<TestPolicyRequest, {jsonType: TestPolicyRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 10);
+  messageDesc(file_allowops_v1_policy, 13);
 
 /**
  * @generated from message allowops.v1.TestPolicyResponse
@@ -709,7 +870,7 @@ export type TestPolicyResponseJson = {
  * Use `create(TestPolicyResponseSchema)` to create a new message.
  */
 export const TestPolicyResponseSchema: GenMessage<TestPolicyResponse, {jsonType: TestPolicyResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 11);
+  messageDesc(file_allowops_v1_policy, 14);
 
 /**
  * @generated from message allowops.v1.GetPolicyTestChangesRequest
@@ -746,7 +907,7 @@ export type GetPolicyTestChangesRequestJson = {
  * Use `create(GetPolicyTestChangesRequestSchema)` to create a new message.
  */
 export const GetPolicyTestChangesRequestSchema: GenMessage<GetPolicyTestChangesRequest, {jsonType: GetPolicyTestChangesRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 12);
+  messageDesc(file_allowops_v1_policy, 15);
 
 /**
  * @generated from message allowops.v1.GetPolicyTestChangesResponse
@@ -783,7 +944,7 @@ export type GetPolicyTestChangesResponseJson = {
  * Use `create(GetPolicyTestChangesResponseSchema)` to create a new message.
  */
 export const GetPolicyTestChangesResponseSchema: GenMessage<GetPolicyTestChangesResponse, {jsonType: GetPolicyTestChangesResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 13);
+  messageDesc(file_allowops_v1_policy, 16);
 
 /**
  * @generated from message allowops.v1.SavePolicyRequest
@@ -840,7 +1001,7 @@ export type SavePolicyRequestJson = {
  * Use `create(SavePolicyRequestSchema)` to create a new message.
  */
 export const SavePolicyRequestSchema: GenMessage<SavePolicyRequest, {jsonType: SavePolicyRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 14);
+  messageDesc(file_allowops_v1_policy, 17);
 
 /**
  * @generated from message allowops.v1.SavePolicyResponse
@@ -867,7 +1028,7 @@ export type SavePolicyResponseJson = {
  * Use `create(SavePolicyResponseSchema)` to create a new message.
  */
 export const SavePolicyResponseSchema: GenMessage<SavePolicyResponse, {jsonType: SavePolicyResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 15);
+  messageDesc(file_allowops_v1_policy, 18);
 
 /**
  * @generated from message allowops.v1.ListPolicyHistoryRequest
@@ -894,7 +1055,7 @@ export type ListPolicyHistoryRequestJson = {
  * Use `create(ListPolicyHistoryRequestSchema)` to create a new message.
  */
 export const ListPolicyHistoryRequestSchema: GenMessage<ListPolicyHistoryRequest, {jsonType: ListPolicyHistoryRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 16);
+  messageDesc(file_allowops_v1_policy, 19);
 
 /**
  * @generated from message allowops.v1.ListPolicyHistoryResponse
@@ -931,7 +1092,7 @@ export type ListPolicyHistoryResponseJson = {
  * Use `create(ListPolicyHistoryResponseSchema)` to create a new message.
  */
 export const ListPolicyHistoryResponseSchema: GenMessage<ListPolicyHistoryResponse, {jsonType: ListPolicyHistoryResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 17);
+  messageDesc(file_allowops_v1_policy, 20);
 
 /**
  * @generated from message allowops.v1.RollbackPolicyRequest
@@ -988,7 +1149,7 @@ export type RollbackPolicyRequestJson = {
  * Use `create(RollbackPolicyRequestSchema)` to create a new message.
  */
 export const RollbackPolicyRequestSchema: GenMessage<RollbackPolicyRequest, {jsonType: RollbackPolicyRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 18);
+  messageDesc(file_allowops_v1_policy, 21);
 
 /**
  * @generated from message allowops.v1.RollbackPolicyResponse
@@ -1015,7 +1176,7 @@ export type RollbackPolicyResponseJson = {
  * Use `create(RollbackPolicyResponseSchema)` to create a new message.
  */
 export const RollbackPolicyResponseSchema: GenMessage<RollbackPolicyResponse, {jsonType: RollbackPolicyResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_policy, 19);
+  messageDesc(file_allowops_v1_policy, 22);
 
 /**
  * @generated from enum allowops.v1.PolicyEffect
@@ -1035,12 +1196,17 @@ export enum PolicyEffect {
    * @generated from enum value: POLICY_EFFECT_DENY = 2;
    */
   DENY = 2,
+
+  /**
+   * @generated from enum value: POLICY_EFFECT_REQUIRE_APPROVAL = 3;
+   */
+  REQUIRE_APPROVAL = 3,
 }
 
 /**
  * @generated from enum allowops.v1.PolicyEffect
  */
-export type PolicyEffectJson = "POLICY_EFFECT_UNSPECIFIED" | "POLICY_EFFECT_ALLOW" | "POLICY_EFFECT_DENY";
+export type PolicyEffectJson = "POLICY_EFFECT_UNSPECIFIED" | "POLICY_EFFECT_ALLOW" | "POLICY_EFFECT_DENY" | "POLICY_EFFECT_REQUIRE_APPROVAL";
 
 /**
  * Describes the enum allowops.v1.PolicyEffect.

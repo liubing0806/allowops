@@ -19,11 +19,8 @@ role_ok(rule) if {
 	role in rule.roles
 }
 
-# execute_action, view_catalog, view_jobs and view_output apply a rule's
-# actions/risks. A view request without an action (a global check) is not
-# filtered for allow rules; deny rules scoped by actions/risks do not match it.
 # Other operations ignore actions/risks.
-action_filtered_operations := {"execute_action", "view_catalog", "view_jobs", "view_output"}
+action_filtered_operations := {"execute_action", "view_catalog", "view_jobs", "view_output", "view_approvals", "approve_jobs"}
 
 action_ok(rule) if not input.operation in action_filtered_operations
 
@@ -105,6 +102,8 @@ effects := {rule.effect | some rule in matched}
 
 decision := "deny" if {
 	"deny" in effects
+} else := "require_approval" if {
+	"require_approval" in effects
 } else := "allow" if {
 	"allow" in effects
 }

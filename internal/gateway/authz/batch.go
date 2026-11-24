@@ -35,7 +35,17 @@ func (e *Engine) EvaluateBatch(ctx context.Context, input Input, hosts []Host) [
 			cached.Result, cached.Err = e.Evaluate(ctx, input)
 			cache[key] = cached
 		}
-		results[i] = HostResult{HostID: host.ID, Result: Result{Decision: cached.Result.Decision, RuleIDs: slices.Clone(cached.Result.RuleIDs)}, Err: cached.Err}
+		result := cached.Result
+		result.RuleIDs = slices.Clone(result.RuleIDs)
+		if result.Approval != nil {
+			approval := *result.Approval
+			approval.RequiredApproverRoleSets = slices.Clone(approval.RequiredApproverRoleSets)
+			for j, roles := range approval.RequiredApproverRoleSets {
+				approval.RequiredApproverRoleSets[j] = slices.Clone(roles)
+			}
+			result.Approval = &approval
+		}
+		results[i] = HostResult{HostID: host.ID, Result: result, Err: cached.Err}
 	}
 	return results
 }

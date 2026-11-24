@@ -10,7 +10,7 @@ import (
 // action (global check) keeps ignoring the filter.
 func TestViewOperationsApplyActionAndRiskFilters(t *testing.T) {
 	read, danger := Action{Name: "read_action", Risk: "read"}, Action{Name: "danger_action", Risk: "dangerous"}
-	for _, op := range []Operation{ViewCatalog, ViewJobs, ViewOutput} {
+	for _, op := range []Operation{ViewCatalog, ViewJobs, ViewOutput, ViewApprovals, ApproveJobs} {
 		rules := map[string]Rule{
 			"actions and risks": {ID: "r", Effect: "allow", Roles: []string{"viewer"}, Operations: []Operation{op}, Actions: []string{"read_action"}, Risks: []string{"read"}},
 			"actions only":      {ID: "r", Effect: "allow", Roles: []string{"viewer"}, Operations: []Operation{op}, Actions: []string{"read_action"}},
@@ -39,6 +39,27 @@ func TestViewOperationsApplyActionAndRiskFilters(t *testing.T) {
 			got, err := e.Evaluate(context.Background(), Input{Subject: Subject{Roles: []string{"viewer"}}, Operation: op, Action: tt.action})
 			if err != nil || got.Decision != tt.want {
 				t.Errorf("%s rule %q action %q: decision=%s error=%v; want %s", op, tt.rule, tt.action.Name, got.Decision, err, tt.want)
+			}
+		}
+	}
+}
+
+func TestApprovalOperationsApplyHostAndActionScope(t *testing.T) {
+	ctx := context.Background()
+	for _, op := range []Operation{ViewApprovals, ApproveJobs} {
+		rule := executionRule("approval-scope", "allow")
+		rule.Operations = []Operation{op}
+		e := engineFor(t, []Rule{rule}, nil)
+		for _, tt := range []struct {
+			action, env, want string
+		}{{"restart", "prod", "allow"}, {"inspect", "prod", "deny"}, {"restart", "dev", "deny"}} {
+			in := executionInput()
+			in.Operation = op
+			in.Action.Name = tt.action
+			in.Host.Labels["env"] = tt.env
+			got, err := e.Evaluate(ctx, in)
+			if err != nil || got.Decision != tt.want {
+				t.Errorf("%s %s on %s = %+v, err=%v; want %s", op, tt.action, tt.env, got, err, tt.want)
 			}
 		}
 	}

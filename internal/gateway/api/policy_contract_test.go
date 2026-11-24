@@ -142,9 +142,9 @@ func TestExistingHostsSimulationAndActionAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// S=2, A=1, H=1: S*(15+2H+3A+3AH); view_jobs/view_output add an empty-host input per action (RR-b-01).
-	if tested.Msg.Test.EvaluatedCount != 46 || tested.Msg.Test.ChangedCount != 1 {
-		t.Fatalf("existing-host trial=%v; want evaluated=46 changed=1", tested.Msg.Test)
+	// Two subjects: 16 global, 2 host, 3 action-only and 5 action-host inputs each.
+	if tested.Msg.Test.EvaluatedCount != 52 || tested.Msg.Test.ChangedCount != 1 {
+		t.Fatalf("existing-host trial=%v; want evaluated=52 changed=1", tested.Msg.Test)
 	}
 	changes, err := p.GetPolicyTestChanges(ctx, connect.NewRequest(&v1.GetPolicyTestChangesRequest{TestId: tested.Msg.Test.TestId}))
 	if err != nil {
@@ -165,6 +165,97 @@ func TestExistingHostsSimulationAndActionAuthorization(t *testing.T) {
 	}
 	_, err = p.SavePolicy(ctx, connect.NewRequest(&v1.SavePolicyRequest{BaseVersion: 1, Rules: rules, TestId: tested.Msg.Test.TestId}))
 	code(t, err, connect.CodeAborted)
+}
+
+func TestPolicyApprovalRequirementsSimulationAndPersistence(t *testing.T) {
+	f := newFixture(t)
+	populateResources(t, f)
+	ctx := context.Background()
+	p := f.policy(f.adminToken)
+	requireApproval := v1.PolicyEffect_POLICY_EFFECT_REQUIRE_APPROVAL
+	rule := &v1.PolicyRule{
+		Name: "restart-approval", Roles: []string{"viewer"}, Operations: []string{string(authz.ExecuteAction)}, Effect: requireApproval,
+		Approval: &v1.PolicyApprovalConfig{ApproverRoles: []string{"ops", "lead"}, TtlSeconds: 120, AllowOwnerApprove: true},
+	}
+	rules := defaultRules()
+	rules.Rules = append(rules.Rules, rule, &v1.PolicyRule{
+		Name: "viewer-can-vote", Roles: []string{"viewer"}, Operations: []string{string(authz.ApproveJobs)},
+		Risks: []string{"dangerous"}, HostLabels: map[string]string{"env": "test"}, Effect: v1.PolicyEffect_POLICY_EFFECT_ALLOW,
+	})
+	targets := hostNames("host-a")
+	cases := []*v1.PolicyTestCase{
+		{SubjectId: f.viewer.UserId, Operation: string(authz.ExecuteAction), Action: "restart", Targets: targets},
+		{SubjectId: f.viewer.UserId, Operation: string(authz.ApproveJobs), Action: "restart", Targets: targets},
+	}
+	testPolicy := func(base uint64, candidate *v1.PolicyRules) (*v1.PolicyTest, []*v1.PolicyChange) {
+		t.Helper()
+		tested, err := p.TestPolicy(ctx, connect.NewRequest(&v1.TestPolicyRequest{BaseVersion: base, Candidate: &v1.TestPolicyRequest_Rules{Rules: candidate}, Cases: cases}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		trial := tested.Msg.Test
+		if trial.EvaluatedCount != 2 || !trial.RetainsPolicyAdministrator {
+			t.Fatalf("unexpected approval trial: %v", trial)
+		}
+		result, err := p.GetPolicyTestChanges(ctx, connect.NewRequest(&v1.GetPolicyTestChangesRequest{TestId: trial.TestId}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if trial.ChangedCount != uint64(len(result.Msg.Changes)) {
+			t.Fatalf("approval trial count=%d, changes=%v", trial.ChangedCount, result.Msg.Changes)
+		}
+		return trial, result.Msg.Changes
+	}
+	requirement := func(count uint32, roles ...string) *v1.PolicyApprovalRequirement {
+		return &v1.PolicyApprovalRequirement{
+			MinApprovals: count, TtlSeconds: 120, AllowOwnerApprove: true,
+			RequiredApproverRoleSets: []*v1.PolicyApprovalRoleSet{{Roles: roles}},
+		}
+	}
+	trial, changes := testPolicy(1, rules)
+	if len(changes) != 2 || changes[0].CaseIndex != 0 || changes[0].Host != "host-a" || changes[0].Before.Effect != v1.PolicyEffect_POLICY_EFFECT_DENY ||
+		changes[0].After.Effect != requireApproval || !proto.Equal(changes[0].After.Approval, requirement(1, "lead", "ops")) ||
+		changes[1].CaseIndex != 1 || changes[1].Host != "host-a" || changes[1].After.Effect != v1.PolicyEffect_POLICY_EFFECT_ALLOW {
+		t.Fatalf("unexpected approval changes: %v", changes)
+	}
+	if _, err := p.SavePolicy(ctx, connect.NewRequest(&v1.SavePolicyRequest{BaseVersion: 1, Rules: rules, TestId: trial.TestId})); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name   string
+		change func(*v1.PolicyApprovalConfig)
+		want   *v1.PolicyApprovalRequirement
+	}{
+		{"minimum approvals", func(a *v1.PolicyApprovalConfig) { a.MinApprovals = 2 }, requirement(2, "lead", "ops")},
+		{"approver roles", func(a *v1.PolicyApprovalConfig) { a.ApproverRoles = []string{"audit"} }, requirement(1, "audit")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			candidate := proto.Clone(rules).(*v1.PolicyRules)
+			tt.change(candidate.Rules[len(rules.Rules)-2].Approval)
+			_, changes := testPolicy(2, candidate)
+			if len(changes) != 1 || changes[0].CaseIndex != 0 || changes[0].Before.Effect != requireApproval || changes[0].After.Effect != requireApproval ||
+				!reflect.DeepEqual(changes[0].Before.MatchedRules, changes[0].After.MatchedRules) ||
+				!proto.Equal(changes[0].Before.Approval, requirement(1, "lead", "ops")) || !proto.Equal(changes[0].After.Approval, tt.want) {
+				t.Fatalf("unexpected approval-only change, want %v: %v", tt.want, changes)
+			}
+		})
+	}
+	invalid := proto.Clone(rules).(*v1.PolicyRules)
+	invalid.Rules[len(rules.Rules)-2].Operations = []string{string(authz.ApproveJobs)}
+	_, err := p.TestPolicy(ctx, connect.NewRequest(&v1.TestPolicyRequest{BaseVersion: 2, Candidate: &v1.TestPolicyRequest_Rules{Rules: invalid}, Cases: cases}))
+	code(t, err, connect.CodeInvalidArgument)
+
+	rollback, err := p.TestPolicy(ctx, connect.NewRequest(&v1.TestPolicyRequest{BaseVersion: 2, Candidate: &v1.TestPolicyRequest_HistoricalVersion{HistoricalVersion: 1}, Cases: cases}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rolled, err := p.RollbackPolicy(ctx, connect.NewRequest(&v1.RollbackPolicyRequest{BaseVersion: 2, TargetVersion: 1, TestId: rollback.Msg.Test.TestId}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rolled.Msg.Policy; got.Version != 3 || got.GetRolledBackFrom() != 1 || !proto.Equal(got.Rules, defaultRules()) {
+		t.Fatalf("unexpected policy after rollback: %v", got)
+	}
 }
 
 func TestPolicyCandidateExpiryIdentityAndEnvironment(t *testing.T) {
