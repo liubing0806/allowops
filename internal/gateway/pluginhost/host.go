@@ -80,7 +80,10 @@ type instanceHost struct {
 
 func (h instanceHost) InstanceID() string       { return h.inst.id }
 func (h instanceHost) Logger() *slog.Logger     { return h.inst.logger }
-func (h instanceHost) HTTPClient() *http.Client { return h.inst.client }
+func (h instanceHost) HTTPClient() *http.Client {
+	c := *h.inst.client
+	return &c
+}
 func (h instanceHost) Cache() plugin.Cache      { return h.cache }
 func (h instanceHost) Now() time.Time           { return h.now().UTC() }
 
@@ -678,7 +681,9 @@ func mergeInventoryGroup(group []Result) Result {
 		sources = append(sources, row.Source)
 		hosts = append(hosts, row.Hosts...)
 		depends = append(depends, row.DependsOn...)
-		selectors[row.Source] = row.Selector
+		if row.Selector != "" {
+			selectors[row.Source] = row.Selector
+		}
 		for k, v := range row.Attrs {
 			if attrValues[k] == nil {
 				attrValues[k] = make(map[string]string)
