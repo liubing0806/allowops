@@ -2,6 +2,9 @@
 name: dremio_nodes
 description: Show the nodes of a Dremio cluster (sys.nodes) and their memory (sys.memory) with fixed requests. The caller supplies no SQL.
 risk: read
+toolset: dremio
+tags: [cluster, nodes, memory]
+entity_kinds: [dremio, database]
 run_as: root
 params: {}
 builtin: dremio_diag

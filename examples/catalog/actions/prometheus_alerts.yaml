@@ -2,6 +2,9 @@
 name: prometheus_alerts
 description: List the current alerts of the configured Prometheus.
 risk: read
+toolset: prometheus
+tags: [alerts, monitoring]
+entity_kinds: [prometheus]
 run_as: root
 params: {}
 builtin: prometheus_query

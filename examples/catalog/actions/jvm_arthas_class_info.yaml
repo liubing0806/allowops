@@ -5,6 +5,9 @@
 name: jvm_arthas_class_info
 description: Show the origin, loader and fields of a loaded class of an allowlisted JVM through the Arthas agent.
 risk: write
+toolset: jvm_arthas
+tags: [arthas, class, classloader]
+entity_kinds: [jvm]
 run_as: root
 idempotent: false
 params: {}

@@ -1,6 +1,9 @@
 name: k8s_pod_logs
 description: Read bounded non-streaming logs from one pod.
 risk: read
+toolset: k8s
+tags: [pod, logs]
+entity_kinds: [k8s_pod]
 run_as: root
 params:
   namespace:

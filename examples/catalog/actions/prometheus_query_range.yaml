@@ -2,6 +2,9 @@
 name: prometheus_query_range
 description: Run a bounded read-only PromQL range query against the configured Prometheus.
 risk: read
+toolset: prometheus
+tags: [metrics, promql, time_range]
+entity_kinds: [prometheus]
 run_as: root
 params: {}
 builtin: prometheus_query

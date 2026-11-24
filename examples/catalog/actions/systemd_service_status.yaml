@@ -1,6 +1,9 @@
 name: systemd_service_status
 description: Read the status of an allowed systemd service.
 risk: read
+toolset: system
+tags: [systemd, status]
+entity_kinds: [host, service]
 params:
   service:
     type: enum

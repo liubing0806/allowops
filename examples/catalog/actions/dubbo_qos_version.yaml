@@ -2,6 +2,9 @@
 name: dubbo_qos_version
 description: Show the Dubbo framework version through the local QoS HTTP endpoint (GET /version).
 risk: read
+toolset: dubbo
+tags: [qos, version]
+entity_kinds: [dubbo, jvm]
 params: {}
 builtin: http_get
 builtin_config:

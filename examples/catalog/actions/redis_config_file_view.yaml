@@ -1,6 +1,9 @@
 name: redis_config_file_view
 description: Read a line-bounded prefix of a Redis configuration file with credentials redacted.
 risk: read
+toolset: redis
+tags: [config, files, redaction]
+entity_kinds: [redis, cache]
 run_as: root
 params:
   path:

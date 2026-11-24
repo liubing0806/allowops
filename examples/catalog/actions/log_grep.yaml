@@ -1,6 +1,9 @@
 name: log_grep
 description: Search allowed plain or gzip logs by path glob with bounded scan and match limits (grep-style text output).
 risk: read
+toolset: logs
+tags: [logs, search, gzip]
+entity_kinds: [host]
 run_as: root
 params:
   path_glob:

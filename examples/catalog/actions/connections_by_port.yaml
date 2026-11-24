@@ -1,6 +1,9 @@
 name: connections_by_port
 description: Read TCP connections filtered by one numeric port.
 risk: read
+toolset: network
+tags: [network, ports, connections]
+entity_kinds: [host]
 run_as: root
 params:
   port:

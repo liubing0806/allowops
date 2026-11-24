@@ -1,6 +1,9 @@
 name: k8s_rollout_history
 description: Read rollout history for an allowed deployment.
 risk: read
+toolset: k8s
+tags: [deployment, rollout, history]
+entity_kinds: [k8s_cluster]
 run_as: root
 params:
   namespace:

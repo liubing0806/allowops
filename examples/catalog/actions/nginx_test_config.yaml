@@ -1,6 +1,9 @@
 name: nginx_test_config
 description: Test the installed nginx configuration without reloading it.
 risk: read
+toolset: nginx
+tags: [config, validation]
+entity_kinds: [nginx]
 run_as: root
 params: {}
 exec: [/usr/sbin/nginx, -t]

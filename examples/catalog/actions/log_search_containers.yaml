@@ -1,6 +1,9 @@
 name: log_search_containers
 description: Search the output and log files of named containers and Kubernetes Pods on this host within a time range (default the last hour). Container output and Pod logs use the time recorded by Docker or the kubelet. Returns JSON records, newest first by default, at most limit per page; pass next_cursor with unchanged parameters for the next page. matched=0 means no hits; failures carry a reason code.
 risk: read
+toolset: logs
+tags: [logs, search, container, pod]
+entity_kinds: [docker_container]
 run_as: root
 timeout: 30s
 builtin: log_query

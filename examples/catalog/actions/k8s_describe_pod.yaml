@@ -1,6 +1,9 @@
 name: k8s_describe_pod
 description: Read a pod description without executing a container command.
 risk: read
+toolset: k8s
+tags: [pod, status]
+entity_kinds: [k8s_pod]
 run_as: root
 params:
   namespace:

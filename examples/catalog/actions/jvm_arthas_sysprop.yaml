@@ -5,6 +5,9 @@
 name: jvm_arthas_sysprop
 description: Show one system property of an allowlisted JVM through the Arthas agent. Only the properties listed in sysprop_keys can be read.
 risk: write
+toolset: jvm_arthas
+tags: [arthas, config, system_properties]
+entity_kinds: [jvm]
 run_as: root
 idempotent: false
 params: {}

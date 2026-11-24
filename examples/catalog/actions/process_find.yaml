@@ -1,6 +1,9 @@
 name: process_find
 description: Find process identifiers by an allowed exact process name.
 risk: read
+toolset: system
+tags: [process, pid]
+entity_kinds: [host]
 params:
   process:
     type: enum

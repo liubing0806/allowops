@@ -1,6 +1,9 @@
 name: log_search_dir
 description: Recursively search an allowed uncompressed log directory.
 risk: read
+toolset: logs
+tags: [logs, search, directory]
+entity_kinds: [host]
 run_as: root
 params:
   path:

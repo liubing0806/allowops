@@ -1,6 +1,9 @@
 name: system_load
 description: Read uptime and load averages.
 risk: read
+toolset: system
+tags: [uptime, load]
+entity_kinds: [host]
 params: {}
 exec: [/usr/bin/uptime]
 timeout: 10s

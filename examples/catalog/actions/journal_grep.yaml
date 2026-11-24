@@ -1,6 +1,9 @@
 name: journal_grep
 description: Search a service journal with the journalctl pattern option.
 risk: read
+toolset: logs
+tags: [logs, journal, search, systemd]
+entity_kinds: [host]
 run_as: root
 params:
   service:

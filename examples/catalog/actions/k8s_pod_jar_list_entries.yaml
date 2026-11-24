@@ -1,6 +1,9 @@
 name: k8s_pod_jar_list_entries
 description: List entry names of one jar under an application directory inside an allowed pod.
 risk: read
+toolset: k8s
+tags: [pod, jar, archive]
+entity_kinds: [k8s_pod, jvm]
 run_as: root
 params:
   namespace:

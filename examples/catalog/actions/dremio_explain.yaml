@@ -1,6 +1,9 @@
 name: dremio_explain
 description: Show the plan of one read-only Dremio query with EXPLAIN PLAN FOR, without running it. The plan shows whether a filter or join is pushed down to the data source.
 risk: read
+toolset: dremio
+tags: [sql, query_plan, pushdown]
+entity_kinds: [dremio]
 run_as: root
 params:
   sql:

@@ -1,6 +1,9 @@
 name: memory_usage
 description: Read memory and swap usage in megabytes.
 risk: read
+toolset: system
+tags: [memory, swap]
+entity_kinds: [host]
 params: {}
 exec: [/usr/bin/free, -m]
 timeout: 10s

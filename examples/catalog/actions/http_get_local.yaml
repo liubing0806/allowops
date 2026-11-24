@@ -1,6 +1,9 @@
 name: http_get_local
 description: Probe an allowed local health endpoint with a bounded GET request.
 risk: read
+toolset: network
+tags: [network, http, health]
+entity_kinds: [host, service]
 params: {}
 builtin: http_get
 builtin_config:

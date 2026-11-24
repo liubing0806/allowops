@@ -5,6 +5,9 @@
 name: jvm_arthas_classloader_tree
 description: Show the class loaders of an allowlisted JVM as a tree through the Arthas agent.
 risk: write
+toolset: jvm_arthas
+tags: [arthas, classloader, hierarchy]
+entity_kinds: [jvm]
 run_as: root
 idempotent: false
 params: {}

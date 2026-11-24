@@ -2,6 +2,9 @@
 name: dubbo_qos_ls
 description: List Dubbo provider and consumer services through the local QoS HTTP endpoint (GET /ls).
 risk: read
+toolset: dubbo
+tags: [qos, providers, consumers]
+entity_kinds: [dubbo, jvm]
 params: {}
 builtin: http_get
 builtin_config:

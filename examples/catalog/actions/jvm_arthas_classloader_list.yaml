@@ -5,6 +5,9 @@
 name: jvm_arthas_classloader_list
 description: List the class loaders of an allowlisted JVM with the number of classes each has loaded through the Arthas agent.
 risk: write
+toolset: jvm_arthas
+tags: [arthas, classloader, inventory]
+entity_kinds: [jvm]
 run_as: root
 idempotent: false
 params: {}

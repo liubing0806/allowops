@@ -1,6 +1,9 @@
 name: docker_file_view
 description: Read a line-bounded file prefix inside an allowed container.
 risk: read
+toolset: docker
+tags: [container, files, redaction]
+entity_kinds: [docker_container]
 run_as: root
 params:
   container:

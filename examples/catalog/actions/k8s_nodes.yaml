@@ -1,6 +1,9 @@
 name: k8s_nodes
 description: List cluster nodes with wide output; nodes are cluster-scoped and take no namespace.
 risk: read
+toolset: k8s
+tags: [node, inventory]
+entity_kinds: [k8s_cluster]
 run_as: root
 params: {}
 exec: [/usr/bin/kubectl, --kubeconfig, /etc/kubernetes/allowops-readonly.conf, get, nodes, -o, wide]

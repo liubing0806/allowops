@@ -1,6 +1,9 @@
 name: docker_java_class_members
 description: List declared members of one Java class with javap -p inside an allowed container.
 risk: read
+toolset: docker
+tags: [container, bytecode, class]
+entity_kinds: [docker_container, jvm]
 run_as: root
 params:
   container:

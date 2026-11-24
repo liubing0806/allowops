@@ -1,6 +1,9 @@
 name: ports_listening
 description: Read listening TCP sockets and process names.
 risk: read
+toolset: network
+tags: [network, ports, sockets]
+entity_kinds: [host]
 run_as: root
 params: {}
 exec: [/usr/sbin/ss, -ltnp]

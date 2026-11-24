@@ -1,6 +1,9 @@
 name: log_stats
 description: Count records of a named log source within a time range (default the last hour), optionally filtered by pattern, exclude and level. Returns matched, first and last match time, a histogram per bucket (default at most 60 buckets), counts by level and by file, and no log text. Use it to find the time range, then read records with log_search. Call log_sources first to list sources.
 risk: read
+toolset: logs
+tags: [logs, histogram, log_level]
+entity_kinds: [host, service]
 run_as: root
 timeout: 30s
 builtin: log_query

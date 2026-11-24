@@ -1,6 +1,9 @@
 name: log_tail_file
 description: Read the last lines of an allowed log file.
 risk: read
+toolset: logs
+tags: [logs, tail]
+entity_kinds: [host]
 run_as: root
 params:
   path:

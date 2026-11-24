@@ -1,6 +1,9 @@
 name: mysql_error_log
 description: Search MySQL or MariaDB error logs, plain or gzip, with bounded scan and match limits.
 risk: read
+toolset: mysql
+tags: [logs, errors, gzip, search]
+entity_kinds: [mysql, database]
 run_as: root
 params:
   path_glob:

@@ -1,4 +1,4 @@
-"""Validate the public catalog and smoke-test local read-only actions."""
+"""Validate the public catalog metadata and smoke-test local read-only actions."""
 
 import gzip
 import json
@@ -7,6 +7,40 @@ import shutil
 import subprocess
 import sys
 import tempfile
+
+
+TOOLSETS = {
+    'system', 'network', 'files', 'logs', 'docker', 'k8s', 'jvm', 'jvm_arthas',
+    'dubbo', 'mysql', 'redis', 'nginx', 'prometheus', 'starrocks', 'dremio', 'agent',
+}
+
+
+def check_metadata(actions):
+    if len(actions) != 133:
+        raise RuntimeError(f'Expected metadata for 133 actions, got {len(actions)}')
+
+    service_count = 0
+    database_count = 0
+    for name, action in actions.items():
+        toolset = action.get('toolset')
+        if toolset not in TOOLSETS:
+            raise RuntimeError(f'{name}: expected a canonical toolset, got {toolset!r}')
+        tags = action.get('tags', [])
+        if not 2 <= len(tags) <= 5:
+            raise RuntimeError(f'{name}: expected 2 to 5 tags, got {len(tags)}')
+        entity_kinds = action.get('entity_kinds', [])
+        if not entity_kinds:
+            raise RuntimeError(f'{name}: expected nonempty entity_kinds')
+        service_count += 'service' in entity_kinds
+        database_count += 'database' in entity_kinds
+
+    if service_count > 10 or database_count > 10:
+        raise RuntimeError(
+            'Expected at most 10 actions each for service and database, got '
+            f'service={service_count}, database={database_count}'
+        )
+    print(f'Catalog metadata: {len(actions)} actions valid '
+          f'(service={service_count}, database={database_count})')
 
 
 def main():
@@ -23,6 +57,9 @@ def main():
     if validated.strip() != 'catalog generic-ops: 133 actions valid':
         raise RuntimeError('Unexpected catalog validation result: ' + validated)
     print(validated, end='')
+
+    package = json.loads(run('build', '--dir', str(catalog), '--git-commit', '0000000', '--out', '-'))
+    check_metadata(package['actions'])
 
     def smoke(directory, action, *parameters):
         args = ['try', action, '--dir', str(directory)]

@@ -2,6 +2,9 @@
 name: dubbo_qos_ps
 description: List Dubbo server ports through the local QoS HTTP endpoint (GET /ps).
 risk: read
+toolset: dubbo
+tags: [qos, network, ports]
+entity_kinds: [dubbo, jvm]
 params: {}
 builtin: http_get
 builtin_config:

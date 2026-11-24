@@ -1,6 +1,9 @@
 name: docker_jar_list_entries
 description: List entry names of one jar under an application directory inside an allowed container.
 risk: read
+toolset: docker
+tags: [container, jar, archive]
+entity_kinds: [docker_container, jvm]
 run_as: root
 params:
   container:

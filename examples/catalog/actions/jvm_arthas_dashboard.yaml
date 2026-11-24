@@ -5,6 +5,9 @@
 name: jvm_arthas_dashboard
 description: Show one snapshot of the threads, memory, GC and runtime figures of an allowlisted JVM through the Arthas agent.
 risk: write
+toolset: jvm_arthas
+tags: [arthas, threads, memory, gc, metrics]
+entity_kinds: [jvm]
 run_as: root
 idempotent: false
 params: {}

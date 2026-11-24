@@ -2,6 +2,9 @@
 name: dubbo_qos_logger_info
 description: Show the Dubbo logger adapter and level through the local QoS HTTP endpoint (GET /loggerInfo).
 risk: read
+toolset: dubbo
+tags: [qos, logs, log_level]
+entity_kinds: [dubbo, jvm]
 params: {}
 builtin: http_get
 builtin_config:

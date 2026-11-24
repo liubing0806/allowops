@@ -1,6 +1,9 @@
 name: k8s_configmap_keys
 description: List only the data key names of one ConfigMap.
 risk: read
+toolset: k8s
+tags: [config, configmap, keys]
+entity_kinds: [k8s_cluster]
 run_as: root
 params:
   namespace:

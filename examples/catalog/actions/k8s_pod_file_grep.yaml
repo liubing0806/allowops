@@ -1,6 +1,9 @@
 name: k8s_pod_file_grep
 description: Search one file inside one pod container with a bounded match count.
 risk: read
+toolset: k8s
+tags: [pod, files, search]
+entity_kinds: [k8s_pod]
 run_as: root
 params:
   namespace:

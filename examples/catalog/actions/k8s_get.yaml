@@ -1,6 +1,9 @@
 name: k8s_get
 description: List namespaced workload, network, or configuration resources in an allowed namespace with wide output.
 risk: read
+toolset: k8s
+tags: [resources, inventory, namespace]
+entity_kinds: [k8s_cluster]
 run_as: root
 params:
   namespace:

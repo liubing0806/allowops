@@ -1,6 +1,9 @@
 name: dns_lookup
 description: Resolve one host name through the host resolver.
 risk: read
+toolset: network
+tags: [network, dns]
+entity_kinds: [host]
 params:
   name:
     type: string

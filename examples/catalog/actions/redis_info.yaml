@@ -2,6 +2,9 @@
 name: redis_info
 description: Read only the allowed server, memory or stats sections of Redis INFO.
 risk: read
+toolset: redis
+tags: [status, memory, metrics]
+entity_kinds: [redis, cache]
 run_as: root
 params: {}
 builtin: redis_command

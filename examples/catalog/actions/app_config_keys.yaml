@@ -1,6 +1,9 @@
 name: app_config_keys
 description: List only the property key names of one application config file.
 risk: read
+toolset: files
+tags: [config, keys]
+entity_kinds: [host]
 run_as: root
 params:
   path:

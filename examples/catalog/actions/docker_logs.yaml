@@ -1,6 +1,9 @@
 name: docker_logs
 description: Read bounded Docker logs with optional start and end times.
 risk: read
+toolset: docker
+tags: [container, logs, time_range]
+entity_kinds: [docker_container]
 run_as: root
 params:
   container:

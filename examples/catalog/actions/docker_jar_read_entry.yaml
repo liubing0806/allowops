@@ -1,6 +1,9 @@
 name: docker_jar_read_entry
 description: Read one application configuration entry from a jar inside an allowed container without writing files.
 risk: read
+toolset: docker
+tags: [container, jar, config]
+entity_kinds: [docker_container, jvm]
 run_as: root
 params:
   container:

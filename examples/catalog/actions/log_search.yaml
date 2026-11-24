@@ -1,6 +1,9 @@
 name: log_search
 description: Search a named log source within a time range (default the last hour). Returns JSON records, newest first by default, at most limit per page; pass next_cursor with unchanged parameters for the next page. Multiline records such as Java stack traces are one record. matched=0 means no hits; failures carry a reason code. Call log_sources first to list sources.
 risk: read
+toolset: logs
+tags: [logs, search, time_range, stack_trace]
+entity_kinds: [host, service]
 run_as: root
 timeout: 30s
 builtin: log_query

@@ -1,6 +1,9 @@
 name: docker_app_config_view
 description: Read the first lines of one application properties file inside an allowed container with secret values redacted; narrow the output with the match filter.
 risk: read
+toolset: docker
+tags: [container, config, redaction]
+entity_kinds: [docker_container]
 run_as: root
 params:
   container:

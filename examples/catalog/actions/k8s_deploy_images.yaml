@@ -1,6 +1,9 @@
 name: k8s_deploy_images
 description: List deployment names, container images, and ready replicas in an allowed namespace.
 risk: read
+toolset: k8s
+tags: [deployment, images, replicas]
+entity_kinds: [k8s_cluster]
 run_as: root
 params:
   namespace:

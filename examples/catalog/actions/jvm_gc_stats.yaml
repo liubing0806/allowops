@@ -1,6 +1,9 @@
 name: jvm_gc_stats
 description: Read a bounded series of JVM garbage-collection statistics in a container.
 risk: read
+toolset: jvm
+tags: [gc, heap, metrics]
+entity_kinds: [jvm]
 run_as: root
 params:
   container:

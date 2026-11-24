@@ -7,6 +7,9 @@
 name: alertmanager_alerts
 description: List the alerts of the configured Alertmanager (GET /api/v2/alerts), optionally including silenced and inhibited ones.
 risk: read
+toolset: prometheus
+tags: [alerts, silences, inhibition]
+entity_kinds: [prometheus, alertmanager]
 params: {}
 builtin: alertmanager_alerts
 builtin_config:

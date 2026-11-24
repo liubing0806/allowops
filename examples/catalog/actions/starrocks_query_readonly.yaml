@@ -1,6 +1,9 @@
 name: starrocks_query_readonly
 description: Run one bounded read-only StarRocks statement (SELECT, SHOW, DESC or EXPLAIN); table scope is controlled by the grants of the database account.
 risk: read
+toolset: starrocks
+tags: [sql, query, read_only]
+entity_kinds: [starrocks, database]
 run_as: root
 params:
   database:

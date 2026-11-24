@@ -1,6 +1,9 @@
 name: crontab_list
 description: Read the crontab of one allowed operating-system account.
 risk: read
+toolset: system
+tags: [cron, scheduling]
+entity_kinds: [host]
 run_as: root
 params:
   user:

@@ -2,6 +2,9 @@
 name: prometheus_rules
 description: List alerting and recording rules of the configured Prometheus with their health and last error.
 risk: read
+toolset: prometheus
+tags: [alerts, rules, recording_rules]
+entity_kinds: [prometheus]
 run_as: root
 params: {}
 builtin: prometheus_query

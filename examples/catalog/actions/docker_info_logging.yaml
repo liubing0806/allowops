@@ -1,6 +1,9 @@
 name: docker_info_logging
 description: Read the Docker default logging driver only.
 risk: read
+toolset: docker
+tags: [logs, logging_driver]
+entity_kinds: [docker_container]
 run_as: root
 params: {}
 exec: [/usr/bin/docker, info, --format, '{{.LoggingDriver}}']

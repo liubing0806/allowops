@@ -2,6 +2,9 @@
 name: redis_get
 description: Read one bounded Redis string value with an allowed app key prefix.
 risk: read
+toolset: redis
+tags: [keys, strings]
+entity_kinds: [redis, cache]
 run_as: root
 params:
   args:

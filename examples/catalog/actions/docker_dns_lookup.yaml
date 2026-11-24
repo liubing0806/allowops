@@ -1,6 +1,9 @@
 name: docker_dns_lookup
 description: Resolve one host name with getent inside an allowed container.
 risk: read
+toolset: docker
+tags: [container, dns, network]
+entity_kinds: [docker_container]
 run_as: root
 params:
   container:

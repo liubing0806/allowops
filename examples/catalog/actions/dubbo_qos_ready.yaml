@@ -2,6 +2,9 @@
 name: dubbo_qos_ready
 description: Check Dubbo readiness through the local QoS HTTP endpoint (GET /ready).
 risk: read
+toolset: dubbo
+tags: [qos, health, readiness]
+entity_kinds: [dubbo, jvm]
 params: {}
 builtin: http_get
 builtin_config:

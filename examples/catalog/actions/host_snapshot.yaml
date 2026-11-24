@@ -1,6 +1,9 @@
 name: host_snapshot
 description: Read a sequential snapshot of host and container health.
 risk: read
+toolset: system
+tags: [health, cpu, memory, disk, container]
+entity_kinds: [host]
 run_as: root
 params: {}
 timeout: 30s
