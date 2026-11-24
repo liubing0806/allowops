@@ -11,7 +11,6 @@ import (
 	"syscall"
 
 	"github.com/liubing0806/allowops/internal/params"
-	"golang.org/x/sys/unix"
 )
 
 // ExecutionPATH is the initial PATH used by the executor and its wrappers.
@@ -324,7 +323,7 @@ func localExecutable(name, cwd, searchPath string) (string, error) {
 			continue
 		}
 		if err == nil {
-			err = unix.Faccessat(unix.AT_FDCWD, path, unix.X_OK, unix.AT_EACCESS)
+			err = checkExecutableAccess(path)
 		}
 		if err == nil {
 			return path, nil

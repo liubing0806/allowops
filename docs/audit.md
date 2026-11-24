@@ -11,9 +11,10 @@ GRANT SELECT ON goose_db_version, roles TO your_gateway_login;
 GRANT SELECT, INSERT ON policy_versions TO your_gateway_login;
 GRANT SELECT, UPDATE ON role_mapping_state TO your_gateway_login;
 GRANT SELECT, INSERT, UPDATE ON gateway_instances, hosts, host_catalog_reports, join_tokens,
-    catalog_versions, console_users, service_accounts, service_account_tokens, identity_sessions, policy_tests
+    catalog_versions, console_users, service_accounts, service_account_tokens
     TO your_gateway_login;
-GRANT SELECT, INSERT, UPDATE, DELETE ON gateway_messages, host_import_previews, catalog_uploads
+GRANT SELECT, INSERT, UPDATE, DELETE ON gateway_messages, host_import_previews, catalog_uploads,
+    identity_sessions, policy_tests
     TO your_gateway_login;
 GRANT SELECT, INSERT, DELETE ON role_mappings, oidc_transactions, cli_login_codes
     TO your_gateway_login;
