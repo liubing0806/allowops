@@ -253,6 +253,9 @@ func (s *Service) snapshot(ctx context.Context, q querier) (*policySnapshot, err
 		return nil, err
 	}
 	for _, u := range users {
+		if u.user.Disabled {
+			continue
+		}
 		snap.Subjects = append(snap.Subjects, policySubject{u.user.UserId, subject(u)})
 		snap.Revisions = append(snap.Revisions, u.user.UserId+":"+u.user.Revision)
 	}

@@ -89,6 +89,7 @@ type ConsoleUser struct {
 	ManualRoles     []string
 	Teams           []string
 	Revision        int64
+	Disabled        bool
 }
 
 type GatewayInstance struct {

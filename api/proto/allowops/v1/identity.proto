@@ -22,6 +22,7 @@ service UserService {
   rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
   rpc GetUser(GetUserRequest) returns (GetUserResponse);
   rpc SetUserRoles(SetUserRolesRequest) returns (SetUserRolesResponse);
+  rpc SetUserDisabled(SetUserDisabledRequest) returns (SetUserDisabledResponse);
   rpc ListRoles(ListRolesRequest) returns (ListRolesResponse);
   rpc GetRoleMappings(GetRoleMappingsRequest) returns (GetRoleMappingsResponse);
   rpc SaveRoleMappings(SaveRoleMappingsRequest) returns (SaveRoleMappingsResponse);
@@ -37,6 +38,7 @@ service AuthService {
   rpc Logout(LogoutRequest) returns (LogoutResponse);
   rpc ListCliSessions(ListCliSessionsRequest) returns (ListCliSessionsResponse);
   rpc RevokeCliSession(RevokeCliSessionRequest) returns (RevokeCliSessionResponse);
+  rpc RevokeUserSessions(RevokeUserSessionsRequest) returns (RevokeUserSessionsResponse);
 }
 
 message ServiceAccount {
@@ -131,6 +133,7 @@ message User {
   repeated string effective_roles = 9;
   repeated string teams = 10;
   string revision = 11;
+  bool disabled = 12;
 }
 message ListUsersRequest {
   PageRequest page = 1;
@@ -152,6 +155,14 @@ message SetUserRolesRequest {
   string expected_revision = 3;
 }
 message SetUserRolesResponse {
+  User user = 1;
+}
+message SetUserDisabledRequest {
+  string user_id = 1;
+  bool disabled = 2;
+  string expected_revision = 3;
+}
+message SetUserDisabledResponse {
   User user = 1;
 }
 message Role {
@@ -279,3 +290,9 @@ message RevokeCliSessionRequest {
   string user_id = 2;
 }
 message RevokeCliSessionResponse {}
+
+message RevokeUserSessionsRequest {
+  // Empty means the caller. Only admins may select another user.
+  string user_id = 1;
+}
+message RevokeUserSessionsResponse {}

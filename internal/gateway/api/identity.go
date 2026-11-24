@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -138,6 +139,65 @@ func (s *Service) SetUserRoles(ctx context.Context, r *connect.Request[v1.SetUse
 	recordAuditTarget(ctx, "user", r.Msg.UserId)
 	u, err := loadUser(ctx, s.Store.Pool, r.Msg.UserId)
 	return connect.NewResponse(&v1.SetUserRolesResponse{User: u.user}), dbError(err)
+}
+
+func (s *Service) SetUserDisabled(ctx context.Context, r *connect.Request[v1.SetUserDisabledRequest]) (*connect.Response[v1.SetUserDisabledResponse], error) {
+	m := r.Msg
+	if m.UserId == "" {
+		return nil, failure(connect.CodeInvalidArgument, "user ID required")
+	}
+	rev, err := revision(m.ExpectedRevision)
+	if err != nil {
+		return nil, err
+	}
+	// Revocation must see sessions committed while waiting for the user lock.
+	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return nil, dbError(err)
+	}
+	defer tx.Rollback(ctx)
+	if err := lockConsoleUserWrites(ctx, tx); err != nil {
+		return nil, dbError(err)
+	}
+	if m.Disabled {
+		if _, err := lockMappingState(ctx, tx); err != nil {
+			return nil, dbError(err)
+		}
+	}
+	u, err := lockUser(ctx, tx, m.UserId)
+	if err != nil {
+		return nil, dbError(err)
+	}
+	if u.user.Revision != strconv.FormatInt(rev, 10) {
+		return nil, failure(connect.CodeAborted, "user revision changed")
+	}
+	if err := mapped(ctx, tx, u.user); err != nil {
+		return nil, dbError(err)
+	}
+	if m.Disabled && !u.user.Disabled && slices.Contains(u.user.EffectiveRoles, "admin") {
+		otherAdmin, err := hasOtherEnabledAdmin(ctx, tx, m.UserId)
+		if err != nil {
+			return nil, dbError(err)
+		}
+		if !otherAdmin {
+			return nil, failure(connect.CodeFailedPrecondition, "cannot disable the last enabled administrator")
+		}
+	}
+	nextRevision, err := setUserDisabled(ctx, tx, m.UserId, rev, m.Disabled)
+	if err != nil {
+		return nil, dbError(err)
+	}
+	if m.Disabled {
+		if err := revokeUserSessions(ctx, tx, m.UserId); err != nil {
+			return nil, dbError(err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, dbError(err)
+	}
+	recordAuditTarget(ctx, "user", m.UserId)
+	u.user.Disabled, u.user.Revision = m.Disabled, strconv.FormatInt(nextRevision, 10)
+	return connect.NewResponse(&v1.SetUserDisabledResponse{User: u.user}), nil
 }
 
 func (s *Service) GetRoleMappings(ctx context.Context, _ *connect.Request[v1.GetRoleMappingsRequest]) (*connect.Response[v1.GetRoleMappingsResponse], error) {

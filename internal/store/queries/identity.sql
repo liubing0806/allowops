@@ -7,17 +7,30 @@
 SELECT roles FROM role_mappings WHERE provider_id=sqlc.arg(provider_id) AND group_name=ANY(sqlc.arg(groups)::text[]) ORDER BY group_name;
 
 -- name: GetConsoleUser :one
-SELECT user_id,provider_id,provider_subject,kind,username,email,display_name,groups,manual_roles,teams,revision FROM console_users WHERE user_id=$1;
+SELECT * FROM console_users WHERE user_id=$1;
+
+-- name: LockConsoleUser :one
+SELECT * FROM console_users WHERE user_id=$1 FOR NO KEY UPDATE;
 
 -- name: SearchConsoleUsers :many
-SELECT user_id,provider_id,provider_subject,kind,username,email,display_name,groups,manual_roles,teams,revision FROM console_users WHERE sqlc.arg(query)::text='' OR position(lower(sqlc.arg(query)::text) in lower(username||' '||email||' '||display_name))>0 ORDER BY user_id;
+SELECT * FROM console_users WHERE sqlc.arg(query)::text='' OR position(lower(sqlc.arg(query)::text) in lower(username||' '||email||' '||display_name))>0 ORDER BY user_id;
 
--- name: UpsertConsoleUser :exec
+-- name: UpsertConsoleUser :one
 INSERT INTO console_users(user_id,provider_id,provider_subject,kind,username,email,groups) VALUES (sqlc.arg(user_id),sqlc.arg(provider_id),sqlc.arg(provider_subject),sqlc.arg(kind),sqlc.arg(provider_subject),sqlc.arg(email),sqlc.arg(groups))
-      ON CONFLICT(provider_id,provider_subject) DO UPDATE SET email=EXCLUDED.email,groups=EXCLUDED.groups,revision=console_users.revision+1;
+      ON CONFLICT(provider_id,provider_subject) DO UPDATE SET email=EXCLUDED.email,groups=EXCLUDED.groups,revision=console_users.revision+1
+      WHERE NOT console_users.disabled RETURNING user_id;
 
--- name: GetConsoleUserID :one
-SELECT user_id FROM console_users WHERE provider_id=$1 AND provider_subject=$2;
+-- name: SetConsoleUserDisabled :one
+UPDATE console_users SET disabled=$3 WHERE user_id=$1 AND revision=$2 RETURNING revision;
+
+-- name: HasOtherEnabledAdmin :one
+SELECT EXISTS (
+    SELECT 1 FROM console_users u WHERE u.user_id<>$1 AND NOT u.disabled
+    AND ('admin'=ANY(u.manual_roles) OR EXISTS (
+        SELECT 1 FROM role_mappings m WHERE m.provider_id=u.provider_id
+        AND m.group_name=ANY(u.groups) AND 'admin'=ANY(m.roles)
+    ))
+);
 
 -- name: GetRoleMappingRevision :one
 SELECT revision FROM role_mapping_state;
@@ -77,7 +90,10 @@ UPDATE identity_sessions SET last_used_at=now() WHERE token_hash=$1 AND client=$
 SELECT session_id,user_id,created_at,expires_at,last_used_at,revoked_at FROM identity_sessions WHERE session_id=$1;
 
 -- name: InsertIdentitySession :one
-INSERT INTO identity_sessions(session_id,user_id,token_hash,client,csrf_token,expires_at) VALUES ($1,$2,$3,$4,$5,$6) RETURNING session_id,user_id,created_at,expires_at,last_used_at,revoked_at;
+INSERT INTO identity_sessions(session_id,user_id,token_hash,client,csrf_token,expires_at)
+SELECT sqlc.arg(session_id),u.user_id,sqlc.arg(token_hash),sqlc.arg(client),sqlc.arg(csrf_token),sqlc.arg(expires_at)
+FROM console_users u WHERE u.user_id=sqlc.arg(user_id) AND NOT u.disabled FOR SHARE OF u
+RETURNING session_id,user_id,created_at,expires_at,last_used_at,revoked_at;
 
 -- name: ListCliSessions :many
 SELECT session_id,user_id,created_at,expires_at,last_used_at,revoked_at FROM identity_sessions WHERE user_id=$1 AND client='cli' ORDER BY session_id;
@@ -87,6 +103,9 @@ UPDATE identity_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE session
 
 -- name: RevokeCliSession :execrows
 UPDATE identity_sessions SET revoked_at=COALESCE(revoked_at,now()) WHERE session_id=$1 AND user_id=$2 AND client='cli';
+
+-- name: RevokeUserSessions :exec
+UPDATE identity_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL;
 
 -- name: LockOidcAdmission :exec
 SELECT pg_advisory_xact_lock(418010);
@@ -109,8 +128,12 @@ DELETE FROM oidc_transactions WHERE state_hash=$1 AND binding_hash=$2 AND expire
 -- name: InsertCliLoginCode :exec
 INSERT INTO cli_login_codes(code_hash,user_id,challenge,expires_at) VALUES ($1,$2,$3,$4);
 
--- name: LockCliLoginCode :one
-SELECT user_id,challenge FROM cli_login_codes WHERE code_hash=$1 AND expires_at>clock_timestamp() FOR UPDATE;
+-- name: LockCliLoginUser :one
+SELECT u.user_id FROM console_users u JOIN cli_login_codes c ON c.user_id=u.user_id
+WHERE c.code_hash=$1 AND c.expires_at>clock_timestamp() AND NOT u.disabled FOR SHARE OF u;
 
--- name: DeleteCliLoginCode :exec
-DELETE FROM cli_login_codes WHERE code_hash=$1;
+-- name: TakeCliLoginCode :one
+DELETE FROM cli_login_codes WHERE code_hash=$1 AND expires_at>clock_timestamp() RETURNING challenge;
+
+-- name: DeleteUserCliLoginCodes :exec
+DELETE FROM cli_login_codes WHERE user_id=$1;

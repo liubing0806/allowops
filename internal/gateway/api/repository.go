@@ -71,15 +71,12 @@ func subject(u storedUser) authz.Subject {
 	return authz.Subject{ID: u.subject, Kind: u.kind, Email: u.user.Email, Roles: u.user.EffectiveRoles, Teams: u.user.Teams}
 }
 
-func (s *Service) syncUser(ctx context.Context, provider string, id authn.Identity) (*v1.User, error) {
-	if err := upsertUser(ctx, s.Store.Pool, secret("usr_"), provider, id.ID, id.Kind, id.Email, nonNil(id.Groups)); err != nil {
-		return nil, dbError(err)
-	}
-	uid, err := userIDBySubject(ctx, s.Store.Pool, provider, id.ID)
+func syncUser(ctx context.Context, q querier, provider string, id authn.Identity) (*v1.User, error) {
+	uid, err := upsertUser(ctx, q, secret("usr_"), provider, id.ID, id.Kind, id.Email, nonNil(id.Groups))
 	if err != nil {
-		return nil, dbError(err)
+		return nil, credentialError(authLookupError(err))
 	}
-	u, err := loadUser(ctx, s.Store.Pool, uid)
+	u, err := loadUser(ctx, q, uid)
 	return u.user, dbError(err)
 }
 
@@ -146,8 +143,17 @@ func (s *Service) authenticate(ctx context.Context, token string, cookie bool) (
 	if err != nil {
 		return nil, authLookupError(err)
 	}
-	u, err := loadUser(ctx, s.Store.Pool, sess.UserId)
+	if sess.RevokedAt != nil {
+		return nil, authn.ErrInvalidCredentials
+	}
+	u, err := getUser(ctx, s.Store.Pool, sess.UserId)
 	if err != nil {
+		return nil, authLookupError(err)
+	}
+	if u.user.Disabled {
+		return nil, authn.ErrInvalidCredentials
+	}
+	if err := mapped(ctx, s.Store.Pool, u.user); err != nil {
 		return nil, authLookupError(err)
 	}
 	kind := v1.LoginClient_LOGIN_CLIENT_CLI
@@ -166,6 +172,9 @@ func (s *Service) issueSession(ctx context.Context, q querier, userID string, cl
 	}
 	token := secret(prefix)
 	sess, err := insertSession(ctx, q, secret("ses_"), userID, hash(token), kind, csrf, time.Now().Add(ttl))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, "", failure(connect.CodeUnauthenticated, "invalid credential")
+	}
 	return sess, token, dbError(err)
 }
 

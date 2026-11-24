@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -47,21 +48,28 @@ func (s *Service) AddOIDC(ctx context.Context, id, name, clientSecret string, cf
 	if err != nil {
 		return err
 	}
-	if cfg.HTTPClient != nil {
-		ctx = oidc.ClientContext(ctx, cfg.HTTPClient)
-	}
-	provider, err := oidc.NewProvider(ctx, cfg.IssuerURL)
-	if err != nil {
-		return err
-	}
-	endpoint := provider.Endpoint()
+	endpoint := verifier.Endpoint()
 	for _, raw := range []string{endpoint.AuthURL, endpoint.TokenURL} {
 		u, err := url.Parse(raw)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" {
 			return errors.New("OIDC requires HTTPS OAuth endpoints")
 		}
 	}
-	s.oidc[id] = &OIDCProvider{method: &v1.LoginMethod{ProviderId: id, DisplayName: name, Kind: "oidc"}, verifier: verifier, oauth: oauth2.Config{ClientID: cfg.ClientID, ClientSecret: clientSecret, Endpoint: endpoint, RedirectURL: s.Config.Origin + "/auth/oidc/callback", Scopes: []string{oidc.ScopeOpenID, "profile", "email", "groups"}}, client: cfg.HTTPClient}
+	scopes := slices.Clone(cfg.Scopes)
+	if scopes == nil {
+		scopes = []string{oidc.ScopeOpenID, "profile", "email", "groups"}
+	} else if !slices.Contains(scopes, oidc.ScopeOpenID) {
+		scopes = append([]string{oidc.ScopeOpenID}, scopes...)
+	}
+	s.oidc[id] = &OIDCProvider{
+		method:   &v1.LoginMethod{ProviderId: id, DisplayName: name, Kind: "oidc"},
+		verifier: verifier,
+		client:   cfg.HTTPClient,
+		oauth: oauth2.Config{
+			ClientID: cfg.ClientID, ClientSecret: clientSecret, Endpoint: endpoint,
+			RedirectURL: s.Config.Origin + "/auth/oidc/callback", Scopes: scopes,
+		},
+	}
 	return nil
 }
 
@@ -266,29 +274,40 @@ func (s *Service) CompleteOidcLogin(ctx context.Context, r *connect.Request[v1.C
 	if err != nil {
 		return nil, failure(connect.CodeUnauthenticated, "OIDC code exchange rejected")
 	}
-	raw, _ := token.Extra("id_token").(string)
-	id, err := p.verifier.VerifyNonce(ctx, raw, nonce)
+	id, err := p.verifier.VerifyLogin(ctx, token, nonce)
 	if err != nil {
 		return nil, failure(connect.CodeUnauthenticated, "OIDC identity rejected")
 	}
-	u, err := s.syncUser(ctx, provider, id)
+	tx, err := s.Store.Pool.Begin(ctx)
+	if err != nil {
+		return nil, dbError(err)
+	}
+	defer tx.Rollback(ctx)
+	u, err := syncUser(ctx, tx, provider, id)
 	if err != nil {
 		return nil, err
 	}
-	t.auditActor = u.UserId
 	if client == "cli" {
 		code := secret("")
-		if err := insertCliLoginCode(ctx, s.Store.Pool, hash(code), u.UserId, pkce, time.Now().Add(s.Config.CodeTTL)); err != nil {
+		if err := insertCliLoginCode(ctx, tx, hash(code), u.UserId, pkce, time.Now().Add(s.Config.CodeTTL)); err != nil {
 			return nil, dbError(err)
 		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, dbError(err)
+		}
+		t.auditActor = u.UserId
 		dest, _ := url.Parse(loop)
 		dest.RawQuery = url.Values{"code": {code}, "state": {state}}.Encode()
 		return connect.NewResponse(&v1.CompleteOidcLoginResponse{RedirectUri: dest.String()}), nil
 	}
-	sess, raw, err := s.issueSession(ctx, s.Store.Pool, u.UserId, v1.LoginClient_LOGIN_CLIENT_CONSOLE)
+	sess, raw, err := s.issueSession(ctx, tx, u.UserId, v1.LoginClient_LOGIN_CLIENT_CONSOLE)
 	if err != nil {
 		return nil, err
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, dbError(err)
+	}
+	t.auditActor = u.UserId
 	s.sessionCookie(ctx, raw, sess.ExpiresAt.AsTime())
 	return connect.NewResponse(&v1.CompleteOidcLoginResponse{RedirectUri: s.Config.Origin + "/"}), nil
 }
@@ -302,16 +321,18 @@ func (s *Service) ExchangeCliSession(ctx context.Context, r *connect.Request[v1.
 		return nil, dbError(err)
 	}
 	defer tx.Rollback(ctx)
-	userID, pkce, err := lockCliLoginCode(ctx, tx, hash(r.Msg.Code))
+	codeHash := hash(r.Msg.Code)
+	userID, err := lockCliLoginUser(ctx, tx, codeHash)
 	if err != nil {
-		return nil, failure(connect.CodeUnauthenticated, "invalid or consumed login code")
+		return nil, credentialError(authLookupError(err))
+	}
+	pkce, err := takeCliLoginCode(ctx, tx, codeHash)
+	if err != nil {
+		return nil, credentialError(authLookupError(err))
 	}
 	got := base64.RawURLEncoding.EncodeToString(hash(r.Msg.CodeVerifier))
 	if subtle.ConstantTimeCompare([]byte(got), []byte(pkce)) != 1 {
 		return nil, failure(connect.CodeUnauthenticated, "PKCE mismatch")
-	}
-	if err := deleteCliLoginCode(ctx, tx, hash(r.Msg.Code)); err != nil {
-		return nil, dbError(err)
 	}
 	sess, token, err := s.issueSession(ctx, tx, userID, v1.LoginClient_LOGIN_CLIENT_CLI)
 	if err != nil {
@@ -350,15 +371,23 @@ func (s *Service) LoginLdap(ctx context.Context, r *connect.Request[v1.LoginLdap
 		}
 		return nil, failure(code, "LDAP login rejected")
 	}
-	u, err := s.syncUser(ctx, r.Msg.ProviderId, id)
+	tx, err := s.Store.Pool.Begin(ctx)
+	if err != nil {
+		return nil, dbError(err)
+	}
+	defer tx.Rollback(ctx)
+	u, err := syncUser(ctx, tx, r.Msg.ProviderId, id)
 	if err != nil {
 		return nil, err
+	}
+	sess, raw, err := s.issueSession(ctx, tx, u.UserId, r.Msg.Client)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, dbError(err)
 	}
 	transport(ctx).auditActor = u.UserId
-	sess, raw, err := s.issueSession(ctx, s.Store.Pool, u.UserId, r.Msg.Client)
-	if err != nil {
-		return nil, err
-	}
 	response := &v1.LoginLdapResponse{User: u}
 	if r.Msg.Client == v1.LoginClient_LOGIN_CLIENT_CLI {
 		response.CliSession = sess
@@ -448,4 +477,28 @@ func (s *Service) buildVersion() string {
 		return "dev"
 	}
 	return s.Config.Version
+}
+
+func (s *Service) RevokeUserSessions(ctx context.Context, r *connect.Request[v1.RevokeUserSessionsRequest]) (*connect.Response[v1.RevokeUserSessionsResponse], error) {
+	uid, err := s.sessionUser(ctx, r.Msg.UserId)
+	if err != nil {
+		return nil, err
+	}
+	// Revocation must see sessions committed while waiting for the user lock.
+	tx, err := s.Store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return nil, dbError(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := lockUser(ctx, tx, uid); err != nil {
+		return nil, dbError(err)
+	}
+	if err := revokeUserSessions(ctx, tx, uid); err != nil {
+		return nil, dbError(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, dbError(err)
+	}
+	recordAuditTarget(ctx, "user", uid)
+	return connect.NewResponse(&v1.RevokeUserSessionsResponse{}), nil
 }

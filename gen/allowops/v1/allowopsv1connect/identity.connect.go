@@ -65,6 +65,9 @@ const (
 	// UserServiceSetUserRolesProcedure is the fully-qualified name of the UserService's SetUserRoles
 	// RPC.
 	UserServiceSetUserRolesProcedure = "/allowops.v1.UserService/SetUserRoles"
+	// UserServiceSetUserDisabledProcedure is the fully-qualified name of the UserService's
+	// SetUserDisabled RPC.
+	UserServiceSetUserDisabledProcedure = "/allowops.v1.UserService/SetUserDisabled"
 	// UserServiceListRolesProcedure is the fully-qualified name of the UserService's ListRoles RPC.
 	UserServiceListRolesProcedure = "/allowops.v1.UserService/ListRoles"
 	// UserServiceGetRoleMappingsProcedure is the fully-qualified name of the UserService's
@@ -98,6 +101,9 @@ const (
 	// AuthServiceRevokeCliSessionProcedure is the fully-qualified name of the AuthService's
 	// RevokeCliSession RPC.
 	AuthServiceRevokeCliSessionProcedure = "/allowops.v1.AuthService/RevokeCliSession"
+	// AuthServiceRevokeUserSessionsProcedure is the fully-qualified name of the AuthService's
+	// RevokeUserSessions RPC.
+	AuthServiceRevokeUserSessionsProcedure = "/allowops.v1.AuthService/RevokeUserSessions"
 )
 
 // ServiceAccountServiceClient is a client for the allowops.v1.ServiceAccountService service.
@@ -332,6 +338,7 @@ type UserServiceClient interface {
 	ListUsers(context.Context, *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error)
 	GetUser(context.Context, *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.GetUserResponse], error)
 	SetUserRoles(context.Context, *connect.Request[v1.SetUserRolesRequest]) (*connect.Response[v1.SetUserRolesResponse], error)
+	SetUserDisabled(context.Context, *connect.Request[v1.SetUserDisabledRequest]) (*connect.Response[v1.SetUserDisabledResponse], error)
 	ListRoles(context.Context, *connect.Request[v1.ListRolesRequest]) (*connect.Response[v1.ListRolesResponse], error)
 	GetRoleMappings(context.Context, *connect.Request[v1.GetRoleMappingsRequest]) (*connect.Response[v1.GetRoleMappingsResponse], error)
 	SaveRoleMappings(context.Context, *connect.Request[v1.SaveRoleMappingsRequest]) (*connect.Response[v1.SaveRoleMappingsResponse], error)
@@ -366,6 +373,12 @@ func NewUserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(userServiceMethods.ByName("SetUserRoles")),
 			connect.WithClientOptions(opts...),
 		),
+		setUserDisabled: connect.NewClient[v1.SetUserDisabledRequest, v1.SetUserDisabledResponse](
+			httpClient,
+			baseURL+UserServiceSetUserDisabledProcedure,
+			connect.WithSchema(userServiceMethods.ByName("SetUserDisabled")),
+			connect.WithClientOptions(opts...),
+		),
 		listRoles: connect.NewClient[v1.ListRolesRequest, v1.ListRolesResponse](
 			httpClient,
 			baseURL+UserServiceListRolesProcedure,
@@ -392,6 +405,7 @@ type userServiceClient struct {
 	listUsers        *connect.Client[v1.ListUsersRequest, v1.ListUsersResponse]
 	getUser          *connect.Client[v1.GetUserRequest, v1.GetUserResponse]
 	setUserRoles     *connect.Client[v1.SetUserRolesRequest, v1.SetUserRolesResponse]
+	setUserDisabled  *connect.Client[v1.SetUserDisabledRequest, v1.SetUserDisabledResponse]
 	listRoles        *connect.Client[v1.ListRolesRequest, v1.ListRolesResponse]
 	getRoleMappings  *connect.Client[v1.GetRoleMappingsRequest, v1.GetRoleMappingsResponse]
 	saveRoleMappings *connect.Client[v1.SaveRoleMappingsRequest, v1.SaveRoleMappingsResponse]
@@ -410,6 +424,11 @@ func (c *userServiceClient) GetUser(ctx context.Context, req *connect.Request[v1
 // SetUserRoles calls allowops.v1.UserService.SetUserRoles.
 func (c *userServiceClient) SetUserRoles(ctx context.Context, req *connect.Request[v1.SetUserRolesRequest]) (*connect.Response[v1.SetUserRolesResponse], error) {
 	return c.setUserRoles.CallUnary(ctx, req)
+}
+
+// SetUserDisabled calls allowops.v1.UserService.SetUserDisabled.
+func (c *userServiceClient) SetUserDisabled(ctx context.Context, req *connect.Request[v1.SetUserDisabledRequest]) (*connect.Response[v1.SetUserDisabledResponse], error) {
+	return c.setUserDisabled.CallUnary(ctx, req)
 }
 
 // ListRoles calls allowops.v1.UserService.ListRoles.
@@ -432,6 +451,7 @@ type UserServiceHandler interface {
 	ListUsers(context.Context, *connect.Request[v1.ListUsersRequest]) (*connect.Response[v1.ListUsersResponse], error)
 	GetUser(context.Context, *connect.Request[v1.GetUserRequest]) (*connect.Response[v1.GetUserResponse], error)
 	SetUserRoles(context.Context, *connect.Request[v1.SetUserRolesRequest]) (*connect.Response[v1.SetUserRolesResponse], error)
+	SetUserDisabled(context.Context, *connect.Request[v1.SetUserDisabledRequest]) (*connect.Response[v1.SetUserDisabledResponse], error)
 	ListRoles(context.Context, *connect.Request[v1.ListRolesRequest]) (*connect.Response[v1.ListRolesResponse], error)
 	GetRoleMappings(context.Context, *connect.Request[v1.GetRoleMappingsRequest]) (*connect.Response[v1.GetRoleMappingsResponse], error)
 	SaveRoleMappings(context.Context, *connect.Request[v1.SaveRoleMappingsRequest]) (*connect.Response[v1.SaveRoleMappingsResponse], error)
@@ -462,6 +482,12 @@ func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(userServiceMethods.ByName("SetUserRoles")),
 		connect.WithHandlerOptions(opts...),
 	)
+	userServiceSetUserDisabledHandler := connect.NewUnaryHandler(
+		UserServiceSetUserDisabledProcedure,
+		svc.SetUserDisabled,
+		connect.WithSchema(userServiceMethods.ByName("SetUserDisabled")),
+		connect.WithHandlerOptions(opts...),
+	)
 	userServiceListRolesHandler := connect.NewUnaryHandler(
 		UserServiceListRolesProcedure,
 		svc.ListRoles,
@@ -488,6 +514,8 @@ func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption
 			userServiceGetUserHandler.ServeHTTP(w, r)
 		case UserServiceSetUserRolesProcedure:
 			userServiceSetUserRolesHandler.ServeHTTP(w, r)
+		case UserServiceSetUserDisabledProcedure:
+			userServiceSetUserDisabledHandler.ServeHTTP(w, r)
 		case UserServiceListRolesProcedure:
 			userServiceListRolesHandler.ServeHTTP(w, r)
 		case UserServiceGetRoleMappingsProcedure:
@@ -515,6 +543,10 @@ func (UnimplementedUserServiceHandler) SetUserRoles(context.Context, *connect.Re
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("allowops.v1.UserService.SetUserRoles is not implemented"))
 }
 
+func (UnimplementedUserServiceHandler) SetUserDisabled(context.Context, *connect.Request[v1.SetUserDisabledRequest]) (*connect.Response[v1.SetUserDisabledResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("allowops.v1.UserService.SetUserDisabled is not implemented"))
+}
+
 func (UnimplementedUserServiceHandler) ListRoles(context.Context, *connect.Request[v1.ListRolesRequest]) (*connect.Response[v1.ListRolesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("allowops.v1.UserService.ListRoles is not implemented"))
 }
@@ -538,6 +570,7 @@ type AuthServiceClient interface {
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
 	ListCliSessions(context.Context, *connect.Request[v1.ListCliSessionsRequest]) (*connect.Response[v1.ListCliSessionsResponse], error)
 	RevokeCliSession(context.Context, *connect.Request[v1.RevokeCliSessionRequest]) (*connect.Response[v1.RevokeCliSessionResponse], error)
+	RevokeUserSessions(context.Context, *connect.Request[v1.RevokeUserSessionsRequest]) (*connect.Response[v1.RevokeUserSessionsResponse], error)
 }
 
 // NewAuthServiceClient constructs a client for the allowops.v1.AuthService service. By default, it
@@ -605,6 +638,12 @@ func NewAuthServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(authServiceMethods.ByName("RevokeCliSession")),
 			connect.WithClientOptions(opts...),
 		),
+		revokeUserSessions: connect.NewClient[v1.RevokeUserSessionsRequest, v1.RevokeUserSessionsResponse](
+			httpClient,
+			baseURL+AuthServiceRevokeUserSessionsProcedure,
+			connect.WithSchema(authServiceMethods.ByName("RevokeUserSessions")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -619,6 +658,7 @@ type authServiceClient struct {
 	logout             *connect.Client[v1.LogoutRequest, v1.LogoutResponse]
 	listCliSessions    *connect.Client[v1.ListCliSessionsRequest, v1.ListCliSessionsResponse]
 	revokeCliSession   *connect.Client[v1.RevokeCliSessionRequest, v1.RevokeCliSessionResponse]
+	revokeUserSessions *connect.Client[v1.RevokeUserSessionsRequest, v1.RevokeUserSessionsResponse]
 }
 
 // GetLoginMethods calls allowops.v1.AuthService.GetLoginMethods.
@@ -666,6 +706,11 @@ func (c *authServiceClient) RevokeCliSession(ctx context.Context, req *connect.R
 	return c.revokeCliSession.CallUnary(ctx, req)
 }
 
+// RevokeUserSessions calls allowops.v1.AuthService.RevokeUserSessions.
+func (c *authServiceClient) RevokeUserSessions(ctx context.Context, req *connect.Request[v1.RevokeUserSessionsRequest]) (*connect.Response[v1.RevokeUserSessionsResponse], error) {
+	return c.revokeUserSessions.CallUnary(ctx, req)
+}
+
 // AuthServiceHandler is an implementation of the allowops.v1.AuthService service.
 type AuthServiceHandler interface {
 	GetLoginMethods(context.Context, *connect.Request[v1.GetLoginMethodsRequest]) (*connect.Response[v1.GetLoginMethodsResponse], error)
@@ -677,6 +722,7 @@ type AuthServiceHandler interface {
 	Logout(context.Context, *connect.Request[v1.LogoutRequest]) (*connect.Response[v1.LogoutResponse], error)
 	ListCliSessions(context.Context, *connect.Request[v1.ListCliSessionsRequest]) (*connect.Response[v1.ListCliSessionsResponse], error)
 	RevokeCliSession(context.Context, *connect.Request[v1.RevokeCliSessionRequest]) (*connect.Response[v1.RevokeCliSessionResponse], error)
+	RevokeUserSessions(context.Context, *connect.Request[v1.RevokeUserSessionsRequest]) (*connect.Response[v1.RevokeUserSessionsResponse], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -740,6 +786,12 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(authServiceMethods.ByName("RevokeCliSession")),
 		connect.WithHandlerOptions(opts...),
 	)
+	authServiceRevokeUserSessionsHandler := connect.NewUnaryHandler(
+		AuthServiceRevokeUserSessionsProcedure,
+		svc.RevokeUserSessions,
+		connect.WithSchema(authServiceMethods.ByName("RevokeUserSessions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/allowops.v1.AuthService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AuthServiceGetLoginMethodsProcedure:
@@ -760,6 +812,8 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect.HandlerOption
 			authServiceListCliSessionsHandler.ServeHTTP(w, r)
 		case AuthServiceRevokeCliSessionProcedure:
 			authServiceRevokeCliSessionHandler.ServeHTTP(w, r)
+		case AuthServiceRevokeUserSessionsProcedure:
+			authServiceRevokeUserSessionsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -803,4 +857,8 @@ func (UnimplementedAuthServiceHandler) ListCliSessions(context.Context, *connect
 
 func (UnimplementedAuthServiceHandler) RevokeCliSession(context.Context, *connect.Request[v1.RevokeCliSessionRequest]) (*connect.Response[v1.RevokeCliSessionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("allowops.v1.AuthService.RevokeCliSession is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) RevokeUserSessions(context.Context, *connect.Request[v1.RevokeUserSessionsRequest]) (*connect.Response[v1.RevokeUserSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("allowops.v1.AuthService.RevokeUserSessions is not implemented"))
 }

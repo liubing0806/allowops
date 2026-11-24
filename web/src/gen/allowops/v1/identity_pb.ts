@@ -16,7 +16,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file allowops/v1/identity.proto.
  */
 export const file_allowops_v1_identity: GenFile = /*@__PURE__*/
-  fileDesc("ChphbGxvd29wcy92MS9pZGVudGl0eS5wcm90bxILYWxsb3dvcHMudjEivgEKDlNlcnZpY2VBY2NvdW50EhIKCmFjY291bnRfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIVCg1vd25lcl91c2VyX2lkGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEg0KBXJvbGVzGAUgAygJEg0KBXRlYW1zGAYgAygJEhAKCHJldmlzaW9uGAcgASgJEi4KCmNyZWF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIpICChNTZXJ2aWNlQWNjb3VudFRva2VuEhAKCHRva2VuX2lkGAEgASgJEhIKCmFjY291bnRfaWQYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSLgoKY3JlYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF91c2VkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpyZXZva2VkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJ1ChtDcmVhdGVTZXJ2aWNlQWNjb3VudFJlcXVlc3QSDAoEbmFtZRgBIAEoCRIVCg1vd25lcl91c2VyX2lkGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEg0KBXJvbGVzGAQgAygJEg0KBXRlYW1zGAUgAygJIkwKHENyZWF0ZVNlcnZpY2VBY2NvdW50UmVzcG9uc2USLAoHYWNjb3VudBgBIAEoCzIbLmFsbG93b3BzLnYxLlNlcnZpY2VBY2NvdW50Ii4KGEdldFNlcnZpY2VBY2NvdW50UmVxdWVzdBISCgphY2NvdW50X2lkGAEgASgJIkkKGUdldFNlcnZpY2VBY2NvdW50UmVzcG9uc2USLAoHYWNjb3VudBgBIAEoCzIbLmFsbG93b3BzLnYxLlNlcnZpY2VBY2NvdW50IkQKGkxpc3RTZXJ2aWNlQWNjb3VudHNSZXF1ZXN0EiYKBHBhZ2UYASABKAsyGC5hbGxvd29wcy52MS5QYWdlUmVxdWVzdCJ1ChtMaXN0U2VydmljZUFjY291bnRzUmVzcG9uc2USLQoIYWNjb3VudHMYASADKAsyGy5hbGxvd29wcy52MS5TZXJ2aWNlQWNjb3VudBInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlIpYBChtVcGRhdGVTZXJ2aWNlQWNjb3VudFJlcXVlc3QSEgoKYWNjb3VudF9pZBgBIAEoCRIZChFleHBlY3RlZF9yZXZpc2lvbhgCIAEoCRIVCg1vd25lcl91c2VyX2lkGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEg0KBXJvbGVzGAUgAygJEg0KBXRlYW1zGAYgAygJIkwKHFVwZGF0ZVNlcnZpY2VBY2NvdW50UmVzcG9uc2USLAoHYWNjb3VudBgBIAEoCzIbLmFsbG93b3BzLnYxLlNlcnZpY2VBY2NvdW50InMKIENyZWF0ZVNlcnZpY2VBY2NvdW50VG9rZW5SZXF1ZXN0EhIKCmFjY291bnRfaWQYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSFwoKdmFsaWRfZGF5cxgDIAEoDUgAiAEBQg0KC192YWxpZF9kYXlzImQKIUNyZWF0ZVNlcnZpY2VBY2NvdW50VG9rZW5SZXNwb25zZRIvCgV0b2tlbhgBIAEoCzIgLmFsbG93b3BzLnYxLlNlcnZpY2VBY2NvdW50VG9rZW4SDgoGc2VjcmV0GAIgASgJIl0KH0xpc3RTZXJ2aWNlQWNjb3VudFRva2Vuc1JlcXVlc3QSEgoKYWNjb3VudF9pZBgBIAEoCRImCgRwYWdlGAIgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QifQogTGlzdFNlcnZpY2VBY2NvdW50VG9rZW5zUmVzcG9uc2USMAoGdG9rZW5zGAEgAygLMiAuYWxsb3dvcHMudjEuU2VydmljZUFjY291bnRUb2tlbhInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlIkgKIFJldm9rZVNlcnZpY2VBY2NvdW50VG9rZW5SZXF1ZXN0EhIKCmFjY291bnRfaWQYASABKAkSEAoIdG9rZW5faWQYAiABKAkiIwohUmV2b2tlU2VydmljZUFjY291bnRUb2tlblJlc3BvbnNlItkBCgRVc2VyEg8KB3VzZXJfaWQYASABKAkSEwoLcHJvdmlkZXJfaWQYAiABKAkSEAoIdXNlcm5hbWUYAyABKAkSFAoMZGlzcGxheV9uYW1lGAQgASgJEg0KBWVtYWlsGAUgASgJEg4KBmdyb3VwcxgGIAMoCRIUCgxtYXBwZWRfcm9sZXMYByADKAkSFAoMbWFudWFsX3JvbGVzGAggAygJEhcKD2VmZmVjdGl2ZV9yb2xlcxgJIAMoCRINCgV0ZWFtcxgKIAMoCRIQCghyZXZpc2lvbhgLIAEoCSJJChBMaXN0VXNlcnNSZXF1ZXN0EiYKBHBhZ2UYASABKAsyGC5hbGxvd29wcy52MS5QYWdlUmVxdWVzdBINCgVxdWVyeRgCIAEoCSJeChFMaXN0VXNlcnNSZXNwb25zZRIgCgV1c2VycxgBIAMoCzIRLmFsbG93b3BzLnYxLlVzZXISJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSIhCg5HZXRVc2VyUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJIjIKD0dldFVzZXJSZXNwb25zZRIfCgR1c2VyGAEgASgLMhEuYWxsb3dvcHMudjEuVXNlciJXChNTZXRVc2VyUm9sZXNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSFAoMbWFudWFsX3JvbGVzGAIgAygJEhkKEWV4cGVjdGVkX3JldmlzaW9uGAMgASgJIjcKFFNldFVzZXJSb2xlc1Jlc3BvbnNlEh8KBHVzZXIYASABKAsyES5hbGxvd29wcy52MS5Vc2VyIikKBFJvbGUSDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCSI6ChBMaXN0Um9sZXNSZXF1ZXN0EiYKBHBhZ2UYASABKAsyGC5hbGxvd29wcy52MS5QYWdlUmVxdWVzdCJeChFMaXN0Um9sZXNSZXNwb25zZRIgCgVyb2xlcxgBIAMoCzIRLmFsbG93b3BzLnYxLlJvbGUSJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSJACgtSb2xlTWFwcGluZxITCgtwcm92aWRlcl9pZBgBIAEoCRINCgVncm91cBgCIAEoCRINCgVyb2xlcxgDIAMoCSIYChZHZXRSb2xlTWFwcGluZ3NSZXF1ZXN0IlcKF0dldFJvbGVNYXBwaW5nc1Jlc3BvbnNlEioKCG1hcHBpbmdzGAEgAygLMhguYWxsb3dvcHMudjEuUm9sZU1hcHBpbmcSEAoIcmV2aXNpb24YAiABKAkiYAoXU2F2ZVJvbGVNYXBwaW5nc1JlcXVlc3QSKgoIbWFwcGluZ3MYASADKAsyGC5hbGxvd29wcy52MS5Sb2xlTWFwcGluZxIZChFleHBlY3RlZF9yZXZpc2lvbhgCIAEoCSIsChhTYXZlUm9sZU1hcHBpbmdzUmVzcG9uc2USEAoIcmV2aXNpb24YASABKAkiRgoLTG9naW5NZXRob2QSEwoLcHJvdmlkZXJfaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEgwKBGtpbmQYAyABKAkiGAoWR2V0TG9naW5NZXRob2RzUmVxdWVzdCJEChdHZXRMb2dpbk1ldGhvZHNSZXNwb25zZRIpCgdtZXRob2RzGAEgAygLMhguYWxsb3dvcHMudjEuTG9naW5NZXRob2QinwEKFUJlZ2luT2lkY0xvZ2luUmVxdWVzdBITCgtwcm92aWRlcl9pZBgBIAEoCRIoCgZjbGllbnQYAiABKA4yGC5hbGxvd29wcy52MS5Mb2dpbkNsaWVudBIYChBjbGlfbG9vcGJhY2tfdXJpGAMgASgJEhEKCWNsaV9zdGF0ZRgEIAEoCRIaChJjbGlfY29kZV9jaGFsbGVuZ2UYBSABKAkiMwoWQmVnaW5PaWRjTG9naW5SZXNwb25zZRIZChFhdXRob3JpemF0aW9uX3VybBgBIAEoCSI3ChhDb21wbGV0ZU9pZGNMb2dpblJlcXVlc3QSDAoEY29kZRgBIAEoCRINCgVzdGF0ZRgCIAEoCSIxChlDb21wbGV0ZU9pZGNMb2dpblJlc3BvbnNlEhQKDHJlZGlyZWN0X3VyaRgBIAEoCSJ1ChBMb2dpbkxkYXBSZXF1ZXN0EhMKC3Byb3ZpZGVyX2lkGAEgASgJEhAKCHVzZXJuYW1lGAIgASgJEhAKCHBhc3N3b3JkGAMgASgJEigKBmNsaWVudBgEIAEoDjIYLmFsbG93b3BzLnYxLkxvZ2luQ2xpZW50IpgBChFMb2dpbkxkYXBSZXNwb25zZRIfCgR1c2VyGAEgASgLMhEuYWxsb3dvcHMudjEuVXNlchIsCgtjbGlfc2Vzc2lvbhgCIAEoCzIXLmFsbG93b3BzLnYxLkNsaVNlc3Npb24SHgoRY2xpX3Nlc3Npb25fdG9rZW4YAyABKAlIAIgBAUIUChJfY2xpX3Nlc3Npb25fdG9rZW4iQAoZRXhjaGFuZ2VDbGlTZXNzaW9uUmVxdWVzdBIMCgRjb2RlGAEgASgJEhUKDWNvZGVfdmVyaWZpZXIYAiABKAkiXQoaRXhjaGFuZ2VDbGlTZXNzaW9uUmVzcG9uc2USKAoHc2Vzc2lvbhgBIAEoCzIXLmFsbG93b3BzLnYxLkNsaVNlc3Npb24SFQoNc2Vzc2lvbl90b2tlbhgCIAEoCSLzAQoKQ2xpU2Vzc2lvbhISCgpzZXNzaW9uX2lkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkSLgoKY3JlYXRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF91c2VkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpyZXZva2VkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIaChhHZXRDdXJyZW50U2Vzc2lvblJlcXVlc3Qi9wEKGUdldEN1cnJlbnRTZXNzaW9uUmVzcG9uc2USHwoEdXNlchgBIAEoCzIRLmFsbG93b3BzLnYxLlVzZXISKAoGY2xpZW50GAIgASgOMhguYWxsb3dvcHMudjEuTG9naW5DbGllbnQSLgoKZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKY3NyZl90b2tlbhgEIAEoCRIXCg9nYXRld2F5X3ZlcnNpb24YBSABKAkSMgoOZ2F0ZXdheV91cGRhdGUYBiABKAsyGi5hbGxvd29wcy52MS5HYXRld2F5VXBkYXRlIg8KDUxvZ291dFJlcXVlc3QiEAoOTG9nb3V0UmVzcG9uc2UiUQoWTGlzdENsaVNlc3Npb25zUmVxdWVzdBImCgRwYWdlGAEgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QSDwoHdXNlcl9pZBgCIAEoCSJtChdMaXN0Q2xpU2Vzc2lvbnNSZXNwb25zZRIpCghzZXNzaW9ucxgBIAMoCzIXLmFsbG93b3BzLnYxLkNsaVNlc3Npb24SJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSI+ChdSZXZva2VDbGlTZXNzaW9uUmVxdWVzdBISCgpzZXNzaW9uX2lkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkiGgoYUmV2b2tlQ2xpU2Vzc2lvblJlc3BvbnNlKlsKC0xvZ2luQ2xpZW50EhwKGExPR0lOX0NMSUVOVF9VTlNQRUNJRklFRBAAEhgKFExPR0lOX0NMSUVOVF9DT05TT0xFEAESFAoQTE9HSU5fQ0xJRU5UX0NMSRACMrAGChVTZXJ2aWNlQWNjb3VudFNlcnZpY2USawoUQ3JlYXRlU2VydmljZUFjY291bnQSKC5hbGxvd29wcy52MS5DcmVhdGVTZXJ2aWNlQWNjb3VudFJlcXVlc3QaKS5hbGxvd29wcy52MS5DcmVhdGVTZXJ2aWNlQWNjb3VudFJlc3BvbnNlEmIKEUdldFNlcnZpY2VBY2NvdW50EiUuYWxsb3dvcHMudjEuR2V0U2VydmljZUFjY291bnRSZXF1ZXN0GiYuYWxsb3dvcHMudjEuR2V0U2VydmljZUFjY291bnRSZXNwb25zZRJoChNMaXN0U2VydmljZUFjY291bnRzEicuYWxsb3dvcHMudjEuTGlzdFNlcnZpY2VBY2NvdW50c1JlcXVlc3QaKC5hbGxvd29wcy52MS5MaXN0U2VydmljZUFjY291bnRzUmVzcG9uc2USawoUVXBkYXRlU2VydmljZUFjY291bnQSKC5hbGxvd29wcy52MS5VcGRhdGVTZXJ2aWNlQWNjb3VudFJlcXVlc3QaKS5hbGxvd29wcy52MS5VcGRhdGVTZXJ2aWNlQWNjb3VudFJlc3BvbnNlEnoKGUNyZWF0ZVNlcnZpY2VBY2NvdW50VG9rZW4SLS5hbGxvd29wcy52MS5DcmVhdGVTZXJ2aWNlQWNjb3VudFRva2VuUmVxdWVzdBouLmFsbG93b3BzLnYxLkNyZWF0ZVNlcnZpY2VBY2NvdW50VG9rZW5SZXNwb25zZRJ3ChhMaXN0U2VydmljZUFjY291bnRUb2tlbnMSLC5hbGxvd29wcy52MS5MaXN0U2VydmljZUFjY291bnRUb2tlbnNSZXF1ZXN0Gi0uYWxsb3dvcHMudjEuTGlzdFNlcnZpY2VBY2NvdW50VG9rZW5zUmVzcG9uc2USegoZUmV2b2tlU2VydmljZUFjY291bnRUb2tlbhItLmFsbG93b3BzLnYxLlJldm9rZVNlcnZpY2VBY2NvdW50VG9rZW5SZXF1ZXN0Gi4uYWxsb3dvcHMudjEuUmV2b2tlU2VydmljZUFjY291bnRUb2tlblJlc3BvbnNlMv8DCgtVc2VyU2VydmljZRJKCglMaXN0VXNlcnMSHS5hbGxvd29wcy52MS5MaXN0VXNlcnNSZXF1ZXN0Gh4uYWxsb3dvcHMudjEuTGlzdFVzZXJzUmVzcG9uc2USRAoHR2V0VXNlchIbLmFsbG93b3BzLnYxLkdldFVzZXJSZXF1ZXN0GhwuYWxsb3dvcHMudjEuR2V0VXNlclJlc3BvbnNlElMKDFNldFVzZXJSb2xlcxIgLmFsbG93b3BzLnYxLlNldFVzZXJSb2xlc1JlcXVlc3QaIS5hbGxvd29wcy52MS5TZXRVc2VyUm9sZXNSZXNwb25zZRJKCglMaXN0Um9sZXMSHS5hbGxvd29wcy52MS5MaXN0Um9sZXNSZXF1ZXN0Gh4uYWxsb3dvcHMudjEuTGlzdFJvbGVzUmVzcG9uc2USXAoPR2V0Um9sZU1hcHBpbmdzEiMuYWxsb3dvcHMudjEuR2V0Um9sZU1hcHBpbmdzUmVxdWVzdBokLmFsbG93b3BzLnYxLkdldFJvbGVNYXBwaW5nc1Jlc3BvbnNlEl8KEFNhdmVSb2xlTWFwcGluZ3MSJC5hbGxvd29wcy52MS5TYXZlUm9sZU1hcHBpbmdzUmVxdWVzdBolLmFsbG93b3BzLnYxLlNhdmVSb2xlTWFwcGluZ3NSZXNwb25zZTLDBgoLQXV0aFNlcnZpY2USXAoPR2V0TG9naW5NZXRob2RzEiMuYWxsb3dvcHMudjEuR2V0TG9naW5NZXRob2RzUmVxdWVzdBokLmFsbG93b3BzLnYxLkdldExvZ2luTWV0aG9kc1Jlc3BvbnNlElkKDkJlZ2luT2lkY0xvZ2luEiIuYWxsb3dvcHMudjEuQmVnaW5PaWRjTG9naW5SZXF1ZXN0GiMuYWxsb3dvcHMudjEuQmVnaW5PaWRjTG9naW5SZXNwb25zZRJiChFDb21wbGV0ZU9pZGNMb2dpbhIlLmFsbG93b3BzLnYxLkNvbXBsZXRlT2lkY0xvZ2luUmVxdWVzdBomLmFsbG93b3BzLnYxLkNvbXBsZXRlT2lkY0xvZ2luUmVzcG9uc2USSgoJTG9naW5MZGFwEh0uYWxsb3dvcHMudjEuTG9naW5MZGFwUmVxdWVzdBoeLmFsbG93b3BzLnYxLkxvZ2luTGRhcFJlc3BvbnNlEmUKEkV4Y2hhbmdlQ2xpU2Vzc2lvbhImLmFsbG93b3BzLnYxLkV4Y2hhbmdlQ2xpU2Vzc2lvblJlcXVlc3QaJy5hbGxvd29wcy52MS5FeGNoYW5nZUNsaVNlc3Npb25SZXNwb25zZRJiChFHZXRDdXJyZW50U2Vzc2lvbhIlLmFsbG93b3BzLnYxLkdldEN1cnJlbnRTZXNzaW9uUmVxdWVzdBomLmFsbG93b3BzLnYxLkdldEN1cnJlbnRTZXNzaW9uUmVzcG9uc2USQQoGTG9nb3V0EhouYWxsb3dvcHMudjEuTG9nb3V0UmVxdWVzdBobLmFsbG93b3BzLnYxLkxvZ291dFJlc3BvbnNlElwKD0xpc3RDbGlTZXNzaW9ucxIjLmFsbG93b3BzLnYxLkxpc3RDbGlTZXNzaW9uc1JlcXVlc3QaJC5hbGxvd29wcy52MS5MaXN0Q2xpU2Vzc2lvbnNSZXNwb25zZRJfChBSZXZva2VDbGlTZXNzaW9uEiQuYWxsb3dvcHMudjEuUmV2b2tlQ2xpU2Vzc2lvblJlcXVlc3QaJS5hbGxvd29wcy52MS5SZXZva2VDbGlTZXNzaW9uUmVzcG9uc2VCPFo6Z2l0aHViLmNvbS9saXViaW5nMDgwNi9hbGxvd29wcy9nZW4vYWxsb3dvcHMvdjE7YWxsb3dvcHN2MWIGcHJvdG8z", [file_allowops_v1_common, file_google_protobuf_timestamp, file_allowops_v1_system]);
+  fileDesc("ChphbGxvd29wcy92MS9pZGVudGl0eS5wcm90bxILYWxsb3dvcHMudjEivgEKDlNlcnZpY2VBY2NvdW50EhIKCmFjY291bnRfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIVCg1vd25lcl91c2VyX2lkGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEg0KBXJvbGVzGAUgAygJEg0KBXRlYW1zGAYgAygJEhAKCHJldmlzaW9uGAcgASgJEi4KCmNyZWF0ZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIpICChNTZXJ2aWNlQWNjb3VudFRva2VuEhAKCHRva2VuX2lkGAEgASgJEhIKCmFjY291bnRfaWQYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSLgoKY3JlYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF91c2VkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpyZXZva2VkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJ1ChtDcmVhdGVTZXJ2aWNlQWNjb3VudFJlcXVlc3QSDAoEbmFtZRgBIAEoCRIVCg1vd25lcl91c2VyX2lkGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEg0KBXJvbGVzGAQgAygJEg0KBXRlYW1zGAUgAygJIkwKHENyZWF0ZVNlcnZpY2VBY2NvdW50UmVzcG9uc2USLAoHYWNjb3VudBgBIAEoCzIbLmFsbG93b3BzLnYxLlNlcnZpY2VBY2NvdW50Ii4KGEdldFNlcnZpY2VBY2NvdW50UmVxdWVzdBISCgphY2NvdW50X2lkGAEgASgJIkkKGUdldFNlcnZpY2VBY2NvdW50UmVzcG9uc2USLAoHYWNjb3VudBgBIAEoCzIbLmFsbG93b3BzLnYxLlNlcnZpY2VBY2NvdW50IkQKGkxpc3RTZXJ2aWNlQWNjb3VudHNSZXF1ZXN0EiYKBHBhZ2UYASABKAsyGC5hbGxvd29wcy52MS5QYWdlUmVxdWVzdCJ1ChtMaXN0U2VydmljZUFjY291bnRzUmVzcG9uc2USLQoIYWNjb3VudHMYASADKAsyGy5hbGxvd29wcy52MS5TZXJ2aWNlQWNjb3VudBInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlIpYBChtVcGRhdGVTZXJ2aWNlQWNjb3VudFJlcXVlc3QSEgoKYWNjb3VudF9pZBgBIAEoCRIZChFleHBlY3RlZF9yZXZpc2lvbhgCIAEoCRIVCg1vd25lcl91c2VyX2lkGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEg0KBXJvbGVzGAUgAygJEg0KBXRlYW1zGAYgAygJIkwKHFVwZGF0ZVNlcnZpY2VBY2NvdW50UmVzcG9uc2USLAoHYWNjb3VudBgBIAEoCzIbLmFsbG93b3BzLnYxLlNlcnZpY2VBY2NvdW50InMKIENyZWF0ZVNlcnZpY2VBY2NvdW50VG9rZW5SZXF1ZXN0EhIKCmFjY291bnRfaWQYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSFwoKdmFsaWRfZGF5cxgDIAEoDUgAiAEBQg0KC192YWxpZF9kYXlzImQKIUNyZWF0ZVNlcnZpY2VBY2NvdW50VG9rZW5SZXNwb25zZRIvCgV0b2tlbhgBIAEoCzIgLmFsbG93b3BzLnYxLlNlcnZpY2VBY2NvdW50VG9rZW4SDgoGc2VjcmV0GAIgASgJIl0KH0xpc3RTZXJ2aWNlQWNjb3VudFRva2Vuc1JlcXVlc3QSEgoKYWNjb3VudF9pZBgBIAEoCRImCgRwYWdlGAIgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QifQogTGlzdFNlcnZpY2VBY2NvdW50VG9rZW5zUmVzcG9uc2USMAoGdG9rZW5zGAEgAygLMiAuYWxsb3dvcHMudjEuU2VydmljZUFjY291bnRUb2tlbhInCgRwYWdlGAIgASgLMhkuYWxsb3dvcHMudjEuUGFnZVJlc3BvbnNlIkgKIFJldm9rZVNlcnZpY2VBY2NvdW50VG9rZW5SZXF1ZXN0EhIKCmFjY291bnRfaWQYASABKAkSEAoIdG9rZW5faWQYAiABKAkiIwohUmV2b2tlU2VydmljZUFjY291bnRUb2tlblJlc3BvbnNlIusBCgRVc2VyEg8KB3VzZXJfaWQYASABKAkSEwoLcHJvdmlkZXJfaWQYAiABKAkSEAoIdXNlcm5hbWUYAyABKAkSFAoMZGlzcGxheV9uYW1lGAQgASgJEg0KBWVtYWlsGAUgASgJEg4KBmdyb3VwcxgGIAMoCRIUCgxtYXBwZWRfcm9sZXMYByADKAkSFAoMbWFudWFsX3JvbGVzGAggAygJEhcKD2VmZmVjdGl2ZV9yb2xlcxgJIAMoCRINCgV0ZWFtcxgKIAMoCRIQCghyZXZpc2lvbhgLIAEoCRIQCghkaXNhYmxlZBgMIAEoCCJJChBMaXN0VXNlcnNSZXF1ZXN0EiYKBHBhZ2UYASABKAsyGC5hbGxvd29wcy52MS5QYWdlUmVxdWVzdBINCgVxdWVyeRgCIAEoCSJeChFMaXN0VXNlcnNSZXNwb25zZRIgCgV1c2VycxgBIAMoCzIRLmFsbG93b3BzLnYxLlVzZXISJwoEcGFnZRgCIAEoCzIZLmFsbG93b3BzLnYxLlBhZ2VSZXNwb25zZSIhCg5HZXRVc2VyUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJIjIKD0dldFVzZXJSZXNwb25zZRIfCgR1c2VyGAEgASgLMhEuYWxsb3dvcHMudjEuVXNlciJXChNTZXRVc2VyUm9sZXNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSFAoMbWFudWFsX3JvbGVzGAIgAygJEhkKEWV4cGVjdGVkX3JldmlzaW9uGAMgASgJIjcKFFNldFVzZXJSb2xlc1Jlc3BvbnNlEh8KBHVzZXIYASABKAsyES5hbGxvd29wcy52MS5Vc2VyIlYKFlNldFVzZXJEaXNhYmxlZFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIQCghkaXNhYmxlZBgCIAEoCBIZChFleHBlY3RlZF9yZXZpc2lvbhgDIAEoCSI6ChdTZXRVc2VyRGlzYWJsZWRSZXNwb25zZRIfCgR1c2VyGAEgASgLMhEuYWxsb3dvcHMudjEuVXNlciIpCgRSb2xlEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkiOgoQTGlzdFJvbGVzUmVxdWVzdBImCgRwYWdlGAEgASgLMhguYWxsb3dvcHMudjEuUGFnZVJlcXVlc3QiXgoRTGlzdFJvbGVzUmVzcG9uc2USIAoFcm9sZXMYASADKAsyES5hbGxvd29wcy52MS5Sb2xlEicKBHBhZ2UYAiABKAsyGS5hbGxvd29wcy52MS5QYWdlUmVzcG9uc2UiQAoLUm9sZU1hcHBpbmcSEwoLcHJvdmlkZXJfaWQYASABKAkSDQoFZ3JvdXAYAiABKAkSDQoFcm9sZXMYAyADKAkiGAoWR2V0Um9sZU1hcHBpbmdzUmVxdWVzdCJXChdHZXRSb2xlTWFwcGluZ3NSZXNwb25zZRIqCghtYXBwaW5ncxgBIAMoCzIYLmFsbG93b3BzLnYxLlJvbGVNYXBwaW5nEhAKCHJldmlzaW9uGAIgASgJImAKF1NhdmVSb2xlTWFwcGluZ3NSZXF1ZXN0EioKCG1hcHBpbmdzGAEgAygLMhguYWxsb3dvcHMudjEuUm9sZU1hcHBpbmcSGQoRZXhwZWN0ZWRfcmV2aXNpb24YAiABKAkiLAoYU2F2ZVJvbGVNYXBwaW5nc1Jlc3BvbnNlEhAKCHJldmlzaW9uGAEgASgJIkYKC0xvZ2luTWV0aG9kEhMKC3Byb3ZpZGVyX2lkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRIMCgRraW5kGAMgASgJIhgKFkdldExvZ2luTWV0aG9kc1JlcXVlc3QiRAoXR2V0TG9naW5NZXRob2RzUmVzcG9uc2USKQoHbWV0aG9kcxgBIAMoCzIYLmFsbG93b3BzLnYxLkxvZ2luTWV0aG9kIp8BChVCZWdpbk9pZGNMb2dpblJlcXVlc3QSEwoLcHJvdmlkZXJfaWQYASABKAkSKAoGY2xpZW50GAIgASgOMhguYWxsb3dvcHMudjEuTG9naW5DbGllbnQSGAoQY2xpX2xvb3BiYWNrX3VyaRgDIAEoCRIRCgljbGlfc3RhdGUYBCABKAkSGgoSY2xpX2NvZGVfY2hhbGxlbmdlGAUgASgJIjMKFkJlZ2luT2lkY0xvZ2luUmVzcG9uc2USGQoRYXV0aG9yaXphdGlvbl91cmwYASABKAkiNwoYQ29tcGxldGVPaWRjTG9naW5SZXF1ZXN0EgwKBGNvZGUYASABKAkSDQoFc3RhdGUYAiABKAkiMQoZQ29tcGxldGVPaWRjTG9naW5SZXNwb25zZRIUCgxyZWRpcmVjdF91cmkYASABKAkidQoQTG9naW5MZGFwUmVxdWVzdBITCgtwcm92aWRlcl9pZBgBIAEoCRIQCgh1c2VybmFtZRgCIAEoCRIQCghwYXNzd29yZBgDIAEoCRIoCgZjbGllbnQYBCABKA4yGC5hbGxvd29wcy52MS5Mb2dpbkNsaWVudCKYAQoRTG9naW5MZGFwUmVzcG9uc2USHwoEdXNlchgBIAEoCzIRLmFsbG93b3BzLnYxLlVzZXISLAoLY2xpX3Nlc3Npb24YAiABKAsyFy5hbGxvd29wcy52MS5DbGlTZXNzaW9uEh4KEWNsaV9zZXNzaW9uX3Rva2VuGAMgASgJSACIAQFCFAoSX2NsaV9zZXNzaW9uX3Rva2VuIkAKGUV4Y2hhbmdlQ2xpU2Vzc2lvblJlcXVlc3QSDAoEY29kZRgBIAEoCRIVCg1jb2RlX3ZlcmlmaWVyGAIgASgJIl0KGkV4Y2hhbmdlQ2xpU2Vzc2lvblJlc3BvbnNlEigKB3Nlc3Npb24YASABKAsyFy5hbGxvd29wcy52MS5DbGlTZXNzaW9uEhUKDXNlc3Npb25fdG9rZW4YAiABKAki8wEKCkNsaVNlc3Npb24SEgoKc2Vzc2lvbl9pZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEi4KCmNyZWF0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCmV4cGlyZXNfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjAKDGxhc3RfdXNlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcmV2b2tlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiGgoYR2V0Q3VycmVudFNlc3Npb25SZXF1ZXN0IvcBChlHZXRDdXJyZW50U2Vzc2lvblJlc3BvbnNlEh8KBHVzZXIYASABKAsyES5hbGxvd29wcy52MS5Vc2VyEigKBmNsaWVudBgCIAEoDjIYLmFsbG93b3BzLnYxLkxvZ2luQ2xpZW50Ei4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmNzcmZfdG9rZW4YBCABKAkSFwoPZ2F0ZXdheV92ZXJzaW9uGAUgASgJEjIKDmdhdGV3YXlfdXBkYXRlGAYgASgLMhouYWxsb3dvcHMudjEuR2F0ZXdheVVwZGF0ZSIPCg1Mb2dvdXRSZXF1ZXN0IhAKDkxvZ291dFJlc3BvbnNlIlEKFkxpc3RDbGlTZXNzaW9uc1JlcXVlc3QSJgoEcGFnZRgBIAEoCzIYLmFsbG93b3BzLnYxLlBhZ2VSZXF1ZXN0Eg8KB3VzZXJfaWQYAiABKAkibQoXTGlzdENsaVNlc3Npb25zUmVzcG9uc2USKQoIc2Vzc2lvbnMYASADKAsyFy5hbGxvd29wcy52MS5DbGlTZXNzaW9uEicKBHBhZ2UYAiABKAsyGS5hbGxvd29wcy52MS5QYWdlUmVzcG9uc2UiPgoXUmV2b2tlQ2xpU2Vzc2lvblJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJIhoKGFJldm9rZUNsaVNlc3Npb25SZXNwb25zZSIsChlSZXZva2VVc2VyU2Vzc2lvbnNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkiHAoaUmV2b2tlVXNlclNlc3Npb25zUmVzcG9uc2UqWwoLTG9naW5DbGllbnQSHAoYTE9HSU5fQ0xJRU5UX1VOU1BFQ0lGSUVEEAASGAoUTE9HSU5fQ0xJRU5UX0NPTlNPTEUQARIUChBMT0dJTl9DTElFTlRfQ0xJEAIysAYKFVNlcnZpY2VBY2NvdW50U2VydmljZRJrChRDcmVhdGVTZXJ2aWNlQWNjb3VudBIoLmFsbG93b3BzLnYxLkNyZWF0ZVNlcnZpY2VBY2NvdW50UmVxdWVzdBopLmFsbG93b3BzLnYxLkNyZWF0ZVNlcnZpY2VBY2NvdW50UmVzcG9uc2USYgoRR2V0U2VydmljZUFjY291bnQSJS5hbGxvd29wcy52MS5HZXRTZXJ2aWNlQWNjb3VudFJlcXVlc3QaJi5hbGxvd29wcy52MS5HZXRTZXJ2aWNlQWNjb3VudFJlc3BvbnNlEmgKE0xpc3RTZXJ2aWNlQWNjb3VudHMSJy5hbGxvd29wcy52MS5MaXN0U2VydmljZUFjY291bnRzUmVxdWVzdBooLmFsbG93b3BzLnYxLkxpc3RTZXJ2aWNlQWNjb3VudHNSZXNwb25zZRJrChRVcGRhdGVTZXJ2aWNlQWNjb3VudBIoLmFsbG93b3BzLnYxLlVwZGF0ZVNlcnZpY2VBY2NvdW50UmVxdWVzdBopLmFsbG93b3BzLnYxLlVwZGF0ZVNlcnZpY2VBY2NvdW50UmVzcG9uc2USegoZQ3JlYXRlU2VydmljZUFjY291bnRUb2tlbhItLmFsbG93b3BzLnYxLkNyZWF0ZVNlcnZpY2VBY2NvdW50VG9rZW5SZXF1ZXN0Gi4uYWxsb3dvcHMudjEuQ3JlYXRlU2VydmljZUFjY291bnRUb2tlblJlc3BvbnNlEncKGExpc3RTZXJ2aWNlQWNjb3VudFRva2VucxIsLmFsbG93b3BzLnYxLkxpc3RTZXJ2aWNlQWNjb3VudFRva2Vuc1JlcXVlc3QaLS5hbGxvd29wcy52MS5MaXN0U2VydmljZUFjY291bnRUb2tlbnNSZXNwb25zZRJ6ChlSZXZva2VTZXJ2aWNlQWNjb3VudFRva2VuEi0uYWxsb3dvcHMudjEuUmV2b2tlU2VydmljZUFjY291bnRUb2tlblJlcXVlc3QaLi5hbGxvd29wcy52MS5SZXZva2VTZXJ2aWNlQWNjb3VudFRva2VuUmVzcG9uc2Uy3QQKC1VzZXJTZXJ2aWNlEkoKCUxpc3RVc2VycxIdLmFsbG93b3BzLnYxLkxpc3RVc2Vyc1JlcXVlc3QaHi5hbGxvd29wcy52MS5MaXN0VXNlcnNSZXNwb25zZRJECgdHZXRVc2VyEhsuYWxsb3dvcHMudjEuR2V0VXNlclJlcXVlc3QaHC5hbGxvd29wcy52MS5HZXRVc2VyUmVzcG9uc2USUwoMU2V0VXNlclJvbGVzEiAuYWxsb3dvcHMudjEuU2V0VXNlclJvbGVzUmVxdWVzdBohLmFsbG93b3BzLnYxLlNldFVzZXJSb2xlc1Jlc3BvbnNlElwKD1NldFVzZXJEaXNhYmxlZBIjLmFsbG93b3BzLnYxLlNldFVzZXJEaXNhYmxlZFJlcXVlc3QaJC5hbGxvd29wcy52MS5TZXRVc2VyRGlzYWJsZWRSZXNwb25zZRJKCglMaXN0Um9sZXMSHS5hbGxvd29wcy52MS5MaXN0Um9sZXNSZXF1ZXN0Gh4uYWxsb3dvcHMudjEuTGlzdFJvbGVzUmVzcG9uc2USXAoPR2V0Um9sZU1hcHBpbmdzEiMuYWxsb3dvcHMudjEuR2V0Um9sZU1hcHBpbmdzUmVxdWVzdBokLmFsbG93b3BzLnYxLkdldFJvbGVNYXBwaW5nc1Jlc3BvbnNlEl8KEFNhdmVSb2xlTWFwcGluZ3MSJC5hbGxvd29wcy52MS5TYXZlUm9sZU1hcHBpbmdzUmVxdWVzdBolLmFsbG93b3BzLnYxLlNhdmVSb2xlTWFwcGluZ3NSZXNwb25zZTKqBwoLQXV0aFNlcnZpY2USXAoPR2V0TG9naW5NZXRob2RzEiMuYWxsb3dvcHMudjEuR2V0TG9naW5NZXRob2RzUmVxdWVzdBokLmFsbG93b3BzLnYxLkdldExvZ2luTWV0aG9kc1Jlc3BvbnNlElkKDkJlZ2luT2lkY0xvZ2luEiIuYWxsb3dvcHMudjEuQmVnaW5PaWRjTG9naW5SZXF1ZXN0GiMuYWxsb3dvcHMudjEuQmVnaW5PaWRjTG9naW5SZXNwb25zZRJiChFDb21wbGV0ZU9pZGNMb2dpbhIlLmFsbG93b3BzLnYxLkNvbXBsZXRlT2lkY0xvZ2luUmVxdWVzdBomLmFsbG93b3BzLnYxLkNvbXBsZXRlT2lkY0xvZ2luUmVzcG9uc2USSgoJTG9naW5MZGFwEh0uYWxsb3dvcHMudjEuTG9naW5MZGFwUmVxdWVzdBoeLmFsbG93b3BzLnYxLkxvZ2luTGRhcFJlc3BvbnNlEmUKEkV4Y2hhbmdlQ2xpU2Vzc2lvbhImLmFsbG93b3BzLnYxLkV4Y2hhbmdlQ2xpU2Vzc2lvblJlcXVlc3QaJy5hbGxvd29wcy52MS5FeGNoYW5nZUNsaVNlc3Npb25SZXNwb25zZRJiChFHZXRDdXJyZW50U2Vzc2lvbhIlLmFsbG93b3BzLnYxLkdldEN1cnJlbnRTZXNzaW9uUmVxdWVzdBomLmFsbG93b3BzLnYxLkdldEN1cnJlbnRTZXNzaW9uUmVzcG9uc2USQQoGTG9nb3V0EhouYWxsb3dvcHMudjEuTG9nb3V0UmVxdWVzdBobLmFsbG93b3BzLnYxLkxvZ291dFJlc3BvbnNlElwKD0xpc3RDbGlTZXNzaW9ucxIjLmFsbG93b3BzLnYxLkxpc3RDbGlTZXNzaW9uc1JlcXVlc3QaJC5hbGxvd29wcy52MS5MaXN0Q2xpU2Vzc2lvbnNSZXNwb25zZRJfChBSZXZva2VDbGlTZXNzaW9uEiQuYWxsb3dvcHMudjEuUmV2b2tlQ2xpU2Vzc2lvblJlcXVlc3QaJS5hbGxvd29wcy52MS5SZXZva2VDbGlTZXNzaW9uUmVzcG9uc2USZQoSUmV2b2tlVXNlclNlc3Npb25zEiYuYWxsb3dvcHMudjEuUmV2b2tlVXNlclNlc3Npb25zUmVxdWVzdBonLmFsbG93b3BzLnYxLlJldm9rZVVzZXJTZXNzaW9uc1Jlc3BvbnNlQjxaOmdpdGh1Yi5jb20vbGl1YmluZzA4MDYvYWxsb3dvcHMvZ2VuL2FsbG93b3BzL3YxO2FsbG93b3BzdjFiBnByb3RvMw", [file_allowops_v1_common, file_google_protobuf_timestamp, file_allowops_v1_system]);
 
 /**
  * @generated from message allowops.v1.ServiceAccount
@@ -798,6 +798,11 @@ export type User = Message<"allowops.v1.User"> & {
    * @generated from field: string revision = 11;
    */
   revision: string;
+
+  /**
+   * @generated from field: bool disabled = 12;
+   */
+  disabled: boolean;
 };
 
 /**
@@ -858,6 +863,11 @@ export type UserJson = {
    * @generated from field: string revision = 11;
    */
   revision?: string;
+
+  /**
+   * @generated from field: bool disabled = 12;
+   */
+  disabled?: boolean;
 };
 
 /**
@@ -1070,6 +1080,80 @@ export const SetUserRolesResponseSchema: GenMessage<SetUserRolesResponse, {jsonT
   messageDesc(file_allowops_v1_identity, 22);
 
 /**
+ * @generated from message allowops.v1.SetUserDisabledRequest
+ */
+export type SetUserDisabledRequest = Message<"allowops.v1.SetUserDisabledRequest"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+
+  /**
+   * @generated from field: bool disabled = 2;
+   */
+  disabled: boolean;
+
+  /**
+   * @generated from field: string expected_revision = 3;
+   */
+  expectedRevision: string;
+};
+
+/**
+ * @generated from message allowops.v1.SetUserDisabledRequest
+ */
+export type SetUserDisabledRequestJson = {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId?: string;
+
+  /**
+   * @generated from field: bool disabled = 2;
+   */
+  disabled?: boolean;
+
+  /**
+   * @generated from field: string expected_revision = 3;
+   */
+  expectedRevision?: string;
+};
+
+/**
+ * Describes the message allowops.v1.SetUserDisabledRequest.
+ * Use `create(SetUserDisabledRequestSchema)` to create a new message.
+ */
+export const SetUserDisabledRequestSchema: GenMessage<SetUserDisabledRequest, {jsonType: SetUserDisabledRequestJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_identity, 23);
+
+/**
+ * @generated from message allowops.v1.SetUserDisabledResponse
+ */
+export type SetUserDisabledResponse = Message<"allowops.v1.SetUserDisabledResponse"> & {
+  /**
+   * @generated from field: allowops.v1.User user = 1;
+   */
+  user?: User | undefined;
+};
+
+/**
+ * @generated from message allowops.v1.SetUserDisabledResponse
+ */
+export type SetUserDisabledResponseJson = {
+  /**
+   * @generated from field: allowops.v1.User user = 1;
+   */
+  user?: UserJson;
+};
+
+/**
+ * Describes the message allowops.v1.SetUserDisabledResponse.
+ * Use `create(SetUserDisabledResponseSchema)` to create a new message.
+ */
+export const SetUserDisabledResponseSchema: GenMessage<SetUserDisabledResponse, {jsonType: SetUserDisabledResponseJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_identity, 24);
+
+/**
  * @generated from message allowops.v1.Role
  */
 export type Role = Message<"allowops.v1.Role"> & {
@@ -1104,7 +1188,7 @@ export type RoleJson = {
  * Use `create(RoleSchema)` to create a new message.
  */
 export const RoleSchema: GenMessage<Role, {jsonType: RoleJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 23);
+  messageDesc(file_allowops_v1_identity, 25);
 
 /**
  * @generated from message allowops.v1.ListRolesRequest
@@ -1131,7 +1215,7 @@ export type ListRolesRequestJson = {
  * Use `create(ListRolesRequestSchema)` to create a new message.
  */
 export const ListRolesRequestSchema: GenMessage<ListRolesRequest, {jsonType: ListRolesRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 24);
+  messageDesc(file_allowops_v1_identity, 26);
 
 /**
  * @generated from message allowops.v1.ListRolesResponse
@@ -1168,7 +1252,7 @@ export type ListRolesResponseJson = {
  * Use `create(ListRolesResponseSchema)` to create a new message.
  */
 export const ListRolesResponseSchema: GenMessage<ListRolesResponse, {jsonType: ListRolesResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 25);
+  messageDesc(file_allowops_v1_identity, 27);
 
 /**
  * @generated from message allowops.v1.RoleMapping
@@ -1215,7 +1299,7 @@ export type RoleMappingJson = {
  * Use `create(RoleMappingSchema)` to create a new message.
  */
 export const RoleMappingSchema: GenMessage<RoleMapping, {jsonType: RoleMappingJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 26);
+  messageDesc(file_allowops_v1_identity, 28);
 
 /**
  * @generated from message allowops.v1.GetRoleMappingsRequest
@@ -1234,7 +1318,7 @@ export type GetRoleMappingsRequestJson = {
  * Use `create(GetRoleMappingsRequestSchema)` to create a new message.
  */
 export const GetRoleMappingsRequestSchema: GenMessage<GetRoleMappingsRequest, {jsonType: GetRoleMappingsRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 27);
+  messageDesc(file_allowops_v1_identity, 29);
 
 /**
  * @generated from message allowops.v1.GetRoleMappingsResponse
@@ -1271,7 +1355,7 @@ export type GetRoleMappingsResponseJson = {
  * Use `create(GetRoleMappingsResponseSchema)` to create a new message.
  */
 export const GetRoleMappingsResponseSchema: GenMessage<GetRoleMappingsResponse, {jsonType: GetRoleMappingsResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 28);
+  messageDesc(file_allowops_v1_identity, 30);
 
 /**
  * @generated from message allowops.v1.SaveRoleMappingsRequest
@@ -1308,7 +1392,7 @@ export type SaveRoleMappingsRequestJson = {
  * Use `create(SaveRoleMappingsRequestSchema)` to create a new message.
  */
 export const SaveRoleMappingsRequestSchema: GenMessage<SaveRoleMappingsRequest, {jsonType: SaveRoleMappingsRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 29);
+  messageDesc(file_allowops_v1_identity, 31);
 
 /**
  * @generated from message allowops.v1.SaveRoleMappingsResponse
@@ -1335,7 +1419,7 @@ export type SaveRoleMappingsResponseJson = {
  * Use `create(SaveRoleMappingsResponseSchema)` to create a new message.
  */
 export const SaveRoleMappingsResponseSchema: GenMessage<SaveRoleMappingsResponse, {jsonType: SaveRoleMappingsResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 30);
+  messageDesc(file_allowops_v1_identity, 32);
 
 /**
  * @generated from message allowops.v1.LoginMethod
@@ -1386,7 +1470,7 @@ export type LoginMethodJson = {
  * Use `create(LoginMethodSchema)` to create a new message.
  */
 export const LoginMethodSchema: GenMessage<LoginMethod, {jsonType: LoginMethodJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 31);
+  messageDesc(file_allowops_v1_identity, 33);
 
 /**
  * @generated from message allowops.v1.GetLoginMethodsRequest
@@ -1405,7 +1489,7 @@ export type GetLoginMethodsRequestJson = {
  * Use `create(GetLoginMethodsRequestSchema)` to create a new message.
  */
 export const GetLoginMethodsRequestSchema: GenMessage<GetLoginMethodsRequest, {jsonType: GetLoginMethodsRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 32);
+  messageDesc(file_allowops_v1_identity, 34);
 
 /**
  * @generated from message allowops.v1.GetLoginMethodsResponse
@@ -1432,7 +1516,7 @@ export type GetLoginMethodsResponseJson = {
  * Use `create(GetLoginMethodsResponseSchema)` to create a new message.
  */
 export const GetLoginMethodsResponseSchema: GenMessage<GetLoginMethodsResponse, {jsonType: GetLoginMethodsResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 33);
+  messageDesc(file_allowops_v1_identity, 35);
 
 /**
  * G10: bind client kind, callback and S256 PKCE to a one-time-code login transaction.
@@ -1503,7 +1587,7 @@ export type BeginOidcLoginRequestJson = {
  * Use `create(BeginOidcLoginRequestSchema)` to create a new message.
  */
 export const BeginOidcLoginRequestSchema: GenMessage<BeginOidcLoginRequest, {jsonType: BeginOidcLoginRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 34);
+  messageDesc(file_allowops_v1_identity, 36);
 
 /**
  * @generated from message allowops.v1.BeginOidcLoginResponse
@@ -1530,7 +1614,7 @@ export type BeginOidcLoginResponseJson = {
  * Use `create(BeginOidcLoginResponseSchema)` to create a new message.
  */
 export const BeginOidcLoginResponseSchema: GenMessage<BeginOidcLoginResponse, {jsonType: BeginOidcLoginResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 35);
+  messageDesc(file_allowops_v1_identity, 37);
 
 /**
  * Provider code/state are redeemed at the gateway callback, never an ID token
@@ -1573,7 +1657,7 @@ export type CompleteOidcLoginRequestJson = {
  * Use `create(CompleteOidcLoginRequestSchema)` to create a new message.
  */
 export const CompleteOidcLoginRequestSchema: GenMessage<CompleteOidcLoginRequest, {jsonType: CompleteOidcLoginRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 36);
+  messageDesc(file_allowops_v1_identity, 38);
 
 /**
  * @generated from message allowops.v1.CompleteOidcLoginResponse
@@ -1604,7 +1688,7 @@ export type CompleteOidcLoginResponseJson = {
  * Use `create(CompleteOidcLoginResponseSchema)` to create a new message.
  */
 export const CompleteOidcLoginResponseSchema: GenMessage<CompleteOidcLoginResponse, {jsonType: CompleteOidcLoginResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 37);
+  messageDesc(file_allowops_v1_identity, 39);
 
 /**
  * @generated from message allowops.v1.LoginLdapRequest
@@ -1661,7 +1745,7 @@ export type LoginLdapRequestJson = {
  * Use `create(LoginLdapRequestSchema)` to create a new message.
  */
 export const LoginLdapRequestSchema: GenMessage<LoginLdapRequest, {jsonType: LoginLdapRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 38);
+  messageDesc(file_allowops_v1_identity, 40);
 
 /**
  * @generated from message allowops.v1.LoginLdapResponse
@@ -1712,7 +1796,7 @@ export type LoginLdapResponseJson = {
  * Use `create(LoginLdapResponseSchema)` to create a new message.
  */
 export const LoginLdapResponseSchema: GenMessage<LoginLdapResponse, {jsonType: LoginLdapResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 39);
+  messageDesc(file_allowops_v1_identity, 41);
 
 /**
  * @generated from message allowops.v1.ExchangeCliSessionRequest
@@ -1749,7 +1833,7 @@ export type ExchangeCliSessionRequestJson = {
  * Use `create(ExchangeCliSessionRequestSchema)` to create a new message.
  */
 export const ExchangeCliSessionRequestSchema: GenMessage<ExchangeCliSessionRequest, {jsonType: ExchangeCliSessionRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 40);
+  messageDesc(file_allowops_v1_identity, 42);
 
 /**
  * @generated from message allowops.v1.ExchangeCliSessionResponse
@@ -1786,7 +1870,7 @@ export type ExchangeCliSessionResponseJson = {
  * Use `create(ExchangeCliSessionResponseSchema)` to create a new message.
  */
 export const ExchangeCliSessionResponseSchema: GenMessage<ExchangeCliSessionResponse, {jsonType: ExchangeCliSessionResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 41);
+  messageDesc(file_allowops_v1_identity, 43);
 
 /**
  * @generated from message allowops.v1.CliSession
@@ -1863,7 +1947,7 @@ export type CliSessionJson = {
  * Use `create(CliSessionSchema)` to create a new message.
  */
 export const CliSessionSchema: GenMessage<CliSession, {jsonType: CliSessionJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 42);
+  messageDesc(file_allowops_v1_identity, 44);
 
 /**
  * @generated from message allowops.v1.GetCurrentSessionRequest
@@ -1882,7 +1966,7 @@ export type GetCurrentSessionRequestJson = {
  * Use `create(GetCurrentSessionRequestSchema)` to create a new message.
  */
 export const GetCurrentSessionRequestSchema: GenMessage<GetCurrentSessionRequest, {jsonType: GetCurrentSessionRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 43);
+  messageDesc(file_allowops_v1_identity, 45);
 
 /**
  * @generated from message allowops.v1.GetCurrentSessionResponse
@@ -1971,7 +2055,7 @@ export type GetCurrentSessionResponseJson = {
  * Use `create(GetCurrentSessionResponseSchema)` to create a new message.
  */
 export const GetCurrentSessionResponseSchema: GenMessage<GetCurrentSessionResponse, {jsonType: GetCurrentSessionResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 44);
+  messageDesc(file_allowops_v1_identity, 46);
 
 /**
  * @generated from message allowops.v1.LogoutRequest
@@ -1990,7 +2074,7 @@ export type LogoutRequestJson = {
  * Use `create(LogoutRequestSchema)` to create a new message.
  */
 export const LogoutRequestSchema: GenMessage<LogoutRequest, {jsonType: LogoutRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 45);
+  messageDesc(file_allowops_v1_identity, 47);
 
 /**
  * @generated from message allowops.v1.LogoutResponse
@@ -2009,7 +2093,7 @@ export type LogoutResponseJson = {
  * Use `create(LogoutResponseSchema)` to create a new message.
  */
 export const LogoutResponseSchema: GenMessage<LogoutResponse, {jsonType: LogoutResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 46);
+  messageDesc(file_allowops_v1_identity, 48);
 
 /**
  * @generated from message allowops.v1.ListCliSessionsRequest
@@ -2050,7 +2134,7 @@ export type ListCliSessionsRequestJson = {
  * Use `create(ListCliSessionsRequestSchema)` to create a new message.
  */
 export const ListCliSessionsRequestSchema: GenMessage<ListCliSessionsRequest, {jsonType: ListCliSessionsRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 47);
+  messageDesc(file_allowops_v1_identity, 49);
 
 /**
  * @generated from message allowops.v1.ListCliSessionsResponse
@@ -2087,7 +2171,7 @@ export type ListCliSessionsResponseJson = {
  * Use `create(ListCliSessionsResponseSchema)` to create a new message.
  */
 export const ListCliSessionsResponseSchema: GenMessage<ListCliSessionsResponse, {jsonType: ListCliSessionsResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 48);
+  messageDesc(file_allowops_v1_identity, 50);
 
 /**
  * @generated from message allowops.v1.RevokeCliSessionRequest
@@ -2130,7 +2214,7 @@ export type RevokeCliSessionRequestJson = {
  * Use `create(RevokeCliSessionRequestSchema)` to create a new message.
  */
 export const RevokeCliSessionRequestSchema: GenMessage<RevokeCliSessionRequest, {jsonType: RevokeCliSessionRequestJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 49);
+  messageDesc(file_allowops_v1_identity, 51);
 
 /**
  * @generated from message allowops.v1.RevokeCliSessionResponse
@@ -2149,7 +2233,57 @@ export type RevokeCliSessionResponseJson = {
  * Use `create(RevokeCliSessionResponseSchema)` to create a new message.
  */
 export const RevokeCliSessionResponseSchema: GenMessage<RevokeCliSessionResponse, {jsonType: RevokeCliSessionResponseJson}> = /*@__PURE__*/
-  messageDesc(file_allowops_v1_identity, 50);
+  messageDesc(file_allowops_v1_identity, 52);
+
+/**
+ * @generated from message allowops.v1.RevokeUserSessionsRequest
+ */
+export type RevokeUserSessionsRequest = Message<"allowops.v1.RevokeUserSessionsRequest"> & {
+  /**
+   * Empty means the caller. Only admins may select another user.
+   *
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+};
+
+/**
+ * @generated from message allowops.v1.RevokeUserSessionsRequest
+ */
+export type RevokeUserSessionsRequestJson = {
+  /**
+   * Empty means the caller. Only admins may select another user.
+   *
+   * @generated from field: string user_id = 1;
+   */
+  userId?: string;
+};
+
+/**
+ * Describes the message allowops.v1.RevokeUserSessionsRequest.
+ * Use `create(RevokeUserSessionsRequestSchema)` to create a new message.
+ */
+export const RevokeUserSessionsRequestSchema: GenMessage<RevokeUserSessionsRequest, {jsonType: RevokeUserSessionsRequestJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_identity, 53);
+
+/**
+ * @generated from message allowops.v1.RevokeUserSessionsResponse
+ */
+export type RevokeUserSessionsResponse = Message<"allowops.v1.RevokeUserSessionsResponse"> & {
+};
+
+/**
+ * @generated from message allowops.v1.RevokeUserSessionsResponse
+ */
+export type RevokeUserSessionsResponseJson = {
+};
+
+/**
+ * Describes the message allowops.v1.RevokeUserSessionsResponse.
+ * Use `create(RevokeUserSessionsResponseSchema)` to create a new message.
+ */
+export const RevokeUserSessionsResponseSchema: GenMessage<RevokeUserSessionsResponse, {jsonType: RevokeUserSessionsResponseJson}> = /*@__PURE__*/
+  messageDesc(file_allowops_v1_identity, 54);
 
 /**
  * @generated from enum allowops.v1.LoginClient
@@ -2274,6 +2408,14 @@ export const UserService: GenService<{
     output: typeof SetUserRolesResponseSchema;
   },
   /**
+   * @generated from rpc allowops.v1.UserService.SetUserDisabled
+   */
+  setUserDisabled: {
+    methodKind: "unary";
+    input: typeof SetUserDisabledRequestSchema;
+    output: typeof SetUserDisabledResponseSchema;
+  },
+  /**
    * @generated from rpc allowops.v1.UserService.ListRoles
    */
   listRoles: {
@@ -2375,6 +2517,14 @@ export const AuthService: GenService<{
     methodKind: "unary";
     input: typeof RevokeCliSessionRequestSchema;
     output: typeof RevokeCliSessionResponseSchema;
+  },
+  /**
+   * @generated from rpc allowops.v1.AuthService.RevokeUserSessions
+   */
+  revokeUserSessions: {
+    methodKind: "unary";
+    input: typeof RevokeUserSessionsRequestSchema;
+    output: typeof RevokeUserSessionsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_allowops_v1_identity, 2);

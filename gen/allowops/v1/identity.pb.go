@@ -1014,6 +1014,7 @@ type User struct {
 	EffectiveRoles []string               `protobuf:"bytes,9,rep,name=effective_roles,json=effectiveRoles,proto3" json:"effective_roles,omitempty"`
 	Teams          []string               `protobuf:"bytes,10,rep,name=teams,proto3" json:"teams,omitempty"`
 	Revision       string                 `protobuf:"bytes,11,opt,name=revision,proto3" json:"revision,omitempty"`
+	Disabled       bool                   `protobuf:"varint,12,opt,name=disabled,proto3" json:"disabled,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1123,6 +1124,13 @@ func (x *User) GetRevision() string {
 		return x.Revision
 	}
 	return ""
+}
+
+func (x *User) GetDisabled() bool {
+	if x != nil {
+		return x.Disabled
+	}
+	return false
 }
 
 type ListUsersRequest struct {
@@ -1421,6 +1429,110 @@ func (x *SetUserRolesResponse) GetUser() *User {
 	return nil
 }
 
+type SetUserDisabledRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	UserId           string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Disabled         bool                   `protobuf:"varint,2,opt,name=disabled,proto3" json:"disabled,omitempty"`
+	ExpectedRevision string                 `protobuf:"bytes,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *SetUserDisabledRequest) Reset() {
+	*x = SetUserDisabledRequest{}
+	mi := &file_allowops_v1_identity_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetUserDisabledRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetUserDisabledRequest) ProtoMessage() {}
+
+func (x *SetUserDisabledRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_identity_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetUserDisabledRequest.ProtoReflect.Descriptor instead.
+func (*SetUserDisabledRequest) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *SetUserDisabledRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *SetUserDisabledRequest) GetDisabled() bool {
+	if x != nil {
+		return x.Disabled
+	}
+	return false
+}
+
+func (x *SetUserDisabledRequest) GetExpectedRevision() string {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return ""
+}
+
+type SetUserDisabledResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetUserDisabledResponse) Reset() {
+	*x = SetUserDisabledResponse{}
+	mi := &file_allowops_v1_identity_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetUserDisabledResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetUserDisabledResponse) ProtoMessage() {}
+
+func (x *SetUserDisabledResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_identity_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetUserDisabledResponse.ProtoReflect.Descriptor instead.
+func (*SetUserDisabledResponse) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *SetUserDisabledResponse) GetUser() *User {
+	if x != nil {
+		return x.User
+	}
+	return nil
+}
+
 type Role struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1431,7 +1543,7 @@ type Role struct {
 
 func (x *Role) Reset() {
 	*x = Role{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[23]
+	mi := &file_allowops_v1_identity_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1443,7 +1555,7 @@ func (x *Role) String() string {
 func (*Role) ProtoMessage() {}
 
 func (x *Role) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[23]
+	mi := &file_allowops_v1_identity_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1456,7 +1568,7 @@ func (x *Role) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Role.ProtoReflect.Descriptor instead.
 func (*Role) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{23}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *Role) GetName() string {
@@ -1482,7 +1594,7 @@ type ListRolesRequest struct {
 
 func (x *ListRolesRequest) Reset() {
 	*x = ListRolesRequest{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[24]
+	mi := &file_allowops_v1_identity_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1494,7 +1606,7 @@ func (x *ListRolesRequest) String() string {
 func (*ListRolesRequest) ProtoMessage() {}
 
 func (x *ListRolesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[24]
+	mi := &file_allowops_v1_identity_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1507,7 +1619,7 @@ func (x *ListRolesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRolesRequest.ProtoReflect.Descriptor instead.
 func (*ListRolesRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{24}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListRolesRequest) GetPage() *PageRequest {
@@ -1527,7 +1639,7 @@ type ListRolesResponse struct {
 
 func (x *ListRolesResponse) Reset() {
 	*x = ListRolesResponse{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[25]
+	mi := &file_allowops_v1_identity_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1539,7 +1651,7 @@ func (x *ListRolesResponse) String() string {
 func (*ListRolesResponse) ProtoMessage() {}
 
 func (x *ListRolesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[25]
+	mi := &file_allowops_v1_identity_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1552,7 +1664,7 @@ func (x *ListRolesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRolesResponse.ProtoReflect.Descriptor instead.
 func (*ListRolesResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{25}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListRolesResponse) GetRoles() []*Role {
@@ -1580,7 +1692,7 @@ type RoleMapping struct {
 
 func (x *RoleMapping) Reset() {
 	*x = RoleMapping{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[26]
+	mi := &file_allowops_v1_identity_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1592,7 +1704,7 @@ func (x *RoleMapping) String() string {
 func (*RoleMapping) ProtoMessage() {}
 
 func (x *RoleMapping) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[26]
+	mi := &file_allowops_v1_identity_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1605,7 +1717,7 @@ func (x *RoleMapping) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoleMapping.ProtoReflect.Descriptor instead.
 func (*RoleMapping) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{26}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *RoleMapping) GetProviderId() string {
@@ -1637,7 +1749,7 @@ type GetRoleMappingsRequest struct {
 
 func (x *GetRoleMappingsRequest) Reset() {
 	*x = GetRoleMappingsRequest{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[27]
+	mi := &file_allowops_v1_identity_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1649,7 +1761,7 @@ func (x *GetRoleMappingsRequest) String() string {
 func (*GetRoleMappingsRequest) ProtoMessage() {}
 
 func (x *GetRoleMappingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[27]
+	mi := &file_allowops_v1_identity_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1662,7 +1774,7 @@ func (x *GetRoleMappingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRoleMappingsRequest.ProtoReflect.Descriptor instead.
 func (*GetRoleMappingsRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{27}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{29}
 }
 
 type GetRoleMappingsResponse struct {
@@ -1675,7 +1787,7 @@ type GetRoleMappingsResponse struct {
 
 func (x *GetRoleMappingsResponse) Reset() {
 	*x = GetRoleMappingsResponse{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[28]
+	mi := &file_allowops_v1_identity_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1687,7 +1799,7 @@ func (x *GetRoleMappingsResponse) String() string {
 func (*GetRoleMappingsResponse) ProtoMessage() {}
 
 func (x *GetRoleMappingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[28]
+	mi := &file_allowops_v1_identity_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1700,7 +1812,7 @@ func (x *GetRoleMappingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRoleMappingsResponse.ProtoReflect.Descriptor instead.
 func (*GetRoleMappingsResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{28}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *GetRoleMappingsResponse) GetMappings() []*RoleMapping {
@@ -1727,7 +1839,7 @@ type SaveRoleMappingsRequest struct {
 
 func (x *SaveRoleMappingsRequest) Reset() {
 	*x = SaveRoleMappingsRequest{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[29]
+	mi := &file_allowops_v1_identity_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1739,7 +1851,7 @@ func (x *SaveRoleMappingsRequest) String() string {
 func (*SaveRoleMappingsRequest) ProtoMessage() {}
 
 func (x *SaveRoleMappingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[29]
+	mi := &file_allowops_v1_identity_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1752,7 +1864,7 @@ func (x *SaveRoleMappingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveRoleMappingsRequest.ProtoReflect.Descriptor instead.
 func (*SaveRoleMappingsRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{29}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *SaveRoleMappingsRequest) GetMappings() []*RoleMapping {
@@ -1778,7 +1890,7 @@ type SaveRoleMappingsResponse struct {
 
 func (x *SaveRoleMappingsResponse) Reset() {
 	*x = SaveRoleMappingsResponse{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[30]
+	mi := &file_allowops_v1_identity_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1790,7 +1902,7 @@ func (x *SaveRoleMappingsResponse) String() string {
 func (*SaveRoleMappingsResponse) ProtoMessage() {}
 
 func (x *SaveRoleMappingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[30]
+	mi := &file_allowops_v1_identity_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1803,7 +1915,7 @@ func (x *SaveRoleMappingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveRoleMappingsResponse.ProtoReflect.Descriptor instead.
 func (*SaveRoleMappingsResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{30}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *SaveRoleMappingsResponse) GetRevision() string {
@@ -1825,7 +1937,7 @@ type LoginMethod struct {
 
 func (x *LoginMethod) Reset() {
 	*x = LoginMethod{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[31]
+	mi := &file_allowops_v1_identity_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1837,7 +1949,7 @@ func (x *LoginMethod) String() string {
 func (*LoginMethod) ProtoMessage() {}
 
 func (x *LoginMethod) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[31]
+	mi := &file_allowops_v1_identity_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1850,7 +1962,7 @@ func (x *LoginMethod) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginMethod.ProtoReflect.Descriptor instead.
 func (*LoginMethod) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{31}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *LoginMethod) GetProviderId() string {
@@ -1882,7 +1994,7 @@ type GetLoginMethodsRequest struct {
 
 func (x *GetLoginMethodsRequest) Reset() {
 	*x = GetLoginMethodsRequest{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[32]
+	mi := &file_allowops_v1_identity_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1894,7 +2006,7 @@ func (x *GetLoginMethodsRequest) String() string {
 func (*GetLoginMethodsRequest) ProtoMessage() {}
 
 func (x *GetLoginMethodsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[32]
+	mi := &file_allowops_v1_identity_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1907,7 +2019,7 @@ func (x *GetLoginMethodsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLoginMethodsRequest.ProtoReflect.Descriptor instead.
 func (*GetLoginMethodsRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{32}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{34}
 }
 
 type GetLoginMethodsResponse struct {
@@ -1919,7 +2031,7 @@ type GetLoginMethodsResponse struct {
 
 func (x *GetLoginMethodsResponse) Reset() {
 	*x = GetLoginMethodsResponse{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[33]
+	mi := &file_allowops_v1_identity_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1931,7 +2043,7 @@ func (x *GetLoginMethodsResponse) String() string {
 func (*GetLoginMethodsResponse) ProtoMessage() {}
 
 func (x *GetLoginMethodsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[33]
+	mi := &file_allowops_v1_identity_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1944,7 +2056,7 @@ func (x *GetLoginMethodsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetLoginMethodsResponse.ProtoReflect.Descriptor instead.
 func (*GetLoginMethodsResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{33}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GetLoginMethodsResponse) GetMethods() []*LoginMethod {
@@ -1968,7 +2080,7 @@ type BeginOidcLoginRequest struct {
 
 func (x *BeginOidcLoginRequest) Reset() {
 	*x = BeginOidcLoginRequest{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[34]
+	mi := &file_allowops_v1_identity_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1980,7 +2092,7 @@ func (x *BeginOidcLoginRequest) String() string {
 func (*BeginOidcLoginRequest) ProtoMessage() {}
 
 func (x *BeginOidcLoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[34]
+	mi := &file_allowops_v1_identity_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1993,7 +2105,7 @@ func (x *BeginOidcLoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginOidcLoginRequest.ProtoReflect.Descriptor instead.
 func (*BeginOidcLoginRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{34}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *BeginOidcLoginRequest) GetProviderId() string {
@@ -2040,7 +2152,7 @@ type BeginOidcLoginResponse struct {
 
 func (x *BeginOidcLoginResponse) Reset() {
 	*x = BeginOidcLoginResponse{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[35]
+	mi := &file_allowops_v1_identity_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2052,7 +2164,7 @@ func (x *BeginOidcLoginResponse) String() string {
 func (*BeginOidcLoginResponse) ProtoMessage() {}
 
 func (x *BeginOidcLoginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[35]
+	mi := &file_allowops_v1_identity_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2065,7 +2177,7 @@ func (x *BeginOidcLoginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginOidcLoginResponse.ProtoReflect.Descriptor instead.
 func (*BeginOidcLoginResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{35}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *BeginOidcLoginResponse) GetAuthorizationUrl() string {
@@ -2087,7 +2199,7 @@ type CompleteOidcLoginRequest struct {
 
 func (x *CompleteOidcLoginRequest) Reset() {
 	*x = CompleteOidcLoginRequest{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[36]
+	mi := &file_allowops_v1_identity_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2099,7 +2211,7 @@ func (x *CompleteOidcLoginRequest) String() string {
 func (*CompleteOidcLoginRequest) ProtoMessage() {}
 
 func (x *CompleteOidcLoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[36]
+	mi := &file_allowops_v1_identity_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2112,7 +2224,7 @@ func (x *CompleteOidcLoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteOidcLoginRequest.ProtoReflect.Descriptor instead.
 func (*CompleteOidcLoginRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{36}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *CompleteOidcLoginRequest) GetCode() string {
@@ -2139,7 +2251,7 @@ type CompleteOidcLoginResponse struct {
 
 func (x *CompleteOidcLoginResponse) Reset() {
 	*x = CompleteOidcLoginResponse{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[37]
+	mi := &file_allowops_v1_identity_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2151,7 +2263,7 @@ func (x *CompleteOidcLoginResponse) String() string {
 func (*CompleteOidcLoginResponse) ProtoMessage() {}
 
 func (x *CompleteOidcLoginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[37]
+	mi := &file_allowops_v1_identity_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2164,7 +2276,7 @@ func (x *CompleteOidcLoginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteOidcLoginResponse.ProtoReflect.Descriptor instead.
 func (*CompleteOidcLoginResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{37}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *CompleteOidcLoginResponse) GetRedirectUri() string {
@@ -2186,7 +2298,7 @@ type LoginLdapRequest struct {
 
 func (x *LoginLdapRequest) Reset() {
 	*x = LoginLdapRequest{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[38]
+	mi := &file_allowops_v1_identity_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2198,7 +2310,7 @@ func (x *LoginLdapRequest) String() string {
 func (*LoginLdapRequest) ProtoMessage() {}
 
 func (x *LoginLdapRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[38]
+	mi := &file_allowops_v1_identity_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2211,7 +2323,7 @@ func (x *LoginLdapRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginLdapRequest.ProtoReflect.Descriptor instead.
 func (*LoginLdapRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{38}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *LoginLdapRequest) GetProviderId() string {
@@ -2254,7 +2366,7 @@ type LoginLdapResponse struct {
 
 func (x *LoginLdapResponse) Reset() {
 	*x = LoginLdapResponse{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[39]
+	mi := &file_allowops_v1_identity_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2266,7 +2378,7 @@ func (x *LoginLdapResponse) String() string {
 func (*LoginLdapResponse) ProtoMessage() {}
 
 func (x *LoginLdapResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[39]
+	mi := &file_allowops_v1_identity_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2279,7 +2391,7 @@ func (x *LoginLdapResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginLdapResponse.ProtoReflect.Descriptor instead.
 func (*LoginLdapResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{39}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *LoginLdapResponse) GetUser() *User {
@@ -2313,7 +2425,7 @@ type ExchangeCliSessionRequest struct {
 
 func (x *ExchangeCliSessionRequest) Reset() {
 	*x = ExchangeCliSessionRequest{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[40]
+	mi := &file_allowops_v1_identity_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2325,7 +2437,7 @@ func (x *ExchangeCliSessionRequest) String() string {
 func (*ExchangeCliSessionRequest) ProtoMessage() {}
 
 func (x *ExchangeCliSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[40]
+	mi := &file_allowops_v1_identity_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2338,7 +2450,7 @@ func (x *ExchangeCliSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExchangeCliSessionRequest.ProtoReflect.Descriptor instead.
 func (*ExchangeCliSessionRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{40}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ExchangeCliSessionRequest) GetCode() string {
@@ -2365,7 +2477,7 @@ type ExchangeCliSessionResponse struct {
 
 func (x *ExchangeCliSessionResponse) Reset() {
 	*x = ExchangeCliSessionResponse{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[41]
+	mi := &file_allowops_v1_identity_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2377,7 +2489,7 @@ func (x *ExchangeCliSessionResponse) String() string {
 func (*ExchangeCliSessionResponse) ProtoMessage() {}
 
 func (x *ExchangeCliSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[41]
+	mi := &file_allowops_v1_identity_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2390,7 +2502,7 @@ func (x *ExchangeCliSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExchangeCliSessionResponse.ProtoReflect.Descriptor instead.
 func (*ExchangeCliSessionResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{41}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ExchangeCliSessionResponse) GetSession() *CliSession {
@@ -2421,7 +2533,7 @@ type CliSession struct {
 
 func (x *CliSession) Reset() {
 	*x = CliSession{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[42]
+	mi := &file_allowops_v1_identity_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2433,7 +2545,7 @@ func (x *CliSession) String() string {
 func (*CliSession) ProtoMessage() {}
 
 func (x *CliSession) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[42]
+	mi := &file_allowops_v1_identity_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2446,7 +2558,7 @@ func (x *CliSession) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CliSession.ProtoReflect.Descriptor instead.
 func (*CliSession) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{42}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *CliSession) GetSessionId() string {
@@ -2499,7 +2611,7 @@ type GetCurrentSessionRequest struct {
 
 func (x *GetCurrentSessionRequest) Reset() {
 	*x = GetCurrentSessionRequest{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[43]
+	mi := &file_allowops_v1_identity_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2511,7 +2623,7 @@ func (x *GetCurrentSessionRequest) String() string {
 func (*GetCurrentSessionRequest) ProtoMessage() {}
 
 func (x *GetCurrentSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[43]
+	mi := &file_allowops_v1_identity_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2524,7 +2636,7 @@ func (x *GetCurrentSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCurrentSessionRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentSessionRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{43}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{45}
 }
 
 type GetCurrentSessionResponse struct {
@@ -2544,7 +2656,7 @@ type GetCurrentSessionResponse struct {
 
 func (x *GetCurrentSessionResponse) Reset() {
 	*x = GetCurrentSessionResponse{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[44]
+	mi := &file_allowops_v1_identity_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2556,7 +2668,7 @@ func (x *GetCurrentSessionResponse) String() string {
 func (*GetCurrentSessionResponse) ProtoMessage() {}
 
 func (x *GetCurrentSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[44]
+	mi := &file_allowops_v1_identity_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2569,7 +2681,7 @@ func (x *GetCurrentSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCurrentSessionResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentSessionResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{44}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *GetCurrentSessionResponse) GetUser() *User {
@@ -2622,7 +2734,7 @@ type LogoutRequest struct {
 
 func (x *LogoutRequest) Reset() {
 	*x = LogoutRequest{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[45]
+	mi := &file_allowops_v1_identity_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2634,7 +2746,7 @@ func (x *LogoutRequest) String() string {
 func (*LogoutRequest) ProtoMessage() {}
 
 func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[45]
+	mi := &file_allowops_v1_identity_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2647,7 +2759,7 @@ func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutRequest.ProtoReflect.Descriptor instead.
 func (*LogoutRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{45}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{47}
 }
 
 type LogoutResponse struct {
@@ -2658,7 +2770,7 @@ type LogoutResponse struct {
 
 func (x *LogoutResponse) Reset() {
 	*x = LogoutResponse{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[46]
+	mi := &file_allowops_v1_identity_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2670,7 +2782,7 @@ func (x *LogoutResponse) String() string {
 func (*LogoutResponse) ProtoMessage() {}
 
 func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[46]
+	mi := &file_allowops_v1_identity_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2683,7 +2795,7 @@ func (x *LogoutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutResponse.ProtoReflect.Descriptor instead.
 func (*LogoutResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{46}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{48}
 }
 
 type ListCliSessionsRequest struct {
@@ -2697,7 +2809,7 @@ type ListCliSessionsRequest struct {
 
 func (x *ListCliSessionsRequest) Reset() {
 	*x = ListCliSessionsRequest{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[47]
+	mi := &file_allowops_v1_identity_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2709,7 +2821,7 @@ func (x *ListCliSessionsRequest) String() string {
 func (*ListCliSessionsRequest) ProtoMessage() {}
 
 func (x *ListCliSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[47]
+	mi := &file_allowops_v1_identity_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2722,7 +2834,7 @@ func (x *ListCliSessionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCliSessionsRequest.ProtoReflect.Descriptor instead.
 func (*ListCliSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{47}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ListCliSessionsRequest) GetPage() *PageRequest {
@@ -2749,7 +2861,7 @@ type ListCliSessionsResponse struct {
 
 func (x *ListCliSessionsResponse) Reset() {
 	*x = ListCliSessionsResponse{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[48]
+	mi := &file_allowops_v1_identity_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2761,7 +2873,7 @@ func (x *ListCliSessionsResponse) String() string {
 func (*ListCliSessionsResponse) ProtoMessage() {}
 
 func (x *ListCliSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[48]
+	mi := &file_allowops_v1_identity_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2774,7 +2886,7 @@ func (x *ListCliSessionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCliSessionsResponse.ProtoReflect.Descriptor instead.
 func (*ListCliSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{48}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ListCliSessionsResponse) GetSessions() []*CliSession {
@@ -2803,7 +2915,7 @@ type RevokeCliSessionRequest struct {
 
 func (x *RevokeCliSessionRequest) Reset() {
 	*x = RevokeCliSessionRequest{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[49]
+	mi := &file_allowops_v1_identity_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2815,7 +2927,7 @@ func (x *RevokeCliSessionRequest) String() string {
 func (*RevokeCliSessionRequest) ProtoMessage() {}
 
 func (x *RevokeCliSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[49]
+	mi := &file_allowops_v1_identity_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2828,7 +2940,7 @@ func (x *RevokeCliSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeCliSessionRequest.ProtoReflect.Descriptor instead.
 func (*RevokeCliSessionRequest) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{49}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *RevokeCliSessionRequest) GetSessionId() string {
@@ -2853,7 +2965,7 @@ type RevokeCliSessionResponse struct {
 
 func (x *RevokeCliSessionResponse) Reset() {
 	*x = RevokeCliSessionResponse{}
-	mi := &file_allowops_v1_identity_proto_msgTypes[50]
+	mi := &file_allowops_v1_identity_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2865,7 +2977,7 @@ func (x *RevokeCliSessionResponse) String() string {
 func (*RevokeCliSessionResponse) ProtoMessage() {}
 
 func (x *RevokeCliSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_allowops_v1_identity_proto_msgTypes[50]
+	mi := &file_allowops_v1_identity_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2878,7 +2990,88 @@ func (x *RevokeCliSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeCliSessionResponse.ProtoReflect.Descriptor instead.
 func (*RevokeCliSessionResponse) Descriptor() ([]byte, []int) {
-	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{50}
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{52}
+}
+
+type RevokeUserSessionsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Empty means the caller. Only admins may select another user.
+	UserId        string `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeUserSessionsRequest) Reset() {
+	*x = RevokeUserSessionsRequest{}
+	mi := &file_allowops_v1_identity_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeUserSessionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeUserSessionsRequest) ProtoMessage() {}
+
+func (x *RevokeUserSessionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_identity_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeUserSessionsRequest.ProtoReflect.Descriptor instead.
+func (*RevokeUserSessionsRequest) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *RevokeUserSessionsRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type RevokeUserSessionsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeUserSessionsResponse) Reset() {
+	*x = RevokeUserSessionsResponse{}
+	mi := &file_allowops_v1_identity_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeUserSessionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeUserSessionsResponse) ProtoMessage() {}
+
+func (x *RevokeUserSessionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_allowops_v1_identity_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeUserSessionsResponse.ProtoReflect.Descriptor instead.
+func (*RevokeUserSessionsResponse) Descriptor() ([]byte, []int) {
+	return file_allowops_v1_identity_proto_rawDescGZIP(), []int{54}
 }
 
 var File_allowops_v1_identity_proto protoreflect.FileDescriptor
@@ -2959,7 +3152,7 @@ const file_allowops_v1_identity_proto_rawDesc = "" +
 	"\n" +
 	"account_id\x18\x01 \x01(\tR\taccountId\x12\x19\n" +
 	"\btoken_id\x18\x02 \x01(\tR\atokenId\"#\n" +
-	"!RevokeServiceAccountTokenResponse\"\xce\x02\n" +
+	"!RevokeServiceAccountTokenResponse\"\xea\x02\n" +
 	"\x04User\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1f\n" +
 	"\vprovider_id\x18\x02 \x01(\tR\n" +
@@ -2973,7 +3166,8 @@ const file_allowops_v1_identity_proto_rawDesc = "" +
 	"\x0feffective_roles\x18\t \x03(\tR\x0eeffectiveRoles\x12\x14\n" +
 	"\x05teams\x18\n" +
 	" \x03(\tR\x05teams\x12\x1a\n" +
-	"\brevision\x18\v \x01(\tR\brevision\"V\n" +
+	"\brevision\x18\v \x01(\tR\brevision\x12\x1a\n" +
+	"\bdisabled\x18\f \x01(\bR\bdisabled\"V\n" +
 	"\x10ListUsersRequest\x12,\n" +
 	"\x04page\x18\x01 \x01(\v2\x18.allowops.v1.PageRequestR\x04page\x12\x14\n" +
 	"\x05query\x18\x02 \x01(\tR\x05query\"k\n" +
@@ -2989,6 +3183,12 @@ const file_allowops_v1_identity_proto_rawDesc = "" +
 	"\fmanual_roles\x18\x02 \x03(\tR\vmanualRoles\x12+\n" +
 	"\x11expected_revision\x18\x03 \x01(\tR\x10expectedRevision\"=\n" +
 	"\x14SetUserRolesResponse\x12%\n" +
+	"\x04user\x18\x01 \x01(\v2\x11.allowops.v1.UserR\x04user\"z\n" +
+	"\x16SetUserDisabledRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
+	"\bdisabled\x18\x02 \x01(\bR\bdisabled\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\tR\x10expectedRevision\"@\n" +
+	"\x17SetUserDisabledResponse\x12%\n" +
 	"\x04user\x18\x01 \x01(\v2\x11.allowops.v1.UserR\x04user\"<\n" +
 	"\x04Role\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
@@ -3087,7 +3287,10 @@ const file_allowops_v1_identity_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"\x1a\n" +
-	"\x18RevokeCliSessionResponse*[\n" +
+	"\x18RevokeCliSessionResponse\"4\n" +
+	"\x19RevokeUserSessionsRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"\x1c\n" +
+	"\x1aRevokeUserSessionsResponse*[\n" +
 	"\vLoginClient\x12\x1c\n" +
 	"\x18LOGIN_CLIENT_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14LOGIN_CLIENT_CONSOLE\x10\x01\x12\x14\n" +
@@ -3099,14 +3302,15 @@ const file_allowops_v1_identity_proto_rawDesc = "" +
 	"\x14UpdateServiceAccount\x12(.allowops.v1.UpdateServiceAccountRequest\x1a).allowops.v1.UpdateServiceAccountResponse\x12z\n" +
 	"\x19CreateServiceAccountToken\x12-.allowops.v1.CreateServiceAccountTokenRequest\x1a..allowops.v1.CreateServiceAccountTokenResponse\x12w\n" +
 	"\x18ListServiceAccountTokens\x12,.allowops.v1.ListServiceAccountTokensRequest\x1a-.allowops.v1.ListServiceAccountTokensResponse\x12z\n" +
-	"\x19RevokeServiceAccountToken\x12-.allowops.v1.RevokeServiceAccountTokenRequest\x1a..allowops.v1.RevokeServiceAccountTokenResponse2\xff\x03\n" +
+	"\x19RevokeServiceAccountToken\x12-.allowops.v1.RevokeServiceAccountTokenRequest\x1a..allowops.v1.RevokeServiceAccountTokenResponse2\xdd\x04\n" +
 	"\vUserService\x12J\n" +
 	"\tListUsers\x12\x1d.allowops.v1.ListUsersRequest\x1a\x1e.allowops.v1.ListUsersResponse\x12D\n" +
 	"\aGetUser\x12\x1b.allowops.v1.GetUserRequest\x1a\x1c.allowops.v1.GetUserResponse\x12S\n" +
-	"\fSetUserRoles\x12 .allowops.v1.SetUserRolesRequest\x1a!.allowops.v1.SetUserRolesResponse\x12J\n" +
+	"\fSetUserRoles\x12 .allowops.v1.SetUserRolesRequest\x1a!.allowops.v1.SetUserRolesResponse\x12\\\n" +
+	"\x0fSetUserDisabled\x12#.allowops.v1.SetUserDisabledRequest\x1a$.allowops.v1.SetUserDisabledResponse\x12J\n" +
 	"\tListRoles\x12\x1d.allowops.v1.ListRolesRequest\x1a\x1e.allowops.v1.ListRolesResponse\x12\\\n" +
 	"\x0fGetRoleMappings\x12#.allowops.v1.GetRoleMappingsRequest\x1a$.allowops.v1.GetRoleMappingsResponse\x12_\n" +
-	"\x10SaveRoleMappings\x12$.allowops.v1.SaveRoleMappingsRequest\x1a%.allowops.v1.SaveRoleMappingsResponse2\xc3\x06\n" +
+	"\x10SaveRoleMappings\x12$.allowops.v1.SaveRoleMappingsRequest\x1a%.allowops.v1.SaveRoleMappingsResponse2\xaa\a\n" +
 	"\vAuthService\x12\\\n" +
 	"\x0fGetLoginMethods\x12#.allowops.v1.GetLoginMethodsRequest\x1a$.allowops.v1.GetLoginMethodsResponse\x12Y\n" +
 	"\x0eBeginOidcLogin\x12\".allowops.v1.BeginOidcLoginRequest\x1a#.allowops.v1.BeginOidcLoginResponse\x12b\n" +
@@ -3116,7 +3320,8 @@ const file_allowops_v1_identity_proto_rawDesc = "" +
 	"\x11GetCurrentSession\x12%.allowops.v1.GetCurrentSessionRequest\x1a&.allowops.v1.GetCurrentSessionResponse\x12A\n" +
 	"\x06Logout\x12\x1a.allowops.v1.LogoutRequest\x1a\x1b.allowops.v1.LogoutResponse\x12\\\n" +
 	"\x0fListCliSessions\x12#.allowops.v1.ListCliSessionsRequest\x1a$.allowops.v1.ListCliSessionsResponse\x12_\n" +
-	"\x10RevokeCliSession\x12$.allowops.v1.RevokeCliSessionRequest\x1a%.allowops.v1.RevokeCliSessionResponseB<Z:github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1b\x06proto3"
+	"\x10RevokeCliSession\x12$.allowops.v1.RevokeCliSessionRequest\x1a%.allowops.v1.RevokeCliSessionResponse\x12e\n" +
+	"\x12RevokeUserSessions\x12&.allowops.v1.RevokeUserSessionsRequest\x1a'.allowops.v1.RevokeUserSessionsResponseB<Z:github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1b\x06proto3"
 
 var (
 	file_allowops_v1_identity_proto_rawDescOnce sync.Once
@@ -3131,7 +3336,7 @@ func file_allowops_v1_identity_proto_rawDescGZIP() []byte {
 }
 
 var file_allowops_v1_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_allowops_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
+var file_allowops_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 55)
 var file_allowops_v1_identity_proto_goTypes = []any{
 	(LoginClient)(0),                          // 0: allowops.v1.LoginClient
 	(*ServiceAccount)(nil),                    // 1: allowops.v1.ServiceAccount
@@ -3157,131 +3362,140 @@ var file_allowops_v1_identity_proto_goTypes = []any{
 	(*GetUserResponse)(nil),            // 21: allowops.v1.GetUserResponse
 	(*SetUserRolesRequest)(nil),        // 22: allowops.v1.SetUserRolesRequest
 	(*SetUserRolesResponse)(nil),       // 23: allowops.v1.SetUserRolesResponse
-	(*Role)(nil),                       // 24: allowops.v1.Role
-	(*ListRolesRequest)(nil),           // 25: allowops.v1.ListRolesRequest
-	(*ListRolesResponse)(nil),          // 26: allowops.v1.ListRolesResponse
-	(*RoleMapping)(nil),                // 27: allowops.v1.RoleMapping
-	(*GetRoleMappingsRequest)(nil),     // 28: allowops.v1.GetRoleMappingsRequest
-	(*GetRoleMappingsResponse)(nil),    // 29: allowops.v1.GetRoleMappingsResponse
-	(*SaveRoleMappingsRequest)(nil),    // 30: allowops.v1.SaveRoleMappingsRequest
-	(*SaveRoleMappingsResponse)(nil),   // 31: allowops.v1.SaveRoleMappingsResponse
-	(*LoginMethod)(nil),                // 32: allowops.v1.LoginMethod
-	(*GetLoginMethodsRequest)(nil),     // 33: allowops.v1.GetLoginMethodsRequest
-	(*GetLoginMethodsResponse)(nil),    // 34: allowops.v1.GetLoginMethodsResponse
-	(*BeginOidcLoginRequest)(nil),      // 35: allowops.v1.BeginOidcLoginRequest
-	(*BeginOidcLoginResponse)(nil),     // 36: allowops.v1.BeginOidcLoginResponse
-	(*CompleteOidcLoginRequest)(nil),   // 37: allowops.v1.CompleteOidcLoginRequest
-	(*CompleteOidcLoginResponse)(nil),  // 38: allowops.v1.CompleteOidcLoginResponse
-	(*LoginLdapRequest)(nil),           // 39: allowops.v1.LoginLdapRequest
-	(*LoginLdapResponse)(nil),          // 40: allowops.v1.LoginLdapResponse
-	(*ExchangeCliSessionRequest)(nil),  // 41: allowops.v1.ExchangeCliSessionRequest
-	(*ExchangeCliSessionResponse)(nil), // 42: allowops.v1.ExchangeCliSessionResponse
-	(*CliSession)(nil),                 // 43: allowops.v1.CliSession
-	(*GetCurrentSessionRequest)(nil),   // 44: allowops.v1.GetCurrentSessionRequest
-	(*GetCurrentSessionResponse)(nil),  // 45: allowops.v1.GetCurrentSessionResponse
-	(*LogoutRequest)(nil),              // 46: allowops.v1.LogoutRequest
-	(*LogoutResponse)(nil),             // 47: allowops.v1.LogoutResponse
-	(*ListCliSessionsRequest)(nil),     // 48: allowops.v1.ListCliSessionsRequest
-	(*ListCliSessionsResponse)(nil),    // 49: allowops.v1.ListCliSessionsResponse
-	(*RevokeCliSessionRequest)(nil),    // 50: allowops.v1.RevokeCliSessionRequest
-	(*RevokeCliSessionResponse)(nil),   // 51: allowops.v1.RevokeCliSessionResponse
-	(*timestamppb.Timestamp)(nil),      // 52: google.protobuf.Timestamp
-	(*PageRequest)(nil),                // 53: allowops.v1.PageRequest
-	(*PageResponse)(nil),               // 54: allowops.v1.PageResponse
-	(*GatewayUpdate)(nil),              // 55: allowops.v1.GatewayUpdate
+	(*SetUserDisabledRequest)(nil),     // 24: allowops.v1.SetUserDisabledRequest
+	(*SetUserDisabledResponse)(nil),    // 25: allowops.v1.SetUserDisabledResponse
+	(*Role)(nil),                       // 26: allowops.v1.Role
+	(*ListRolesRequest)(nil),           // 27: allowops.v1.ListRolesRequest
+	(*ListRolesResponse)(nil),          // 28: allowops.v1.ListRolesResponse
+	(*RoleMapping)(nil),                // 29: allowops.v1.RoleMapping
+	(*GetRoleMappingsRequest)(nil),     // 30: allowops.v1.GetRoleMappingsRequest
+	(*GetRoleMappingsResponse)(nil),    // 31: allowops.v1.GetRoleMappingsResponse
+	(*SaveRoleMappingsRequest)(nil),    // 32: allowops.v1.SaveRoleMappingsRequest
+	(*SaveRoleMappingsResponse)(nil),   // 33: allowops.v1.SaveRoleMappingsResponse
+	(*LoginMethod)(nil),                // 34: allowops.v1.LoginMethod
+	(*GetLoginMethodsRequest)(nil),     // 35: allowops.v1.GetLoginMethodsRequest
+	(*GetLoginMethodsResponse)(nil),    // 36: allowops.v1.GetLoginMethodsResponse
+	(*BeginOidcLoginRequest)(nil),      // 37: allowops.v1.BeginOidcLoginRequest
+	(*BeginOidcLoginResponse)(nil),     // 38: allowops.v1.BeginOidcLoginResponse
+	(*CompleteOidcLoginRequest)(nil),   // 39: allowops.v1.CompleteOidcLoginRequest
+	(*CompleteOidcLoginResponse)(nil),  // 40: allowops.v1.CompleteOidcLoginResponse
+	(*LoginLdapRequest)(nil),           // 41: allowops.v1.LoginLdapRequest
+	(*LoginLdapResponse)(nil),          // 42: allowops.v1.LoginLdapResponse
+	(*ExchangeCliSessionRequest)(nil),  // 43: allowops.v1.ExchangeCliSessionRequest
+	(*ExchangeCliSessionResponse)(nil), // 44: allowops.v1.ExchangeCliSessionResponse
+	(*CliSession)(nil),                 // 45: allowops.v1.CliSession
+	(*GetCurrentSessionRequest)(nil),   // 46: allowops.v1.GetCurrentSessionRequest
+	(*GetCurrentSessionResponse)(nil),  // 47: allowops.v1.GetCurrentSessionResponse
+	(*LogoutRequest)(nil),              // 48: allowops.v1.LogoutRequest
+	(*LogoutResponse)(nil),             // 49: allowops.v1.LogoutResponse
+	(*ListCliSessionsRequest)(nil),     // 50: allowops.v1.ListCliSessionsRequest
+	(*ListCliSessionsResponse)(nil),    // 51: allowops.v1.ListCliSessionsResponse
+	(*RevokeCliSessionRequest)(nil),    // 52: allowops.v1.RevokeCliSessionRequest
+	(*RevokeCliSessionResponse)(nil),   // 53: allowops.v1.RevokeCliSessionResponse
+	(*RevokeUserSessionsRequest)(nil),  // 54: allowops.v1.RevokeUserSessionsRequest
+	(*RevokeUserSessionsResponse)(nil), // 55: allowops.v1.RevokeUserSessionsResponse
+	(*timestamppb.Timestamp)(nil),      // 56: google.protobuf.Timestamp
+	(*PageRequest)(nil),                // 57: allowops.v1.PageRequest
+	(*PageResponse)(nil),               // 58: allowops.v1.PageResponse
+	(*GatewayUpdate)(nil),              // 59: allowops.v1.GatewayUpdate
 }
 var file_allowops_v1_identity_proto_depIdxs = []int32{
-	52, // 0: allowops.v1.ServiceAccount.created_at:type_name -> google.protobuf.Timestamp
-	52, // 1: allowops.v1.ServiceAccountToken.created_at:type_name -> google.protobuf.Timestamp
-	52, // 2: allowops.v1.ServiceAccountToken.expires_at:type_name -> google.protobuf.Timestamp
-	52, // 3: allowops.v1.ServiceAccountToken.last_used_at:type_name -> google.protobuf.Timestamp
-	52, // 4: allowops.v1.ServiceAccountToken.revoked_at:type_name -> google.protobuf.Timestamp
+	56, // 0: allowops.v1.ServiceAccount.created_at:type_name -> google.protobuf.Timestamp
+	56, // 1: allowops.v1.ServiceAccountToken.created_at:type_name -> google.protobuf.Timestamp
+	56, // 2: allowops.v1.ServiceAccountToken.expires_at:type_name -> google.protobuf.Timestamp
+	56, // 3: allowops.v1.ServiceAccountToken.last_used_at:type_name -> google.protobuf.Timestamp
+	56, // 4: allowops.v1.ServiceAccountToken.revoked_at:type_name -> google.protobuf.Timestamp
 	1,  // 5: allowops.v1.CreateServiceAccountResponse.account:type_name -> allowops.v1.ServiceAccount
 	1,  // 6: allowops.v1.GetServiceAccountResponse.account:type_name -> allowops.v1.ServiceAccount
-	53, // 7: allowops.v1.ListServiceAccountsRequest.page:type_name -> allowops.v1.PageRequest
+	57, // 7: allowops.v1.ListServiceAccountsRequest.page:type_name -> allowops.v1.PageRequest
 	1,  // 8: allowops.v1.ListServiceAccountsResponse.accounts:type_name -> allowops.v1.ServiceAccount
-	54, // 9: allowops.v1.ListServiceAccountsResponse.page:type_name -> allowops.v1.PageResponse
+	58, // 9: allowops.v1.ListServiceAccountsResponse.page:type_name -> allowops.v1.PageResponse
 	1,  // 10: allowops.v1.UpdateServiceAccountResponse.account:type_name -> allowops.v1.ServiceAccount
 	2,  // 11: allowops.v1.CreateServiceAccountTokenResponse.token:type_name -> allowops.v1.ServiceAccountToken
-	53, // 12: allowops.v1.ListServiceAccountTokensRequest.page:type_name -> allowops.v1.PageRequest
+	57, // 12: allowops.v1.ListServiceAccountTokensRequest.page:type_name -> allowops.v1.PageRequest
 	2,  // 13: allowops.v1.ListServiceAccountTokensResponse.tokens:type_name -> allowops.v1.ServiceAccountToken
-	54, // 14: allowops.v1.ListServiceAccountTokensResponse.page:type_name -> allowops.v1.PageResponse
-	53, // 15: allowops.v1.ListUsersRequest.page:type_name -> allowops.v1.PageRequest
+	58, // 14: allowops.v1.ListServiceAccountTokensResponse.page:type_name -> allowops.v1.PageResponse
+	57, // 15: allowops.v1.ListUsersRequest.page:type_name -> allowops.v1.PageRequest
 	17, // 16: allowops.v1.ListUsersResponse.users:type_name -> allowops.v1.User
-	54, // 17: allowops.v1.ListUsersResponse.page:type_name -> allowops.v1.PageResponse
+	58, // 17: allowops.v1.ListUsersResponse.page:type_name -> allowops.v1.PageResponse
 	17, // 18: allowops.v1.GetUserResponse.user:type_name -> allowops.v1.User
 	17, // 19: allowops.v1.SetUserRolesResponse.user:type_name -> allowops.v1.User
-	53, // 20: allowops.v1.ListRolesRequest.page:type_name -> allowops.v1.PageRequest
-	24, // 21: allowops.v1.ListRolesResponse.roles:type_name -> allowops.v1.Role
-	54, // 22: allowops.v1.ListRolesResponse.page:type_name -> allowops.v1.PageResponse
-	27, // 23: allowops.v1.GetRoleMappingsResponse.mappings:type_name -> allowops.v1.RoleMapping
-	27, // 24: allowops.v1.SaveRoleMappingsRequest.mappings:type_name -> allowops.v1.RoleMapping
-	32, // 25: allowops.v1.GetLoginMethodsResponse.methods:type_name -> allowops.v1.LoginMethod
-	0,  // 26: allowops.v1.BeginOidcLoginRequest.client:type_name -> allowops.v1.LoginClient
-	0,  // 27: allowops.v1.LoginLdapRequest.client:type_name -> allowops.v1.LoginClient
-	17, // 28: allowops.v1.LoginLdapResponse.user:type_name -> allowops.v1.User
-	43, // 29: allowops.v1.LoginLdapResponse.cli_session:type_name -> allowops.v1.CliSession
-	43, // 30: allowops.v1.ExchangeCliSessionResponse.session:type_name -> allowops.v1.CliSession
-	52, // 31: allowops.v1.CliSession.created_at:type_name -> google.protobuf.Timestamp
-	52, // 32: allowops.v1.CliSession.expires_at:type_name -> google.protobuf.Timestamp
-	52, // 33: allowops.v1.CliSession.last_used_at:type_name -> google.protobuf.Timestamp
-	52, // 34: allowops.v1.CliSession.revoked_at:type_name -> google.protobuf.Timestamp
-	17, // 35: allowops.v1.GetCurrentSessionResponse.user:type_name -> allowops.v1.User
-	0,  // 36: allowops.v1.GetCurrentSessionResponse.client:type_name -> allowops.v1.LoginClient
-	52, // 37: allowops.v1.GetCurrentSessionResponse.expires_at:type_name -> google.protobuf.Timestamp
-	55, // 38: allowops.v1.GetCurrentSessionResponse.gateway_update:type_name -> allowops.v1.GatewayUpdate
-	53, // 39: allowops.v1.ListCliSessionsRequest.page:type_name -> allowops.v1.PageRequest
-	43, // 40: allowops.v1.ListCliSessionsResponse.sessions:type_name -> allowops.v1.CliSession
-	54, // 41: allowops.v1.ListCliSessionsResponse.page:type_name -> allowops.v1.PageResponse
-	3,  // 42: allowops.v1.ServiceAccountService.CreateServiceAccount:input_type -> allowops.v1.CreateServiceAccountRequest
-	5,  // 43: allowops.v1.ServiceAccountService.GetServiceAccount:input_type -> allowops.v1.GetServiceAccountRequest
-	7,  // 44: allowops.v1.ServiceAccountService.ListServiceAccounts:input_type -> allowops.v1.ListServiceAccountsRequest
-	9,  // 45: allowops.v1.ServiceAccountService.UpdateServiceAccount:input_type -> allowops.v1.UpdateServiceAccountRequest
-	11, // 46: allowops.v1.ServiceAccountService.CreateServiceAccountToken:input_type -> allowops.v1.CreateServiceAccountTokenRequest
-	13, // 47: allowops.v1.ServiceAccountService.ListServiceAccountTokens:input_type -> allowops.v1.ListServiceAccountTokensRequest
-	15, // 48: allowops.v1.ServiceAccountService.RevokeServiceAccountToken:input_type -> allowops.v1.RevokeServiceAccountTokenRequest
-	18, // 49: allowops.v1.UserService.ListUsers:input_type -> allowops.v1.ListUsersRequest
-	20, // 50: allowops.v1.UserService.GetUser:input_type -> allowops.v1.GetUserRequest
-	22, // 51: allowops.v1.UserService.SetUserRoles:input_type -> allowops.v1.SetUserRolesRequest
-	25, // 52: allowops.v1.UserService.ListRoles:input_type -> allowops.v1.ListRolesRequest
-	28, // 53: allowops.v1.UserService.GetRoleMappings:input_type -> allowops.v1.GetRoleMappingsRequest
-	30, // 54: allowops.v1.UserService.SaveRoleMappings:input_type -> allowops.v1.SaveRoleMappingsRequest
-	33, // 55: allowops.v1.AuthService.GetLoginMethods:input_type -> allowops.v1.GetLoginMethodsRequest
-	35, // 56: allowops.v1.AuthService.BeginOidcLogin:input_type -> allowops.v1.BeginOidcLoginRequest
-	37, // 57: allowops.v1.AuthService.CompleteOidcLogin:input_type -> allowops.v1.CompleteOidcLoginRequest
-	39, // 58: allowops.v1.AuthService.LoginLdap:input_type -> allowops.v1.LoginLdapRequest
-	41, // 59: allowops.v1.AuthService.ExchangeCliSession:input_type -> allowops.v1.ExchangeCliSessionRequest
-	44, // 60: allowops.v1.AuthService.GetCurrentSession:input_type -> allowops.v1.GetCurrentSessionRequest
-	46, // 61: allowops.v1.AuthService.Logout:input_type -> allowops.v1.LogoutRequest
-	48, // 62: allowops.v1.AuthService.ListCliSessions:input_type -> allowops.v1.ListCliSessionsRequest
-	50, // 63: allowops.v1.AuthService.RevokeCliSession:input_type -> allowops.v1.RevokeCliSessionRequest
-	4,  // 64: allowops.v1.ServiceAccountService.CreateServiceAccount:output_type -> allowops.v1.CreateServiceAccountResponse
-	6,  // 65: allowops.v1.ServiceAccountService.GetServiceAccount:output_type -> allowops.v1.GetServiceAccountResponse
-	8,  // 66: allowops.v1.ServiceAccountService.ListServiceAccounts:output_type -> allowops.v1.ListServiceAccountsResponse
-	10, // 67: allowops.v1.ServiceAccountService.UpdateServiceAccount:output_type -> allowops.v1.UpdateServiceAccountResponse
-	12, // 68: allowops.v1.ServiceAccountService.CreateServiceAccountToken:output_type -> allowops.v1.CreateServiceAccountTokenResponse
-	14, // 69: allowops.v1.ServiceAccountService.ListServiceAccountTokens:output_type -> allowops.v1.ListServiceAccountTokensResponse
-	16, // 70: allowops.v1.ServiceAccountService.RevokeServiceAccountToken:output_type -> allowops.v1.RevokeServiceAccountTokenResponse
-	19, // 71: allowops.v1.UserService.ListUsers:output_type -> allowops.v1.ListUsersResponse
-	21, // 72: allowops.v1.UserService.GetUser:output_type -> allowops.v1.GetUserResponse
-	23, // 73: allowops.v1.UserService.SetUserRoles:output_type -> allowops.v1.SetUserRolesResponse
-	26, // 74: allowops.v1.UserService.ListRoles:output_type -> allowops.v1.ListRolesResponse
-	29, // 75: allowops.v1.UserService.GetRoleMappings:output_type -> allowops.v1.GetRoleMappingsResponse
-	31, // 76: allowops.v1.UserService.SaveRoleMappings:output_type -> allowops.v1.SaveRoleMappingsResponse
-	34, // 77: allowops.v1.AuthService.GetLoginMethods:output_type -> allowops.v1.GetLoginMethodsResponse
-	36, // 78: allowops.v1.AuthService.BeginOidcLogin:output_type -> allowops.v1.BeginOidcLoginResponse
-	38, // 79: allowops.v1.AuthService.CompleteOidcLogin:output_type -> allowops.v1.CompleteOidcLoginResponse
-	40, // 80: allowops.v1.AuthService.LoginLdap:output_type -> allowops.v1.LoginLdapResponse
-	42, // 81: allowops.v1.AuthService.ExchangeCliSession:output_type -> allowops.v1.ExchangeCliSessionResponse
-	45, // 82: allowops.v1.AuthService.GetCurrentSession:output_type -> allowops.v1.GetCurrentSessionResponse
-	47, // 83: allowops.v1.AuthService.Logout:output_type -> allowops.v1.LogoutResponse
-	49, // 84: allowops.v1.AuthService.ListCliSessions:output_type -> allowops.v1.ListCliSessionsResponse
-	51, // 85: allowops.v1.AuthService.RevokeCliSession:output_type -> allowops.v1.RevokeCliSessionResponse
-	64, // [64:86] is the sub-list for method output_type
-	42, // [42:64] is the sub-list for method input_type
-	42, // [42:42] is the sub-list for extension type_name
-	42, // [42:42] is the sub-list for extension extendee
-	0,  // [0:42] is the sub-list for field type_name
+	17, // 20: allowops.v1.SetUserDisabledResponse.user:type_name -> allowops.v1.User
+	57, // 21: allowops.v1.ListRolesRequest.page:type_name -> allowops.v1.PageRequest
+	26, // 22: allowops.v1.ListRolesResponse.roles:type_name -> allowops.v1.Role
+	58, // 23: allowops.v1.ListRolesResponse.page:type_name -> allowops.v1.PageResponse
+	29, // 24: allowops.v1.GetRoleMappingsResponse.mappings:type_name -> allowops.v1.RoleMapping
+	29, // 25: allowops.v1.SaveRoleMappingsRequest.mappings:type_name -> allowops.v1.RoleMapping
+	34, // 26: allowops.v1.GetLoginMethodsResponse.methods:type_name -> allowops.v1.LoginMethod
+	0,  // 27: allowops.v1.BeginOidcLoginRequest.client:type_name -> allowops.v1.LoginClient
+	0,  // 28: allowops.v1.LoginLdapRequest.client:type_name -> allowops.v1.LoginClient
+	17, // 29: allowops.v1.LoginLdapResponse.user:type_name -> allowops.v1.User
+	45, // 30: allowops.v1.LoginLdapResponse.cli_session:type_name -> allowops.v1.CliSession
+	45, // 31: allowops.v1.ExchangeCliSessionResponse.session:type_name -> allowops.v1.CliSession
+	56, // 32: allowops.v1.CliSession.created_at:type_name -> google.protobuf.Timestamp
+	56, // 33: allowops.v1.CliSession.expires_at:type_name -> google.protobuf.Timestamp
+	56, // 34: allowops.v1.CliSession.last_used_at:type_name -> google.protobuf.Timestamp
+	56, // 35: allowops.v1.CliSession.revoked_at:type_name -> google.protobuf.Timestamp
+	17, // 36: allowops.v1.GetCurrentSessionResponse.user:type_name -> allowops.v1.User
+	0,  // 37: allowops.v1.GetCurrentSessionResponse.client:type_name -> allowops.v1.LoginClient
+	56, // 38: allowops.v1.GetCurrentSessionResponse.expires_at:type_name -> google.protobuf.Timestamp
+	59, // 39: allowops.v1.GetCurrentSessionResponse.gateway_update:type_name -> allowops.v1.GatewayUpdate
+	57, // 40: allowops.v1.ListCliSessionsRequest.page:type_name -> allowops.v1.PageRequest
+	45, // 41: allowops.v1.ListCliSessionsResponse.sessions:type_name -> allowops.v1.CliSession
+	58, // 42: allowops.v1.ListCliSessionsResponse.page:type_name -> allowops.v1.PageResponse
+	3,  // 43: allowops.v1.ServiceAccountService.CreateServiceAccount:input_type -> allowops.v1.CreateServiceAccountRequest
+	5,  // 44: allowops.v1.ServiceAccountService.GetServiceAccount:input_type -> allowops.v1.GetServiceAccountRequest
+	7,  // 45: allowops.v1.ServiceAccountService.ListServiceAccounts:input_type -> allowops.v1.ListServiceAccountsRequest
+	9,  // 46: allowops.v1.ServiceAccountService.UpdateServiceAccount:input_type -> allowops.v1.UpdateServiceAccountRequest
+	11, // 47: allowops.v1.ServiceAccountService.CreateServiceAccountToken:input_type -> allowops.v1.CreateServiceAccountTokenRequest
+	13, // 48: allowops.v1.ServiceAccountService.ListServiceAccountTokens:input_type -> allowops.v1.ListServiceAccountTokensRequest
+	15, // 49: allowops.v1.ServiceAccountService.RevokeServiceAccountToken:input_type -> allowops.v1.RevokeServiceAccountTokenRequest
+	18, // 50: allowops.v1.UserService.ListUsers:input_type -> allowops.v1.ListUsersRequest
+	20, // 51: allowops.v1.UserService.GetUser:input_type -> allowops.v1.GetUserRequest
+	22, // 52: allowops.v1.UserService.SetUserRoles:input_type -> allowops.v1.SetUserRolesRequest
+	24, // 53: allowops.v1.UserService.SetUserDisabled:input_type -> allowops.v1.SetUserDisabledRequest
+	27, // 54: allowops.v1.UserService.ListRoles:input_type -> allowops.v1.ListRolesRequest
+	30, // 55: allowops.v1.UserService.GetRoleMappings:input_type -> allowops.v1.GetRoleMappingsRequest
+	32, // 56: allowops.v1.UserService.SaveRoleMappings:input_type -> allowops.v1.SaveRoleMappingsRequest
+	35, // 57: allowops.v1.AuthService.GetLoginMethods:input_type -> allowops.v1.GetLoginMethodsRequest
+	37, // 58: allowops.v1.AuthService.BeginOidcLogin:input_type -> allowops.v1.BeginOidcLoginRequest
+	39, // 59: allowops.v1.AuthService.CompleteOidcLogin:input_type -> allowops.v1.CompleteOidcLoginRequest
+	41, // 60: allowops.v1.AuthService.LoginLdap:input_type -> allowops.v1.LoginLdapRequest
+	43, // 61: allowops.v1.AuthService.ExchangeCliSession:input_type -> allowops.v1.ExchangeCliSessionRequest
+	46, // 62: allowops.v1.AuthService.GetCurrentSession:input_type -> allowops.v1.GetCurrentSessionRequest
+	48, // 63: allowops.v1.AuthService.Logout:input_type -> allowops.v1.LogoutRequest
+	50, // 64: allowops.v1.AuthService.ListCliSessions:input_type -> allowops.v1.ListCliSessionsRequest
+	52, // 65: allowops.v1.AuthService.RevokeCliSession:input_type -> allowops.v1.RevokeCliSessionRequest
+	54, // 66: allowops.v1.AuthService.RevokeUserSessions:input_type -> allowops.v1.RevokeUserSessionsRequest
+	4,  // 67: allowops.v1.ServiceAccountService.CreateServiceAccount:output_type -> allowops.v1.CreateServiceAccountResponse
+	6,  // 68: allowops.v1.ServiceAccountService.GetServiceAccount:output_type -> allowops.v1.GetServiceAccountResponse
+	8,  // 69: allowops.v1.ServiceAccountService.ListServiceAccounts:output_type -> allowops.v1.ListServiceAccountsResponse
+	10, // 70: allowops.v1.ServiceAccountService.UpdateServiceAccount:output_type -> allowops.v1.UpdateServiceAccountResponse
+	12, // 71: allowops.v1.ServiceAccountService.CreateServiceAccountToken:output_type -> allowops.v1.CreateServiceAccountTokenResponse
+	14, // 72: allowops.v1.ServiceAccountService.ListServiceAccountTokens:output_type -> allowops.v1.ListServiceAccountTokensResponse
+	16, // 73: allowops.v1.ServiceAccountService.RevokeServiceAccountToken:output_type -> allowops.v1.RevokeServiceAccountTokenResponse
+	19, // 74: allowops.v1.UserService.ListUsers:output_type -> allowops.v1.ListUsersResponse
+	21, // 75: allowops.v1.UserService.GetUser:output_type -> allowops.v1.GetUserResponse
+	23, // 76: allowops.v1.UserService.SetUserRoles:output_type -> allowops.v1.SetUserRolesResponse
+	25, // 77: allowops.v1.UserService.SetUserDisabled:output_type -> allowops.v1.SetUserDisabledResponse
+	28, // 78: allowops.v1.UserService.ListRoles:output_type -> allowops.v1.ListRolesResponse
+	31, // 79: allowops.v1.UserService.GetRoleMappings:output_type -> allowops.v1.GetRoleMappingsResponse
+	33, // 80: allowops.v1.UserService.SaveRoleMappings:output_type -> allowops.v1.SaveRoleMappingsResponse
+	36, // 81: allowops.v1.AuthService.GetLoginMethods:output_type -> allowops.v1.GetLoginMethodsResponse
+	38, // 82: allowops.v1.AuthService.BeginOidcLogin:output_type -> allowops.v1.BeginOidcLoginResponse
+	40, // 83: allowops.v1.AuthService.CompleteOidcLogin:output_type -> allowops.v1.CompleteOidcLoginResponse
+	42, // 84: allowops.v1.AuthService.LoginLdap:output_type -> allowops.v1.LoginLdapResponse
+	44, // 85: allowops.v1.AuthService.ExchangeCliSession:output_type -> allowops.v1.ExchangeCliSessionResponse
+	47, // 86: allowops.v1.AuthService.GetCurrentSession:output_type -> allowops.v1.GetCurrentSessionResponse
+	49, // 87: allowops.v1.AuthService.Logout:output_type -> allowops.v1.LogoutResponse
+	51, // 88: allowops.v1.AuthService.ListCliSessions:output_type -> allowops.v1.ListCliSessionsResponse
+	53, // 89: allowops.v1.AuthService.RevokeCliSession:output_type -> allowops.v1.RevokeCliSessionResponse
+	55, // 90: allowops.v1.AuthService.RevokeUserSessions:output_type -> allowops.v1.RevokeUserSessionsResponse
+	67, // [67:91] is the sub-list for method output_type
+	43, // [43:67] is the sub-list for method input_type
+	43, // [43:43] is the sub-list for extension type_name
+	43, // [43:43] is the sub-list for extension extendee
+	0,  // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_allowops_v1_identity_proto_init() }
@@ -3292,14 +3506,14 @@ func file_allowops_v1_identity_proto_init() {
 	file_allowops_v1_common_proto_init()
 	file_allowops_v1_system_proto_init()
 	file_allowops_v1_identity_proto_msgTypes[10].OneofWrappers = []any{}
-	file_allowops_v1_identity_proto_msgTypes[39].OneofWrappers = []any{}
+	file_allowops_v1_identity_proto_msgTypes[41].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_allowops_v1_identity_proto_rawDesc), len(file_allowops_v1_identity_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   51,
+			NumMessages:   55,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

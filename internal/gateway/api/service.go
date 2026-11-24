@@ -296,7 +296,7 @@ func operation(procedure string) (authz.Operation, bool, bool) {
 		return "", true, true
 	case rpc.AuthServiceGetCurrentSessionProcedure, rpc.AuthServiceListCliSessionsProcedure:
 		return "", false, false
-	case rpc.AuthServiceLogoutProcedure, rpc.AuthServiceRevokeCliSessionProcedure:
+	case rpc.AuthServiceLogoutProcedure, rpc.AuthServiceRevokeCliSessionProcedure, rpc.AuthServiceRevokeUserSessionsProcedure:
 		return "", false, true
 	}
 	return authz.Operation("unknown_operation"), false, true

@@ -56,15 +56,6 @@ func (q *Queries) CountLiveOidcTransactions(ctx context.Context) (int64, error) 
 	return count, err
 }
 
-const deleteCliLoginCode = `-- name: DeleteCliLoginCode :exec
-DELETE FROM cli_login_codes WHERE code_hash=$1
-`
-
-func (q *Queries) DeleteCliLoginCode(ctx context.Context, codeHash []byte) error {
-	_, err := q.db.Exec(ctx, deleteCliLoginCode, codeHash)
-	return err
-}
-
 const deleteExpiredOidcTransactions = `-- name: DeleteExpiredOidcTransactions :exec
 DELETE FROM oidc_transactions WHERE expires_at<=clock_timestamp()
 `
@@ -83,8 +74,17 @@ func (q *Queries) DeleteRoleMappings(ctx context.Context) error {
 	return err
 }
 
+const deleteUserCliLoginCodes = `-- name: DeleteUserCliLoginCodes :exec
+DELETE FROM cli_login_codes WHERE user_id=$1
+`
+
+func (q *Queries) DeleteUserCliLoginCodes(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, deleteUserCliLoginCodes, userID)
+	return err
+}
+
 const getConsoleUser = `-- name: GetConsoleUser :one
-SELECT user_id,provider_id,provider_subject,kind,username,email,display_name,groups,manual_roles,teams,revision FROM console_users WHERE user_id=$1
+SELECT user_id, provider_id, provider_subject, kind, username, email, display_name, groups, manual_roles, teams, revision, disabled FROM console_users WHERE user_id=$1
 `
 
 func (q *Queries) GetConsoleUser(ctx context.Context, userID string) (ConsoleUser, error) {
@@ -102,24 +102,9 @@ func (q *Queries) GetConsoleUser(ctx context.Context, userID string) (ConsoleUse
 		&i.ManualRoles,
 		&i.Teams,
 		&i.Revision,
+		&i.Disabled,
 	)
 	return i, err
-}
-
-const getConsoleUserID = `-- name: GetConsoleUserID :one
-SELECT user_id FROM console_users WHERE provider_id=$1 AND provider_subject=$2
-`
-
-type GetConsoleUserIDParams struct {
-	ProviderID      string
-	ProviderSubject string
-}
-
-func (q *Queries) GetConsoleUserID(ctx context.Context, arg GetConsoleUserIDParams) (string, error) {
-	row := q.db.QueryRow(ctx, getConsoleUserID, arg.ProviderID, arg.ProviderSubject)
-	var user_id string
-	err := row.Scan(&user_id)
-	return user_id, err
 }
 
 const getIdentitySession = `-- name: GetIdentitySession :one
@@ -180,6 +165,23 @@ func (q *Queries) GetServiceAccount(ctx context.Context, accountID string) (Serv
 	return i, err
 }
 
+const hasOtherEnabledAdmin = `-- name: HasOtherEnabledAdmin :one
+SELECT EXISTS (
+    SELECT 1 FROM console_users u WHERE u.user_id<>$1 AND NOT u.disabled
+    AND ('admin'=ANY(u.manual_roles) OR EXISTS (
+        SELECT 1 FROM role_mappings m WHERE m.provider_id=u.provider_id
+        AND m.group_name=ANY(u.groups) AND 'admin'=ANY(m.roles)
+    ))
+)
+`
+
+func (q *Queries) HasOtherEnabledAdmin(ctx context.Context, userID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOtherEnabledAdmin, userID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const insertCliLoginCode = `-- name: InsertCliLoginCode :exec
 INSERT INTO cli_login_codes(code_hash,user_id,challenge,expires_at) VALUES ($1,$2,$3,$4)
 `
@@ -202,16 +204,19 @@ func (q *Queries) InsertCliLoginCode(ctx context.Context, arg InsertCliLoginCode
 }
 
 const insertIdentitySession = `-- name: InsertIdentitySession :one
-INSERT INTO identity_sessions(session_id,user_id,token_hash,client,csrf_token,expires_at) VALUES ($1,$2,$3,$4,$5,$6) RETURNING session_id,user_id,created_at,expires_at,last_used_at,revoked_at
+INSERT INTO identity_sessions(session_id,user_id,token_hash,client,csrf_token,expires_at)
+SELECT $1,u.user_id,$2,$3,$4,$5
+FROM console_users u WHERE u.user_id=$6 AND NOT u.disabled FOR SHARE OF u
+RETURNING session_id,user_id,created_at,expires_at,last_used_at,revoked_at
 `
 
 type InsertIdentitySessionParams struct {
 	SessionID string
-	UserID    string
 	TokenHash []byte
 	Client    string
 	CsrfToken string
 	ExpiresAt pgtype.Timestamptz
+	UserID    string
 }
 
 type InsertIdentitySessionRow struct {
@@ -226,11 +231,11 @@ type InsertIdentitySessionRow struct {
 func (q *Queries) InsertIdentitySession(ctx context.Context, arg InsertIdentitySessionParams) (InsertIdentitySessionRow, error) {
 	row := q.db.QueryRow(ctx, insertIdentitySession,
 		arg.SessionID,
-		arg.UserID,
 		arg.TokenHash,
 		arg.Client,
 		arg.CsrfToken,
 		arg.ExpiresAt,
+		arg.UserID,
 	)
 	var i InsertIdentitySessionRow
 	err := row.Scan(
@@ -569,19 +574,39 @@ func (q *Queries) ListServiceAccounts(ctx context.Context) ([]ServiceAccount, er
 	return items, nil
 }
 
-const lockCliLoginCode = `-- name: LockCliLoginCode :one
-SELECT user_id,challenge FROM cli_login_codes WHERE code_hash=$1 AND expires_at>clock_timestamp() FOR UPDATE
+const lockCliLoginUser = `-- name: LockCliLoginUser :one
+SELECT u.user_id FROM console_users u JOIN cli_login_codes c ON c.user_id=u.user_id
+WHERE c.code_hash=$1 AND c.expires_at>clock_timestamp() AND NOT u.disabled FOR SHARE OF u
 `
 
-type LockCliLoginCodeRow struct {
-	UserID    string
-	Challenge string
+func (q *Queries) LockCliLoginUser(ctx context.Context, codeHash []byte) (string, error) {
+	row := q.db.QueryRow(ctx, lockCliLoginUser, codeHash)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
 }
 
-func (q *Queries) LockCliLoginCode(ctx context.Context, codeHash []byte) (LockCliLoginCodeRow, error) {
-	row := q.db.QueryRow(ctx, lockCliLoginCode, codeHash)
-	var i LockCliLoginCodeRow
-	err := row.Scan(&i.UserID, &i.Challenge)
+const lockConsoleUser = `-- name: LockConsoleUser :one
+SELECT user_id, provider_id, provider_subject, kind, username, email, display_name, groups, manual_roles, teams, revision, disabled FROM console_users WHERE user_id=$1 FOR NO KEY UPDATE
+`
+
+func (q *Queries) LockConsoleUser(ctx context.Context, userID string) (ConsoleUser, error) {
+	row := q.db.QueryRow(ctx, lockConsoleUser, userID)
+	var i ConsoleUser
+	err := row.Scan(
+		&i.UserID,
+		&i.ProviderID,
+		&i.ProviderSubject,
+		&i.Kind,
+		&i.Username,
+		&i.Email,
+		&i.DisplayName,
+		&i.Groups,
+		&i.ManualRoles,
+		&i.Teams,
+		&i.Revision,
+		&i.Disabled,
+	)
 	return i, err
 }
 
@@ -657,8 +682,17 @@ func (q *Queries) RevokeServiceAccountToken(ctx context.Context, arg RevokeServi
 	return result.RowsAffected(), nil
 }
 
+const revokeUserSessions = `-- name: RevokeUserSessions :exec
+UPDATE identity_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeUserSessions(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, revokeUserSessions, userID)
+	return err
+}
+
 const searchConsoleUsers = `-- name: SearchConsoleUsers :many
-SELECT user_id,provider_id,provider_subject,kind,username,email,display_name,groups,manual_roles,teams,revision FROM console_users WHERE $1::text='' OR position(lower($1::text) in lower(username||' '||email||' '||display_name))>0 ORDER BY user_id
+SELECT user_id, provider_id, provider_subject, kind, username, email, display_name, groups, manual_roles, teams, revision, disabled FROM console_users WHERE $1::text='' OR position(lower($1::text) in lower(username||' '||email||' '||display_name))>0 ORDER BY user_id
 `
 
 func (q *Queries) SearchConsoleUsers(ctx context.Context, query string) ([]ConsoleUser, error) {
@@ -682,6 +716,7 @@ func (q *Queries) SearchConsoleUsers(ctx context.Context, query string) ([]Conso
 			&i.ManualRoles,
 			&i.Teams,
 			&i.Revision,
+			&i.Disabled,
 		); err != nil {
 			return nil, err
 		}
@@ -691,6 +726,34 @@ func (q *Queries) SearchConsoleUsers(ctx context.Context, query string) ([]Conso
 		return nil, err
 	}
 	return items, nil
+}
+
+const setConsoleUserDisabled = `-- name: SetConsoleUserDisabled :one
+UPDATE console_users SET disabled=$3 WHERE user_id=$1 AND revision=$2 RETURNING revision
+`
+
+type SetConsoleUserDisabledParams struct {
+	UserID   string
+	Revision int64
+	Disabled bool
+}
+
+func (q *Queries) SetConsoleUserDisabled(ctx context.Context, arg SetConsoleUserDisabledParams) (int64, error) {
+	row := q.db.QueryRow(ctx, setConsoleUserDisabled, arg.UserID, arg.Revision, arg.Disabled)
+	var revision int64
+	err := row.Scan(&revision)
+	return revision, err
+}
+
+const takeCliLoginCode = `-- name: TakeCliLoginCode :one
+DELETE FROM cli_login_codes WHERE code_hash=$1 AND expires_at>clock_timestamp() RETURNING challenge
+`
+
+func (q *Queries) TakeCliLoginCode(ctx context.Context, codeHash []byte) (string, error) {
+	row := q.db.QueryRow(ctx, takeCliLoginCode, codeHash)
+	var challenge string
+	err := row.Scan(&challenge)
+	return challenge, err
 }
 
 const takeOidcTransaction = `-- name: TakeOidcTransaction :one
@@ -795,9 +858,10 @@ func (q *Queries) UpdateServiceAccount(ctx context.Context, arg UpdateServiceAcc
 	return i, err
 }
 
-const upsertConsoleUser = `-- name: UpsertConsoleUser :exec
+const upsertConsoleUser = `-- name: UpsertConsoleUser :one
 INSERT INTO console_users(user_id,provider_id,provider_subject,kind,username,email,groups) VALUES ($1,$2,$3,$4,$3,$5,$6)
       ON CONFLICT(provider_id,provider_subject) DO UPDATE SET email=EXCLUDED.email,groups=EXCLUDED.groups,revision=console_users.revision+1
+      WHERE NOT console_users.disabled RETURNING user_id
 `
 
 type UpsertConsoleUserParams struct {
@@ -809,8 +873,8 @@ type UpsertConsoleUserParams struct {
 	Groups          []string
 }
 
-func (q *Queries) UpsertConsoleUser(ctx context.Context, arg UpsertConsoleUserParams) error {
-	_, err := q.db.Exec(ctx, upsertConsoleUser,
+func (q *Queries) UpsertConsoleUser(ctx context.Context, arg UpsertConsoleUserParams) (string, error) {
+	row := q.db.QueryRow(ctx, upsertConsoleUser,
 		arg.UserID,
 		arg.ProviderID,
 		arg.ProviderSubject,
@@ -818,5 +882,7 @@ func (q *Queries) UpsertConsoleUser(ctx context.Context, arg UpsertConsoleUserPa
 		arg.Email,
 		arg.Groups,
 	)
-	return err
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
 }

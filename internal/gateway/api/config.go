@@ -19,6 +19,9 @@ type ProviderConfig struct {
 	IssuerURL            string          `yaml:"issuer_url"`
 	ClientID             string          `yaml:"client_id"`
 	ClientSecretEnv      string          `yaml:"client_secret_env"`
+	Scopes               []string        `yaml:"scopes"`
+	GroupsClaim          string          `yaml:"groups_claim"`
+	FetchUserInfo        bool            `yaml:"fetch_userinfo"`
 	URL                  string          `yaml:"url"`
 	StartTLS             bool            `yaml:"start_tls"`
 	UserBaseDN           string          `yaml:"user_base_dn"`
@@ -80,7 +83,10 @@ func (s *Service) ConfigureProviders(ctx context.Context, configs []ProviderConf
 				}
 				return nil
 			}}
-			if err := s.AddOIDC(ctx, cfg.ID, cfg.DisplayName, secret, authn.OIDCConfig{IssuerURL: cfg.IssuerURL, ClientID: cfg.ClientID, HTTPClient: client}); err != nil {
+			if err := s.AddOIDC(ctx, cfg.ID, cfg.DisplayName, secret, authn.OIDCConfig{
+				IssuerURL: cfg.IssuerURL, ClientID: cfg.ClientID, HTTPClient: client,
+				Scopes: cfg.Scopes, GroupsClaim: cfg.GroupsClaim, FetchUserInfo: cfg.FetchUserInfo,
+			}); err != nil {
 				return err
 			}
 		case "ldap":

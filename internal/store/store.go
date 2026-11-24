@@ -19,7 +19,7 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-const SchemaVersion int64 = 10
+const SchemaVersion int64 = 11
 const NotificationChannel = "allowops_gateway"
 
 //go:embed migrations/*.sql
