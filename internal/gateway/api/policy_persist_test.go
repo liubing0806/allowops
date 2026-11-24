@@ -2,11 +2,42 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
+	"github.com/liubing0806/allowops/internal/gateway/authz"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestPolicyTestEnvironmentRoundTripsExplicitTargets(t *testing.T) {
+	original := testEnvironment{
+		Environment: authz.Environment{TimeNS: 1234567890, SourceIP: "192.0.2.1"},
+		Cases: []*v1.PolicyTestCase{
+			{SubjectId: "inspector", Operation: "view_hosts"},
+			{SubjectId: "inspector", Operation: "execute_action", Action: "inspect", Targets: hostNames("host-a", "host-b"), At: &timestamppb.Timestamp{Seconds: 123, Nanos: 456}, SourceIp: "198.51.100.1"},
+			{SubjectId: "inspector", Operation: "execute_action", Action: "inspect", Targets: &v1.HostTargets{Selection: &v1.HostTargets_Selector{Selector: "env=prod"}}},
+		},
+	}
+	b, err := json.Marshal(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded testEnvironment
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Environment != original.Environment || len(decoded.Cases) != len(original.Cases) {
+		t.Fatalf("decoded environment = %+v, want %+v", decoded, original)
+	}
+	for i, want := range original.Cases {
+		if got := decoded.Cases[i]; !proto.Equal(got, want) {
+			t.Errorf("case %d = %v, want %v", i, got, want)
+		}
+	}
+}
 
 func TestPersistPolicyRejectsStaleBaseAndMissingTarget(t *testing.T) {
 	f := newFixture(t)
