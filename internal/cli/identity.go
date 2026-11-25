@@ -362,6 +362,8 @@ func readRules(path string) (*v1.PolicyRules, error) {
 					rule["effect"] = "POLICY_EFFECT_ALLOW"
 				case "deny":
 					rule["effect"] = "POLICY_EFFECT_DENY"
+				case "require_approval":
+					rule["effect"] = "POLICY_EFFECT_REQUIRE_APPROVAL"
 				}
 			}
 		}
@@ -410,10 +412,13 @@ func NewPolicyCmd() *cobra.Command {
 		if rules, ok := object["rules"].([]any); ok {
 			for _, raw := range rules {
 				r := raw.(map[string]any)
-				if r["effect"] == "POLICY_EFFECT_ALLOW" {
+				switch r["effect"] {
+				case "POLICY_EFFECT_ALLOW":
 					r["effect"] = "allow"
-				} else if r["effect"] == "POLICY_EFFECT_DENY" {
+				case "POLICY_EFFECT_DENY":
 					r["effect"] = "deny"
+				case "POLICY_EFFECT_REQUIRE_APPROVAL":
+					r["effect"] = "require_approval"
 				}
 			}
 		}

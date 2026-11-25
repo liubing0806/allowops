@@ -7,10 +7,12 @@ import { useTranslation } from 'react-i18next'
 import { HistoryIcon, PlusIcon, SparklesIcon } from 'lucide-react'
 import {
   api,
+  formatApprovalRoleSets,
   formatLabels,
   labelsRepresentable,
   parseLabels,
   type PolicyChange,
+  type PolicyDecision,
   type PolicyRule,
   type PolicyTest,
   type PolicyTestCase,
@@ -28,6 +30,7 @@ import {
 import { SegmentedControl } from '@/components/console/SegmentedControl'
 import { SidePanel } from '@/components/console/SidePanel'
 import { StatusDot } from '@/components/console/StatusDot'
+import { softTone, statusTone } from '@/components/console/tone'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
@@ -69,7 +72,11 @@ const schema = z
         return false
       }
     }, 'error.timezone'),
-    effect: z.enum(['POLICY_EFFECT_ALLOW', 'POLICY_EFFECT_DENY']),
+    effect: z.enum(['POLICY_EFFECT_ALLOW', 'POLICY_EFFECT_DENY', 'POLICY_EFFECT_REQUIRE_APPROVAL']),
+    approverRoles: z.string(),
+    minApprovals: z.string(),
+    ttlSeconds: z.string(),
+    allowOwnerApprove: z.boolean(),
   })
   .refine(
     (value) =>
@@ -83,6 +90,23 @@ const schema = z
         Number(value.hoursTo) <= 24),
     { message: 'error.hours', path: ['hoursTo'] },
   )
+  .superRefine((value, ctx) => {
+    if (value.effect !== 'POLICY_EFFECT_REQUIRE_APPROVAL') return
+    const issue = (field: string, message: string) =>
+      ctx.addIssue({ code: 'custom', path: [field], message })
+    const operations = commaList(value.operations)
+    if (operations.length !== 1 || operations[0] !== 'execute_action')
+      issue('operations', 'policy.approvalOperationError')
+    const roles = commaList(value.approverRoles)
+    if (!roles.length || roles.length > 16 || roles.some((role) => !/^[a-zA-Z0-9._-]{1,64}$/.test(role)))
+      issue('approverRoles', 'policy.approvalRolesError')
+    const min = Number(value.minApprovals)
+    if (!Number.isInteger(min) || min < 1 || min > 5)
+      issue('minApprovals', 'policy.approvalMinError')
+    const ttl = Number(value.ttlSeconds)
+    if (value.ttlSeconds && (!Number.isInteger(ttl) || ttl < 60 || ttl > 86400))
+      issue('ttlSeconds', 'policy.approvalTtlError')
+  })
 
 // Operations a test case may name; the gateway rejects any other value.
 const testOperations = [
@@ -93,6 +117,8 @@ const testOperations = [
   'view_knowledge',
   'view_catalog',
   'view_jobs',
+  'view_approvals',
+  'approve_jobs',
   'view_output',
   'view_audit',
   'view_system',
@@ -150,10 +176,8 @@ function candidateKey(candidate: Candidate) {
 function caseReady(scope: Scope, value: CaseInput) {
   if (scope === 'all') return true
   if (!value.subjectId) return false
-  return (
-    value.operation !== 'execute_action' ||
-    (value.action !== '' && value.selector.trim() !== '')
-  )
+  const requiresTargets = value.operation === 'execute_action' || value.operation === 'approve_jobs'
+  return !requiresTargets || (value.action !== '' && value.selector.trim() !== '')
 }
 
 function testCases(candidate: Candidate): PolicyTestCase[] {
@@ -598,8 +622,7 @@ function RuleCard({
 }) {
   const { t } = useTranslation()
   const id = useId()
-  const deny = rule.effect === 'POLICY_EFFECT_DENY'
-  const effect = t(deny ? 'policy.deny' : 'policy.allow')
+  const effect = t(`status.${rule.effect}`)
   const many = (items: string[], key: string) =>
     items.length > 2 ? t(key, { count: items.length }) : items.join(', ')
   const chips: [string, string][] = [
@@ -651,9 +674,7 @@ function RuleCard({
         <span
           className={cn(
             'rounded-full px-[7px] text-[11px] font-semibold',
-            deny
-              ? 'bg-destructive-soft text-destructive'
-              : 'bg-success-soft text-success',
+            softTone[statusTone(rule.effect)],
           )}
         >
           {effect}
@@ -767,20 +788,29 @@ function CaseFields({
 function SimulationResult({ simulation }: { simulation: Simulation }) {
   const { t } = useTranslation()
   const { test, changes } = simulation
-  const flipped = changes.filter((c) => c.before.effect !== c.after.effect)
-  const toAllow = flipped.filter(
+  const changed = changes.filter((c) =>
+    c.before.effect !== c.after.effect ||
+    canonical(c.before.approval) !== canonical(c.after.approval),
+  )
+  const toAllow = changed.filter(
     (c) => c.after.effect === 'POLICY_EFFECT_ALLOW',
+  ).length
+  const toDeny = changed.filter((c) => c.after.effect === 'POLICY_EFFECT_DENY').length
+  const approvalChanges = changed.filter((c) =>
+    c.before.approval || c.after.approval || c.after.effect === 'POLICY_EFFECT_REQUIRE_APPROVAL',
   ).length
   return (
     <div className="flex flex-col border-t border-border-subtle">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-background px-4 py-2.5">
         <h3 className="text-sm font-semibold">{t('policy.result')}</h3>
         <span className="font-medium">
-          {flipped.length
+          {approvalChanges
+            ? t('policy.approvalSummaryChanged', { count: changed.length, approvals: approvalChanges })
+            : changed.length
             ? t('policy.summaryChanged', {
-                count: flipped.length,
+                count: changed.length,
                 allow: toAllow,
-                deny: flipped.length - toAllow,
+                deny: toDeny,
               })
             : t('policy.summaryNone')}
         </span>
@@ -823,7 +853,9 @@ function SimulationResult({ simulation }: { simulation: Simulation }) {
               ? undefined
               : row.after.effect === 'POLICY_EFFECT_ALLOW'
                 ? 'bg-success-soft'
-                : 'bg-destructive-soft'
+                : row.after.effect === 'POLICY_EFFECT_REQUIRE_APPROVAL'
+                  ? 'bg-warning-soft'
+                  : 'bg-destructive-soft'
           }
           columns={[
             {
@@ -838,12 +870,12 @@ function SimulationResult({ simulation }: { simulation: Simulation }) {
             {
               id: 'before',
               header: t('policy.before'),
-              cell: ({ row }) => <Status value={row.original.before.effect} />,
+              cell: ({ row }) => <SimulatedDecision decision={row.original.before} />,
             },
             {
               id: 'after',
               header: t('policy.after'),
-              cell: ({ row }) => <Status value={row.original.after.effect} />,
+              cell: ({ row }) => <SimulatedDecision decision={row.original.after} />,
             },
             {
               id: 'matched',
@@ -857,6 +889,36 @@ function SimulationResult({ simulation }: { simulation: Simulation }) {
           ]}
         />
       </div>
+    </div>
+  )
+}
+
+function SimulatedDecision({ decision }: { decision: PolicyDecision }) {
+  const { t } = useTranslation()
+  const approval = decision.approval
+  return (
+    <div className="space-y-1">
+      <Status value={decision.effect} />
+      {approval && (
+        <dl className="space-y-0.5 text-xs text-foreground-2">
+          <div>
+            <dt className="inline">{t('policy.approvalMin')} </dt>
+            <dd className="inline font-mono">{approval.minApprovals}</dd>
+          </div>
+          <div>
+            <dt className="inline">{t('policy.approvalTtl')} </dt>
+            <dd className="inline font-mono">{approval.ttlSeconds || t('policy.approvalDefaultTtl')}</dd>
+          </div>
+          <div>
+            <dt className="inline">{t('policy.approvalOwner')} </dt>
+            <dd className="inline">{t(approval.allowOwnerApprove ? 'policy.yes' : 'policy.no')}</dd>
+          </div>
+          <div>
+            <dt className="inline">{t('policy.approvalRoleSets')} </dt>
+            <dd className="inline font-mono">{formatApprovalRoleSets(approval.requiredApproverRoleSets) || t('common.none')}</dd>
+          </div>
+        </dl>
+      )}
     </div>
   )
 }
@@ -910,10 +972,11 @@ function RuleForm({
       hoursFrom: rule?.hours ? String(rule.hours.from) : '',
       hoursTo: rule?.hours ? String(rule.hours.to) : '',
       timezone: rule?.hours?.timezone ?? 'Asia/Shanghai',
-      effect:
-        rule?.effect === 'POLICY_EFFECT_DENY'
-          ? 'POLICY_EFFECT_DENY'
-          : 'POLICY_EFFECT_ALLOW',
+      effect: rule?.effect === 'POLICY_EFFECT_UNSPECIFIED' ? 'POLICY_EFFECT_ALLOW' : rule?.effect ?? 'POLICY_EFFECT_ALLOW',
+      approverRoles: rule?.approval?.approverRoles.join(',') ?? '',
+      minApprovals: String(rule?.approval?.minApprovals || 1),
+      ttlSeconds: rule?.approval ? String(rule.approval.ttlSeconds || '') : '1800',
+      allowOwnerApprove: rule?.approval?.allowOwnerApprove ?? false,
     },
   })
 
@@ -961,6 +1024,11 @@ function RuleForm({
               label: t('policy.deny'),
               tone: 'destructive',
             },
+            {
+              value: 'POLICY_EFFECT_REQUIRE_APPROVAL',
+              label: t('status.POLICY_EFFECT_REQUIRE_APPROVAL'),
+              tone: 'warning',
+            },
           ]}
         />
         {onDelete && (
@@ -988,6 +1056,14 @@ function RuleForm({
             risks: commaList(values.risks),
             hostLabels: parseLabels(values.labels),
             effect: values.effect,
+            approval: values.effect === 'POLICY_EFFECT_REQUIRE_APPROVAL'
+              ? {
+                  approverRoles: commaList(values.approverRoles),
+                  minApprovals: Number(values.minApprovals),
+                  ttlSeconds: Number(values.ttlSeconds),
+                  allowOwnerApprove: values.allowOwnerApprove,
+                }
+              : undefined,
             teams: commaList(values.teams),
             owners: commaList(values.owners),
             sourceCidrs: commaList(values.sourceCidrs),
@@ -1072,6 +1148,24 @@ function RuleForm({
         >
           <Input className={input} {...form.register('timezone')} />
         </Field>
+        {effect === 'POLICY_EFFECT_REQUIRE_APPROVAL' && (
+          <fieldset className="col-span-full grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-2.5 border-t border-border-subtle pt-2">
+            <legend className="pr-2 text-xs font-medium">{t('policy.approvalConfig')}</legend>
+            <Field label={t('policy.approvalRoles')} error={form.formState.errors.approverRoles?.message}>
+              <Input className={input} {...form.register('approverRoles')} />
+            </Field>
+            <Field label={t('policy.approvalMin')} error={form.formState.errors.minApprovals?.message}>
+              <Input className={input} type="number" min={1} max={5} {...form.register('minApprovals')} />
+            </Field>
+            <Field label={t('policy.approvalTtl')} error={form.formState.errors.ttlSeconds?.message}>
+              <Input className={input} type="number" min={60} max={86400} placeholder="1800" {...form.register('ttlSeconds')} />
+            </Field>
+            <label className="flex items-center gap-2 self-end py-2 text-sm">
+              <input type="checkbox" className="accent-primary" {...form.register('allowOwnerApprove')} />
+              {t('policy.approvalOwner')}
+            </label>
+          </fieldset>
+        )}
         <div className="col-span-full flex flex-wrap items-center gap-2.5">
           <Button size="sm" variant="outline" disabled={!representable}>
             {t('common.save')}

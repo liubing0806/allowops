@@ -31,6 +31,23 @@ async function openOutput(host = 'web-01') {
 }
 
 describe('job list and detail side by side', () => {
+  it('renders the requester reason literally in the list and detail', async () => {
+    const reason = '<img src=x onerror=alert(1)> [click](javascript:alert(1)) {{status}} $t(app.name)'
+    const { job } = await api.getJob({ jobId: FINISHED })
+    vi.spyOn(api, 'listJobs').mockResolvedValue({
+      jobs: [{ ...job, reason }],
+      page: { nextPageToken: '' },
+    })
+    vi.spyOn(api, 'getJob').mockResolvedValue({ job: { ...job, reason } })
+    open(`/jobs/${FINISHED}`)
+    const row = await screen.findByRole('link', { name: FINISHED })
+    const detail = await screen.findByRole('article', { name: FINISHED })
+    expect(row).toHaveTextContent(reason)
+    expect(within(detail).getByText(reason)).toBeVisible()
+    expect(row.querySelector('img, a')).toBeNull()
+    expect(detail.querySelector('img, a')).toBeNull()
+  })
+
   it('keeps the list filter while a job is opened', async () => {
     open('/jobs')
     expect(await screen.findByText('从列表中选择一个 job 查看详情')).toBeInTheDocument()
@@ -52,6 +69,20 @@ describe('job list and detail side by side', () => {
       'true',
     )
     expect(screen.queryByRole('link', { name: FINISHED })).not.toBeInTheDocument()
+  })
+
+  it('filters pending jobs and links their approval progress to the request', async () => {
+    const pending = 'job-20261013-0044'
+    open(`/jobs/${pending}`)
+    const status = await screen.findByRole('group', { name: 'Job 状态' })
+    fireEvent.click(within(status).getByRole('button', { name: '等待审批' }))
+    const row = await screen.findByRole('link', { name: pending })
+    expect(row).toHaveTextContent('等待审批 · 1/2')
+    const summary = await screen.findByRole('region', { name: '任务审批' })
+    expect(within(summary).getByText('已批准 1 / 2')).toBeVisible()
+    expect(within(summary).getByRole('link', { name: 'apr-20261013-0001' }))
+      .toHaveAttribute('href', '/approvals/apr-20261013-0001')
+    await waitFor(() => expect(screen.queryByRole('link', { name: RUNNING })).toBeNull())
   })
 
   it('offers cancel only for an active job', async () => {

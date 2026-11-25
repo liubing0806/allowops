@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/liubing0806/allowops/gen/allowops/v1"
+	"github.com/liubing0806/allowops/internal/catalog"
 	"github.com/liubing0806/allowops/internal/gateway/audit"
 	"github.com/liubing0806/allowops/internal/gateway/authz"
 	"github.com/liubing0806/allowops/internal/gateway/cluster"
@@ -54,7 +55,10 @@ type Service struct {
 	started, draining           atomic.Bool
 	activeJobs                  atomic.Int64
 	activePersists              atomic.Int64
-	submitMu                    sync.Mutex
+	submitMu                    sync.RWMutex
+	approvals                   ApprovalConfig
+	ApprovalNotifier            ApprovalNotifier
+	notifications               approvalNotifications
 	analysisSem                 chan struct{}
 }
 
@@ -96,7 +100,11 @@ func (s *Service) Close() {
 	s.mu.Lock()
 	s.cancel()
 	s.mu.Unlock()
+	notifications := s.stopNotifications()
 	s.wg.Wait()
+	if notifications != nil {
+		<-notifications
+	}
 }
 
 func (s *Service) clearTasks(jobID string, taskIDs ...string) {
@@ -137,6 +145,7 @@ type operationKey struct{}
 type operationState struct {
 	JobID                               string
 	Resource                            string
+	Action, Outcome                     string
 	Version                             uint64
 	Rules                               []string
 	Committed, AuthorizationAuditFailed bool
@@ -149,7 +158,12 @@ func operationInfo(ctx context.Context) *operationState {
 
 func (s *Service) audit(ctx context.Context, op, phase, outcome, jobID, resource string, version uint64, rules []string) error {
 	actor, ip := reqctx.RequestInfo(ctx)
-	_, err := s.Audit.Append(ctx, audit.Payload{SubjectID: actor, SourceIP: ip, Operation: op, Resource: resource, Reason: phase, Decision: outcome, JobID: jobID, PolicyVersion: version, MatchedRules: rules})
+	state := operationInfo(ctx)
+	action := ""
+	if state != nil {
+		action = state.Action
+	}
+	_, err := s.Audit.Append(ctx, audit.Payload{Action: action, SubjectID: actor, SourceIP: ip, Operation: op, Resource: resource, Reason: phase, Decision: outcome, JobID: jobID, PolicyVersion: version, MatchedRules: rules})
 	if err != nil {
 		if phase == "authorized" {
 			if state := operationInfo(ctx); state != nil {
@@ -172,6 +186,9 @@ func (s *Service) operation(ctx context.Context, op string, write bool, fn func(
 		outcome := "deny"
 		if err == nil {
 			outcome = "allow"
+			if state.Outcome != "" {
+				outcome = state.Outcome
+			}
 		}
 		resultCtx, cancelResult := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancelResult()
@@ -235,7 +252,11 @@ func (s *Service) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobRe
 		if expected := expectedRiskFromContext(ctx); expected != "" && a.Risk != expected {
 			return nil, detailError(connect.CodeFailedPrecondition, &v1.ErrorDetail{Reason: "ACTION_RISK_MISMATCH"})
 		}
-		batch, failures, err := prepare(a, r, s.Config)
+		batch, failures, parsedParams, err := prepare(a, r, s.Config)
+		if err != nil {
+			return nil, err
+		}
+		evidence, err := s.validateApprovalEvidence(ctx, r)
 		if err != nil {
 			return nil, err
 		}
@@ -269,55 +290,74 @@ func (s *Service) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobRe
 		}
 		denials := []*v1.HostDenial{}
 		rules := []string{}
+		var requirements []*authz.EffectiveApproval
 		for i, d := range decisions {
 			rules = append(rules, d.Result.RuleIDs...)
-			if d.Err != nil || d.Result.Decision != "allow" {
+			switch {
+			case d.Err == nil && d.Result.Decision == "allow":
+			case d.Err == nil && d.Result.Decision == "require_approval" && d.Result.Approval != nil:
+				requirements = append(requirements, d.Result.Approval)
+			default:
 				denials = append(denials, &v1.HostDenial{Host: targets[i].Name, Rules: d.Result.RuleIDs})
 			}
 		}
 		outcome := "allow"
-		if len(denials) > 0 {
-			outcome = "deny"
+		status := v1.JobStatus_JOB_STATUS_QUEUED
+		switch {
+		case len(denials) > 0:
+			outcome, status = "deny", v1.JobStatus_JOB_STATUS_DENIED
+		case len(requirements) > 0:
+			outcome, status = "require_approval", v1.JobStatus_JOB_STATUS_PENDING_APPROVAL
 		}
-		if err := s.audit(ctx, "run_job", "authorized", outcome, "", "", version, rules); err != nil {
+		state := operationInfo(ctx)
+		state.Action, state.Version, state.Rules = a.Name, version, dedupeStrings(rules)
+		var pending *approvalSubmission
+		if status == v1.JobStatus_JOB_STATUS_PENDING_APPROVAL || r.ClientRequestId != "" {
+			plan, err := freezeApproval(r, p, a, digest, parsedParams, targets, batch, failures)
+			if err != nil {
+				return nil, err
+			}
+			pending = &approvalSubmission{
+				plan: plan, requirements: authz.MergeEffectiveApprovals(requirements),
+				clientRequestID: r.ClientRequestId, selector: r.Targets.GetSelector(), evidence: evidence,
+			}
+		}
+		if err := s.audit(ctx, "run_job", "authorized", outcome, "", "", version, state.Rules); err != nil {
 			return nil, err
 		}
 		actor, _ := reqctx.RequestInfo(ctx)
-		s.submitMu.Lock()
+		s.submitMu.RLock()
 		if s.draining.Load() {
-			s.submitMu.Unlock()
+			s.submitMu.RUnlock()
 			return nil, failure(connect.CodeUnavailable, "GATEWAY_DRAINING")
 		}
-		j, err := s.create(ctx, actor, p, a, digest, r.Reason, targets, batch, failures, version, len(denials) > 0)
+		j, created, err := s.create(ctx, actor, p, a, digest, r.Reason, targets, batch, failures, version, status, pending)
+		if err == nil && created && j.Status == v1.JobStatus_JOB_STATUS_QUEUED {
+			s.startSchedule(j, a, proto.Clone(r).(*v1.RunJobRequest), batch, failures)
+		}
+		s.submitMu.RUnlock()
 		if err != nil {
-			s.submitMu.Unlock()
 			return nil, err
 		}
-		state := operationInfo(ctx)
-		state.JobID = j.JobId
-		state.Version = version
-		state.Rules = rules
-		state.Committed = true
-		if len(denials) > 0 {
-			s.submitMu.Unlock()
+		state.JobID, state.Committed = j.JobId, created
+		if j.Approval != nil {
+			state.Resource = "approval:" + j.Approval.ApprovalId
+			state.Outcome = "require_approval"
+		}
+		if created && status == v1.JobStatus_JOB_STATUS_DENIED {
 			return nil, detailError(connect.CodePermissionDenied, &v1.ErrorDetail{Reason: "JOB_DENIED", DeniedHosts: denials, PolicyVersion: version, RequestId: j.JobId})
 		}
-		request := proto.Clone(r).(*v1.RunJobRequest)
-		s.activeJobs.Add(1)
-		s.wg.Add(1)
-		go func(initial *v1.Job) {
-			defer s.wg.Done()
-			defer s.activeJobs.Add(-1)
-			if err := s.schedule(s.ctx, initial, a, request, batch, failures); err != nil {
-				logSQLFailure(s.ctx, slog.LevelError, "job scheduler stopped", initial.JobId, err)
+		if j.Status != v1.JobStatus_JOB_STATUS_PENDING_APPROVAL || r.GetWaitSeconds() > 0 {
+			j, err = s.wait(ctx, j.JobId, wait)
+			if err != nil {
+				return nil, err
 			}
-		}(j)
-		s.submitMu.Unlock()
-		j, err = s.wait(ctx, j.JobId, wait)
-		if err != nil {
-			return nil, err
+			if err := s.attachApproval(ctx, j); err != nil {
+				return nil, err
+			}
 		}
-		summary, err := s.summary(ctx, j, f, grouping)
+		summaryCtx := context.WithValue(reqctx.ForkRequestContext(ctx), operationKey{}, &operationState{})
+		summary, err := s.summary(summaryCtx, j, f, grouping)
 		if err != nil {
 			return nil, err
 		}
@@ -327,6 +367,20 @@ func (s *Service) RunJob(ctx context.Context, r *v1.RunJobRequest) (*v1.RunJobRe
 		return nil, err
 	}
 	return m.(*v1.RunJobResponse), nil
+}
+
+// startSchedule registers an already committed job before releasing submitMu.
+func (s *Service) startSchedule(j *v1.Job, a catalog.Action, r *v1.RunJobRequest, batch, failures uint32) {
+	j = proto.CloneOf(j)
+	s.activeJobs.Add(1)
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		defer s.activeJobs.Add(-1)
+		if err := s.schedule(s.ctx, j, a, r, batch, failures); err != nil {
+			logSQLFailure(s.ctx, slog.LevelError, "job scheduler stopped", j.JobId, err)
+		}
+	}()
 }
 
 func (s *Service) wait(ctx context.Context, id string, seconds uint32) (*v1.Job, error) {
@@ -339,7 +393,7 @@ func (s *Service) wait(ctx context.Context, id string, seconds uint32) (*v1.Job,
 		if err != nil {
 			return nil, err
 		}
-		if j.Status != v1.JobStatus_JOB_STATUS_QUEUED && j.Status != v1.JobStatus_JOB_STATUS_RUNNING {
+		if !isUnfinishedJobStatus(j.Status) || j.Status == v1.JobStatus_JOB_STATUS_UNSPECIFIED || seconds == 0 {
 			return j, nil
 		}
 		select {

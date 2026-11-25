@@ -18,7 +18,7 @@ import (
 )
 
 func TestEgressEndpointValidation(t *testing.T) {
-	p, err := egressConfig(Config{Egress: []string{"https://EXAMPLE.org:0443/api", "http://[::1]"}})
+	p, err := egressConfig(Config{Egress: []string{"https://EXAMPLE.org:0443/api", "http://[::1]"}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestEgressEndpointValidation(t *testing.T) {
 		"https://example.org:65536", "https://user:opaque@x.example", "https://example.org/api/%2e%2e",
 		"https://example.org/api%2fsibling", "https://[fe80::1%25eth0]",
 	} {
-		if _, err := egressConfig(Config{Egress: []string{addr}}); !errors.Is(err, errEgress) {
+		if _, err := egressConfig(Config{Egress: []string{addr}}, false); !errors.Is(err, errEgress) {
 			t.Errorf("endpoint validation accepted %q: %v", addr, err)
 		}
 	}
@@ -41,7 +41,7 @@ func TestEgressEndpointValidation(t *testing.T) {
 		{CAFile: "/absolute", Egress: []string{"http://example.org"}},
 		{CAFile: "relative", Egress: []string{"https://example.org"}},
 	} {
-		if _, err := egressConfig(cfg); !errors.Is(err, errCA) {
+		if _, err := egressConfig(cfg, false); !errors.Is(err, errCA) {
 			t.Errorf("CA configuration accepted: %v", err)
 		}
 	}
@@ -53,24 +53,24 @@ func TestEgressIPPolicy(t *testing.T) {
 		"169.254.169.123", "fe80::1", "100.100.100.200", "fd00:ec2::254", "::ffff:169.254.169.254",
 		"64:ff9b::169.254.169.254", "64:ff9b:1::10.0.0.1", "2002:7f00:0001::", "2001::1", "::10.0.0.1",
 	} {
-		if allowedIP(netip.MustParseAddr(raw), true, true) {
+		if allowedIP(netip.MustParseAddr(raw), true, true, false) {
 			t.Errorf("blocked address accepted: %s", raw)
 		}
 	}
 	for _, raw := range []string{"127.0.0.1", "::1", "::ffff:127.0.0.1"} {
 		ip := netip.MustParseAddr(raw)
-		if allowedIP(ip, false, true) || !allowedIP(ip, true, false) {
+		if allowedIP(ip, false, true, false) || !allowedIP(ip, true, false, false) {
 			t.Errorf("bad loopback handling: %s", raw)
 		}
 	}
 	for _, raw := range []string{"10.0.0.1", "fd00::1", "100.64.0.1", "::ffff:10.0.0.1"} {
 		ip := netip.MustParseAddr(raw)
-		if allowedIP(ip, false, false) || !allowedIP(ip, true, false) || !allowedIP(ip, false, true) {
+		if allowedIP(ip, false, false, false) || !allowedIP(ip, true, false, false) || !allowedIP(ip, false, true, false) {
 			t.Errorf("bad private handling: %s", raw)
 		}
 	}
 	for _, raw := range []string{"93.184.216.34", "2606:4700::1111"} {
-		if !allowedIP(netip.MustParseAddr(raw), false, false) {
+		if !allowedIP(netip.MustParseAddr(raw), false, false, false) {
 			t.Errorf("public address denied: %s", raw)
 		}
 	}
@@ -83,7 +83,7 @@ func (r resolverFunc) LookupNetIP(ctx context.Context, network, host string) ([]
 }
 
 func TestEgressDialLocksResolvedIP(t *testing.T) {
-	p, err := egressConfig(Config{Egress: []string{"https://plugin.example", "http://[::1]", "http://127.0.0.1"}})
+	p, err := egressConfig(Config{Egress: []string{"https://plugin.example", "http://[::1]", "http://127.0.0.1"}}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestEgressRedirectsAndTLS(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := Config{Egress: []string{a.URL + "/api", b.URL, plaintext.URL}, Timeout: time.Second}
-	untrusted, err := newEgressClient(cfg, nil)
+	untrusted, err := newEgressClient(cfg, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestEgressRedirectsAndTLS(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg.AllowCrossOriginRedirects = tc.cross
-			client, err := newEgressClient(cfg, nil)
+			client, err := newEgressClient(cfg, false, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -239,7 +239,7 @@ func TestEgressBlocksMethodsPathsAndRedirectTargets(t *testing.T) {
 		}
 	}))
 	defer origin.Close()
-	client, err := newEgressClient(Config{Egress: []string{origin.URL + "/allowed", target.URL}, AllowCrossOriginRedirects: true}, nil)
+	client, err := newEgressClient(Config{Egress: []string{origin.URL + "/allowed", target.URL}, AllowCrossOriginRedirects: true}, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestEgressBlocksMethodsPathsAndRedirectTargets(t *testing.T) {
 	} else {
 		resp.Body.Close()
 	}
-	denied, err := newEgressClient(Config{}, nil)
+	denied, err := newEgressClient(Config{}, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,127 @@
+syntax = "proto3";
+
+package allowops.v1;
+
+import "allowops/v1/common.proto";
+import "allowops/v1/job.proto";
+import "allowops/v1/policy.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/liubing0806/allowops/gen/allowops/v1;allowopsv1";
+
+service ApprovalService {
+  rpc ListApprovals(ListApprovalsRequest) returns (ListApprovalsResponse);
+  rpc GetApproval(GetApprovalRequest) returns (GetApprovalResponse);
+  rpc ApproveRequest(ApproveRequestRequest) returns (ApproveRequestResponse);
+  rpc RejectRequest(RejectRequestRequest) returns (RejectRequestResponse);
+  rpc CancelApproval(CancelApprovalRequest) returns (CancelApprovalResponse);
+}
+
+message ApprovalTarget {
+  string host_id = 1;
+  string hostname = 2;
+}
+
+message ApprovalDecisionRecord {
+  string actor_id = 1;
+  string actor_email = 2;
+  ApprovalVote vote = 3;
+  string reason = 4;
+  google.protobuf.Timestamp decided_at = 5;
+  uint64 policy_version = 6;
+  repeated string matched_rules = 7;
+}
+
+message ApprovalRequest {
+  string approval_id = 1;
+  string job_id = 2;
+  ApprovalStatus status = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  string action = 6;
+  string action_risk = 7;
+  CatalogRef catalog = 8;
+  bytes action_sha256 = 9;
+  bytes params_json = 10;
+  bytes filters_json = 11;
+  string target_selector = 12;
+  // Frozen targets in execution order.
+  repeated ApprovalTarget targets = 13;
+  uint32 batch_size = 14;
+  uint32 max_failures = 15;
+  bytes request_digest = 16;
+  string requester_subject_id = 17;
+  string requester_kind = 18;
+  string reason = 19;
+  JobEvidence evidence = 20;
+  uint64 policy_version = 21;
+  repeated string matched_rules = 22;
+  repeated PolicyApprovalRoleSet required_approver_role_sets = 23;
+  uint32 min_approvals = 24;
+  bool allow_owner_approve = 25;
+  uint32 approved_count = 26;
+  repeated ApprovalDecisionRecord decisions = 27;
+  google.protobuf.Timestamp decided_at = 28;
+  string decided_by = 29;
+  string decision_reason = 30;
+  optional uint64 recheck_policy_version = 31;
+  string recheck_error = 32;
+  string console_url = 33;
+  string requester_owner_id = 34;
+  OutputTrust context_trust = 35;
+  string notify_status = 36;
+  string notify_error = 37;
+  bool can_approve = 38;
+  string cannot_approve_reason = 39;
+}
+
+message ListApprovalsRequest {
+  PageRequest page = 1;
+  TimeRange created = 2;
+  repeated ApprovalStatus statuses = 3;
+  string action = 4;
+  string requester_subject_id = 5;
+  bool only_actionable = 6;
+}
+
+message ListApprovalsResponse {
+  repeated ApprovalRequest approvals = 1;
+  PageResponse page = 2;
+}
+
+message GetApprovalRequest {
+  string approval_id = 1;
+}
+
+message GetApprovalResponse {
+  ApprovalRequest approval = 1;
+}
+
+message ApproveRequestRequest {
+  string approval_id = 1;
+  // Required SHA-256 digest of the execution plan presented for approval.
+  bytes expected_request_digest = 2;
+  string reason = 3;
+}
+
+message ApproveRequestResponse {
+  ApprovalRequest approval = 1;
+  Job job = 2;
+}
+
+message RejectRequestRequest {
+  string approval_id = 1;
+  string reason = 2;
+}
+
+message RejectRequestResponse {
+  ApprovalRequest approval = 1;
+}
+
+message CancelApprovalRequest {
+  string approval_id = 1;
+}
+
+message CancelApprovalResponse {
+  ApprovalRequest approval = 1;
+}

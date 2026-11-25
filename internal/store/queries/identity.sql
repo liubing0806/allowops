@@ -59,7 +59,7 @@ SELECT account_id,name,owner_user_id,description,roles,teams,revision,created_at
 UPDATE service_accounts SET owner_user_id=$3,description=$4,roles=$5,teams=$6,revision=revision+1 WHERE account_id=$1 AND revision=$2 RETURNING account_id,name,owner_user_id,description,roles,teams,revision,created_at;
 
 -- name: InsertServiceAccountToken :one
-INSERT INTO service_account_tokens(token_id,account_id,token_hash,description,expires_at) VALUES ($1,$2,$3,$4,$5) RETURNING token_id,account_id,description,created_at,expires_at,last_used_at,revoked_at;
+INSERT INTO service_account_tokens(token_id,account_id,token_hash,description,expires_at,created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING token_id,account_id,description,created_at,expires_at,last_used_at,revoked_at;
 
 -- name: ListServiceAccountTokens :many
 SELECT token_id,account_id,description,created_at,expires_at,last_used_at,revoked_at FROM service_account_tokens WHERE account_id=$1 ORDER BY token_id;
@@ -68,7 +68,7 @@ SELECT token_id,account_id,description,created_at,expires_at,last_used_at,revoke
 UPDATE service_account_tokens SET revoked_at=COALESCE(revoked_at,now()) WHERE account_id=$1 AND token_id=$2;
 
 -- name: TouchServiceAccountToken :one
-UPDATE service_account_tokens SET last_used_at=now() WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>now() RETURNING account_id;
+UPDATE service_account_tokens SET last_used_at=now() WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>now() RETURNING account_id,token_id,created_by_user_id;
 
 -- name: TouchIdentitySession :one
 UPDATE identity_sessions SET last_used_at=now() WHERE token_hash=$1 AND client=$2 AND revoked_at IS NULL AND expires_at>now() RETURNING session_id,csrf_token;
@@ -114,3 +114,27 @@ SELECT user_id,challenge FROM cli_login_codes WHERE code_hash=$1 AND expires_at>
 
 -- name: DeleteCliLoginCode :exec
 DELETE FROM cli_login_codes WHERE code_hash=$1;
+
+-- name: GetConsoleUserEmail :one
+SELECT email FROM console_users WHERE user_id=$1 FOR SHARE;
+
+-- name: GetApprovalUser :one
+SELECT user_id,provider_id,provider_subject,kind,username,email,display_name,groups,manual_roles,teams,revision FROM console_users WHERE user_id=$1 FOR SHARE;
+
+-- name: LockApprovalRoleMappings :exec
+SELECT revision FROM role_mapping_state FOR SHARE;
+
+-- name: GetApprovalServiceAccount :one
+SELECT account_id,name,owner_user_id,description,roles,teams,revision,created_at FROM service_accounts WHERE account_id=$1 FOR SHARE;
+
+-- name: IsApprovalTokenValid :one
+SELECT EXISTS (
+    SELECT 1 FROM service_account_tokens
+    WHERE token_id=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE
+);
+
+-- name: IsApprovalSessionValid :one
+SELECT EXISTS (
+    SELECT 1 FROM identity_sessions
+    WHERE session_id=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE
+);

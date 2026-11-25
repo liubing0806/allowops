@@ -10,11 +10,13 @@ import (
 
 // Identity is the authenticated caller of a request.
 type Identity struct {
-	Subject authz.Subject
-	User    *v1.User
-	Session *v1.CliSession
-	Client  v1.LoginClient
-	CSRF    string
+	Subject       authz.Subject
+	User          *v1.User
+	Session       *v1.CliSession
+	Client        v1.LoginClient
+	CSRF          string
+	TokenID       string
+	TokenIssuerID string
 }
 
 // AuditEvent is an allowlist: request bodies, credentials and provider errors

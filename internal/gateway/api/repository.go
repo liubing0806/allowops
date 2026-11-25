@@ -115,15 +115,15 @@ func (s *Service) authenticate(ctx context.Context, token string, cookie bool) (
 		if !authn.VerifyServiceToken(token, authn.TokenRecord{Hash: h, ExpiresAt: time.Now().Add(time.Hour)}, time.Now()) {
 			return nil, authn.ErrInvalidCredentials
 		}
-		accountID, err := touchAccountToken(ctx, s.Store.Pool, hash(token))
+		credential, err := touchAccountToken(ctx, s.Store.Pool, hash(token))
 		if err != nil {
 			return nil, authLookupError(err)
 		}
-		a, err := getAccount(ctx, s.Store.Pool, accountID)
+		a, err := getAccount(ctx, s.Store.Pool, credential.AccountID)
 		if err != nil {
 			return nil, authLookupError(err)
 		}
-		return &Identity{Subject: authz.Subject{ID: a.AccountId, Kind: "service_account", Roles: a.Roles, Teams: a.Teams, Owner: a.OwnerUserId}}, nil
+		return &Identity{Subject: authz.Subject{ID: a.AccountId, Kind: "service_account", Roles: a.Roles, Teams: a.Teams, Owner: a.OwnerUserId}, TokenID: credential.TokenID, TokenIssuerID: credential.CreatedByUserID}, nil
 	}
 	client := "cli"
 	prefix := "aops_cli_"

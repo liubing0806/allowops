@@ -1,4 +1,4 @@
-import type { Labels } from './types'
+import type { Labels, PolicyApprovalRoleSet } from './types'
 import { ApiError } from './error'
 export const toBase64 = (text: string) =>
   bytesToBase64(new TextEncoder().encode(text))
@@ -8,6 +8,9 @@ export const bytesToBase64 = (bytes: Uint8Array) =>
   btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''))
 export const base64ToBytes = (value: string) =>
   Uint8Array.from(atob(value), (c) => c.charCodeAt(0))
+
+export const formatApprovalRoleSets = (sets: PolicyApprovalRoleSet[]) =>
+  sets.map(({ roles }) => `(${roles.join(' ∨ ')})`).join(' ∧ ')
 
 export function validateLabel(key: string, value: string) {
   const keyBytes = new TextEncoder().encode(key).length

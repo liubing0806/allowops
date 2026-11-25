@@ -10,7 +10,7 @@ import (
 // action (global check) keeps ignoring the filter.
 func TestViewOperationsApplyActionAndRiskFilters(t *testing.T) {
 	read, danger := Action{Name: "read_action", Risk: "read"}, Action{Name: "danger_action", Risk: "dangerous"}
-	for _, op := range []Operation{ViewCatalog, ViewJobs, ViewOutput} {
+	for _, op := range []Operation{ViewCatalog, ViewJobs, ViewOutput, ViewApprovals} {
 		rules := map[string]Rule{
 			"actions and risks": {ID: "r", Effect: "allow", Roles: []string{"viewer"}, Operations: []Operation{op}, Actions: []string{"read_action"}, Risks: []string{"read"}},
 			"actions only":      {ID: "r", Effect: "allow", Roles: []string{"viewer"}, Operations: []Operation{op}, Actions: []string{"read_action"}},
@@ -41,6 +41,37 @@ func TestViewOperationsApplyActionAndRiskFilters(t *testing.T) {
 				t.Errorf("%s rule %q action %q: decision=%s error=%v; want %s", op, tt.rule, tt.action.Name, got.Decision, err, tt.want)
 			}
 		}
+	}
+}
+
+func TestApprovalOperationsApplyHostAndActionScope(t *testing.T) {
+	ctx := context.Background()
+	for _, op := range []Operation{ViewApprovals, ApproveJobs} {
+		rule := executionRule("approval-scope", "allow")
+		rule.Operations = []Operation{op}
+		e := engineFor(t, []Rule{rule}, nil)
+		for _, tt := range []struct {
+			action, env, want string
+		}{{"restart", "prod", "allow"}, {"inspect", "prod", "deny"}, {"restart", "dev", "deny"}} {
+			in := executionInput()
+			in.Operation = op
+			in.Action.Name = tt.action
+			in.Host.Labels["env"] = tt.env
+			got, err := e.Evaluate(ctx, in)
+			if err != nil || got.Decision != tt.want {
+				t.Errorf("%s %s on %s = %+v, err=%v; want %s", op, tt.action, tt.env, got, err, tt.want)
+			}
+		}
+	}
+	// Action-scoped approve_jobs must never allow an empty global action check.
+	rule := executionRule("approve-scoped", "allow")
+	rule.Operations = []Operation{ApproveJobs}
+	e := engineFor(t, []Rule{rule}, nil)
+	in := executionInput()
+	in.Operation = ApproveJobs
+	in.Action = Action{}
+	if got, err := e.Evaluate(ctx, in); err != nil || got.Decision != "deny" {
+		t.Fatalf("approve_jobs with empty action = %+v, err=%v; want deny", got, err)
 	}
 }
 

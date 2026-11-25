@@ -104,6 +104,12 @@ func TestSDKRealJobBackendAgentsAndSeaweedFS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	approvalConfig := job.DefaultApprovalConfig()
+	approvalConfig.ConsoleBaseURL = "https://console.test"
+	approvalConfig.SweepInterval = time.Second
+	if err := jobs.ConfigureApprovals(approvalConfig); err != nil {
+		t.Fatal(err)
+	}
 	hosts.Hooks = jobs.Hooks()
 	if err = hosts.Start(ctx); err != nil {
 		t.Fatal(err)
@@ -154,7 +160,13 @@ func TestSDKRealJobBackendAgentsAndSeaweedFS(t *testing.T) {
 	metric.Filters = nil
 	metric.Params = map[string]params.Definition{"val": {Type: params.String, Description: "Metric value", Regex: "^[0-9]+$"}}
 	metric.Exec = []any{"/usr/bin/printf", `ts=2026-11-24T12:00:00Z latency=%sms status=ok\n`, "{val}"}
-	pkg, err := catalog.Build(&catalog.Catalog{Config: catalog.Config{SchemaVersion: 1, CatalogID: "fixture"}, Actions: map[string]catalog.Action{"logs_read": action, "slow_read": slow, "steps_read": steps, "metric_read": metric}}, catalog.BuildOptions{Now: time.Now().Add(time.Second)})
+	actions := map[string]catalog.Action{"logs_read": action, "slow_read": slow, "steps_read": steps, "metric_read": metric}
+	for _, risk := range []string{"write", "dangerous"} {
+		name := "gated_" + risk
+		actions[name] = catalog.Action{Name: name, Risk: risk, Description: "Approval fixture", Timeout: "5s", MaxOutput: 1024,
+			Exec: []any{"/usr/bin/printf", "approval execution verified"}}
+	}
+	pkg, err := catalog.Build(&catalog.Catalog{Config: catalog.Config{SchemaVersion: 1, CatalogID: "fixture"}, Actions: actions}, catalog.BuildOptions{Now: time.Now().Add(time.Second)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +243,7 @@ func TestSDKRealJobBackendAgentsAndSeaweedFS(t *testing.T) {
 	}
 	defer session.Close()
 	tools, err := session.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 9 {
+	if err != nil || len(tools.Tools) != len(actions)+len(fixedToolNames) {
 		t.Fatalf("tools=%v error=%v", tools, err)
 	}
 	args := actionArgs()
@@ -503,4 +515,7 @@ func TestSDKRealJobBackendAgentsAndSeaweedFS(t *testing.T) {
 		}
 	})
 
+	t.Run("approval lifecycle", func(t *testing.T) {
+		testMCPApprovalLifecycle(t, f, session, httpClient.Transport, "https://"+listener.Addr().String(), id)
+	})
 }

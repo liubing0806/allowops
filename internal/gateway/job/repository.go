@@ -27,14 +27,18 @@ func (s *Service) hosts(ctx context.Context) ([]host, error) {
 }
 
 func (s *Service) get(ctx context.Context, id string) (*v1.Job, error) {
-	j, err := selectJob(ctx, s.Store.Pool, id)
+	return getJob(ctx, s.Store.Pool, id)
+}
+
+func getJob(ctx context.Context, q db.DBTX, id string) (*v1.Job, error) {
+	j, err := selectJob(ctx, q, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, failure(connect.CodeNotFound, "JOB_UNKNOWN")
 	}
 	if err != nil {
 		return nil, failure(connect.CodeUnavailable, "JOB_DATABASE_UNAVAILABLE")
 	}
-	counts, err := countJobTasksByStatus(ctx, s.Store.Pool, id)
+	counts, err := countJobTasksByStatus(ctx, q, id)
 	if err != nil {
 		return nil, err
 	}
@@ -49,53 +53,90 @@ func (s *Service) tasks(ctx context.Context, id string) ([]*v1.Task, error) {
 	return listJobTasks(ctx, s.Store.Pool, id)
 }
 
-func (s *Service) create(ctx context.Context, subject string, p *catalog.Package, a catalog.Action, digest []byte, reason string, targets []host, batch, failures uint32, version uint64, denied bool) (*v1.Job, error) {
+func (s *Service) create(ctx context.Context, subject string, p *catalog.Package, a catalog.Action, digest []byte, reason string, targets []host, batch, failures uint32, version uint64, status v1.JobStatus, submission *approvalSubmission) (*v1.Job, bool, error) {
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	if err := s.ensureJobPartition(ctx, at); err != nil {
+		return nil, false, err
+	}
 	tx, err := s.Store.Pool.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer tx.Rollback(ctx)
-	at := time.Now().UTC().Truncate(time.Microsecond)
-	if err := partition(ctx, tx, at); err != nil {
-		return nil, err
+	if err := db.New(tx).LockJobPartitionCreation(ctx); err != nil {
+		return nil, false, err
 	}
 	if err := lockJobSubject(ctx, tx, subject); err != nil {
-		return nil, err
+		return nil, false, err
+	}
+	q := db.New(tx)
+	existing, err := s.existingApproval(ctx, q, subject, submission)
+	if err != nil {
+		return nil, false, err
+	}
+	if existing.ApprovalID != "" {
+		j, err := getJob(ctx, tx, existing.JobID)
+		if err != nil {
+			return nil, false, err
+		}
+		j.Approval, err = s.approvalSummary(existing)
+		return j, false, err
+	}
+	if status == v1.JobStatus_JOB_STATUS_PENDING_APPROVAL {
+		counts, err := q.CountPendingApprovals(ctx, subject)
+		if err != nil {
+			return nil, false, err
+		}
+		cfg := s.approvalConfig()
+		if counts.SubjectCount >= int64(cfg.MaxPendingPerSubject) || counts.GlobalCount >= int64(cfg.MaxPendingGlobal) {
+			return nil, false, failure(connect.CodeResourceExhausted, "PENDING_APPROVAL_LIMIT")
+		}
 	}
 	identity, _ := reqctx.FromContext(ctx)
-	if !denied && identity != nil && identity.Subject.Kind == "service_account" {
+	if status == v1.JobStatus_JOB_STATUS_QUEUED && identity != nil && identity.Subject.Kind == "service_account" {
 		n, err := countActiveJobs(ctx, tx, subject)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if n >= 5 {
-			return nil, failure(connect.CodeResourceExhausted, "CONCURRENT_JOB_LIMIT")
+			return nil, false, failure(connect.CodeResourceExhausted, "CONCURRENT_JOB_LIMIT")
 		}
 	}
 	sequence, err := nextJobSequence(ctx, tx, at)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	id := fmt.Sprintf("job-%s-%04d", at.Format("20060102"), sequence)
 	definition, err := json.Marshal(a)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	status := v1.JobStatus_JOB_STATUS_QUEUED
 	var finished *time.Time
-	if denied {
-		status = v1.JobStatus_JOB_STATUS_DENIED
+	if status == v1.JobStatus_JOB_STATUS_DENIED {
 		finished = &at
 	}
-	if err := insertJob(ctx, tx, newJob{id: id, at: at, subject: subject, action: a.Name, definition: definition, catalogID: p.CatalogID, catalogVersion: p.Version, digest: digest, policyVersion: version, reason: reason, status: status, batch: batch, failures: failures, finished: finished, origin: s.instanceID}); err != nil {
-		return nil, err
+	row := newJob{id: id, at: at, subject: subject, action: a.Name, definition: definition, catalogID: p.CatalogID, catalogVersion: p.Version, digest: digest, policyVersion: version, reason: reason, status: status, batch: batch, failures: failures, finished: finished, origin: s.instanceID}
+	if err := insertJob(ctx, tx, row); err != nil {
+		return nil, false, err
 	}
-	if !denied {
+	if status != v1.JobStatus_JOB_STATUS_DENIED {
 		raw, _ := proto.Marshal(&v1.ExecutionResult{Status: v1.TaskStatus_TASK_STATUS_PENDING})
 		for i, h := range targets {
 			if err := insertPendingTask(ctx, tx, id, fmt.Sprintf("%s-%d", id, i), at, h, i, raw); err != nil {
-				return nil, err
+				return nil, false, err
 			}
+		}
+	}
+	var approval *v1.JobApprovalSummary
+	var pending db.ApprovalRequest
+	if status == v1.JobStatus_JOB_STATUS_PENDING_APPROVAL {
+		pending, err = s.insertApproval(ctx, tx, row, targets, submission)
+		if err != nil {
+			return nil, false, err
+		}
+		approval, err = s.approvalSummary(pending)
+		if err != nil {
+			return nil, false, err
 		}
 	}
 	// A COMMIT error is not a rollback. Commit outside the request's cancellation
@@ -104,7 +145,7 @@ func (s *Service) create(ctx context.Context, subject string, p *catalog.Package
 	err = tx.Commit(commitCtx)
 	stopCommit()
 	if err != nil && !s.jobCommitted(ctx, id, at, subject) {
-		return nil, err
+		return nil, false, err
 	}
 	// Admission must not depend on a request-context read after COMMIT.
 	// Response reads can still fail without abandoning the committed scheduler.
@@ -112,11 +153,15 @@ func (s *Service) create(ctx context.Context, subject string, p *catalog.Package
 	if finished != nil {
 		j.FinishedAt = timestamppb.New(*finished)
 	}
-	if !denied && len(targets) > 0 {
+	if status != v1.JobStatus_JOB_STATUS_DENIED && len(targets) > 0 {
 		j.TotalTasks = uint64(len(targets))
 		j.Counts = []*v1.TaskCount{{Status: v1.TaskStatus_TASK_STATUS_PENDING, Count: j.TotalTasks}}
 	}
-	return j, nil
+	j.Approval = approval
+	if approval != nil {
+		s.notifyApproval(pending, "requested")
+	}
+	return j, true, nil
 }
 
 // jobCommitted reports whether this create transaction's job row exists. The job

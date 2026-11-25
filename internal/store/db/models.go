@@ -8,6 +8,70 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ApprovalDecision struct {
+	ApprovalID    string
+	ActorID       string
+	ActorEmail    string
+	Decision      int16
+	Reason        string
+	DecidedAt     pgtype.Timestamptz
+	PolicyVersion int64
+	MatchedRules  []string
+}
+
+type ApprovalRequest struct {
+	ApprovalID             string
+	JobID                  string
+	CreatedAt              pgtype.Timestamptz
+	ExpiresAt              pgtype.Timestamptz
+	Status                 int16
+	Action                 string
+	ActionRisk             string
+	CatalogID              string
+	CatalogVersion         int64
+	ActionSha256           []byte
+	ParamsJson             []byte
+	FiltersJson            []byte
+	TargetSelector         string
+	TargetHosts            []byte
+	BatchSize              int32
+	MaxFailures            int32
+	RequestDigest          []byte
+	RequesterSubjectID     string
+	RequesterKind          string
+	RequesterEmail         string
+	RequesterOwnerID       string
+	RequesterCredentialID  string
+	RequesterTokenIssuerID string
+	RequesterSourceIp      string
+	ClientRequestID        string
+	Reason                 string
+	EvidenceJobIds         []string
+	EvidenceSummary        string
+	PolicyVersion          int64
+	MatchedRules           []string
+	RequiredApproverRoles  []byte
+	MinApprovals           int32
+	AllowOwnerApprove      bool
+	ApprovedCount          int32
+	DecidedAt              pgtype.Timestamptz
+	DecidedBy              string
+	DecisionReason         string
+	ConsumedAt             pgtype.Timestamptz
+	ConsumedByInstance     string
+	ConsumeNonce           string
+	RecheckPolicyVersion   pgtype.Int8
+	RecheckError           string
+	NotifySeq              int64
+	NotifyStatus           string
+	NotifyError            string
+}
+
+type ApprovalSequence struct {
+	Day   pgtype.Date
+	Value int64
+}
+
 type AuditBoundary struct {
 	Singleton bool
 	Seq       int64
@@ -266,14 +330,15 @@ type ServiceAccount struct {
 }
 
 type ServiceAccountToken struct {
-	TokenID     string
-	AccountID   string
-	TokenHash   []byte
-	Description string
-	CreatedAt   pgtype.Timestamptz
-	ExpiresAt   pgtype.Timestamptz
-	LastUsedAt  pgtype.Timestamptz
-	RevokedAt   pgtype.Timestamptz
+	TokenID         string
+	AccountID       string
+	TokenHash       []byte
+	Description     string
+	CreatedAt       pgtype.Timestamptz
+	ExpiresAt       pgtype.Timestamptz
+	LastUsedAt      pgtype.Timestamptz
+	RevokedAt       pgtype.Timestamptz
+	CreatedByUserID string
 }
 
 type Task struct {

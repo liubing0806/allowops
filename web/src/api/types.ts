@@ -1,4 +1,10 @@
-import type { JobStatusJson, TaskStatusJson } from '@/gen/allowops/v1/common_pb'
+import type {
+  ApprovalStatusJson,
+  ApprovalVoteJson,
+  JobStatusJson,
+  OutputTrustJson,
+  TaskStatusJson,
+} from '@/gen/allowops/v1/common_pb'
 import type { PolicyEffectJson } from '@/gen/allowops/v1/policy_pb'
 import type { HealthStatusJson } from '@/gen/allowops/v1/system_pb'
 
@@ -10,12 +16,21 @@ import type { HealthStatusJson } from '@/gen/allowops/v1/system_pb'
 // other field exists in the generated request and response types.
 export const jobStatuses = [
   'JOB_STATUS_QUEUED',
+  'JOB_STATUS_PENDING_APPROVAL',
   'JOB_STATUS_RUNNING',
   'JOB_STATUS_SUCCEEDED',
   'JOB_STATUS_PARTIALLY_FAILED',
   'JOB_STATUS_FAILED',
   'JOB_STATUS_CANCELLED',
   'JOB_STATUS_DENIED',
+] as const
+export const approvalStatuses = [
+  'APPROVAL_STATUS_PENDING',
+  'APPROVAL_STATUS_APPROVED',
+  'APPROVAL_STATUS_REJECTED',
+  'APPROVAL_STATUS_EXPIRED',
+  'APPROVAL_STATUS_CANCELLED',
+  'APPROVAL_STATUS_EXECUTION_DENIED',
 ] as const
 export const taskStatuses = [
   'TASK_STATUS_PENDING',
@@ -36,6 +51,9 @@ export const defaultRoles = [
   'publisher',
 ] as const
 export type JobStatus = JobStatusJson
+export type ApprovalStatus = ApprovalStatusJson
+export type ApprovalNotifyStatus = string
+export type ContextTrust = OutputTrustJson
 export type TaskStatus = TaskStatusJson
 export type PolicyEffect = PolicyEffectJson
 export type HealthStatus = HealthStatusJson
@@ -170,6 +188,21 @@ export interface ActionDefinition {
   max_output: string | number
   redact?: { builtin?: string[] | null; custom?: unknown[] }
 }
+export interface PolicyApprovalConfig {
+  approverRoles: string[]
+  minApprovals: number
+  ttlSeconds: number
+  allowOwnerApprove: boolean
+}
+export interface PolicyApprovalRoleSet {
+  roles: string[]
+}
+export interface PolicyApprovalRequirement {
+  requiredApproverRoleSets: PolicyApprovalRoleSet[]
+  minApprovals: number
+  ttlSeconds: number
+  allowOwnerApprove: boolean
+}
 export interface PolicyRule {
   name: string
   roles: string[]
@@ -182,6 +215,7 @@ export interface PolicyRule {
   hours?: { from: number; to: number; timezone: string }
   sourceCidrs: string[]
   effect: PolicyEffect
+  approval?: PolicyApprovalConfig
 }
 export interface PolicyRules {
   rules: PolicyRule[]
@@ -198,6 +232,7 @@ export interface PolicyDecision {
   effect: PolicyEffect
   matchedRules: string[]
   errorReason: string
+  approval?: PolicyApprovalRequirement
 }
 export interface PolicyTestCase {
   subjectId: string
@@ -289,6 +324,22 @@ export interface Task {
   outputStored: boolean
   stepCount: number
 }
+export interface JobEvidence {
+  jobIds: string[]
+  summary: string
+}
+export interface JobApprovalSummary {
+  approvalId: string
+  status: ApprovalStatus
+  expiresAt?: string
+  minApprovals: number
+  approvedCount: number
+  requiredApproverRoleSets: PolicyApprovalRoleSet[]
+  decidedAt?: string
+  decisionReason: string
+  consoleUrl: string
+  recheckError: string
+}
 export interface Job {
   jobId: string
   action: string
@@ -302,6 +353,101 @@ export interface Job {
   totalTasks: string
   counts: { status: TaskStatus; count: string }[]
   policyVersion: string
+  approval?: JobApprovalSummary
+}
+export interface ApprovalTarget {
+  hostId: string
+  hostname: string
+}
+export interface ApprovalDecision {
+  actorId: string
+  actorEmail: string
+  vote: ApprovalVoteJson
+  reason: string
+  decidedAt?: string
+  policyVersion: string
+  matchedRules: string[]
+}
+export interface ApprovalRequest {
+  approvalId: string
+  jobId: string
+  status: ApprovalStatus
+  createdAt?: string
+  expiresAt?: string
+  action: string
+  actionRisk: string
+  catalog?: CatalogRef
+  actionSha256: string
+  paramsJson: string
+  filtersJson: string
+  targetSelector: string
+  targets: ApprovalTarget[]
+  batchSize: number
+  maxFailures: number
+  requestDigest: string
+  requesterSubjectId: string
+  requesterKind: string
+  reason: string
+  evidence?: JobEvidence
+  policyVersion: string
+  matchedRules: string[]
+  requiredApproverRoleSets: PolicyApprovalRoleSet[]
+  minApprovals: number
+  allowOwnerApprove: boolean
+  approvedCount: number
+  decisions: ApprovalDecision[]
+  decidedAt?: string
+  decidedBy: string
+  decisionReason: string
+  recheckPolicyVersion?: string
+  recheckError: string
+  consoleUrl: string
+  requesterOwnerId: string
+  contextTrust: ContextTrust
+  notifyStatus: ApprovalNotifyStatus
+  notifyError: string
+  canApprove: boolean
+  cannotApproveReason: string
+}
+export interface ListApprovalsRequest {
+  page?: { pageSize?: number; pageToken?: string }
+  created?: { from?: string; to?: string }
+  statuses?: ApprovalStatus[]
+  action?: string
+  requesterSubjectId?: string
+  onlyActionable?: boolean
+}
+export interface ListApprovalsResponse {
+  approvals: ApprovalRequest[]
+  page: PageResponse
+}
+export interface GetApprovalRequest {
+  approvalId: string
+}
+export interface GetApprovalResponse {
+  approval: ApprovalRequest
+}
+export interface ApproveRequestRequest {
+  approvalId: string
+  expectedRequestDigest: string
+  reason?: string
+}
+export interface ApproveRequestResponse {
+  approval: ApprovalRequest
+  job?: Job
+}
+export interface RejectRequestRequest {
+  approvalId: string
+  reason: string
+}
+export interface RejectRequestResponse {
+  approval: ApprovalRequest
+}
+export interface CancelApprovalRequest {
+  approvalId: string
+}
+export interface CancelApprovalResponse {
+  approval: ApprovalRequest
 }
 export interface GetJobOutputResponse {
   data: string
@@ -541,6 +687,11 @@ export interface ConsoleApi {
     limitBytes?: number
   }): Promise<GetJobOutputResponse>
   cancelJob(input: { jobId: string }): Promise<{ job: Job }>
+  listApprovals(input?: ListApprovalsRequest): Promise<ListApprovalsResponse>
+  getApproval(input: GetApprovalRequest): Promise<GetApprovalResponse>
+  approveRequest(input: ApproveRequestRequest): Promise<ApproveRequestResponse>
+  rejectRequest(input: RejectRequestRequest): Promise<RejectRequestResponse>
+  cancelApproval(input: CancelApprovalRequest): Promise<CancelApprovalResponse>
   listAuditEvents(input?: {
     query?: AuditQuery
   }): Promise<{ events: AuditEvent[]; page: PageResponse }>

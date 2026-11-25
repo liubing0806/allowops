@@ -39,6 +39,9 @@ func TestPolicyInputsRejectInvalidCases(t *testing.T) {
 		{"unknown action", &v1.PolicyTestCase{SubjectId: "inspector", Operation: string(authz.ExecuteAction), Action: "missing", Targets: hostNames("dev")}, connect.CodeInvalidArgument, "test action not found"},
 		{"execute without action", &v1.PolicyTestCase{SubjectId: "inspector", Operation: string(authz.ExecuteAction), Targets: hostNames("dev")}, connect.CodeInvalidArgument, "test action not found"},
 		{"execute without targets", &v1.PolicyTestCase{SubjectId: "inspector", Operation: string(authz.ExecuteAction), Action: "restart"}, connect.CodeInvalidArgument, "execution test targets required"},
+		{"approve without action", &v1.PolicyTestCase{SubjectId: "inspector", Operation: string(authz.ApproveJobs), Targets: hostNames("dev")}, connect.CodeInvalidArgument, "test action not found"},
+		{"approve without targets", &v1.PolicyTestCase{SubjectId: "inspector", Operation: string(authz.ApproveJobs), Action: "restart"}, connect.CodeInvalidArgument, "approval test targets required"},
+		{"approve without matching targets", &v1.PolicyTestCase{SubjectId: "inspector", Operation: string(authz.ApproveJobs), Action: "restart", Targets: &v1.HostTargets{Selection: &v1.HostTargets_Selector{Selector: "env=stage"}}}, connect.CodeInvalidArgument, "approval test targets required"},
 		{"unknown host", &v1.PolicyTestCase{SubjectId: "inspector", Operation: string(authz.ExecuteAction), Action: "restart", Targets: hostNames("ghost")}, connect.CodeInvalidArgument, "test host not found"},
 	}
 	for _, tc := range cases {
@@ -61,15 +64,16 @@ func TestPolicyInputsExpandCases(t *testing.T) {
 		{SubjectId: "inspector", Operation: string(authz.ExecuteAction), Action: "restart", Targets: hostNames("dev", "prod"), At: at, SourceIp: "198.51.100.7"},
 		{SubjectId: "inspector", Operation: string(authz.ViewHosts)},
 		{SubjectId: "inspector", Operation: string(authz.ViewJobs), Action: "restart", Targets: &v1.HostTargets{Selection: &v1.HostTargets_Selector{Selector: "env=prod"}}},
+		{SubjectId: "inspector", Operation: string(authz.ApproveJobs), Action: "restart", Targets: hostNames("dev", "prod")},
 	}, env)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(inputs) != 4 {
-		t.Fatalf("got %d inputs, want 4", len(inputs))
+	if len(inputs) != 6 {
+		t.Fatalf("got %d inputs, want 6", len(inputs))
 	}
-	wantIndex := []uint32{0, 0, 1, 2}
-	wantHost := []string{"dev", "prod", "", "prod"}
+	wantIndex := []uint32{0, 0, 1, 2, 3, 3}
+	wantHost := []string{"dev", "prod", "", "prod", "dev", "prod"}
 	for i, in := range inputs {
 		if indices[i] != wantIndex[i] || in.Host.ID != wantHost[i] {
 			t.Errorf("input %d: index %d host %q, want %d %q", i, indices[i], in.Host.ID, wantIndex[i], wantHost[i])
@@ -80,5 +84,10 @@ func TestPolicyInputsExpandCases(t *testing.T) {
 	}
 	if inputs[0].Action.Name != "restart" || inputs[2].Action.Name != "" || inputs[3].Action.Name != "restart" {
 		t.Errorf("case actions wrong: %+v", inputs)
+	}
+	for _, input := range inputs[4:] {
+		if input.Operation != authz.ApproveJobs || input.Action.Name != "restart" || input.Action.Risk != "dangerous" {
+			t.Errorf("approval case action or operation wrong: %+v", input)
+		}
 	}
 }

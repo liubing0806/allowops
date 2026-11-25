@@ -290,6 +290,42 @@ func TestAcquireAnalysisSemaphoreAndNilFallback(t *testing.T) {
 	r2()
 }
 
+func TestTrimSummaryDropsOversizedApprovalRoleSets(t *testing.T) {
+	j := makeSampleJob(1)
+	j.Status = v1.JobStatus_JOB_STATUS_PENDING_APPROVAL
+	j.Approval = &v1.JobApprovalSummary{
+		ApprovalId:    "apr-20261124-0001",
+		Status:        v1.ApprovalStatus_APPROVAL_STATUS_PENDING,
+		ExpiresAt:     timestamppb.New(time.Date(2026, 11, 24, 13, 0, 0, 0, time.UTC)),
+		MinApprovals:  2,
+		ApprovedCount: 0,
+		ConsoleUrl:    "https://approvals.test/approvals/apr-20261124-0001",
+	}
+	for i := 0; i < 48; i++ {
+		roles := make([]string, 0, 16)
+		for k := 0; k < 16; k++ {
+			roles = append(roles, fmt.Sprintf("approval-role-group-%02d-member-%02d-with-long-name-padding", i, k))
+		}
+		j.Approval.RequiredApproverRoleSets = append(j.Approval.RequiredApproverRoleSets, &v1.PolicyApprovalRoleSet{Roles: roles})
+	}
+	summary := &v1.JobSummary{OutputTrust: v1.OutputTrust_OUTPUT_TRUST_UNTRUSTED}
+	if sz, err := encodedMessageSize(&v1.GetJobResponse{Job: j, Summary: summary}); err != nil || sz <= ResponseBytes {
+		t.Fatalf("test fixture not oversized: size=%d err=%v", sz, err)
+	}
+	if err := trimSummaryResponse(j, summary, ResponseBytes); err != nil {
+		t.Fatalf("trimSummaryResponse oversized approval role sets: %v", err)
+	}
+	if !summary.Truncated {
+		t.Fatalf("expected summary.Truncated=true")
+	}
+	if len(j.Approval.RequiredApproverRoleSets) != 0 {
+		t.Fatalf("expected RequiredApproverRoleSets to be omitted as a whole, got %d", len(j.Approval.RequiredApproverRoleSets))
+	}
+	if sz, err := encodedMessageSize(&v1.GetJobResponse{Job: j, Summary: summary}); err != nil || sz > ResponseBytes {
+		t.Fatalf("encoded GetJobResponse size=%d err=%v, want <= %d", sz, err, ResponseBytes)
+	}
+}
+
 func BenchmarkTrimSummary1000Groups(b *testing.B) {
 	j := makeSampleJob(1000)
 	templateGroups := make([]*v1.OutputGroup, 1000)

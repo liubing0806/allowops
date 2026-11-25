@@ -100,21 +100,23 @@ func invokeTool(risk string, cfg job.Config) ToolDefinition {
 		annotations.DestructiveHint = &destructive
 	}
 	props := map[string]any{
-		"action":          map[string]any{"type": "string", "description": "Action name from actions_search whose invoke_tool is " + invokeToolName(risk) + ".", "pattern": actionName.String()},
-		"targets":         targetsSchema(" The action's max_targets, if any, applies; a job with more targets is rejected."),
-		"expected_count":  expectedCountSchema(),
-		"reason":          reasonSchema(),
-		"params":          map[string]any{"type": "object", "description": "Signed action parameters, as input_schema.params from actions_search with include_schema."},
-		"wait_seconds":    waitSchema(cfg),
-		"batch_size":      map[string]any{"type": "integer", "description": "Hosts per batch; may only lower the action's effective_batch_size.", "minimum": 1, "maximum": cfg.BatchSize},
-		"max_failures":    map[string]any{"type": "integer", "description": "Stop after failures exceed this limit; may only lower the action's effective_max_failures.", "minimum": 0, "maximum": cfg.MaxFailures},
-		"response_format": formatSchema(),
-		"grouping":        groupingSchema("exact"),
+		"action":            map[string]any{"type": "string", "description": "Action name from actions_search whose invoke_tool is " + invokeToolName(risk) + ".", "pattern": actionName.String()},
+		"targets":           targetsSchema(" The action's max_targets, if any, applies; a job with more targets is rejected."),
+		"expected_count":    expectedCountSchema(),
+		"reason":            reasonSchema(),
+		"params":            map[string]any{"type": "object", "description": "Signed action parameters, as input_schema.params from actions_search with include_schema."},
+		"wait_seconds":      waitSchema(cfg),
+		"batch_size":        map[string]any{"type": "integer", "description": "Hosts per batch; may only lower the action's effective_batch_size.", "minimum": 1, "maximum": cfg.BatchSize},
+		"max_failures":      map[string]any{"type": "integer", "description": "Stop after failures exceed this limit; may only lower the action's effective_max_failures.", "minimum": 0, "maximum": cfg.MaxFailures},
+		"response_format":   formatSchema(),
+		"grouping":          groupingSchema("exact"),
+		"evidence":          evidenceSchema(),
+		"client_request_id": clientRequestIDSchema(),
 	}
 	for _, name := range []string{"match", "exclude", "tail", "head", "count"} {
 		props[name], _ = filterSchema(name)
 	}
-	return ToolDefinition{Name: invokeToolName(risk), Description: "Run one " + risk + "-risk catalog action found with actions_search. Pass its name in action, with the arguments the action takes: targets, reason, params, and optionally expected_count, wait_seconds, batch_size, max_failures, response_format, grouping and the output filters listed in its filters. The call is refused unless the action's current risk is " + risk + "." + toolInstructions, Annotations: annotations, InputSchema: map[string]any{
+	return ToolDefinition{Name: invokeToolName(risk), Description: "Run one " + risk + "-risk catalog action found with actions_search. Pass its name in action, with the arguments the action takes: targets, reason, params, and optionally expected_count, wait_seconds, batch_size, max_failures, response_format, grouping, evidence, client_request_id and the output filters listed in its filters. The call is refused unless the action's current risk is " + risk + "." + toolInstructions, Annotations: annotations, InputSchema: map[string]any{
 		"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": props, "required": []string{"action", "targets", "reason"}, "additionalProperties": false,
 	}}
 }

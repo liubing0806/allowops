@@ -36,6 +36,9 @@ func (s *Service) summary(ctx context.Context, j *v1.Job, f string, grouping clu
 	result := &v1.JobSummary{OutputTrust: v1.OutputTrust_OUTPUT_TRUST_UNTRUSTED}
 	if _, _, err := s.authorize(ctx, j, authz.ViewOutput, false, ""); err != nil {
 		if connect.CodeOf(err) == connect.CodePermissionDenied {
+			if err := trimSummaryResponse(j, result, ResponseBytes); err != nil {
+				return nil, err
+			}
 			return result, nil
 		}
 		return nil, err
@@ -431,6 +434,10 @@ func trimSummaryResponse(j *v1.Job, result *v1.JobSummary, limit int) error {
 				}
 			}
 			recomputeFoldedNormalHosts(result, omittedNormalHosts)
+			continue
+		}
+		if j.Approval != nil && len(j.Approval.RequiredApproverRoleSets) > 0 {
+			j.Approval.RequiredApproverRoleSets = nil
 			continue
 		}
 		return failure(connect.CodeResourceExhausted, "JOB_RESPONSE_LIMIT")

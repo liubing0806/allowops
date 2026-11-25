@@ -92,15 +92,17 @@ func actionTool(a catalog.Action, cfg job.Config) (*ToolDefinition, error) {
 		limit = " This action accepts " + text + " per job; a job with more targets is rejected."
 	}
 	props := map[string]any{
-		"params":          schema,
-		"targets":         targetsSchema(limit),
-		"expected_count":  expectedCountSchema(),
-		"reason":          reasonSchema(),
-		"wait_seconds":    waitSchema(cfg),
-		"batch_size":      map[string]any{"type": "integer", "description": "Hosts per batch; may only lower the action's effective limit.", "minimum": 1, "maximum": batch, "default": batch},
-		"max_failures":    map[string]any{"type": "integer", "description": "Stop after failures exceed this limit; may only lower the action's effective limit.", "minimum": 0, "maximum": failures, "default": failures},
-		"response_format": formatSchema(),
-		"grouping":        groupingSchema("exact"),
+		"params":            schema,
+		"targets":           targetsSchema(limit),
+		"expected_count":    expectedCountSchema(),
+		"reason":            reasonSchema(),
+		"wait_seconds":      waitSchema(cfg),
+		"batch_size":        map[string]any{"type": "integer", "description": "Hosts per batch; may only lower the action's effective limit.", "minimum": 1, "maximum": batch, "default": batch},
+		"max_failures":      map[string]any{"type": "integer", "description": "Stop after failures exceed this limit; may only lower the action's effective limit.", "minimum": 0, "maximum": failures, "default": failures},
+		"response_format":   formatSchema(),
+		"grouping":          groupingSchema("exact"),
+		"evidence":          evidenceSchema(),
+		"client_request_id": clientRequestIDSchema(),
 	}
 	for _, name := range a.Filters {
 		filter, err := filterSchema(name)
@@ -131,6 +133,28 @@ func actionTool(a catalog.Action, cfg job.Config) (*ToolDefinition, error) {
 	return &ToolDefinition{Name: a.Name, Description: a.Description + limit + toolInstructions, Annotations: annotations, InputSchema: map[string]any{
 		"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": props, "required": required, "additionalProperties": false,
 	}}, nil
+}
+
+func evidenceSchema() map[string]any {
+	return map[string]any{
+		"type": "object", "description": "Untrusted requester context for an approval.",
+		"additionalProperties": false,
+		"properties": map[string]any{
+			"job_ids": map[string]any{
+				"type": "array", "description": "Short job IDs you are authorized to view.",
+				"minItems": 1, "maxItems": 5, "uniqueItems": true,
+				"items": map[string]any{"type": "string", "pattern": evidenceJobID.String()},
+			},
+			"summary": map[string]any{"type": "string", "minLength": 1, "maxLength": 1024, "pattern": `^[^\x00]*$`},
+		},
+	}
+}
+
+func clientRequestIDSchema() map[string]any {
+	return map[string]any{
+		"type": "string", "pattern": clientRequestID.String(),
+		"description": "Reuse this ID with the same execution plan to recover an approval receipt after an interrupted response.",
+	}
 }
 
 // batchLimits returns the effective batch_size and max_failures: the lower of

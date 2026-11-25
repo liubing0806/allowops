@@ -10,15 +10,15 @@ import (
 	"github.com/liubing0806/allowops/internal/gateway/reqctx"
 )
 
-// AllowedActionsOnHost returns the candidate actions the caller may execute on
-// one active host, for the MCP actions_search hostname filter. It is a display
-// precheck; the job service still authorizes every call.
+// AllowedActionsOnHost returns the execution decisions for candidate actions
+// that are allowed or require approval on one active host. It is a display
+// precheck for actions_search; the job service still authorizes every call.
 //
 // A missing host, a host the caller may not view and a host without
 // authorization labels all return an empty map, so the result does not reveal
 // whether a hostname exists. All decisions use one pinned policy snapshot, and
 // matched rule IDs are added to the request audit metadata as can does.
-func (s *Service) AllowedActionsOnHost(ctx context.Context, hostname string, actions []authz.Action) (map[string]bool, error) {
+func (s *Service) AllowedActionsOnHost(ctx context.Context, hostname string, actions []authz.Action) (map[string]string, error) {
 	id, ok := reqctx.FromContext(ctx)
 	r := transport(ctx)
 	if !ok || r == nil {
@@ -29,7 +29,7 @@ func (s *Service) AllowedActionsOnHost(ctx context.Context, hostname string, act
 		return nil, err
 	}
 	current := ctx.Value(pinnedPolicyKey{}).(*policyState)
-	allowed := map[string]bool{}
+	allowed := map[string]string{}
 	hosts, err := s.hostsWhere(ctx, s.Store.Pool, " AND h.hostname = $2", false, hostname)
 	if err != nil {
 		return nil, err
@@ -60,8 +60,8 @@ func (s *Service) AllowedActionsOnHost(ctx context.Context, hostname string, act
 		}
 		r.policyVersion = current.version
 		r.matchedRules = unique(append(r.matchedRules, result.RuleIDs...))
-		if result.Decision == "allow" {
-			allowed[action.Name] = true
+		if result.Decision == "allow" || result.Decision == "require_approval" {
+			allowed[action.Name] = result.Decision
 		}
 	}
 	return allowed, nil

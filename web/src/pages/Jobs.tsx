@@ -208,6 +208,11 @@ function JobRow({ job, selected }: { job: Job; selected: boolean }) {
   const tone = statusTone(job.status)
   const total = Number(job.totalTasks)
   const succeeded = countOf(job, 'TASK_STATUS_SUCCEEDED')
+  const pendingApproval = job.status === 'JOB_STATUS_PENDING_APPROVAL'
+  const approval = job.approval
+  const approvedPercent = approval
+    ? Math.min(100, (approval.approvedCount / Math.max(1, approval.minApprovals)) * 100)
+    : 0
   return (
     <li className="border-b border-border-subtle last:border-b-0">
       <Link
@@ -238,14 +243,16 @@ function JobRow({ job, selected }: { job: Job; selected: boolean }) {
           {' · '}
           <span className="font-mono">{job.subjectId}</span>
           {' · '}
-          {t(job.reason)}
+          <span className="whitespace-pre-wrap">{job.reason}</span>
         </span>
         <span className="flex w-full items-center gap-2 pl-[15px]">
           <span
             aria-hidden="true"
             className="flex h-1 flex-1 overflow-hidden rounded-sm bg-muted"
           >
-            {total > 0
+            {pendingApproval
+              ? <span className="bg-dot-warning" style={{ width: `${approvedPercent}%` }} />
+              : total > 0
               ? job.counts.map((entry) => (
                   <span
                     key={entry.status}
@@ -264,7 +271,9 @@ function JobRow({ job, selected }: { job: Job; selected: boolean }) {
             )}
           >
             {t(`status.${job.status}`)}
-            {total > 0 && ` · ${succeeded}/${total}`}
+            {pendingApproval
+              ? approval && ` · ${approval.approvedCount}/${approval.minApprovals}`
+              : total > 0 && ` · ${succeeded}/${total}`}
           </span>
         </span>
       </Link>
@@ -292,7 +301,9 @@ function JobDetail({ jobId }: { jobId: string }) {
         current.state.data as { job?: Job } | undefined
       )?.job?.status
       if (!status) return false
-      return activeJobStatuses.includes(status) ? pollInterval : false
+      return status === 'JOB_STATUS_PENDING_APPROVAL' || activeJobStatuses.includes(status)
+        ? pollInterval
+        : false
     },
   })
   const lastChange = useRef({ signature: '', at: 0 })
@@ -300,6 +311,7 @@ function JobDetail({ jobId }: { jobId: string }) {
     queryKey: ['tasks', jobId],
     queryFn: () => api.listTasks({ jobId }),
     refetchInterval: (current) => {
+      if (query.data?.job.status === 'JOB_STATUS_PENDING_APPROVAL') return false
       if (stopsPolling(current.state.error)) return false
       const data = current.state.data as { tasks?: Task[] } | undefined
       if (!data?.tasks) return false
@@ -399,7 +411,7 @@ function JobDetail({ jobId }: { jobId: string }) {
               </Button>
             )}
           </div>
-          {job.status === 'JOB_STATUS_DENIED' && (
+          {job.status === 'JOB_STATUS_DENIED' && !job.approval && (
             // The matching deny rule is recorded in the audit event; the job
             // itself does not carry it.
             <p
@@ -409,11 +421,14 @@ function JobDetail({ jobId }: { jobId: string }) {
               {t('job.deniedHint')}
             </p>
           )}
+          {job.approval && <JobApproval approval={job.approval} />}
           <dl className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-x-4 gap-y-2.5">
             <Meta label={t('job.subject')} mono>
               {job.subjectId}
             </Meta>
-            <Meta label={t('job.reason')}>{t(job.reason)}</Meta>
+            <Meta label={t('job.reason')}>
+              <span className="block whitespace-pre-wrap [overflow-wrap:anywhere]">{job.reason}</span>
+            </Meta>
             <Meta label={t('nav.catalog')} mono>
               {job.catalog.catalogId} {job.catalog.version}
             </Meta>
@@ -551,6 +566,39 @@ function JobDetail({ jobId }: { jobId: string }) {
         />
       )}
     </>
+  )
+}
+
+function JobApproval({ approval }: { approval: NonNullable<Job['approval']> }) {
+  const { t } = useTranslation()
+  const pending = approval.status === 'APPROVAL_STATUS_PENDING'
+  return (
+    <section aria-label={t('job.approval')} className="space-y-2 rounded-lg border border-border-subtle bg-muted/40 px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Status value={approval.status} />
+        <span className="text-xs text-muted-foreground">
+          {t('approvals.progress', { approved: approval.approvedCount, required: approval.minApprovals })}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {t(pending ? 'approvals.expiresAt' : 'approvals.decidedAt')}{' '}
+          <Time value={pending ? approval.expiresAt : approval.decidedAt} />
+        </span>
+        <Link to={`/approvals/${encodeURIComponent(approval.approvalId)}`} className="break-all font-mono text-xs">
+          {approval.approvalId}
+        </Link>
+      </div>
+      {approval.decisionReason && (
+        <div className="space-y-1.5">
+          <UntrustedBanner>{t('approvals.untrustedDecisions')}</UntrustedBanner>
+          <p className="text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">{approval.decisionReason}</p>
+        </div>
+      )}
+      {approval.recheckError && (
+        <p className="text-xs whitespace-pre-wrap text-destructive [overflow-wrap:anywhere]">
+          {t('approvals.recheckError')} {approval.recheckError}
+        </p>
+      )}
+    </section>
   )
 }
 

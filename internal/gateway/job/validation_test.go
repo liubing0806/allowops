@@ -14,27 +14,27 @@ import (
 func TestGatewayValidationUsesSignedLimitsAndRemotePaths(t *testing.T) {
 	a := catalog.Action{Name: "read", BatchSize: 3, MaxFailures: new(1), Filters: []string{"tail", "count"}, Params: map[string]params.Definition{"path": {Type: params.Path, Description: "remote path", AllowedRoots: []string{"/remote"}}}}
 	r := &v1.RunJobRequest{Reason: "test", Params: &v1.Parameters{Json: []byte(`{"path":"/remote/exists-only-on-agent"}`)}}
-	batch, failures, err := prepare(a, r, DefaultConfig())
+	batch, failures, _, err := prepare(a, r, DefaultConfig())
 	if err != nil || batch != 3 || failures != 1 {
 		t.Fatalf("prepare=%d %d %v", batch, failures, err)
 	}
 	r.BatchSize = proto.Uint32(4)
-	if _, _, err := prepare(a, r, DefaultConfig()); err == nil {
+	if _, _, _, err := prepare(a, r, DefaultConfig()); err == nil {
 		t.Fatal("expanded signed batch size")
 	}
 	r.BatchSize = nil
 	r.MaxFailures = proto.Uint32(2)
-	if _, _, err := prepare(a, r, DefaultConfig()); err == nil {
+	if _, _, _, err := prepare(a, r, DefaultConfig()); err == nil {
 		t.Fatal("expanded signed max failures")
 	}
 	r.MaxFailures = nil
 	r.Filters = &v1.OutputFilters{Tail: proto.Uint32(1), Count: proto.Bool(false)}
-	if _, _, err := prepare(a, r, DefaultConfig()); err == nil {
+	if _, _, _, err := prepare(a, r, DefaultConfig()); err == nil {
 		t.Fatal("accepted conflicting filter presence")
 	}
 	r.Filters = nil
 	r.Params.Json = []byte(`{"path":"a","path":"b"}`)
-	if _, _, err := prepare(a, r, DefaultConfig()); err == nil {
+	if _, _, _, err := prepare(a, r, DefaultConfig()); err == nil {
 		t.Fatal("accepted duplicate parameter")
 	}
 }

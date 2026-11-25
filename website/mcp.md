@@ -219,6 +219,8 @@ Action parameters go inside `params`; common parameters and filters are top-leve
 | `max_failures` | Nonnegative; only reduces the signed effective limit, normally 5. Stops when failures exceed it. |
 | `response_format` | `concise` (default) or `detailed`. |
 | `grouping` | `exact` (default for action tools and `jobs_get`; `jobs_diff` defaults to `normalized`) or `normalized` for noisy multi-host output. |
+| `evidence` | Optional approval context: `{ "job_ids": [...], "summary": "..." }` (up to 5 caller-visible prior job IDs and/or redacted plain-text summary). |
+| `client_request_id` | Optional idempotency key (`^[a-zA-Z0-9._-]{1,64}$`) for approval submissions; repeating the same execution plan returns the existing approval receipt, while reusing the key with a different plan returns `CLIENT_REQUEST_ID_CONFLICT`. |
 
 If the action sets `max_targets`, its description and the `targets` schema state
 the limit. A call whose target count (for a selector, the resolved count) is
@@ -270,3 +272,32 @@ Long polling with `_meta.progressToken` receives progress notifications every
 updates take effect on the next `tools/list`. `tools/list_changed` is not supported.
 Do not blindly retry an action after a network failure: inspect recent jobs and
 confirm whether the original submission executed.
+
+## Human-in-the-loop (HITL) approvals
+
+Actions authorized only via `effect: require_approval` remain discoverable in
+flat `tools/list` and progressive `actions_search` (when `hostname` is passed
+to `actions_search`, matching actions include `requires_approval: true`).
+
+When an action call (flat or `actions_invoke_*`) matches `require_approval`,
+the gateway freezes the execution plan and returns a **non-error**
+(`isError: false`) structured receipt with `status: "pending_approval"` instead
+of failing the tool call:
+
+- `job_id`, `status: "pending_approval"`, `output_trust: "untrusted"`, and `hint`.
+- `approval`: `approval_id`, `status`, `expires_at`, `min_approvals`,
+  `approved_count`, `required_approver_role_sets` (omitted with
+  `details_truncated: true` if oversized for the 32 KiB budget), and `console_url`.
+
+Follow the receipt hint rather than re-submitting the action:
+
+1. Share `approval_id` and `console_url` with a human reviewer (who approves in
+   the Web Console or via `allowops approvals approve`).
+2. Poll progress with `jobs_get(job_id, wait_seconds=30)` until the job moves
+   to execution or a terminal state (`rejected`, `expired`, `cancelled`, or
+   `execution_denied`).
+3. Withdraw a pending request with `jobs_cancel(job_id)` if no longer needed.
+
+Because `/mcp` uses stateless Streamable HTTP and allowops approvals enforce
+cross-identity separation of duties, the gateway does not use server-initiated
+MCP Elicitation requests.

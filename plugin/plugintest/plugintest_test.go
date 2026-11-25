@@ -14,7 +14,30 @@ import (
 	"github.com/liubing0806/allowops/plugin/changes"
 	"github.com/liubing0806/allowops/plugin/inventory"
 	"github.com/liubing0806/allowops/plugin/knowledge"
+	"github.com/liubing0806/allowops/plugin/notifier"
 )
+
+type testNotifier struct {
+	Name string `yaml:"name"`
+}
+
+func (testNotifier) Module() plugin.ModuleInfo {
+	return plugin.ModuleInfo{ID: "notifier.contract_test", New: func() plugin.Module { return new(testNotifier) }}
+}
+
+func (m *testNotifier) Send(ctx context.Context, event notifier.Event) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if m.Name == "" || event.Type != notifier.EventApprovalRequested || event.EventID == "" || event.ApprovalID == "" {
+		return errors.New("invalid notifier contract fixture")
+	}
+	return nil
+}
+
+func TestNotifierContractWithoutHTTP(t *testing.T) {
+	RunNotifierContract(t, testNotifier{}, "name: fixture")
+}
 
 func TestHostFixtureCapabilities(t *testing.T) {
 	now := time.Date(2026, time.November, 24, 10, 0, 0, 0, time.FixedZone("test", 8*60*60))

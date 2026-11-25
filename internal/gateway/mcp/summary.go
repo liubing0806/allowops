@@ -215,7 +215,7 @@ func (p *summaryPage) render(end, previewLimit int, includeVariances bool) (*Too
 		raw, _ := json.Marshal(summaryCursor{Snapshot: p.snapshot, Offset: end})
 		data["next_cursor"] = base64.RawURLEncoding.EncodeToString(raw)
 	}
-	return toolResult(data)
+	return toolResultWithApprovals(data, data)
 }
 
 type mcpMetricVariance struct {

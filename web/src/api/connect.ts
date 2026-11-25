@@ -13,6 +13,7 @@ import {
   type CallOptions,
 } from '@connectrpc/connect'
 import { createConnectTransport } from '@connectrpc/connect-web'
+import { ApprovalService } from '@/gen/allowops/v1/approval_pb'
 import { AuditService } from '@/gen/allowops/v1/audit_pb'
 import { CatalogService } from '@/gen/allowops/v1/catalog_pb'
 import { ErrorDetailSchema } from '@/gen/allowops/v1/common_pb'
@@ -50,6 +51,9 @@ const writes = new Set<keyof ConsoleApi>([
   'createServiceAccountToken',
   'revokeServiceAccountToken',
   'cancelJob',
+  'approveRequest',
+  'rejectRequest',
+  'cancelApproval',
   'setUserRoles',
   'saveRoleMappings',
 ])
@@ -232,6 +236,11 @@ export const api: ConsoleApi = {
   listTasks: bind('listTasks', JobService.method.listTasks, 'tasks'),
   getJobOutput: bind('getJobOutput', JobService.method.getJobOutput),
   cancelJob: bind('cancelJob', JobService.method.cancelJob),
+  listApprovals: bind('listApprovals', ApprovalService.method.listApprovals),
+  getApproval: bind('getApproval', ApprovalService.method.getApproval),
+  approveRequest: bind('approveRequest', ApprovalService.method.approveRequest),
+  rejectRequest: bind('rejectRequest', ApprovalService.method.rejectRequest),
+  cancelApproval: bind('cancelApproval', ApprovalService.method.cancelApproval),
   listAuditEvents: bind(
     'listAuditEvents',
     AuditService.method.listAuditEvents,

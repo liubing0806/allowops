@@ -83,6 +83,49 @@ func (q *Queries) DeleteRoleMappings(ctx context.Context) error {
 	return err
 }
 
+const getApprovalServiceAccount = `-- name: GetApprovalServiceAccount :one
+SELECT account_id,name,owner_user_id,description,roles,teams,revision,created_at FROM service_accounts WHERE account_id=$1 FOR SHARE
+`
+
+func (q *Queries) GetApprovalServiceAccount(ctx context.Context, accountID string) (ServiceAccount, error) {
+	row := q.db.QueryRow(ctx, getApprovalServiceAccount, accountID)
+	var i ServiceAccount
+	err := row.Scan(
+		&i.AccountID,
+		&i.Name,
+		&i.OwnerUserID,
+		&i.Description,
+		&i.Roles,
+		&i.Teams,
+		&i.Revision,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getApprovalUser = `-- name: GetApprovalUser :one
+SELECT user_id,provider_id,provider_subject,kind,username,email,display_name,groups,manual_roles,teams,revision FROM console_users WHERE user_id=$1 FOR SHARE
+`
+
+func (q *Queries) GetApprovalUser(ctx context.Context, userID string) (ConsoleUser, error) {
+	row := q.db.QueryRow(ctx, getApprovalUser, userID)
+	var i ConsoleUser
+	err := row.Scan(
+		&i.UserID,
+		&i.ProviderID,
+		&i.ProviderSubject,
+		&i.Kind,
+		&i.Username,
+		&i.Email,
+		&i.DisplayName,
+		&i.Groups,
+		&i.ManualRoles,
+		&i.Teams,
+		&i.Revision,
+	)
+	return i, err
+}
+
 const getConsoleUser = `-- name: GetConsoleUser :one
 SELECT user_id,provider_id,provider_subject,kind,username,email,display_name,groups,manual_roles,teams,revision FROM console_users WHERE user_id=$1
 `
@@ -104,6 +147,17 @@ func (q *Queries) GetConsoleUser(ctx context.Context, userID string) (ConsoleUse
 		&i.Revision,
 	)
 	return i, err
+}
+
+const getConsoleUserEmail = `-- name: GetConsoleUserEmail :one
+SELECT email FROM console_users WHERE user_id=$1 FOR SHARE
+`
+
+func (q *Queries) GetConsoleUserEmail(ctx context.Context, userID string) (string, error) {
+	row := q.db.QueryRow(ctx, getConsoleUserEmail, userID)
+	var email string
+	err := row.Scan(&email)
+	return email, err
 }
 
 const getConsoleUserID = `-- name: GetConsoleUserID :one
@@ -327,15 +381,16 @@ func (q *Queries) InsertServiceAccount(ctx context.Context, arg InsertServiceAcc
 }
 
 const insertServiceAccountToken = `-- name: InsertServiceAccountToken :one
-INSERT INTO service_account_tokens(token_id,account_id,token_hash,description,expires_at) VALUES ($1,$2,$3,$4,$5) RETURNING token_id,account_id,description,created_at,expires_at,last_used_at,revoked_at
+INSERT INTO service_account_tokens(token_id,account_id,token_hash,description,expires_at,created_by_user_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING token_id,account_id,description,created_at,expires_at,last_used_at,revoked_at
 `
 
 type InsertServiceAccountTokenParams struct {
-	TokenID     string
-	AccountID   string
-	TokenHash   []byte
-	Description string
-	ExpiresAt   pgtype.Timestamptz
+	TokenID         string
+	AccountID       string
+	TokenHash       []byte
+	Description     string
+	ExpiresAt       pgtype.Timestamptz
+	CreatedByUserID string
 }
 
 type InsertServiceAccountTokenRow struct {
@@ -355,6 +410,7 @@ func (q *Queries) InsertServiceAccountToken(ctx context.Context, arg InsertServi
 		arg.TokenHash,
 		arg.Description,
 		arg.ExpiresAt,
+		arg.CreatedByUserID,
 	)
 	var i InsertServiceAccountTokenRow
 	err := row.Scan(
@@ -367,6 +423,34 @@ func (q *Queries) InsertServiceAccountToken(ctx context.Context, arg InsertServi
 		&i.RevokedAt,
 	)
 	return i, err
+}
+
+const isApprovalSessionValid = `-- name: IsApprovalSessionValid :one
+SELECT EXISTS (
+    SELECT 1 FROM identity_sessions
+    WHERE session_id=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE
+)
+`
+
+func (q *Queries) IsApprovalSessionValid(ctx context.Context, sessionID string) (bool, error) {
+	row := q.db.QueryRow(ctx, isApprovalSessionValid, sessionID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const isApprovalTokenValid = `-- name: IsApprovalTokenValid :one
+SELECT EXISTS (
+    SELECT 1 FROM service_account_tokens
+    WHERE token_id=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR SHARE
+)
+`
+
+func (q *Queries) IsApprovalTokenValid(ctx context.Context, tokenID string) (bool, error) {
+	row := q.db.QueryRow(ctx, isApprovalTokenValid, tokenID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listCliSessions = `-- name: ListCliSessions :many
@@ -569,6 +653,15 @@ func (q *Queries) ListServiceAccounts(ctx context.Context) ([]ServiceAccount, er
 	return items, nil
 }
 
+const lockApprovalRoleMappings = `-- name: LockApprovalRoleMappings :exec
+SELECT revision FROM role_mapping_state FOR SHARE
+`
+
+func (q *Queries) LockApprovalRoleMappings(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockApprovalRoleMappings)
+	return err
+}
+
 const lockCliLoginCode = `-- name: LockCliLoginCode :one
 SELECT user_id,challenge FROM cli_login_codes WHERE code_hash=$1 AND expires_at>clock_timestamp() FOR UPDATE
 `
@@ -749,14 +842,20 @@ func (q *Queries) TouchIdentitySession(ctx context.Context, arg TouchIdentitySes
 }
 
 const touchServiceAccountToken = `-- name: TouchServiceAccountToken :one
-UPDATE service_account_tokens SET last_used_at=now() WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>now() RETURNING account_id
+UPDATE service_account_tokens SET last_used_at=now() WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>now() RETURNING account_id,token_id,created_by_user_id
 `
 
-func (q *Queries) TouchServiceAccountToken(ctx context.Context, tokenHash []byte) (string, error) {
+type TouchServiceAccountTokenRow struct {
+	AccountID       string
+	TokenID         string
+	CreatedByUserID string
+}
+
+func (q *Queries) TouchServiceAccountToken(ctx context.Context, tokenHash []byte) (TouchServiceAccountTokenRow, error) {
 	row := q.db.QueryRow(ctx, touchServiceAccountToken, tokenHash)
-	var account_id string
-	err := row.Scan(&account_id)
-	return account_id, err
+	var i TouchServiceAccountTokenRow
+	err := row.Scan(&i.AccountID, &i.TokenID, &i.CreatedByUserID)
+	return i, err
 }
 
 const updateServiceAccount = `-- name: UpdateServiceAccount :one

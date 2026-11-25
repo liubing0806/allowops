@@ -74,19 +74,20 @@ type policyState struct {
 }
 
 type Service struct {
-	Store         *store.Store
-	Config        Config
-	Audit         Auditor
-	management    *management
-	jobStatistics JobStatistics
-	objectStorage ObjectStorageHealth
-	pluginHealth  func() []pluginhost.Health
-	oidc          map[string]*OIDCProvider
-	ldap          map[string]LDAPProvider
-	state         atomic.Pointer[policyState]
-	refreshMu     sync.Mutex
-	cancel        context.CancelFunc
-	wg            sync.WaitGroup
+	Store          *store.Store
+	Config         Config
+	Audit          Auditor
+	management     *management
+	jobStatistics  JobStatistics
+	objectStorage  ObjectStorageHealth
+	pluginHealth   func() []pluginhost.Health
+	oidc           map[string]*OIDCProvider
+	ldap           map[string]LDAPProvider
+	state          atomic.Pointer[policyState]
+	refreshMu      sync.Mutex
+	maxApprovalTTL time.Duration
+	cancel         context.CancelFunc
+	wg             sync.WaitGroup
 }
 
 func New(ctx context.Context, db *store.Store, cfg Config, audit Auditor) (*Service, error) {

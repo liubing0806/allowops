@@ -25,6 +25,7 @@ import (
 	"github.com/liubing0806/allowops/plugin/changes"
 	"github.com/liubing0806/allowops/plugin/inventory"
 	"github.com/liubing0806/allowops/plugin/knowledge"
+	"github.com/liubing0806/allowops/plugin/notifier"
 )
 
 type Deps struct {
@@ -53,6 +54,7 @@ type instance struct {
 	resolver              inventory.Resolver
 	lister                changes.Lister
 	store                 knowledge.Store
+	sender                notifier.Sender
 	cleaner               plugin.Cleaner
 	ok                    bool
 	logger                *slog.Logger
@@ -208,7 +210,8 @@ func New(ctx context.Context, configs []Config, deps Deps) (_ *Host, startupErr 
 			return nil, fmt.Errorf("plugin %s: %w", c.ID, err)
 		}
 		if c.Disabled {
-			if _, err := egressConfig(c); err != nil {
+			namespace, _, _ := strings.Cut(c.Module, ".")
+			if _, err := egressConfig(c, namespace == "notifier"); err != nil {
 				return nil, fmt.Errorf("plugin %s: %w", c.ID, err)
 			}
 			continue
@@ -237,8 +240,10 @@ func (h *Host) newInstance(ctx context.Context, c Config, deps Deps) (*instance,
 		inst.lister, _ = m.(changes.Lister)
 	case "knowledge":
 		inst.store, _ = m.(knowledge.Store)
+	case "notifier":
+		inst.sender, _ = m.(notifier.Sender)
 	}
-	if inst.resolver == nil && inst.lister == nil && inst.store == nil {
+	if inst.resolver == nil && inst.lister == nil && inst.store == nil && inst.sender == nil {
 		return nil, fmt.Errorf("plugin %s: module does not implement its namespace interface", c.ID)
 	}
 	if err := decodeConfig(c, m); err != nil {
@@ -249,7 +254,7 @@ func (h *Host) newInstance(ctx context.Context, c Config, deps Deps) (*instance,
 			return nil, fmt.Errorf("plugin %s: validate: %s", c.ID, h.safe(err))
 		}
 	}
-	client, err := newEgressClient(c, nil)
+	client, err := newEgressClient(c, namespace == "notifier", nil)
 	if err != nil {
 		return nil, fmt.Errorf("plugin %s: %w", c.ID, err)
 	}
@@ -386,6 +391,7 @@ func (h *Host) shutdown(ctx context.Context) {
 func (h *Host) InventorySources() []string { return h.sourceIDs("inventory") }
 func (h *Host) ChangesSources() []string   { return h.sourceIDs("changes") }
 func (h *Host) KnowledgeSources() []string { return h.sourceIDs("knowledge") }
+func (h *Host) NotifierSources() []string  { return h.sourceIDs("notifier") }
 
 func (h *Host) sourceIDs(namespace string) []string {
 	var ids []string
@@ -513,14 +519,20 @@ func pluginCall[T any](ctx context.Context, h *Host, i *instance, fn func(contex
 		var result callResult[T]
 		defer func() {
 			if value := recover(); value != nil {
-				i.logger.Error("plugin call panic", "panic", fmt.Sprint(value))
+				if i.namespace == "notifier" {
+					i.logger.Error("notifier call panic")
+				} else {
+					i.logger.Error("plugin call panic", "panic", fmt.Sprint(value))
+				}
 				result = callResult[T]{reason: "panic"}
 			}
 			done <- result
 		}()
 		result.value, result.err = fn(callCtx)
 		if result.err != nil {
-			if !errors.Is(result.err, knowledge.ErrNotFound) {
+			if i.namespace == "notifier" {
+				i.logger.Error("notifier call failed")
+			} else if !errors.Is(result.err, knowledge.ErrNotFound) {
 				i.logger.Error("plugin call failed", "error", result.err)
 			}
 			result.reason = "failed"
@@ -554,6 +566,26 @@ func sourceCalls[T any](ctx context.Context, h *Host, namespace string, sources 
 		}()
 	}
 	return calls
+}
+
+// Notify delivers an approval event to all healthy notifier instances.
+func (h *Host) Notify(ctx context.Context, event notifier.Event) []SourceError {
+	calls := sourceCalls(ctx, h, "notifier", nil, func(ctx context.Context, inst *instance) (struct{}, error) {
+		copy := event
+		copy.SampleHosts = slices.Clone(event.SampleHosts)
+		copy.RequiredApproverRoleSets = slices.Clone(event.RequiredApproverRoleSets)
+		for index, roles := range copy.RequiredApproverRoleSets {
+			copy.RequiredApproverRoleSets[index] = slices.Clone(roles)
+		}
+		return struct{}{}, inst.sender.Send(ctx, copy)
+	})
+	var sourceErrors []SourceError
+	for _, call := range calls {
+		if result := <-call.done; result.reason != "" {
+			sourceErrors = append(sourceErrors, SourceError{call.inst.id, result.reason})
+		}
+	}
+	return sourceErrors
 }
 
 func (h *Host) SearchInventory(ctx context.Context, q Query, sources []string) ([]Result, []SourceError) {

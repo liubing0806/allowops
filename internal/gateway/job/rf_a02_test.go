@@ -27,6 +27,7 @@ type rfA02Tracer struct {
 	admin           *pgxpool.Pool
 	cancel          context.CancelFunc
 	kill            bool
+	insertingJob    atomic.Bool
 	committed       atomic.Bool
 	fault           atomic.Bool
 	injectionErrors chan error
@@ -36,7 +37,11 @@ func (p *rfA02Tracer) TraceQueryStart(ctx context.Context, c *pgx.Conn, d pgx.Tr
 	if ctx.Value(rfA02Request{}) == nil {
 		return ctx
 	}
-	if d.SQL == "commit" {
+	// Partition creation can commit first. Arm only for the job write.
+	if strings.HasPrefix(d.SQL, "-- name: InsertJob :exec") {
+		p.insertingJob.Store(true)
+	}
+	if d.SQL == "commit" && p.insertingJob.Swap(false) {
 		return context.WithValue(ctx, rfA02Commit{}, true)
 	}
 	if p.kill && p.committed.Load() && strings.HasPrefix(d.SQL, "SELECT job_id,action,catalog_id,") && p.fault.CompareAndSwap(false, true) {

@@ -161,8 +161,8 @@ func tokenFromRow(r db.ListServiceAccountTokensRow) *v1.ServiceAccountToken {
 	return &v1.ServiceAccountToken{TokenId: r.TokenID, AccountId: r.AccountID, Description: r.Description, CreatedAt: stamp(r.CreatedAt.Time), ExpiresAt: stamp(r.ExpiresAt.Time), LastUsedAt: nullable(r.LastUsedAt), RevokedAt: nullable(r.RevokedAt)}
 }
 
-func insertAccountToken(ctx context.Context, q querier, id, account string, tokenHash []byte, description string, expires time.Time) (*v1.ServiceAccountToken, error) {
-	r, err := db.New(q).InsertServiceAccountToken(ctx, db.InsertServiceAccountTokenParams{TokenID: id, AccountID: account, TokenHash: tokenHash, Description: description, ExpiresAt: timestamptz(expires)})
+func insertAccountToken(ctx context.Context, q querier, id, account string, tokenHash []byte, description string, expires time.Time, issuer string) (*v1.ServiceAccountToken, error) {
+	r, err := db.New(q).InsertServiceAccountToken(ctx, db.InsertServiceAccountTokenParams{TokenID: id, AccountID: account, TokenHash: tokenHash, Description: description, ExpiresAt: timestamptz(expires), CreatedByUserID: issuer})
 	if err != nil {
 		return &v1.ServiceAccountToken{}, err
 	}
@@ -186,8 +186,8 @@ func revokeAccountToken(ctx context.Context, q querier, account, token string) (
 	return db.New(q).RevokeServiceAccountToken(ctx, db.RevokeServiceAccountTokenParams{AccountID: account, TokenID: token})
 }
 
-// touchAccountToken marks a live token as used and returns its account ID.
-func touchAccountToken(ctx context.Context, q querier, tokenHash []byte) (string, error) {
+// touchAccountToken marks a live token as used and returns its identifiers.
+func touchAccountToken(ctx context.Context, q querier, tokenHash []byte) (db.TouchServiceAccountTokenRow, error) {
 	return db.New(q).TouchServiceAccountToken(ctx, tokenHash)
 }
 

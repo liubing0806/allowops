@@ -124,6 +124,107 @@ describe('policy simulation scope', () => {
   })
 })
 
+describe('approval policies', () => {
+  it('validates approval configuration and sends it to the simulation', async () => {
+    const testPolicy = vi.spyOn(api, 'testPolicy')
+    try {
+      await openPolicies()
+      fireEvent.click(screen.getByRole('button', { name: '编辑 readonly-all' }))
+      fireEvent.click(screen.getByRole('button', { name: '要求审批' }))
+      const operations = screen.getByLabelText('操作（逗号分隔）')
+      const roles = screen.getByLabelText('审批人角色（逗号分隔）')
+      const minimum = screen.getByLabelText('最低批准票数')
+      const ttl = screen.getByLabelText('审批有效期（秒）')
+      const owner = screen.getByRole('checkbox', { name: '允许服务账号所有者批准' })
+      const save = screen.getByRole('button', { name: '保存' })
+      expect(minimum).toHaveValue(1)
+      expect(ttl).toHaveValue(1800)
+      expect(owner).not.toBeChecked()
+      fireEvent.change(operations, { target: { value: 'execute_action,view_approvals' } })
+      fireEvent.change(minimum, { target: { value: '1.5' } })
+      fireEvent.change(ttl, { target: { value: '86401' } })
+      fireEvent.click(save)
+      expect(await screen.findByText('审批规则只允许使用 execute_action 操作。')).toBeVisible()
+      expect(screen.getByText(/请输入 1–16 个角色名/)).toBeVisible()
+      expect(screen.getByText('请输入 1 到 5 的整数。')).toBeVisible()
+      expect(screen.getByText(/请输入 60 到 86400 秒的整数/)).toBeVisible()
+      fireEvent.change(operations, { target: { value: 'execute_action' } })
+      fireEvent.change(roles, { target: { value: 'admin, operator' } })
+      fireEvent.change(minimum, { target: { value: '2' } })
+      fireEvent.change(ttl, { target: { value: '1200' } })
+      fireEvent.click(owner)
+      fireEvent.click(save)
+      const run = screen.getByRole('button', { name: '试算' })
+      await waitFor(() => expect(run).toBeEnabled())
+      fireEvent.click(run)
+      await screen.findByRole('heading', { name: '试算结果' })
+      expect(testPolicy).toHaveBeenCalledWith(expect.objectContaining({
+        rules: {
+          rules: expect.arrayContaining([expect.objectContaining({
+            name: 'readonly-all',
+            effect: 'POLICY_EFFECT_REQUIRE_APPROVAL',
+            operations: ['execute_action'],
+            approval: {
+              approverRoles: ['admin', 'operator'],
+              minApprovals: 2,
+              ttlSeconds: 1200,
+              allowOwnerApprove: true,
+            },
+          })]),
+        },
+      }))
+    } finally {
+      testPolicy.mockRestore()
+    }
+  })
+
+  it('shows a requirement change when both decisions require approval', async () => {
+    const approval = {
+      requiredApproverRoleSets: [{ roles: ['admin', 'operator'] }],
+      minApprovals: 1,
+      ttlSeconds: 1800,
+      allowOwnerApprove: false,
+    }
+    const before = {
+      effect: 'POLICY_EFFECT_REQUIRE_APPROVAL' as const,
+      matchedRules: ['prod-restart'],
+      errorReason: '',
+      approval,
+    }
+    const changes = vi.spyOn(api, 'getPolicyTestChanges').mockResolvedValue({
+      changes: [{
+        caseIndex: 0,
+        host: 'web-01',
+        before,
+        after: {
+          ...before,
+          approval: {
+            ...approval,
+            requiredApproverRoleSets: [...approval.requiredApproverRoleSets, { roles: ['security'] }],
+            minApprovals: 2,
+            ttlSeconds: 600,
+            allowOwnerApprove: true,
+          },
+        },
+      }],
+      page: { nextPageToken: '' },
+    })
+    try {
+      await openPolicies()
+      fireEvent.click(screen.getByRole('button', { name: '试算' }))
+      expect(await screen.findByText('1 处判定改变，其中 1 处涉及审批约束')).toBeVisible()
+      const row = screen.getByRole('row', { name: /web-01/ })
+      expect(within(row).getAllByText('要求审批')).toHaveLength(2)
+      expect(within(row).getByText('(admin ∨ operator)')).toBeVisible()
+      expect(within(row).getByText('(admin ∨ operator) ∧ (security)')).toBeVisible()
+      expect(within(row).getByText('1800')).toBeVisible()
+      expect(within(row).getByText('600')).toBeVisible()
+    } finally {
+      changes.mockRestore()
+    }
+  })
+})
+
 describe('policy rollback draft', () => {
   it('loads historical rules and turns into a normal save after an edit', async () => {
     await openPolicies()

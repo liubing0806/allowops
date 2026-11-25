@@ -32,17 +32,17 @@ func callerContext(id string, roles ...string) context.Context {
 // hostIdentity answers AllowedActionsOnHost from a fixed table.
 type hostIdentity struct {
 	Identity
-	allowed    map[string]map[string]bool
+	allowed    map[string]map[string]string
 	hostname   string
 	candidates []authz.Action
 }
 
-func (h *hostIdentity) AllowedActionsOnHost(_ context.Context, hostname string, actions []authz.Action) (map[string]bool, error) {
+func (h *hostIdentity) AllowedActionsOnHost(_ context.Context, hostname string, actions []authz.Action) (map[string]string, error) {
 	h.hostname, h.candidates = hostname, actions
-	out := map[string]bool{}
+	out := map[string]string{}
 	for _, a := range actions {
-		if h.allowed[hostname][a.Name] {
-			out[a.Name] = true
+		if decision, ok := h.allowed[hostname][a.Name]; ok {
+			out[a.Name] = decision
 		}
 	}
 	return out, nil
@@ -159,7 +159,7 @@ func TestActionsSearchOrderFiltersAndMetadata(t *testing.T) {
 }
 
 func TestActionsSearchHostname(t *testing.T) {
-	id := &hostIdentity{allowed: map[string]map[string]bool{"web-01": {"logs_read": true, "svc_restart": true, "not_candidate": true}}}
+	id := &hostIdentity{allowed: map[string]map[string]string{"web-01": {"logs_read": "allow", "svc_restart": "require_approval", "not_candidate": "allow"}}}
 	s := &Service{identity: id}
 	ctx := callerContext("alice", "ops")
 	scope := searchScope(t, searchCatalog()...)
@@ -170,6 +170,9 @@ func TestActionsSearchHostname(t *testing.T) {
 	out, err = searchActionsFor(t, s, ctx, scope, `{"hostname":"web-01"}`)
 	if err != nil || !slices.Equal(entryNames(out), []string{"logs_read", "svc_restart"}) || out.Total != 2 {
 		t.Fatalf("names=%v error=%v", entryNames(out), err)
+	}
+	if out.Actions[0].RequiresApproval || !out.Actions[1].RequiresApproval {
+		t.Fatalf("host-specific approval flags=%+v", out.Actions)
 	}
 	empty, err := searchActionsFor(t, s, ctx, scope, `{"hostname":"missing"}`)
 	if err != nil || len(empty.Actions) != 0 || empty.Total != 0 || empty.Toolsets != nil {
@@ -229,7 +232,7 @@ func TestActionsSearchPaginationAndCursorBinding(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := actionsSnapshot(ctx, scope, actionsQuery{Limit: 3}, matchActions(actionsQuery{Limit: 3}, scope.visible))
+	snapshot, err := actionsSnapshot(ctx, scope, actionsQuery{Limit: 3}, matchActions(actionsQuery{Limit: 3}, scope.visible), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,13 +287,19 @@ func TestActionsSearchPaginationAndCursorBinding(t *testing.T) {
 	}
 	// Host precheck drift (e.g. host authorization labels changed between pages
 	// without changing catalog or policy versions) invalidates the cursor.
-	hostID := &hostIdentity{allowed: map[string]map[string]bool{"web-01": {"disk_usage": true, "logs_read": true, "svc_restart": true}}}
+	hostID := &hostIdentity{allowed: map[string]map[string]string{"web-01": {"disk_usage": "allow", "logs_read": "allow", "svc_restart": "require_approval"}}}
 	hs := &Service{identity: hostID}
 	page1, err := searchActionsFor(t, hs, ctx, scope, `{"hostname":"web-01","limit":2}`)
 	if err != nil || page1.NextCursor == "" {
 		t.Fatalf("host page1=%+v err=%v", page1, err)
 	}
-	hostID.allowed["web-01"]["data_purge"] = true
+	query := fmt.Sprintf(`{"hostname":"web-01","limit":2,"next_cursor":%q}`, page1.NextCursor)
+	hostID.allowed["web-01"]["svc_restart"] = "allow"
+	if _, err := hs.searchActions(ctx, json.RawMessage(query), scope); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("approval decision changed on a later page but cursor stayed valid: %v", err)
+	}
+	hostID.allowed["web-01"]["svc_restart"] = "require_approval"
+	hostID.allowed["web-01"]["data_purge"] = "allow"
 	if _, err := hs.searchActions(ctx, json.RawMessage(fmt.Sprintf(`{"hostname":"web-01","limit":2,"next_cursor":%q}`, page1.NextCursor)), scope); connect.CodeOf(err) != connect.CodeInvalidArgument || err.(*connect.Error).Message() != invalidActionsCursor {
 		t.Fatalf("host precheck drift error=%v", err)
 	}

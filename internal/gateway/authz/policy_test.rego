@@ -16,6 +16,24 @@ test_deny_precedes_allow if {
 	result == {"decision": "deny", "rules": ["allow", "deny"]} with data.rules as [fixture_rule, deny] with data.bootstrap_admins as [] with input as fixture_input
 }
 
+test_require_approval_precedes_allow if {
+	approval := object.union(fixture_rule, {"id": "approval", "effect": "require_approval"})
+	result == {"decision": "require_approval", "rules": ["allow", "approval"]} with data.rules as [approval, fixture_rule] with data.bootstrap_admins as [] with input as fixture_input
+}
+
+test_deny_precedes_require_approval if {
+	approval := object.union(fixture_rule, {"id": "approval", "effect": "require_approval"})
+	deny := object.union(fixture_rule, {"id": "deny", "effect": "deny"})
+	result == {"decision": "deny", "rules": ["allow", "approval", "deny"]} with data.rules as [deny, approval, fixture_rule] with data.bootstrap_admins as [] with input as fixture_input
+}
+
+test_bootstrap_admin_does_not_grant_job_or_approval_access if {
+	every op in ["execute_action", "view_approvals", "approve_jobs"] {
+		i := object.union(fixture_input, {"operation": op})
+		result == {"decision": "deny", "rules": []} with data.rules as [] with data.bootstrap_admins as ["alice"] with input as i
+	}
+}
+
 test_missing_host_label if {
 	i := object.union(object.remove(fixture_input, ["host"]), {"host": {"labels": {}}})
 	result.decision == "deny" with data.rules as [fixture_rule] with data.bootstrap_admins as [] with input as i

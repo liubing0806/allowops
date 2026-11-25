@@ -23,9 +23,10 @@ var shortJobID = regexp.MustCompile(`^job-[0-9]{8}-[0-9]{1,20}$`)
 // replaces the audited tool name with the validated action name; mutating
 // marks calls that may have changed hosts once a job ID is known.
 type callState struct {
-	jobID     string
-	operation string
-	mutating  bool
+	jobID           string
+	operation       string
+	mutating        bool
+	pendingApproval bool
 }
 
 func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, scope *serverScope) (*sdk.CallToolResult, error) {
@@ -55,6 +56,8 @@ func (s *Service) call(ctx context.Context, r *sdk.CallToolRequest, scope *serve
 	event.JobID = state.jobID
 	if err != nil {
 		event.Outcome = "deny"
+	} else if state.pendingApproval {
+		event.Outcome = "require_approval"
 	}
 	// The job module owns the audit written before a write (design P6, G28). This result covers early parameter
 	// failures and unknown/denied tools without duplicating the authorized event (design G49).
@@ -262,6 +265,10 @@ func (s *Service) runAction(ctx context.Context, r *sdk.CallToolRequest, action 
 	if state.jobID == "" {
 		return nil, accessError(connect.CodeUnavailable, "invalid job response")
 	}
+	if response.Job.Status == v1.JobStatus_JOB_STATUS_PENDING_APPROVAL {
+		state.pendingApproval = true
+		return pendingApprovalResult(response.Job, response.Summary.GetTruncated())
+	}
 	return nativeSummaryResult(reqctx.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, "")
 }
 
@@ -411,6 +418,10 @@ func (s *Service) getJob(ctx context.Context, r *sdk.CallToolRequest, state *cal
 		return nil, accessError(connect.CodeUnavailable, "job response unavailable")
 	}
 	if host == "" {
+		if response.Job.Status == v1.JobStatus_JOB_STATUS_PENDING_APPROVAL {
+			state.pendingApproval = true
+			return pendingApprovalResult(response.Job, response.Summary.GetTruncated())
+		}
 		return nativeSummaryResult(reqctx.RequestAuditInfo(ctx).ActorID, response.Job, response.Summary, format, cursor)
 	}
 	outputStream := v1.OutputStream_OUTPUT_STREAM_STDOUT
@@ -450,11 +461,7 @@ func (s *Service) listJobs(ctx context.Context, raw json.RawMessage) (*ToolResul
 		}
 		jobs = append(jobs, jobMetadata(job))
 	}
-	result, size, err := toolResult(map[string]any{"jobs": jobs, "next_cursor": response.Page.GetNextPageToken(), "output_trust": "untrusted"})
-	if size > resultByteLimit {
-		return nil, errors.New("job metadata exceeds 32KB")
-	}
-	return result, err
+	return boundedJobResult(map[string]any{"jobs": jobs, "next_cursor": response.Page.GetNextPageToken(), "output_trust": "untrusted"}, jobs...)
 }
 
 func jobMetadata(job *v1.Job) map[string]any {
@@ -462,15 +469,16 @@ func jobMetadata(job *v1.Job) map[string]any {
 	for _, c := range job.Counts {
 		counts[taskStatus(c.Status)] = c.Count
 	}
-	return map[string]any{"counts": counts, "job_id": job.JobId, "action": job.Action, "status": strings.ToLower(strings.TrimPrefix(job.Status.String(), "JOB_STATUS_")), "total": job.TotalTasks, "output_trust": "untrusted"}
+	data := map[string]any{"counts": counts, "job_id": job.JobId, "action": job.Action, "status": strings.ToLower(strings.TrimPrefix(job.Status.String(), "JOB_STATUS_")), "total": job.TotalTasks, "output_trust": "untrusted"}
+	if job.Approval != nil {
+		data["approval"] = approvalMetadata(job.Approval)
+	}
+	return data
 }
 
 func jobMetadataResult(job *v1.Job) (*ToolResult, error) {
-	result, size, err := toolResult(jobMetadata(job))
-	if size > resultByteLimit {
-		return nil, errors.New("job metadata exceeds 32KB")
-	}
-	return result, err
+	data := jobMetadata(job)
+	return boundedJobResult(data, data)
 }
 
 func invalidArguments(err error) error {

@@ -52,7 +52,7 @@ allowops jobs cancel job-20261014-0001 --json
 
 run 使用 `--hosts`（以逗号分隔的主机名）或 `--selector` 之一；使用选择器时必须提供`--expected-count`。`--reason` 为必填。动作输入通过重复的 `--param` 提供；整数和布尔值按类型解析，数组使用 JSON。提供参数时还需要 `view_catalog` 权限，以便 CLI 读取动作的 schema。run 支持 `--response-format concise|detailed`、等待、分批和失败控制参数。run 不提供单独的输出过滤参数；需要顶层输出过滤时使用 MCP。
 
-返回的 job 为失败、部分失败、已取消或被拒绝时，`run` 以 1 退出。返回的 job 成功时，以 0 退出。响应为排队中或运行中时也以 0 退出，并在 stderr 中提示 job 尚未完成。使用 `--wait-seconds 0` 或响应等待在完成前结束时会出现这种情况；仅凭退出码 0 不能确定 task 成功。job 状态未指定或未知，或响应中没有 job 时，以 1 退出，并在 stderr 中报告未知状态。文本或 JSON 响应仍输出到 stdout，job 失败时也是如此。提交错误、RPC 错误和输出错误仍以非零状态码退出。这些退出规则只适用于 `run`；之后的进度使用 `jobs get` 查看。
+返回的 job 为失败、部分失败、已取消或被拒绝时，`run` 以 1 退出。返回的 job 成功时，以 0 退出。响应为排队中、运行中或 `pending_approval` 时也以 0 退出，并在 stderr 中提示（待审批时打印 `approval_id` 与 `console_url`）。使用 `--wait-seconds 0`、等待人工审批或响应等待在完成前结束时会出现这种情况；仅凭退出码 0 不能确定 task 成功。提交需要审批的动作时可使用 `--evidence-job`（可重复）、`--evidence-summary` 与 `--client-request-id`。job 状态未指定或未知，或响应中没有 job 时，以 1 退出，并在 stderr 中报告未知状态。文本或 JSON 响应仍输出到 stdout，job 失败时也是如此。提交错误、RPC 错误和输出错误仍以非零状态码退出。这些退出规则只适用于 `run`；之后的进度使用 `jobs get` 查看。
 
 `jobs list` 使用 `--page-token` 分页；须通过 JSON 输出获取下一页的 token。读取组合动作的输出时须提供 `--step`，值为从零开始的步骤序号；单步骤动作应省略该参数。每个已声明的步骤须分别读取；切换步骤或输出流时须重置 offset。组合动作省略步骤或提供无效序号时，返回 `INVALID_OUTPUT_STEP`。例如：
 
@@ -65,6 +65,18 @@ allowops jobs output job-20261014-0002 --host host-a --step 1 --stream stdout --
 
 MCP 动作工具使用同一个 job 服务。MCP 工具的输入是 JSON，动作参数放在 `params` 中；带 `host` 的 `jobs_get` 读取输出，组合动作使用 `step_index`。MCP 返回 `data_base64`
 和数值类型的 `next_offset`；CLI JSON 返回 ProtoJSON 的 `data` 和字符串类型的 `next_offset`。汇总字段、输出分页和读取提示见 [MCP 工具](mcp.md)。
+
+## 审批 {#approvals}
+
+```sh
+allowops approvals list --status pending --actionable --json
+allowops approvals get apr-20261124-0001 --json
+allowops approvals approve apr-20261124-0001 --reason '已核对执行计划'
+allowops approvals reject apr-20261124-0001 --reason '目标维护窗口不符'
+allowops approvals cancel apr-20261124-0001 --yes
+```
+
+`approvals list` 支持 `--status`、`--action`、`--requester`、`--actionable`、`--page-size`、`--page-token` 与 `--json`。`approvals get` 将网关已校验的冻结执行计划（精确解析后的目标主机、规范化参数、动作摘要与 `request_digest`）与不可信的发起人 `reason`、`evidence` 分区展示。`approvals approve` 会先拉取冻结执行计划并将其 `request_digest` 作为 `expected_request_digest` 回传，防止 TOCTOU 篡改。`approvals reject` 必填 `--reason`。批准、拒绝与撤回默认要求交互确认，非终端 stdin 须传 `--yes`。
 
 ## 策略和审计 {#policy-and-audit}
 

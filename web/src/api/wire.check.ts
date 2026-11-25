@@ -3,6 +3,18 @@
 // This file has no runtime code. `pnpm typecheck` fails when a proto field that
 // a console model uses is renamed, removed, or changes type.
 import type {
+  ApproveRequestRequestJson,
+  ApproveRequestResponseJson,
+  CancelApprovalRequestJson,
+  CancelApprovalResponseJson,
+  GetApprovalRequestJson,
+  GetApprovalResponseJson,
+  ListApprovalsRequestJson,
+  ListApprovalsResponseJson,
+  RejectRequestRequestJson,
+  RejectRequestResponseJson,
+} from '@/gen/allowops/v1/approval_pb'
+import type {
   ListAuditEventsRequestJson,
   ListAuditEventsResponseJson,
   VerifyAuditRequestJson,
@@ -107,10 +119,11 @@ import type {
   ListGatewayInstancesResponseJson,
 } from '@/gen/allowops/v1/system_pb'
 import type {
+  ApprovalStatusJson,
   JobStatusJson,
   TaskStatusJson,
 } from '@/gen/allowops/v1/common_pb'
-import type { ConsoleApi, jobStatuses, taskStatuses } from './types'
+import type { ConsoleApi, approvalStatuses, jobStatuses, taskStatuses } from './types'
 
 // Lists the paths in D (a console model) that do not exist in J (the generated
 // ProtoJSON type) or whose type is not assignable to it. Fields that the console
@@ -209,6 +222,11 @@ interface Wire {
   listTasks: [ListTasksRequestJson, ListTasksResponseJson]
   getJobOutput: [GetJobOutputRequestJson, GetJobOutputResponseJson]
   cancelJob: [CancelJobRequestJson, CancelJobResponseJson]
+  listApprovals: [ListApprovalsRequestJson, ListApprovalsResponseJson]
+  getApproval: [GetApprovalRequestJson, GetApprovalResponseJson]
+  approveRequest: [ApproveRequestRequestJson, ApproveRequestResponseJson]
+  rejectRequest: [RejectRequestRequestJson, RejectRequestResponseJson]
+  cancelApproval: [CancelApprovalRequestJson, CancelApprovalResponseJson]
   listAuditEvents: [ListAuditEventsRequestJson, ListAuditEventsResponseJson]
   verifyAudit: [VerifyAuditRequestJson, VerifyAuditResponseJson]
   listUsers: [ListUsersRequestJson, ListUsersResponseJson]
@@ -245,8 +263,8 @@ type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
     ? true
     : false
-// The status lists used by the filters must list every non-zero enum value.
+// The status lists must cover every status supported by the list RPCs.
 export const statusListsMatchProtoJson: Equal<
-  (typeof jobStatuses)[number] | (typeof taskStatuses)[number],
-  Exclude<JobStatusJson | TaskStatusJson, `${string}_UNSPECIFIED`>
+  (typeof jobStatuses)[number] | (typeof taskStatuses)[number] | (typeof approvalStatuses)[number],
+  Exclude<JobStatusJson | TaskStatusJson | ApprovalStatusJson, `${string}_UNSPECIFIED`>
 > = true

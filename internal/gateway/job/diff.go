@@ -150,6 +150,7 @@ func (s *Service) DiffJobs(ctx context.Context, r *v1.DiffJobsRequest) (*v1.Diff
 func isUnfinishedJobStatus(status v1.JobStatus) bool {
 	return status == v1.JobStatus_JOB_STATUS_QUEUED ||
 		status == v1.JobStatus_JOB_STATUS_RUNNING ||
+		status == v1.JobStatus_JOB_STATUS_PENDING_APPROVAL ||
 		status == v1.JobStatus_JOB_STATUS_UNSPECIFIED
 }
 

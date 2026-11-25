@@ -53,8 +53,8 @@ type catalogLoad struct {
 // from it per request and never cached, so header combinations cannot evict
 // other identities.
 type identityView struct {
-	// allAvailable holds every action the projected policy allows, including
-	// actions whose schema this gateway cannot register.
+	// allAvailable holds every action the projected policy allows or requires
+	// approval for, including actions with schemas this gateway cannot register.
 	allAvailable map[string]catalog.Action
 	// visible is allAvailable without the unsupported actions.
 	visible     map[string]catalog.Action
@@ -308,7 +308,7 @@ func (s *Service) buildView(ctx context.Context, snapshot *catalogSnapshot, id *
 		if err != nil {
 			return nil, err
 		}
-		if result.Decision != "allow" {
+		if result.Decision != "allow" && result.Decision != "require_approval" {
 			continue
 		}
 		view.allAvailable[name] = a

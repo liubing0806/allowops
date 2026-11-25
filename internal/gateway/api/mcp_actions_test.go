@@ -62,6 +62,7 @@ func TestAllowedActionsOnHost(t *testing.T) {
 	rules.Rules = append(rules.Rules,
 		&v1.PolicyRule{Name: "ops-view", Roles: []string{"ops"}, Operations: []string{"view_hosts"}, HostLabels: map[string]string{"env": "prod"}, Effect: allow},
 		&v1.PolicyRule{Name: "ops-run", Roles: []string{"ops"}, Operations: []string{"execute_action"}, Risks: []string{"read", "write"}, HostLabels: map[string]string{"env": "prod"}, Effect: allow},
+		&v1.PolicyRule{Name: "reload-approval", Roles: []string{"admin", "ops"}, Operations: []string{"execute_action"}, Actions: []string{"svc_reload"}, Effect: v1.PolicyEffect_POLICY_EFFECT_REQUIRE_APPROVAL, Approval: &v1.PolicyApprovalConfig{MinApprovals: 1}},
 		&v1.PolicyRule{Name: "ops-no-restart", Roles: []string{"ops"}, Operations: []string{"execute_action"}, Actions: []string{"svc_restart"}, Effect: deny},
 		&v1.PolicyRule{Name: "ops-office-ip", Roles: []string{"ops"}, Operations: []string{"execute_action"}, Actions: []string{"office_read"}, SourceCidrs: []string{"10.0.0.0/8"}, Effect: allow},
 		&v1.PolicyRule{Name: "ops-always", Roles: []string{"ops"}, Operations: []string{"execute_action"}, Actions: []string{"anytime_purge"}, Hours: &v1.PolicyHours{From: 0, To: 24, Timezone: "UTC"}, Effect: allow},
@@ -89,17 +90,17 @@ func TestAllowedActionsOnHost(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name, role, ip, host string
-		want                 map[string]bool
+		want                 map[string]string
 	}{
-		{"admin labeled host", "admin", "192.0.2.1", "prod-01", map[string]bool{"disk_usage": true, "svc_restart": true, "svc_reload": true, "data_purge": true, "office_read": true, "anytime_purge": true, "night_purge": true}},
-		{"admin unlabeled host", "admin", "192.0.2.1", "bare-01", map[string]bool{}},
-		{"admin missing host", "admin", "192.0.2.1", "missing-01", map[string]bool{}},
-		{"admin deleted host", "admin", "192.0.2.1", "deleted-01", map[string]bool{}},
-		{"ops office address", "ops", "10.1.2.3", "prod-01", map[string]bool{"disk_usage": true, "svc_reload": true, "office_read": true, "anytime_purge": true}},
-		{"ops other address", "ops", "192.0.2.1", "prod-01", map[string]bool{"disk_usage": true, "svc_reload": true, "anytime_purge": true}},
-		{"ops hidden host", "ops", "10.1.2.3", "secret-01", map[string]bool{}},
-		{"ops unlabeled host", "ops", "10.1.2.3", "bare-01", map[string]bool{}},
-		{"viewer labeled host", "viewer", "10.1.2.3", "prod-01", map[string]bool{}},
+		{"admin labeled host", "admin", "192.0.2.1", "prod-01", map[string]string{"disk_usage": "allow", "svc_restart": "allow", "svc_reload": "require_approval", "data_purge": "allow", "office_read": "allow", "anytime_purge": "allow", "night_purge": "allow"}},
+		{"admin unlabeled host", "admin", "192.0.2.1", "bare-01", map[string]string{}},
+		{"admin missing host", "admin", "192.0.2.1", "missing-01", map[string]string{}},
+		{"admin deleted host", "admin", "192.0.2.1", "deleted-01", map[string]string{}},
+		{"ops office address", "ops", "10.1.2.3", "prod-01", map[string]string{"disk_usage": "allow", "svc_reload": "require_approval", "office_read": "allow", "anytime_purge": "allow"}},
+		{"ops other address", "ops", "192.0.2.1", "prod-01", map[string]string{"disk_usage": "allow", "svc_reload": "require_approval", "anytime_purge": "allow"}},
+		{"ops hidden host", "ops", "10.1.2.3", "secret-01", map[string]string{}},
+		{"ops unlabeled host", "ops", "10.1.2.3", "bare-01", map[string]string{}},
+		{"viewer labeled host", "viewer", "10.1.2.3", "prod-01", map[string]string{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, state := caller(tc.role, tc.ip)
@@ -116,7 +117,7 @@ func TestAllowedActionsOnHost(t *testing.T) {
 	if _, err := f.service.AllowedActionsOnHost(ctx, "prod-01", candidates); err != nil {
 		t.Fatal(err)
 	}
-	for _, rule := range []string{"earlier", "ops-view", "ops-run", "ops-no-restart", "ops-office-ip", "ops-always"} {
+	for _, rule := range []string{"earlier", "ops-view", "ops-run", "reload-approval", "ops-no-restart", "ops-office-ip", "ops-always"} {
 		if !slices.Contains(state.matchedRules, rule) {
 			t.Fatalf("matched rules=%v missing %s", state.matchedRules, rule)
 		}

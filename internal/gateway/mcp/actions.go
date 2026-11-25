@@ -44,19 +44,20 @@ type actionInputSchema struct {
 }
 
 type actionEntry struct {
-	Name           string             `json:"name"`
-	Description    string             `json:"description"`
-	Risk           string             `json:"risk"`
-	Idempotent     bool               `json:"idempotent"`
-	Toolset        string             `json:"toolset,omitempty"`
-	Tags           []string           `json:"tags,omitempty"`
-	EntityKinds    []string           `json:"entity_kinds,omitempty"`
-	MaxTargets     *int               `json:"max_targets,omitempty"`
-	Filters        []string           `json:"filters,omitempty"`
-	RequiredParams []string           `json:"required_params,omitempty"`
-	OptionalParams []string           `json:"optional_params,omitempty"`
-	InvokeTool     string             `json:"invoke_tool"`
-	InputSchema    *actionInputSchema `json:"input_schema,omitempty"`
+	Name             string             `json:"name"`
+	Description      string             `json:"description"`
+	Risk             string             `json:"risk"`
+	Idempotent       bool               `json:"idempotent"`
+	Toolset          string             `json:"toolset,omitempty"`
+	Tags             []string           `json:"tags,omitempty"`
+	EntityKinds      []string           `json:"entity_kinds,omitempty"`
+	MaxTargets       *int               `json:"max_targets,omitempty"`
+	Filters          []string           `json:"filters,omitempty"`
+	RequiredParams   []string           `json:"required_params,omitempty"`
+	OptionalParams   []string           `json:"optional_params,omitempty"`
+	InvokeTool       string             `json:"invoke_tool"`
+	InputSchema      *actionInputSchema `json:"input_schema,omitempty"`
+	RequiresApproval bool               `json:"requires_approval,omitempty"`
 }
 
 type toolsetCount struct {
@@ -107,19 +108,23 @@ func (s *Service) searchActions(ctx context.Context, raw json.RawMessage, scope 
 		return nil, err
 	}
 	matched := matchActions(q, scope.visible)
+	var decisions map[string]string
 	if q.Hostname != "" && len(matched) > 0 {
 		candidates := make([]authz.Action, len(matched))
 		for i, a := range matched {
 			candidates[i] = authz.Action{Name: a.Name, Risk: a.Risk}
 		}
-		allowed, err := s.identity.AllowedActionsOnHost(ctx, q.Hostname, candidates)
+		decisions, err = s.identity.AllowedActionsOnHost(ctx, q.Hostname, candidates)
 		if err != nil {
 			return nil, err
 		}
-		matched = slices.DeleteFunc(matched, func(a catalog.Action) bool { return !allowed[a.Name] })
+		matched = slices.DeleteFunc(matched, func(a catalog.Action) bool {
+			_, allowed := decisions[a.Name]
+			return !allowed
+		})
 	}
 	key := s.cursorSecret()
-	snapshot, err := actionsSnapshot(ctx, scope, q, matched)
+	snapshot, err := actionsSnapshot(ctx, scope, q, matched, decisions)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +144,9 @@ func (s *Service) searchActions(ctx context.Context, raw json.RawMessage, scope 
 	end := min(start+q.Limit, len(matched))
 	entries := make([]actionEntry, 0, end-start)
 	for _, a := range matched[start:end] {
-		entries = append(entries, actionResult(a, scope.flatDefs[a.Name], q.IncludeSchema))
+		entry := actionResult(a, scope.flatDefs[a.Name], q.IncludeSchema)
+		entry.RequiresApproval = decisions[a.Name] == "require_approval"
+		entries = append(entries, entry)
 	}
 	toolsetsDropped := false
 	// page measures the complete MCP result holding the first n entries.
@@ -315,25 +322,30 @@ func actionResult(a catalog.Action, definition ToolDefinition, includeSchema boo
 
 // actionsSnapshot binds a cursor to the caller, the catalog and policy
 // versions, the server mode and toolsets, the query, and the ordered matched
-// action names (including the post-host-precheck result).
-func actionsSnapshot(ctx context.Context, scope *serverScope, q actionsQuery, matched []catalog.Action) (string, error) {
+// action names and their host-specific approval requirements.
+func actionsSnapshot(ctx context.Context, scope *serverScope, q actionsQuery, matched []catalog.Action, decisions map[string]string) (string, error) {
 	id, ok := reqctx.FromContext(ctx)
 	if !ok {
 		return "", accessError(connect.CodeUnauthenticated, "authentication required")
 	}
 	names := make([]string, len(matched))
+	var requiresApproval []string
 	for i, a := range matched {
 		names[i] = a.Name
+		if decisions[a.Name] == "require_approval" {
+			requiresApproval = append(requiresApproval, a.Name)
+		}
 	}
 	data, err := json.Marshal(struct {
-		Actor    string
-		Subject  authz.Subject
-		Versions string
-		Mode     string
-		Toolsets []string
-		Query    actionsQuery
-		Matched  []string
-	}{reqctx.RequestAuditInfo(ctx).ActorID, id.Subject, scope.versions, scope.mode, scope.toolsets, q, names})
+		Actor            string
+		Subject          authz.Subject
+		Versions         string
+		Mode             string
+		Toolsets         []string
+		Query            actionsQuery
+		Matched          []string
+		RequiresApproval []string `json:",omitempty"`
+	}{reqctx.RequestAuditInfo(ctx).ActorID, id.Subject, scope.versions, scope.mode, scope.toolsets, q, names, requiresApproval})
 	if err != nil {
 		return "", err
 	}
